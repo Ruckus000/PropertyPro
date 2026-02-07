@@ -1,0 +1,4 @@
+.section-header__toggle:hover {
+  background: var(--section-header-hover-bg, transparent);
+}
+

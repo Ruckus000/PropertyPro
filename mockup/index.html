@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palm Gardens Condominium Association</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .hero {
+            background-color: hsl(var(--primary) / 0.05);
+            padding: 4rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="border-b" style="background-color: hsl(var(--background));">
+        <div class="container flex items-center justify-between" style="padding-top: 1rem; padding-bottom: 1rem;">
+            <div class="flex items-center gap-2">
+                <div
+                    class="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold">
+                    P</div>
+                <span class="font-bold text-lg">Palm Gardens</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="#notices" class="text-sm font-medium text-muted-foreground hover:text-foreground">Notices</a>
+                <a href="#contact" class="text-sm font-medium text-muted-foreground hover:text-foreground">Contact</a>
+                <a href="dashboard.html" class="btn btn-primary">Owner Login</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container flex flex-col items-center gap-4">
+            <span class="badge badge-outline">Official Association Portal</span>
+            <h1 class="text-4xl font-bold tracking-tight">Welcome to Palm Gardens</h1>
+            <p class="text-xl text-muted-foreground" style="max-width: 600px;">
+                Your community hub for documents, updates, and association management.
+                Compliant with Florida Statute §718.
+            </p>
+            <div class="flex gap-4 pt-4">
+                <a href="dashboard.html" class="btn btn-primary">Log In to Portal</a>
+                <a href="#notices" class="btn btn-outline">View Public Notices</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Notices Section (Statutory Requirement) -->
+    <section id="notices" class="container py-12">
+        <div class="flex flex-col gap-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold">Official Notices</h2>
+                    <p class="text-muted-foreground">Statutory notices and upcoming meetings.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="card-title">Upcoming Board Meeting</h3>
+                            <p class="card-description">Budget Review & Annual Planning</p>
+                        </div>
+                        <span class="badge badge-outline">Meeting Notice</span>
+                    </div>
+                </div>
+                <div class="card-content flex flex-col gap-2">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-muted-foreground">Date:</span>
+                        <span class="font-medium">February 15, 2026</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-muted-foreground">Time:</span>
+                        <span class="font-medium">6:00 PM EST</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-muted-foreground">Location:</span>
+                        <span class="font-medium">Clubhouse Meeting Room</span>
+                    </div>
+                    <div class="pt-4">
+                        <button class="btn btn-outline w-full">Download Agenda (PDF)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="card-title">Pool Maintenance Schedule</h3>
+                            <p class="card-description">Common Area Update</p>
+                        </div>
+                        <span class="badge badge-outline">Notice</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <p class="text-sm">The main pool will be closed for resurfacing from Feb 20 - Feb 25. Please use the
+                        north pool during this time.</p>
+                    <p class="text-sm text-muted-foreground pt-2">Posted: Feb 2, 2026</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t py-6 mt-12 bg-slate-50">
+        <div class="container text-center text-sm text-muted-foreground">
+            <p>&copy; 2026 Palm Gardens Condominium Association. Powered by PropertyPro.</p>
+            <p class="mt-2 text-xs">This site is maintained in compliance with Florida Condominium Act §718.111(12)(g).
+            </p>
+        </div>
+    </footer>
+
+</body>
+
+</html>

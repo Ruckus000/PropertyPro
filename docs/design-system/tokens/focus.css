@@ -1,0 +1,33 @@
+:root {
+  --focus-ring-color: #3b82f6;
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 2px;
+}
+
+button:focus,
+a:focus,
+[tabindex]:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (forced-colors: active) {
+  button:focus-visible,
+  a:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid CanvasText;
+  }
+}
+
+.dark-surface button:focus-visible,
+.dark-surface a:focus-visible,
+.dark-surface [tabindex]:focus-visible {
+  --focus-ring-color: #93c5fd;
+}
+

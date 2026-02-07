@@ -1,0 +1,52 @@
+.button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--button-gap, 0.5rem);
+  height: var(--button-height, 40px);
+  padding: var(--button-padding, 0 16px);
+  width: var(--button-width, auto);
+
+  font-family: var(--button-font-family, var(--font-sans));
+  font-size: var(--button-font-size, var(--font-size-sm));
+  font-weight: var(--button-font-weight, 500);
+  line-height: 1;
+  text-decoration: var(--button-text-decoration, none);
+
+  color: var(--button-color);
+  background: var(--button-bg);
+  border: var(--button-border, none);
+  border-radius: var(--button-radius, 8px);
+
+  cursor: pointer;
+  transition:
+    background var(--duration-micro, 100ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    color var(--duration-micro, 100ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    border-color var(--duration-micro, 100ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    box-shadow var(--duration-micro, 100ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.button:hover {
+  background: var(--button-bg-hover, var(--button-bg));
+  color: var(--button-color-hover, var(--button-color));
+  text-decoration: var(--button-text-decoration-hover, var(--button-text-decoration, none));
+}
+
+.button:active {
+  background: var(--button-bg-active, var(--button-bg-hover, var(--button-bg)));
+}
+
+.button:disabled {
+  cursor: not-allowed;
+}
+
+.button[data-loading="true"] {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.button--fullWidth {
+  width: 100%;
+}
+

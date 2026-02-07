@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - PropertyPro</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Inline overrides if strictly necessary, but try to keep to styles.css */
+    </style>
+</head>
+
+<body>
+
+    <div class="app-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div>
+                <div class="flex items-center gap-3 mb-8 px-2">
+                    <div
+                        class="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
+                        P</div>
+                    <span class="font-bold text-lg tracking-tight">PropertyPro</span>
+                </div>
+
+                <nav class="flex flex-col gap-1">
+                    <p class="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">Platform
+                    </p>
+                    <a href="#" class="nav-link active" onclick="switchView('admin', this)">
+                        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                        Compliance
+                    </a>
+                    <a href="#" class="nav-link" onclick="switchView('owner', this)">
+                        <i data-lucide="home" class="w-4 h-4"></i>
+                        Owner Portal
+                    </a>
+                    <a href="#" class="nav-link">
+                        <i data-lucide="file-text" class="w-4 h-4"></i>
+                        Documents
+                    </a>
+                    <a href="#" class="nav-link">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                        Directory
+                    </a>
+                    <a href="#" class="nav-link">
+                        <i data-lucide="wrench" class="w-4 h-4"></i>
+                        Maintenance
+                    </a>
+                    <a href="#" class="nav-link">
+                        <i data-lucide="calendar" class="w-4 h-4"></i>
+                        Meetings
+                    </a>
+                </nav>
+            </div>
+
+            <div class="border-t pt-4 mt-auto">
+                <div class="flex items-center gap-3 px-2">
+                    <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium">
+                        MS</div>
+                    <div class="text-sm">
+                        <p class="font-medium leading-none">Maria Santos</p>
+                        <p class="text-xs text-muted-foreground mt-1">Board President</p>
+                    </div>
+                </div>
+                <a href="index.html"
+                    class="text-xs text-muted-foreground hover:text-foreground mt-4 block px-2 transition-colors">Log
+                    out</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Header -->
+            <header class="flex items-center justify-between mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight mb-1" id="page-title">Compliance Dashboard</h1>
+                    <p class="text-sm text-muted-foreground" id="page-subtitle">Palm Gardens Condominium Association
+                        Service
+                        Portal</p>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn btn-outline btn-sm" onclick="forceView('admin')">Admin View</button>
+                    <button class="btn btn-outline btn-sm" onclick="forceView('owner')">Owner View</button>
+                </div>
+            </header>
+
+            <!-- ADMIN VIEW: Compliance Dashboard -->
+            <div id="admin-view" class="view-section active">
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="stat-card">
+                        <div class="text-sm font-medium text-muted-foreground">Overall Compliance</div>
+                        <div class="text-3xl font-bold mt-2 text-green-600">92%</div>
+                        <div class="text-xs text-muted-foreground mt-1">2 items need attention</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-sm font-medium text-muted-foreground">Documents Posted</div>
+                        <div class="text-3xl font-bold mt-2">142</div>
+                        <div class="text-xs text-muted-foreground mt-1">+12 this month</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-sm font-medium text-muted-foreground">Next Statutory Deadline</div>
+                        <div class="text-3xl font-bold mt-2">Feb 15</div>
+                        <div class="text-xs text-muted-foreground mt-1">Meeting Notice (14 days)</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header border-b">
+                        <h2 class="card-title">Statutory Requirements Checklist</h2>
+                        <p class="card-description">Based on Florida Statute §718.111(12)(g)</p>
+                    </div>
+                    <div class="card-content p-0">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th class="w-[400px]">Requirement</th>
+                                        <th>Statute Ref</th>
+                                        <th>Status</th>
+                                        <th class="text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- RED ITEM -->
+                                    <tr class="bg-red-subtle">
+                                        <td>
+                                            <div class="font-medium">Current Insurance Policies</div>
+                                            <div class="text-xs text-muted-foreground">Must be posted within 30 days of
+                                                renewal
+                                            </div>
+                                        </td>
+                                        <td class="text-muted-foreground text-sm">§718.111(11)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot red"></span>
+                                                <span class="text-destructive font-medium">Expired</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right">
+                                            <button class="btn btn-primary btn-sm">Upload</button>
+                                        </td>
+                                    </tr>
+
+                                    <!-- YELLOW ITEM -->
+                                    <tr class="bg-yellow-subtle">
+                                        <td>
+                                            <div class="font-medium">Question & Answer Sheet</div>
+                                            <div class="text-xs text-muted-foreground">Updates required annually</div>
+                                        </td>
+                                        <td class="text-muted-foreground text-sm">§718.504</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot yellow"></span>
+                                                <span class="status-yellow font-medium">Missing</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right">
+                                            <button class="btn btn-primary btn-sm">Upload</button>
+                                        </td>
+                                    </tr>
+
+                                    <!-- GREEN ITEMS -->
+                                    <tr>
+                                        <td><span class="font-medium">Declaration of Condominium</span></td>
+                                        <td class="text-muted-foreground text-sm">§718.111(12)(g)(2)(a)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot green"></span>
+                                                <span class="status-green">Compliant</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right"><button class="btn btn-ghost btn-sm">View</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-medium">Bylaws & Amendments</span></td>
+                                        <td class="text-muted-foreground text-sm">§718.111(12)(g)(2)(b)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot green"></span>
+                                                <span class="status-green">Compliant</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right"><button class="btn btn-ghost btn-sm">View</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-medium">Articles of Incorporation</span></td>
+                                        <td class="text-muted-foreground text-sm">§718.111(12)(g)(2)(c)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot green"></span>
+                                                <span class="status-green">Compliant</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right"><button class="btn btn-ghost btn-sm">View</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-medium">Annual Budget</span></td>
+                                        <td class="text-muted-foreground text-sm">§718.112(2)(f)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot green"></span>
+                                                <span class="status-green">Compliant</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right"><button class="btn btn-ghost btn-sm">View</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-medium">Annual Financial Report</span></td>
+                                        <td class="text-muted-foreground text-sm">§718.111(13)</td>
+                                        <td>
+                                            <div class="status-flex">
+                                                <span class="status-dot green"></span>
+                                                <span class="status-green">Compliant</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-right"><button class="btn btn-ghost btn-sm">View</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OWNER VIEW -->
+            <div id="owner-view" class="view-section">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Main Feed -->
+                    <div class="lg:col-span-2 flex flex-col gap-6">
+                        <div class="card">
+                            <div class="card-header border-b bg-slate-50/50">
+                                <h2 class="card-title text-lg">Community Announcements</h2>
+                            </div>
+                            <div class="card-content flex flex-col gap-6 pt-6">
+
+                                <!-- Announcement 1 -->
+                                <div class="flex gap-4">
+                                    <div class="bg-blue-100 text-blue-700 p-2 rounded-lg h-fit shrink-0">
+                                        <i data-lucide="info" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <h3 class="font-semibold text-sm">Pool Validation</h3>
+                                            <span class="text-xs text-muted-foreground">2 hours ago</span>
+                                        </div>
+                                        <p class="text-sm text-muted-foreground leading-relaxed">
+                                            The north pool heater has been inspected and is fully operational.
+                                            Temperature is set to 82°F. Enjoy!
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="border-b"></div>
+
+                                <!-- Announcement 2 -->
+                                <div class="flex gap-4">
+                                    <div class="bg-orange-100 text-orange-700 p-2 rounded-lg h-fit shrink-0">
+                                        <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <h3 class="font-semibold text-sm">Pest Control Schedule</h3>
+                                            <span class="text-xs text-muted-foreground">Yesterday</span>
+                                        </div>
+                                        <p class="text-sm text-muted-foreground leading-relaxed">
+                                            Exterior preventative treatment is scheduled for this Friday starting at 9
+                                            AM.
+                                            No action needed from residents.
+                                        </p>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header border-b">
+                                <h2 class="card-title text-lg">Maintenance Requests</h2>
+                            </div>
+                            <div class="card-content pt-6">
+                                <div
+                                    class="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed rounded-lg bg-slate-50">
+                                    <div class="mb-4 p-3 bg-slate-100 rounded-full">
+                                        <i data-lucide="check-circle" class="w-6 h-6 text-muted-foreground"></i>
+                                    </div>
+                                    <h3 class="font-medium mb-1">No open requests</h3>
+                                    <p class="text-xs text-muted-foreground mb-4">You have no active maintenance
+                                        tickets.</p>
+                                    <button class="btn btn-outline btn-sm">Submit New Request</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sidebar Content -->
+                    <div class="flex flex-col gap-6">
+                        <div class="card bg-slate-900 text-white border-slate-800">
+                            <div class="card-header">
+                                <h2 class="card-title text-lg text-white">Upcoming Events</h2>
+                            </div>
+                            <div class="card-content">
+                                <div class="flex gap-3 mb-4">
+                                    <div
+                                        class="bg-slate-700 rounded p-2 text-center w-12 h-14 flex flex-col items-center justify-center shrink-0">
+                                        <span class="text-[10px] uppercase font-bold text-slate-400">Feb</span>
+                                        <span class="font-bold text-lg leading-none text-white">15</span>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-sm text-white">Board Meeting</p>
+                                        <p class="text-xs text-slate-400 mt-1">6:00 PM • Clubhouse</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary w-full btn-sm">View Calendar</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title text-lg">Quick Links</h2>
+                            </div>
+                            <div class="card-content flex flex-col gap-1 p-2">
+                                <a href="#"
+                                    class="flex items-center justify-between p-2 hover:bg-slate-100 rounded transition-colors text-sm">
+                                    <span class="flex items-center gap-2">
+                                        <i data-lucide="file-text" class="w-4 h-4 text-muted-foreground"></i>
+                                        Notices
+                                    </span>
+                                    <i data-lucide="chevron-right" class="w-4 h-4 text-muted-foreground"></i>
+                                </a>
+                                <a href="#"
+                                    class="flex items-center justify-between p-2 hover:bg-slate-100 rounded transition-colors text-sm">
+                                    <span class="flex items-center gap-2">
+                                        <i data-lucide="book" class="w-4 h-4 text-muted-foreground"></i>
+                                        Rules & Regs
+                                    </span>
+                                    <i data-lucide="chevron-right" class="w-4 h-4 text-muted-foreground"></i>
+                                </a>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Simple View Switcher
+        function switchView(viewName, element) {
+            // Hide all sections
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            // Show target section
+            document.getElementById(viewName + '-view').classList.add('active');
+
+            // Update Nav State
+            document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+            if (element) element.classList.add('active');
+
+            updateHeader(viewName);
+        }
+
+        // Helper for the top buttons to switch views without nav context
+        function forceView(viewName) {
+            // Hide all sections
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            // Show target section
+            document.getElementById(viewName + '-view').classList.add('active');
+
+            // Update Header
+            updateHeader(viewName);
+        }
+
+        function updateHeader(viewName) {
+            const titleEl = document.getElementById('page-title');
+            if (viewName === 'admin') {
+                titleEl.textContent = 'Compliance Dashboard';
+            } else {
+                titleEl.textContent = 'Welcome Home, Maria';
+            }
+        }
+    </script>
+</body>
+
+</html>

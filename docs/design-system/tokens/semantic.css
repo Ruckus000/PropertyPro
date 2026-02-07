@@ -1,0 +1,70 @@
+:root {
+  /* Semantic: Text */
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-600);
+  --text-disabled: var(--gray-400);
+  --text-placeholder: var(--gray-400);
+  --text-inverse: var(--gray-0);
+  --text-brand: var(--blue-600);
+  --text-link: var(--blue-600);
+  --text-link-hover: var(--blue-700);
+
+  /* Semantic: Surfaces */
+  --surface-page: var(--gray-50);
+  --surface-card: var(--gray-0);
+  --surface-subtle: var(--gray-25);
+  --surface-muted: var(--gray-100);
+  --surface-elevated: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+  --surface-inverse: var(--gray-950);
+  --surface-inverse-subtle: var(--gray-900);
+
+  /* Semantic: Borders */
+  --border-default: var(--gray-200);
+  --border-subtle: var(--gray-100);
+  --border-strong: var(--gray-300);
+  --border-muted: var(--gray-50);
+  --border-focus: var(--blue-500);
+  --border-error: var(--red-500);
+
+  /* Semantic: Interactive */
+  --interactive-primary: var(--blue-600);
+  --interactive-primary-hover: var(--blue-700);
+  --interactive-primary-active: var(--blue-800);
+  --interactive-disabled: var(--gray-300);
+  --interactive-subtle: var(--blue-50);
+  --interactive-subtle-hover: var(--blue-100);
+  --interactive-muted: var(--blue-100);
+
+  /* Semantic: Status */
+  --status-success: var(--green-700);
+  --status-success-bg: var(--green-50);
+  --status-success-border: var(--green-200);
+  --status-success-subtle: var(--green-100);
+
+  --status-brand: var(--blue-600);
+  --status-brand-bg: var(--blue-50);
+  --status-brand-border: var(--blue-200);
+  --status-brand-subtle: var(--blue-100);
+
+  --status-warning: var(--amber-700);
+  --status-warning-bg: var(--amber-50);
+  --status-warning-border: var(--amber-200);
+  --status-warning-subtle: var(--amber-100);
+
+  --status-danger: var(--red-700);
+  --status-danger-bg: var(--red-50);
+  --status-danger-border: var(--red-200);
+  --status-danger-subtle: var(--red-100);
+
+  --status-info: var(--blue-700);
+  --status-info-bg: var(--blue-50);
+  --status-info-border: var(--blue-200);
+  --status-info-subtle: var(--blue-100);
+
+  --status-neutral: var(--gray-600);
+  --status-neutral-bg: var(--gray-100);
+  --status-neutral-border: var(--gray-200);
+  --status-neutral-subtle: var(--gray-50);
+}
