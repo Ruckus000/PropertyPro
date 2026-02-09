@@ -174,7 +174,7 @@ export function NavRail({ items, activeView, onViewChange, expanded, onToggle }:
                         fontSize: primitiveFonts.size.xs,
                         fontWeight: primitiveFonts.weight.semibold,
                         padding: "0 6px",
-                        borderRadius: 10,
+                        borderRadius: primitiveRadius.md,
                         height: 20,
                         display: "flex",
                         alignItems: "center",

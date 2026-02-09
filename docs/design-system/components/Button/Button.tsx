@@ -330,14 +330,21 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
       .join(" ");
 
     const fontSize = size === "lg" ? primitiveFonts.size.base : primitiveFonts.size.sm;
+    const resolvedHeight = size === "md" ? "var(--button-height, 40px)" : `${height[size]}px`;
+    const resolvedGap = size === "md" ? "var(--component-gap, 8px)" : `${gap}px`;
+    const resolvedPadding = size === "md"
+      ? isSimpleLayout
+        ? "0 var(--component-padding, 16px)"
+        : "0 calc(var(--component-padding, 16px) - 4px)"
+      : isSimpleLayout
+        ? `0 ${padding[size]}px`
+        : `0 ${padding[size] - 4}px`;
 
     const baseVars: React.CSSProperties = {
-      ["--button-height" as any]: `${height[size]}px`,
-      ["--button-padding" as any]: isSimpleLayout
-        ? `0 ${padding[size]}px`
-        : `0 ${padding[size] - 4}px`,
+      ["--button-height" as any]: resolvedHeight,
+      ["--button-padding" as any]: resolvedPadding,
       ["--button-width" as any]: fullWidth ? "100%" : "auto",
-      ["--button-gap" as any]: `${gap}px`,
+      ["--button-gap" as any]: resolvedGap,
       ["--button-radius" as any]: `${componentTokens.button.radius}px`,
       ["--button-font-family" as any]: primitiveFonts.family.sans,
       ["--button-font-size" as any]: fontSize,

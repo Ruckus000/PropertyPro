@@ -2,7 +2,7 @@
   background: var(--card-bg);
   border: var(--card-border, 1px solid transparent);
   border-left: var(--card-border-left, initial);
-  border-radius: var(--card-radius, 8px);
+  border-radius: var(--card-radius, 10px);
   box-shadow: var(--card-shadow, none);
   transition:
     box-shadow var(--duration-quick, 150ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
@@ -17,4 +17,3 @@
 .card--interactive:hover {
   box-shadow: var(--card-shadow-hover, var(--card-shadow, none));
 }
-

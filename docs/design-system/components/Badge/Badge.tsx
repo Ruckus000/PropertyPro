@@ -284,6 +284,7 @@ const BadgeRoot = forwardRef<HTMLSpanElement, BadgeProps>(
             alignItems: "center",
             gap: gap,
             height: height[size],
+            minHeight: "var(--touch-target-min, 44px)",
             padding: `0 ${padding[size]}px`,
             borderRadius: radius,
             background: colors.background,

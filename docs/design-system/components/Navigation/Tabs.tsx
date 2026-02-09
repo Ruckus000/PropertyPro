@@ -9,9 +9,9 @@
 import React, { HTMLAttributes, ReactNode, useRef } from "react";
 import {
   semanticColors,
+  semanticElevation,
   primitiveFonts,
   primitiveRadius,
-  primitiveShadow,
   primitiveSpace,
   createTransition,
 } from "../../tokens";
@@ -96,7 +96,7 @@ export function Tabs({ tabs, activeTab, onTabChange, style, ...props }: TabsProp
               fontSize: primitiveFonts.size.sm,
               fontWeight: selected ? primitiveFonts.weight.medium : primitiveFonts.weight.normal,
               cursor: "pointer",
-              boxShadow: selected ? primitiveShadow.sm : "none",
+              boxShadow: selected ? semanticElevation.e1.shadow : semanticElevation.e0.shadow,
               transition: createTransition("all", "micro"),
               whiteSpace: "nowrap",
             }}
@@ -128,4 +128,3 @@ export function Tabs({ tabs, activeTab, onTabChange, style, ...props }: TabsProp
 }
 
 export default Tabs;
-

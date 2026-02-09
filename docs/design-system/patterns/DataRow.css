@@ -1,6 +1,7 @@
 .data-row {
   background: var(--data-row-bg);
-  border-radius: var(--data-row-radius, 8px);
+  min-height: 44px;
+  border-radius: var(--data-row-radius, 10px);
   border-left: var(--data-row-status-border, 3px solid transparent);
   transition: background var(--duration-micro, 100ms) var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
 }
@@ -17,3 +18,8 @@
   background: var(--data-row-bg);
 }
 
+@media (min-width: 768px) {
+  .data-row {
+    min-height: 36px;
+  }
+}

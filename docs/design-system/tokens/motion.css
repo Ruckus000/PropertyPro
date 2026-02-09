@@ -1,21 +1,41 @@
 :root {
-  /* Duration — KEPT FROM EXISTING SYSTEM */
-  --duration-instant: 0ms;
-  --duration-micro: 100ms;
-  --duration-quick: 150ms;
-  --duration-standard: 250ms;
-  --duration-slow: 350ms;
-  --duration-expressive: 500ms;
+  /* Motion durations */
+  --motion-duration-instant: 0ms;
+  --motion-duration-micro: 100ms;
+  --motion-duration-quick: 150ms;
+  --motion-duration-standard: 250ms;
+  --motion-duration-slow: 350ms;
+  --motion-duration-expressive: 500ms;
+
+  /* Backward-compatible duration aliases */
+  --duration-instant: var(--motion-duration-instant);
+  --duration-micro: var(--motion-duration-micro);
+  --duration-quick: var(--motion-duration-quick);
+  --duration-standard: var(--motion-duration-standard);
+  --duration-slow: var(--motion-duration-slow);
+  --duration-expressive: var(--motion-duration-expressive);
 
   /* Easing */
-  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Backward-compatible easing aliases */
+  --ease-default: var(--ease-standard);
+  --ease-in: var(--ease-exit);
+  --ease-out: var(--ease-enter);
 }
 
-/* Disable animations for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-micro: 0ms;
+    --motion-duration-quick: 0ms;
+    --motion-duration-standard: 0ms;
+    --motion-duration-slow: 0ms;
+    --motion-duration-expressive: 0ms;
+  }
+
   *,
   *::before,
   *::after {
@@ -38,6 +58,6 @@
 /* Utility class for motion-safe animations */
 @media (prefers-reduced-motion: no-preference) {
   .animate-fade-in {
-    animation: fadeIn var(--duration-standard) var(--ease-out);
+    animation: fadeIn var(--duration-standard) var(--ease-enter);
   }
 }

@@ -40,6 +40,11 @@ export {
   semanticColors,
   semanticTypography,
   semanticSpacing,
+  semanticElevation,
+  interactionSizing,
+  complianceEscalation,
+  semanticMotion,
+  responsiveDensity,
   // Component tokens
   componentTokens,
   // Utilities
@@ -55,6 +60,8 @@ export type {
   TypographyVariant,
   SpaceCategory,
   StatusVariant,
+  ElevationLevel,
+  EscalationTier,
 } from "./tokens";
 
 // ═══════════════════════════════════════════════════════════════════════════

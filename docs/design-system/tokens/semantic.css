@@ -1,4 +1,13 @@
 :root {
+  /**
+   * Surface Treatment Philosophy
+   *
+   * 1. Use BORDERS as the primary tool for defining surface edges
+   * 2. Use ELEVATION (shadows) sparingly and only from the semantic scale
+   * 3. Keep the material palette tight: surface-page / surface-card / surface-elevated / overlay
+   * 4. Strong grid alignment — no floating or drifting elements
+   */
+
   /* Semantic: Text */
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-600);
@@ -67,4 +76,10 @@
   --status-neutral-bg: var(--gray-100);
   --status-neutral-border: var(--gray-200);
   --status-neutral-subtle: var(--gray-50);
+
+  /* Elevation */
+  --elevation-e0: none;
+  --elevation-e1: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --elevation-e2: 0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02);
+  --elevation-e3: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03);
 }

@@ -18,6 +18,7 @@ import React, { forwardRef, HTMLAttributes, ReactNode } from "react";
 import "./AlertBanner.css";
 import {
   semanticColors,
+  semanticElevation,
   primitiveSpace,
   primitiveRadius,
   createTransition,
@@ -199,6 +200,7 @@ export const AlertBanner = forwardRef<HTMLDivElement, AlertBannerProps>(
           gap: primitiveSpace[3],
           padding: `${primitiveSpace[3]}px ${primitiveSpace[4]}px`,
           borderRadius: primitiveRadius.md,
+          boxShadow: semanticElevation.e0.shadow,
           ...currentVariant,
           ...style,
         }}

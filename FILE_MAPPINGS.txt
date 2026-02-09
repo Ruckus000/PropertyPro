@@ -1,0 +1,588 @@
+PROPERTYRO PROJECT - COMPREHENSIVE FILE MAPPINGS BY PHASE
+=========================================================
+
+This document maps all expected files across the project organized by specification.
+
+PHASE 0: FOUNDATION
+===================
+
+P0-00: Monorepo Scaffold
+Files:
+  - turbo.json (root)
+  - pnpm-workspace.yaml (root)
+  - package.json (root, apps/web, packages/ui, packages/shared, packages/db, packages/email)
+  - tsconfig.json (root, apps/web, packages/ui, packages/shared, packages/db, packages/email)
+  - apps/web/next.config.ts
+  - apps/web/tailwind.config.ts
+  - .env.example (root)
+  - .gitignore (root)
+
+P0-01: Design Tokens
+Files:
+  - packages/ui/src/tokens/colors.ts
+  - packages/ui/src/tokens/spacing.ts
+  - packages/ui/src/tokens/typography.ts
+  - packages/ui/src/tokens/shadows.ts
+  - packages/ui/src/tokens/radius.ts
+  - packages/ui/src/tokens/breakpoints.ts
+  - packages/ui/src/tokens/index.ts (barrel export)
+  - packages/ui/src/styles/tokens.css
+
+P0-02: Core Primitives
+Files:
+  - packages/ui/src/primitives/Box.tsx
+  - packages/ui/src/primitives/Stack.tsx
+  - packages/ui/src/primitives/Text.tsx
+  - packages/ui/src/primitives/index.ts
+  - packages/ui/src/index.ts (update barrel)
+  - packages/ui/src/types/polymorphic.ts
+  - tests/primitives/Box.test.tsx
+  - tests/primitives/Stack.test.tsx
+  - tests/primitives/Text.test.tsx
+
+P0-03: Priority Components
+Files:
+  - packages/ui/src/components/Button.tsx
+  - packages/ui/src/components/Card.tsx
+  - packages/ui/src/components/Badge.tsx
+  - packages/ui/src/components/NavRail.tsx
+  - packages/ui/src/components/Icon.tsx
+  - packages/ui/src/components/index.ts
+  - packages/ui/src/index.ts (update barrel)
+  - tests/components/Button.test.tsx
+  - tests/components/Card.test.tsx
+  - tests/components/Badge.test.tsx
+  - tests/components/NavRail.test.tsx
+
+P0-04: Supabase Setup
+Files:
+  - packages/db/src/supabase/server.ts
+  - packages/db/src/supabase/client.ts
+  - packages/db/src/supabase/admin.ts
+  - packages/db/src/supabase/middleware.ts
+  - packages/db/src/supabase/storage.ts
+  - apps/web/middleware.ts
+  - packages/db/src/index.ts (update barrel)
+  - .env.example (update with Supabase keys)
+
+P0-05: Drizzle Schema Core
+Files:
+  - packages/db/src/schema/communities.ts
+  - packages/db/src/schema/users.ts
+  - packages/db/src/schema/user-roles.ts
+  - packages/db/src/schema/units.ts
+  - packages/db/src/schema/documents.ts
+  - packages/db/src/schema/notification-preferences.ts
+  - packages/db/src/schema/enums.ts
+  - packages/db/src/schema/index.ts
+  - packages/db/migrations/001_initial_schema.sql (generated)
+
+P0-06: Scoped Query Builder
+Files:
+  - packages/db/src/scoped-client.ts
+  - packages/db/src/tenant-context.ts
+  - packages/db/src/errors/TenantContextMissing.ts
+  - packages/db/src/index.ts (update barrel)
+  - packages/db/src/types/scoped-client.ts
+  - tests/scoped-client.integration.test.ts
+  - tests/tenant-context.unit.test.ts
+
+P0-07: Error Handling
+Files:
+  - apps/web/src/lib/api/error-handler.ts
+  - apps/web/src/lib/api/request-id.ts
+  - apps/web/src/lib/errors/AppError.ts
+  - apps/web/src/lib/errors/ValidationError.ts
+  - apps/web/src/lib/errors/UnauthorizedError.ts
+  - apps/web/src/lib/errors/NotFoundError.ts
+  - apps/web/src/lib/errors/index.ts
+  - apps/web/src/lib/zod/error-formatter.ts
+  - apps/web/src/components/ErrorBoundary.tsx
+
+P0-08: Sentry Setup
+Files:
+  - apps/web/sentry.client.config.ts
+  - apps/web/sentry.server.config.ts
+  - apps/web/sentry.edge.config.ts
+  - apps/web/next.config.ts (update with withSentryConfig)
+  - apps/web/src/instrumentation.ts (optional)
+  - apps/web/middleware.ts (update)
+  - .env.example (update with Sentry keys)
+  - tests/sentry-setup.integration.test.ts (optional)
+
+
+PHASE 1: COMPLIANCE CORE
+========================
+
+P1-09: Compliance Checklist Engine
+Files:
+  - packages/db/src/schema.ts (add compliance_checklist_items table)
+  - packages/shared/src/compliance-templates.ts (§718 and §720 constants)
+  - apps/api/src/routes/compliance.ts (auto-generation logic)
+  - apps/api/src/utils/compliance-calculator.ts (status calculation)
+  - packages/db/src/__tests__/compliance-dates.test.ts (date edge cases)
+
+P1-10: Compliance Dashboard UI
+Files:
+  - apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx
+  - apps/web/src/components/compliance-dashboard.tsx
+  - apps/web/src/components/compliance-checklist-item.tsx
+  - apps/web/src/components/compliance-badge.tsx
+  - apps/web/src/utils/pdf-export.ts
+
+P1-11: Document Upload Pipeline
+Files:
+  - apps/api/src/routes/upload.ts (presign endpoint)
+  - apps/api/src/routes/documents.ts (create document endpoint)
+  - apps/web/src/components/document-uploader.tsx
+  - apps/web/src/hooks/useDocumentUpload.ts
+  - apps/api/src/__tests__/upload.test.ts
+
+P1-12: Magic Bytes Validation
+Files:
+  - apps/api/src/utils/file-validation.ts
+  - apps/api/src/middleware/validate-upload.ts
+  - apps/api/src/__tests__/file-validation.test.ts
+
+P1-13: Document Text Extraction
+Files:
+  - apps/api/src/workers/pdf-extraction.ts
+  - apps/api/src/utils/extract-pdf-text.ts
+  - packages/db/src/schema.ts (add search_text and search_vector)
+  - apps/api/src/__tests__/pdf-extraction.test.ts
+
+P1-14: Document Search
+Files:
+  - apps/api/src/routes/documents.ts (add search endpoint)
+  - packages/db/src/queries/document-search.ts (search query builder)
+  - apps/web/src/components/document-search.tsx
+  - apps/api/src/__tests__/document-search.test.ts
+
+P1-15: Document Management UI
+Files:
+  - apps/web/src/app/(authenticated)/communities/[id]/documents/page.tsx
+  - apps/web/src/components/document-upload-area.tsx
+  - apps/web/src/components/document-list.tsx
+  - apps/web/src/components/document-viewer.tsx
+  - apps/web/src/components/document-version-history.tsx
+
+P1-16: Meeting Management
+Files:
+  - packages/db/src/schema.ts (add meetings and meeting_documents tables)
+  - apps/api/src/routes/meetings.ts (CRUD endpoints)
+  - apps/api/src/utils/meeting-calculator.ts (deadline calculation)
+  - apps/web/src/components/meeting-form.tsx
+  - apps/web/src/components/meeting-list.tsx
+
+P1-17: Announcement System
+Files:
+  - packages/db/src/schema.ts (add announcements table)
+  - apps/api/src/routes/announcements.ts (CRUD endpoints)
+  - apps/web/src/components/announcement-composer.tsx
+  - apps/web/src/components/announcement-feed.tsx
+  - apps/web/src/components/announcement-toolbar.tsx
+
+P1-18: Resident Management
+Files:
+  - packages/db/src/schema.ts (add/verify user_roles table)
+  - apps/api/src/routes/residents.ts (CRUD endpoints)
+  - apps/web/src/components/resident-form.tsx
+  - apps/web/src/components/resident-list.tsx
+  - apps/web/src/utils/role-validator.ts
+
+P1-19: CSV Import
+Files:
+  - apps/api/src/routes/import-residents.ts (CSV import endpoint)
+  - apps/api/src/utils/csv-validator.ts (validation logic)
+  - apps/web/src/components/csv-import-dialog.tsx
+  - apps/web/src/components/csv-preview-table.tsx
+  - apps/web/src/components/csv-error-report.tsx
+
+P1-20: Invitation Auth Flow
+Files:
+  - apps/api/src/routes/invitations.ts (send invitation endpoint)
+  - packages/email/src/invitation-email.tsx (React Email template)
+  - apps/web/src/app/auth/accept-invite/page.tsx
+  - apps/web/src/components/set-password-form.tsx
+  - apps/api/src/__tests__/invitations.test.ts
+
+P1-21: Password Reset Flow
+Files:
+  - apps/web/src/app/auth/forgot-password/page.tsx
+  - apps/web/src/app/auth/reset-password/page.tsx
+  - apps/web/src/components/forgot-password-form.tsx
+  - apps/web/src/components/reset-password-form.tsx
+  - apps/api/src/middleware/rate-limit.ts (reuse)
+
+P1-22: Session Management
+Files:
+  - apps/web/src/lib/supabase/server.ts (createServerClient)
+  - apps/web/src/lib/supabase/client.ts (createBrowserClient)
+  - apps/web/src/middleware.ts (auth middleware)
+  - apps/web/src/app/(authenticated)/layout.tsx (auth listener)
+  - apps/web/src/app/auth/verify-email/page.tsx
+
+P1-23: Public Website
+Files:
+  - apps/web/src/app/(public)/[subdomain]/page.tsx
+  - apps/web/src/app/(public)/[subdomain]/notices/page.tsx
+  - apps/web/src/app/(public)/[subdomain]/not-found.tsx
+  - apps/web/src/components/public-home.tsx
+  - apps/web/src/components/public-notices.tsx
+
+P1-24: Resident Portal Dashboard
+Files:
+  - apps/web/src/app/(authenticated)/dashboard/page.tsx
+  - apps/web/src/components/dashboard-welcome.tsx
+  - apps/web/src/components/dashboard-announcements.tsx
+  - apps/web/src/components/dashboard-meetings.tsx
+  - apps/web/src/components/dashboard-quick-links.tsx
+
+P1-25: Resident Document Library
+Files:
+  - packages/shared/src/access-policies.ts (role/type/category matrix)
+  - packages/db/src/queries/document-access.ts (enforced query builder)
+  - apps/web/src/app/(authenticated)/communities/[id]/documents/page.tsx
+  - apps/web/src/components/document-library.tsx
+  - apps/web/src/components/document-category-filter.tsx
+
+P1-26: Notification Preferences
+Files:
+  - packages/db/src/schema.ts (add notification_preferences table)
+  - apps/web/src/app/(authenticated)/settings/page.tsx
+  - apps/web/src/components/notification-preferences.tsx
+  - apps/api/src/utils/email-preferences.ts (preference checker)
+  - apps/api/src/__tests__/notification-preferences.test.ts
+
+P1-27: Audit Logging
+Files:
+  - packages/db/src/schema.ts (add audit_logs table)
+  - packages/db/src/utils/audit-logger.ts (logAuditEvent function)
+  - apps/api/src/middleware/audit-middleware.ts (auto-inject)
+  - packages/db/src/__tests__/audit-logging.test.ts
+
+P1-28: Email Infrastructure
+Files:
+  - packages/email/src/templates/invitation-email.tsx
+  - packages/email/src/templates/password-reset-email.tsx
+  - packages/email/src/templates/meeting-notice-email.tsx
+  - packages/email/src/templates/compliance-alert-email.tsx
+  - packages/email/src/templates/announcement-email.tsx
+
+P1-29: Demo Seed Data
+Files:
+  - scripts/seed-demo.ts
+  - scripts/config/demo-data.ts (seed data constants)
+  - packages/db/src/__tests__/seed.integration.test.ts (verification)
+
+
+PHASE 2: MULTI-TENANCY
+======================
+
+P2-30: Subdomain Routing Middleware
+Files:
+  - apps/web/src/middleware.ts
+  - packages/shared/src/middleware/subdomain-router.ts
+  - packages/shared/src/middleware/reserved-subdomains.ts
+
+P2-31: Marketing Landing Page
+Files:
+  - apps/web/src/app/(marketing)/page.tsx
+  - apps/web/src/components/marketing/hero.tsx
+  - apps/web/src/components/marketing/pricing.tsx
+  - apps/web/src/components/marketing/features.tsx
+  - apps/web/src/components/marketing/footer.tsx
+
+P2-32: Legal Pages
+Files:
+  - apps/web/src/app/legal/terms/page.tsx
+  - apps/web/src/app/legal/privacy/page.tsx
+  - apps/web/src/content/legal/terms.md
+  - apps/web/src/content/legal/privacy.md
+
+P2-33: Self-Service Signup
+Files:
+  - apps/web/src/app/(auth)/signup/page.tsx
+  - apps/web/src/components/signup/signup-form.tsx
+  - apps/web/src/components/signup/community-type-selector.tsx
+  - apps/web/src/components/signup/subdomain-checker.tsx
+  - apps/web/src/lib/actions/signup.ts
+
+P2-34: Stripe Integration
+Files:
+  - apps/api/src/routes/webhooks/stripe.ts
+  - apps/web/src/lib/actions/checkout.ts
+  - apps/api/src/services/stripe-service.ts
+  - packages/shared/src/schema/stripe.ts
+
+P2-35: Provisioning Pipeline
+Files:
+  - apps/api/src/services/provisioning-service.ts
+  - apps/api/src/lib/provisioning-idempotency.ts
+  - packages/email/src/templates/welcome.tsx
+  - packages/shared/src/schema/provisioning.ts
+
+P2-36: Apartment Operational Dashboard
+Files:
+  - apps/web/src/app/dashboard/apartment/page.tsx
+  - apps/web/src/components/dashboard/apartment-dashboard.tsx
+  - apps/web/src/components/dashboard/apartment-metrics.tsx
+  - apps/web/src/lib/queries/apartment-metrics.ts
+
+P2-37: Lease Tracking
+Files:
+  - packages/shared/src/schema/leases.ts
+  - apps/api/src/routes/leases.ts
+  - apps/api/src/services/lease-expiration-service.ts
+  - apps/web/src/lib/actions/leases.ts
+
+P2-38: Apartment Onboarding Wizard
+Files:
+  - apps/web/src/app/onboarding/apartment/page.tsx
+  - apps/web/src/components/onboarding/apartment-wizard.tsx
+  - apps/web/src/components/onboarding/steps/profile-step.tsx
+  - apps/web/src/components/onboarding/steps/units-step.tsx
+  - apps/web/src/components/onboarding/steps/rules-step.tsx
+
+P2-39: Condo Onboarding Wizard
+Files:
+  - apps/web/src/app/onboarding/condo/page.tsx
+  - apps/web/src/components/onboarding/condo-wizard.tsx
+  - apps/web/src/components/onboarding/steps/statutory-documents-step.tsx
+  - apps/web/src/components/onboarding/steps/profile-step.tsx
+  - apps/web/src/components/onboarding/steps/unit-roster-step.tsx
+
+P2-40: Community Features Config
+Files:
+  - packages/shared/src/features/community-features.ts
+  - packages/shared/src/features/types.ts
+  - packages/shared/src/features/get-features.ts
+
+P2-41: Email Notifications
+Files:
+  - packages/email/src/templates/meeting-notice.tsx
+  - packages/email/src/templates/compliance-alert.tsx
+  - packages/email/src/templates/announcement-blast.tsx
+  - packages/email/src/templates/maintenance-update.tsx
+  - apps/api/src/services/email-service.ts
+
+P2-42: Rate Limiting
+Files:
+  - apps/api/src/middleware/rate-limit.ts
+  - apps/api/src/lib/rate-limiter.ts
+  - apps/api/src/services/upstash-service.ts
+
+P2-43: Multi-Tenant Isolation Tests
+Files:
+  - apps/api/tests/integration/multi-tenant-isolation.test.ts
+  - apps/api/tests/fixtures/multi-tenant-communities.ts
+  - apps/api/tests/fixtures/multi-tenant-users.ts
+
+P2-44: Apartment Demo Seed
+Files:
+  - packages/db/src/seed-demo.ts (extended)
+  - packages/db/src/fixtures/apartment-demo-data.ts
+  - apps/api/scripts/seed-apartment-demo.ts
+
+
+PHASE 3: PM & MOBILE
+====================
+
+P3-45: PM Portfolio Dashboard
+Files:
+  - apps/web/app/(pm)/dashboard/communities/page.tsx
+  - apps/web/components/pm/CommunityCard.tsx
+  - apps/web/components/pm/CommunityFilters.tsx
+  - apps/web/lib/api/pm-communities.ts
+
+P3-46: PM Community Switcher
+Files:
+  - apps/web/app/(pm)/dashboard/[community_id]/page.tsx
+  - apps/web/components/pm/CommunitySwitcher.tsx
+  - apps/web/lib/api/community-context.ts
+  - apps/web/hooks/useSelectedCommunity.ts
+
+P3-47: White-Label Branding
+Files:
+  - apps/web/app/(pm)/settings/branding/page.tsx
+  - apps/web/components/pm/BrandingForm.tsx
+  - apps/web/components/pm/BrandingPreview.tsx
+  - apps/web/lib/api/branding.ts
+  - apps/web/lib/services/image-processor.ts
+
+P3-48: Phone Frame Mobile Preview
+Files:
+  - apps/web/components/mobile/PhoneFrame.tsx
+  - apps/web/app/mobile/layout.tsx
+  - apps/web/app/mobile/page.tsx
+  - apps/web/app/mobile/documents/page.tsx
+  - apps/web/app/mobile/meetings/page.tsx
+
+P3-49: Mobile Layouts
+Files:
+  - apps/web/components/mobile/BottomTabBar.tsx
+  - apps/web/components/mobile/CompactCard.tsx
+  - apps/web/app/mobile/layout.tsx
+  - apps/web/styles/mobile.css
+
+P3-50: Maintenance Request Submission
+Files:
+  - apps/web/app/(resident)/maintenance/submit/page.tsx
+  - apps/web/components/maintenance/SubmitForm.tsx
+  - apps/web/components/maintenance/RequestCard.tsx
+  - apps/web/components/maintenance/CommentThread.tsx
+  - apps/web/lib/api/maintenance-requests.ts
+
+P3-51: Maintenance Request Admin
+Files:
+  - apps/web/app/(admin)/maintenance/inbox/page.tsx
+  - apps/web/components/maintenance/AdminInbox.tsx
+  - apps/web/components/maintenance/AssignmentModal.tsx
+  - apps/web/components/maintenance/StatusUpdateForm.tsx
+  - apps/web/lib/api/admin-maintenance.ts
+
+P3-52: Contract & Vendor Tracking
+Files:
+  - apps/web/app/(admin)/contracts/page.tsx
+  - apps/web/components/contracts/ContractForm.tsx
+  - apps/web/components/contracts/ContractTable.tsx
+  - apps/web/components/contracts/BidTracker.tsx
+  - apps/web/lib/api/contracts.ts
+
+P3-53: Audit Trail Viewer
+Files:
+  - apps/web/app/(admin)/audit-trail/page.tsx
+  - apps/web/components/audit/AuditTrailViewer.tsx
+  - apps/web/components/audit/AuditFilters.tsx
+  - apps/web/components/audit/AuditEntry.tsx
+  - apps/web/lib/api/audit-trail.ts
+
+P3-54: Performance Optimization
+Files:
+  - apps/web/lib/performance/vitals-monitor.ts
+  - apps/web/next.config.js
+  - apps/web/middleware.ts
+  - Various component refactors for dynamic imports
+
+
+PHASE 4: HARDENING
+==================
+
+P4-55: Row-Level Security
+Files:
+  - packages/db/migrations/add-rls-policies.sql
+  - packages/db/schema.ts (RLS configuration)
+  - apps/web/lib/db/rls-validation.test.ts
+
+P4-56: Security Audit
+Files:
+  - docs/SECURITY_AUDIT.md (report)
+  - apps/web/middleware.ts (CORS, CSP headers)
+  - apps/web/lib/validation/zod-schemas.ts
+  - apps/web/lib/services/file-upload.ts
+
+P4-57: RBAC Audit
+Files:
+  - apps/web/lib/db/access-control.ts
+  - apps/web/__tests__/rbac.test.ts
+  - docs/RBAC_MATRIX.md (role × community_type × resource mapping)
+
+P4-58: Integration Tests
+Files:
+  - apps/web/__tests__/integration/signup.test.ts
+  - apps/web/__tests__/integration/document-upload.test.ts
+  - apps/web/__tests__/integration/compliance.test.ts
+  - apps/web/__tests__/integration/role-isolation.test.ts
+  - apps/web/__tests__/fixtures/community-fixtures.ts
+
+P4-59: CI/CD Pipeline
+Files:
+  - .github/workflows/ci.yml
+  - .github/workflows/deploy.yml
+  - turbo.json (cache configuration)
+
+P4-60: Production Deployment
+Files:
+  - vercel.json (project configuration)
+  - .env.example (documented environment variables)
+  - docs/DEPLOYMENT.md (deployment procedures)
+
+P4-61: Demo Reset Script
+Files:
+  - scripts/reset-demo.ts
+  - scripts/fixtures/demo-data.json
+  - .github/workflows/reset-demo.yml (optional)
+  - vercel.json (cron configuration, optional)
+
+P4-62: Load Testing
+Files:
+  - scripts/load-tests/k6-script.js (or equivalent)
+  - docs/LOAD_TEST_RESULTS.md (report with metrics)
+
+P4-63: Accessibility Audit
+Files:
+  - apps/web/__tests__/accessibility/axe-audit.test.ts
+  - docs/ACCESSIBILITY.md (audit findings)
+  - Component accessibility documentation updates
+
+P4-64: Data Export
+Files:
+  - apps/web/app/(admin)/export/page.tsx
+  - apps/web/lib/api/export.ts
+  - apps/web/lib/services/csv-generator.ts
+
+
+PACKAGE STRUCTURE SUMMARY
+=========================
+
+apps/
+  web/                     (Next.js frontend)
+  api/                     (Backend API - if separate)
+
+packages/
+  ui/                      (Design system components)
+    src/tokens/           (Design tokens)
+    src/primitives/       (Box, Stack, Text)
+    src/components/       (Button, Card, Badge, etc.)
+    src/styles/
+    src/types/
+  db/                      (Database client and schema)
+    src/schema/           (Drizzle schemas)
+    src/supabase/         (Auth/storage clients)
+    src/queries/          (Query builders)
+    src/scoped-client.ts
+    migrations/           (SQL migrations)
+  shared/                  (Shared utilities and constants)
+    src/types/
+    src/compliance-templates.ts
+    src/middleware/
+    src/features/
+    src/schema/
+  email/                   (Email templates)
+    src/templates/
+
+scripts/                    (Build and data scripts)
+  seed-demo.ts
+  reset-demo.ts
+  load-tests/
+
+docs/                       (Documentation)
+  DEPLOYMENT.md
+  SECURITY_AUDIT.md
+  RBAC_MATRIX.md
+  ACCESSIBILITY.md
+  LOAD_TEST_RESULTS.md
+
+.github/
+  workflows/               (CI/CD)
+    ci.yml
+    deploy.yml
+    reset-demo.yml (optional)
+
+
+TOTALS
+======
+Total Specification Files: 65
+Total Expected Project Files: ~320+ (including all components, routes, tests)
+Lines of Expected Documentation: 1000+
+

@@ -1,15 +1,23 @@
+/* Responsive density — component sizing adjusts per viewport */
 :root {
+  /* Accessibility target minimums */
   --touch-target-min: 44px;
+  --pointer-target-min: 36px;
 
-  --button-height-sm: 32px;
-  --button-height-md: 40px;
-  --button-height-lg: 48px;
+  /* Mobile-first: spacious */
+  --component-padding: var(--space-4); /* 16px */
+  --component-gap: var(--space-3); /* 12px */
+  --input-height: 48px;
+  --button-height: 48px;
 }
 
-@media (pointer: coarse) {
-  .button--sm {
-    min-height: var(--touch-target-min);
-    min-width: var(--touch-target-min);
+@media (min-width: 768px) {
+  :root {
+    /* Desktop: default density */
+    --component-padding: var(--space-3); /* 12px */
+    --component-gap: var(--space-2); /* 8px */
+    --input-height: 40px;
+    --button-height: 40px;
+    --touch-target-min: 36px;
   }
 }
-

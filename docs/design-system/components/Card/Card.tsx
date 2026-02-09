@@ -38,7 +38,7 @@ import "./Card.css";
 import {
   semanticColors,
   componentTokens,
-  primitiveShadow,
+  semanticElevation,
   primitiveSpace,
   StatusVariant,
 } from "../../tokens";
@@ -65,7 +65,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
   size?: CardSize;
 
   /**
-   * Elevate the card with shadow
+   * Legacy option for raised-at-rest cards
    */
   elevated?: boolean;
 
@@ -333,7 +333,7 @@ const CardRoot = forwardRef<HTMLDivElement, CardProps>(
     },
     ref
   ) => {
-    const { padding, radius } = componentTokens.card;
+    const { padding, radius, elevation } = componentTokens.card;
 
     const isClickable = !!onClick;
     const isInteractive = interactive && isClickable;
@@ -352,6 +352,9 @@ const CardRoot = forwardRef<HTMLDivElement, CardProps>(
     const statusBorderColor = status
       ? semanticColors.status[status].foreground
       : "transparent";
+
+    const restElevation = elevation.rest;
+    const hoverElevation = elevated ? elevation.interactive : elevation.hover;
 
     return (
       <CardContext.Provider value={{ size, interactive: isInteractive }}>
@@ -380,8 +383,8 @@ const CardRoot = forwardRef<HTMLDivElement, CardProps>(
             ["--card-border-left" as any]: status
               ? `3px solid ${statusBorderColor}`
               : "initial",
-            ["--card-shadow" as any]: elevated ? primitiveShadow.lg : primitiveShadow.sm,
-            ["--card-shadow-hover" as any]: primitiveShadow.lg,
+            ["--card-shadow" as any]: semanticElevation[restElevation].shadow,
+            ["--card-shadow-hover" as any]: semanticElevation[hoverElevation].shadow,
             // Padding (only if no compound children and not noPadding)
             padding: hasCompoundChildren || noPadding ? 0 : padding[size],
             ...style,

@@ -118,7 +118,12 @@ export const SectionHeader = forwardRef<HTMLDivElement, SectionHeaderProps>(
     ref
   ) => {
     const titleVariant = size === "lg" ? "heading2" : size === "sm" ? "bodySmMedium" : "heading3";
-    const marginBottom = size === "lg" ? primitiveSpace[6] : size === "sm" ? primitiveSpace[3] : primitiveSpace[4];
+    const marginBottom =
+      size === "lg"
+        ? semanticSpacing.section.lg
+        : size === "sm"
+          ? semanticSpacing.section.sm
+          : semanticSpacing.section.md;
 
     const handleToggle = () => {
       if (collapsible && onToggle) {

@@ -1,33 +1,47 @@
 :root {
-  --focus-ring-color: #3b82f6;
+  /* Focus ring tokens */
+  --focus-ring-color: var(--blue-500);
   --focus-ring-offset: 2px;
   --focus-ring-width: 2px;
+  --focus-ring-style: solid;
+
+  /* High contrast focus for critical actions */
+  --focus-ring-color-danger: var(--red-500);
+  --focus-ring-color-inverse: var(--gray-0);
 }
 
-button:focus,
-a:focus,
-[tabindex]:focus {
+/* Default focus-visible style — apply globally */
+:focus-visible {
+  outline: var(--focus-ring-width) var(--focus-ring-style) var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: inherit;
+}
+
+/* Remove default focus for mouse users */
+:focus:not(:focus-visible) {
   outline: none;
 }
 
-button:focus-visible,
-a:focus-visible,
-[tabindex]:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
+/* Skip link — add to layout */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 16px;
 }
 
 @media (forced-colors: active) {
-  button:focus-visible,
-  a:focus-visible,
-  [tabindex]:focus-visible {
+  :focus-visible {
     outline: 3px solid CanvasText;
   }
 }
-
-.dark-surface button:focus-visible,
-.dark-surface a:focus-visible,
-.dark-surface [tabindex]:focus-visible {
-  --focus-ring-color: #93c5fd;
-}
-

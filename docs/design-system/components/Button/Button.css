@@ -17,7 +17,7 @@
   color: var(--button-color);
   background: var(--button-bg);
   border: var(--button-border, none);
-  border-radius: var(--button-radius, 8px);
+  border-radius: var(--button-radius, 10px);
 
   cursor: pointer;
   transition:
@@ -49,4 +49,3 @@
 .button--fullWidth {
   width: 100%;
 }
-

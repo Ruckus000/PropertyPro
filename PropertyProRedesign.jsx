@@ -46,17 +46,17 @@ const primitiveFonts = {
     sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     mono: "'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace"
   },
-  size: { xs: "0.694rem", sm: "0.833rem", base: "1rem", lg: "1.2rem", xl: "1.44rem", "2xl": "1.728rem", "3xl": "2.074rem" },
+  size: { xs: "0.6875rem", sm: "0.8125rem", base: "1rem", lg: "1.125rem", xl: "1.25rem", "2xl": "1.5rem", "3xl": "1.875rem" },
   lineHeight: { tight: 1.2, snug: 1.35, normal: 1.5, relaxed: 1.625 },
   weight: { normal: 400, medium: 500, semibold: 600, bold: 700 },
   letterSpacing: { tight: "-0.01em", normal: "0", wide: "0.02em", wider: "0.05em" }
 };
 
 const primitiveSpace = {
-  0: 0, 1: 4, 1.5: 6, 2: 8, 2.5: 10, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48, 16: 64
+  0: 0, px: 1, 0.5: 2, 1: 4, 1.5: 6, 2: 8, 2.5: 10, 3: 12, 4: 16, 5: 20, 6: 24, 7: 28, 8: 32, 9: 36, 10: 40, 11: 44, 12: 48, 14: 56, 16: 64, 20: 80
 };
 
-const primitiveRadius = { none: 0, sm: 4, md: 8, lg: 12, xl: 16, full: 9999 };
+const primitiveRadius = { none: 0, sm: 6, md: 10, lg: 16, xl: 20, "2xl": 24, full: 9999 };
 
 const primitiveShadow = {
   none: "none",
@@ -68,12 +68,13 @@ const primitiveShadow = {
 };
 
 const primitiveMotion = {
-  duration: { instant: 0, micro: 100, quick: 150, standard: 250, slow: 350 },
+  duration: { instant: 0, micro: 100, quick: 150, standard: 250, slow: 350, expressive: 500 },
   easing: {
     linear: "linear",
     standard: "cubic-bezier(0.4, 0, 0.2, 1)",
     enter: "cubic-bezier(0, 0, 0.2, 1)",
-    exit: "cubic-bezier(0.4, 0, 1, 1)"
+    exit: "cubic-bezier(0.4, 0, 1, 1)",
+    bounce: "cubic-bezier(0.34, 1.56, 0.64, 1)"
   }
 };
 
@@ -87,7 +88,8 @@ const semanticColors = {
     inverse: "var(--text-inverse)",
     brand: "var(--text-brand)",
     link: "var(--text-link)",
-    linkHover: "var(--text-link-hover)"
+    linkHover: "var(--text-link-hover)",
+    placeholder: "var(--text-placeholder)"
   },
   surface: {
     page: "var(--surface-page)",
@@ -95,7 +97,9 @@ const semanticColors = {
     subtle: "var(--surface-subtle)",
     muted: "var(--surface-muted)",
     elevated: "var(--surface-elevated)",
+    sunken: "var(--surface-sunken)",
     inverse: "var(--surface-inverse)",
+    inverseSubtle: "var(--surface-inverse-subtle)",
     // Translucent overlays for dark surfaces
     inverseOverlay: "var(--surface-inverse-overlay)",
     inverseOverlayHover: "var(--surface-inverse-overlay-hover)",
@@ -107,46 +111,56 @@ const semanticColors = {
     default: "var(--border-default)",
     subtle: "var(--border-subtle)",
     strong: "var(--border-strong)",
-    focus: "var(--border-focus)"
+    muted: "var(--border-muted)",
+    focus: "var(--border-focus)",
+    error: "var(--border-error)"
   },
   interactive: {
     default: "var(--interactive-primary)",
     hover: "var(--interactive-primary-hover)",
     active: "var(--interactive-primary-active)",
+    disabled: "var(--interactive-disabled)",
     subtle: "var(--interactive-subtle)",
-    subtleHover: "var(--interactive-subtle-hover)"
+    subtleHover: "var(--interactive-subtle-hover)",
+    muted: "var(--interactive-muted)"
   },
   status: {
     success: {
       foreground: "var(--status-success)",
       background: "var(--status-success-bg)",
-      border: "var(--status-success-border)"
+      border: "var(--status-success-border)",
+      subtle: "var(--status-success-subtle)"
     },
     brand: {
       // Blue (brand) status for "good but not perfect" metrics (80–99%)
       foreground: "var(--status-brand)",
       background: "var(--status-brand-bg)",
-      border: "var(--status-brand-border)"
+      border: "var(--status-brand-border)",
+      subtle: "var(--status-brand-subtle)"
     },
     warning: {
       foreground: "var(--status-warning)",
       background: "var(--status-warning-bg)",
-      border: "var(--status-warning-border)"
+      border: "var(--status-warning-border)",
+      subtle: "var(--status-warning-subtle)"
     },
     danger: {
       foreground: "var(--status-danger)",
       background: "var(--status-danger-bg)",
-      border: "var(--status-danger-border)"
+      border: "var(--status-danger-border)",
+      subtle: "var(--status-danger-subtle)"
     },
     info: {
       foreground: "var(--status-info)",
       background: "var(--status-info-bg)",
-      border: "var(--status-info-border)"
+      border: "var(--status-info-border)",
+      subtle: "var(--status-info-subtle)"
     },
     neutral: {
       foreground: "var(--status-neutral)",
       background: "var(--status-neutral-bg)",
-      border: "var(--status-neutral-border)"
+      border: "var(--status-neutral-border)",
+      subtle: "var(--status-neutral-subtle)"
     }
   }
 };
@@ -217,16 +231,28 @@ const semanticTypography = {
 };
 
 const semanticSpacing = {
+  // ── Micro tokens (component internals) ──
   inline: { xs: primitiveSpace[1], sm: primitiveSpace[2], md: primitiveSpace[3], lg: primitiveSpace[4], xl: primitiveSpace[6] },
   stack: { xs: primitiveSpace[2], sm: primitiveSpace[3], md: primitiveSpace[4], lg: primitiveSpace[6], xl: primitiveSpace[8] },
+  inset: { xs: primitiveSpace[2], sm: primitiveSpace[3], md: primitiveSpace[4], lg: primitiveSpace[5], xl: primitiveSpace[6] },
+  // ── Macro tokens (section/page composition) ──
   section: { sm: primitiveSpace[6], md: primitiveSpace[8], lg: primitiveSpace[12], xl: primitiveSpace[16] },
-  inset: { xs: primitiveSpace[2], sm: primitiveSpace[3], md: primitiveSpace[4], lg: primitiveSpace[5], xl: primitiveSpace[6] }
+  page: { sm: primitiveSpace[12], md: primitiveSpace[16], lg: primitiveSpace[20] }
+};
+
+// ─── Elevation System ───
+// E0=flat (default), E1=raised (hover/sticky), E2=overlay (menus/popovers), E3=modal
+const semanticElevation = {
+  e0: { shadow: primitiveShadow.none },
+  e1: { shadow: primitiveShadow.sm },
+  e2: { shadow: primitiveShadow.md },
+  e3: { shadow: primitiveShadow.lg }
 };
 
 // ─── Component Tokens ───
 const componentTokens = {
   button: {
-    height: { sm: 32, md: 40, lg: 48 },
+    height: { sm: 36, md: 40, lg: 48 },
     padding: { sm: primitiveSpace[3], md: primitiveSpace[4], lg: primitiveSpace[5] },
     iconSize: { sm: 14, md: 16, lg: 18 },
     gap: primitiveSpace[2],
@@ -241,13 +267,59 @@ const componentTokens = {
   },
   card: {
     padding: { sm: primitiveSpace[4], md: primitiveSpace[5], lg: primitiveSpace[6] },
-    radius: primitiveRadius.lg,
-    gap: primitiveSpace[4]
+    radius: primitiveRadius.md,
+    gap: primitiveSpace[4],
+    elevation: { rest: "e0", hover: "e1", interactive: "e1" }
   },
   nav: {
     rail: { widthCollapsed: 64, widthExpanded: 240 },
     item: { height: 44, padding: primitiveSpace[3], radius: primitiveRadius.md, iconSize: 20, gap: primitiveSpace[3] }
+  },
+  input: {
+    height: { sm: 36, md: 40, lg: 48 },
+    padding: { sm: primitiveSpace[2], md: primitiveSpace[3], lg: primitiveSpace[4] },
+    radius: primitiveRadius.sm,
+    borderWidth: 1,
+    focusBorderWidth: 2
+  },
+  table: {
+    row: { height: 52, padding: primitiveSpace[4] },
+    header: { height: 40, padding: primitiveSpace[4] },
+    cell: { padding: primitiveSpace[3] }
+  },
+  modal: {
+    width: { sm: 400, md: 560, lg: 720, xl: 960 },
+    padding: primitiveSpace[6],
+    radius: primitiveRadius.lg,
+    elevation: "e3"
+  },
+  tooltip: {
+    padding: `${primitiveSpace[2]}px ${primitiveSpace[3]}px`,
+    radius: primitiveRadius.md,
+    maxWidth: 280
   }
+};
+
+// ─── Compliance Escalation Tiers ───
+const complianceEscalation = {
+  calm:     { variant: "neutral", treatment: "subtle", iconEmphasis: false },
+  aware:    { variant: "brand", treatment: "standard", iconEmphasis: false },
+  urgent:   { variant: "warning", treatment: "prominent", iconEmphasis: true },
+  critical: { variant: "danger", treatment: "persistent", iconEmphasis: true }
+};
+
+// ─── Semantic Motion ───
+const semanticMotion = {
+  feedback:    { duration: primitiveMotion.duration.quick, easing: primitiveMotion.easing.standard },
+  orientation: { duration: primitiveMotion.duration.standard, easing: primitiveMotion.easing.enter },
+  attention:   { duration: primitiveMotion.duration.slow, easing: primitiveMotion.easing.bounce },
+  none:        { duration: primitiveMotion.duration.instant, easing: primitiveMotion.easing.linear }
+};
+
+// ─── Interaction Sizing ───
+const interactionSizing = {
+  touchTarget: { minimum: 44, comfortable: 48 },
+  pointerTarget: { minimum: 36, comfortable: 40 }
 };
 
 // ─── Utility Functions ───
@@ -342,7 +414,7 @@ function useHashParams() {
 }
 
 const injectedGlobalStyles = `
-  html { font-size: 93.75%; }
+  html { font-size: 100%; }
 
   :root {
     /* Focus */
@@ -414,13 +486,16 @@ const injectedGlobalStyles = `
     --text-brand: var(--blue-600);
     --text-link: var(--blue-600);
     --text-link-hover: var(--blue-700);
+    --text-placeholder: var(--gray-400);
 
     --surface-page: var(--gray-50);
     --surface-card: var(--gray-0);
     --surface-subtle: var(--gray-25);
     --surface-muted: var(--gray-100);
     --surface-elevated: var(--gray-0);
+    --surface-sunken: var(--gray-50);
     --surface-inverse: var(--gray-950);
+    --surface-inverse-subtle: var(--gray-900);
     --surface-inverse-overlay: rgba(255,255,255,0.1);
     --surface-inverse-overlay-hover: rgba(255,255,255,0.15);
     --surface-inverse-border: rgba(255,255,255,0.08);
@@ -430,37 +505,47 @@ const injectedGlobalStyles = `
     --border-default: var(--gray-200);
     --border-subtle: var(--gray-100);
     --border-strong: var(--gray-300);
+    --border-muted: var(--gray-50);
     --border-focus: var(--blue-500);
+    --border-error: var(--red-500);
 
     --interactive-primary: var(--blue-600);
     --interactive-primary-hover: var(--blue-700);
     --interactive-primary-active: var(--blue-800);
+    --interactive-disabled: var(--gray-300);
     --interactive-subtle: var(--blue-50);
     --interactive-subtle-hover: var(--blue-100);
+    --interactive-muted: var(--blue-100);
 
     --status-success: var(--green-700);
     --status-success-bg: var(--green-50);
     --status-success-border: var(--green-200);
+    --status-success-subtle: var(--green-100);
 
     --status-brand: var(--blue-600);
     --status-brand-bg: var(--blue-50);
     --status-brand-border: var(--blue-200);
+    --status-brand-subtle: var(--blue-100);
 
     --status-warning: var(--amber-700);
     --status-warning-bg: var(--amber-50);
     --status-warning-border: var(--amber-200);
+    --status-warning-subtle: var(--amber-100);
 
     --status-danger: var(--red-700);
     --status-danger-bg: var(--red-50);
     --status-danger-border: var(--red-200);
+    --status-danger-subtle: var(--red-100);
 
     --status-info: var(--blue-700);
     --status-info-bg: var(--blue-50);
     --status-info-border: var(--blue-200);
+    --status-info-subtle: var(--blue-100);
 
     --status-neutral: var(--gray-600);
     --status-neutral-bg: var(--gray-100);
     --status-neutral-border: var(--gray-200);
+    --status-neutral-subtle: var(--gray-50);
 
     /* Spacing */
     --space-1: 4px;
@@ -471,14 +556,28 @@ const injectedGlobalStyles = `
     --space-8: 32px;
 
     /* Radius */
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
     --radius-full: 9999px;
 
-    /* Shadow */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
-    --shadow-lg: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03);
+    /* Elevation tokens */
+    --elevation-e0: none;
+    --elevation-e1: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+    --elevation-e2: 0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02);
+    --elevation-e3: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03);
+
+    /* Shadow aliases (backward compat) */
+    --shadow-sm: var(--elevation-e1);
+    --shadow-lg: var(--elevation-e3);
+
+    /* Responsive density */
+    --component-padding: var(--space-4);
+    --component-gap: var(--space-3);
+    --input-height: 48px;
+    --button-height: 48px;
 
     /* Motion */
     --duration-instant: 0ms;
@@ -532,6 +631,15 @@ const injectedGlobalStyles = `
     }
   }
 
+  @media (min-width: 768px) {
+    :root {
+      --component-padding: var(--space-3);
+      --component-gap: var(--space-2);
+      --input-height: 40px;
+      --button-height: 40px;
+    }
+  }
+
   button[data-pp-button] {
     background: var(--button-bg);
     color: var(--button-color);
@@ -559,7 +667,7 @@ const injectedGlobalStyles = `
   }
 
   [data-pp-card][data-interactive="true"]:hover {
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--elevation-e1);
   }
 
   [data-pp-datarow][data-selected="false"]:hover {
@@ -590,8 +698,8 @@ const injectedGlobalStyles = `
     }
 
     [data-pp-datarow] {
-      padding-top: 14px !important;
-      padding-bottom: 14px !important;
+      padding-top: 16px !important;
+      padding-bottom: 16px !important;
     }
   }
 `;
@@ -1179,7 +1287,7 @@ const CardRoot = forwardRef(({
     borderRadius: radius,
     border: `1px solid ${selected ? semanticColors.interactive.default : semanticColors.border.subtle}`,
     borderLeft: status ? `3px solid ${statusBorderColor}` : undefined,
-    boxShadow: elevated ? primitiveShadow.lg : primitiveShadow.sm,
+    boxShadow: elevated ? semanticElevation.e1.shadow : semanticElevation.e0.shadow,
     padding: hasCompoundChildren || noPadding ? 0 : padding[size],
     cursor: interactive ? "pointer" : "default",
     transition: createTransition(["box-shadow", "border-color", "background"], "quick"),
@@ -1193,7 +1301,7 @@ const CardRoot = forwardRef(({
           ref={ref}
           type="button"
           data-pp-card
-          data-interactive="true"
+          data-interactive={isInteractive ? "true" : "false"}
           onClick={onClick}
           style={{
             ...sharedStyle,
@@ -1211,7 +1319,7 @@ const CardRoot = forwardRef(({
         <div
           ref={ref}
           data-pp-card
-          data-interactive="true"
+          data-interactive={isInteractive ? "true" : "false"}
           style={sharedStyle}
           {...props}
         >
@@ -1946,10 +2054,10 @@ const NavRail = ({ activeView, setActiveView, expanded, onToggle }) => {
                   <span style={{
                     background: badgeVariant === "danger" ? semanticColors.status.danger.foreground : semanticColors.surface.inverseOverlay,
                     color: badgeVariant === "danger" ? semanticColors.text.inverse : semanticColors.text.inverse,
-                    fontSize: "0.75rem",
+                    fontSize: primitiveFonts.size.xs,
                     fontWeight: 600,
-                    padding: "0 6px",
-                    borderRadius: 10,
+                    padding: `0 ${primitiveSpace[2]}px`,
+                    borderRadius: primitiveRadius.md,
                     height: 20,
                     display: "flex",
                     alignItems: "center",
@@ -2090,7 +2198,7 @@ const TopBar = ({ title, subtitle, onSearchOpen, bp, onNavOpen }) => (
             fontSize: primitiveFonts.size.xs,
             color: semanticColors.text.tertiary,
             background: semanticColors.surface.default,
-            padding: `1px ${semanticSpacing.inline.sm}px`,
+            padding: `${primitiveSpace[1]}px ${semanticSpacing.inline.sm}px`,
             borderRadius: primitiveRadius.sm,
             border: `1px solid ${semanticColors.border.default}`
           }}>⌘K</span>
@@ -2145,7 +2253,7 @@ const HeroMetric = forwardRef(({
           <Text variant="display" style={{ color: colors.foreground }}>{value}</Text>
           {trend && (
             <HStack align="center" gap={4} style={{
-              padding: "2px 6px",
+              padding: `${primitiveSpace[1]}px ${primitiveSpace[2]}px`,
               borderRadius: primitiveRadius.sm,
               background: isPositive ? semanticColors.status.success.background : semanticColors.status.danger.background,
               color: isPositive ? semanticColors.status.success.foreground : semanticColors.status.danger.foreground,
@@ -3079,7 +3187,7 @@ export default function PropertyProRedesign() {
             style={{
               position: "absolute",
               inset: 0,
-              background: "rgba(0,0,0,0.35)",
+              background: "var(--surface-inverse-overlay, rgba(0,0,0,0.35))",
               zIndex: 50,
               display: "flex"
             }}

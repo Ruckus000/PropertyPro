@@ -1,0 +1,290 @@
+/* PropertyPro Design System — CSS Custom Properties */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRIMITIVES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Colors */
+  --blue-50: #EFF6FF;
+  --blue-100: #DBEAFE;
+  --blue-200: #BFDBFE;
+  --blue-300: #93C5FD;
+  --blue-400: #60A5FA;
+  --blue-500: #3B82F6;
+  --blue-600: #2563EB;
+  --blue-700: #1D4ED8;
+  --blue-800: #1E40AF;
+  --blue-900: #1E3A8A;
+  --blue-950: #172554;
+
+  --gray-0: #FFFFFF;
+  --gray-25: #FCFCFD;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+  --gray-950: #0D1117;
+
+  --green-50: #ECFDF5;
+  --green-100: #D1FAE5;
+  --green-200: #A7F3D0;
+  --green-500: #10B981;
+  --green-600: #059669;
+  --green-700: #047857;
+
+  --amber-50: #FFFBEB;
+  --amber-100: #FEF3C7;
+  --amber-200: #FDE68A;
+  --amber-500: #F59E0B;
+  --amber-600: #D97706;
+  --amber-700: #B45309;
+
+  --red-50: #FEF2F2;
+  --red-100: #FEE2E2;
+  --red-200: #FECACA;
+  --red-500: #EF4444;
+  --red-600: #DC2626;
+  --red-700: #B91C1C;
+
+  /* Spacing (4px base unit) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  font-size: 16px;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-size-xs: 0.6875rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  /* Motion */
+  --motion-duration-instant: 0ms;
+  --motion-duration-micro: 100ms;
+  --motion-duration-quick: 150ms;
+  --motion-duration-standard: 250ms;
+  --motion-duration-slow: 350ms;
+  --motion-duration-expressive: 500ms;
+
+  --duration-instant: var(--motion-duration-instant);
+  --duration-micro: var(--motion-duration-micro);
+  --duration-quick: var(--motion-duration-quick);
+  --duration-standard: var(--motion-duration-standard);
+  --duration-slow: var(--motion-duration-slow);
+  --duration-expressive: var(--motion-duration-expressive);
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Sizing — responsive density */
+  --touch-target-min: 44px;
+  --pointer-target-min: 36px;
+  --component-padding: var(--space-4);
+  --component-gap: var(--space-3);
+  --input-height: 48px;
+  --button-height: 48px;
+
+  /* Focus */
+  --focus-ring-color: var(--blue-500);
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 2px;
+  --focus-ring-style: solid;
+  --focus-ring-color-danger: var(--red-500);
+  --focus-ring-color-inverse: var(--gray-0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Text */
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-600);
+  --text-disabled: var(--gray-400);
+  --text-placeholder: var(--gray-400);
+  --text-inverse: var(--gray-0);
+  --text-brand: var(--blue-600);
+  --text-link: var(--blue-600);
+  --text-link-hover: var(--blue-700);
+
+  /* Surfaces */
+  --surface-page: var(--gray-50);
+  --surface-card: var(--gray-0);
+  --surface-subtle: var(--gray-25);
+  --surface-muted: var(--gray-100);
+  --surface-elevated: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+  --surface-inverse: var(--gray-950);
+  --surface-inverse-subtle: var(--gray-900);
+
+  /* Borders */
+  --border-default: var(--gray-200);
+  --border-subtle: var(--gray-100);
+  --border-strong: var(--gray-300);
+  --border-muted: var(--gray-50);
+  --border-focus: var(--blue-500);
+  --border-error: var(--red-500);
+
+  /* Interactive */
+  --interactive-primary: var(--blue-600);
+  --interactive-primary-hover: var(--blue-700);
+  --interactive-primary-active: var(--blue-800);
+  --interactive-disabled: var(--gray-300);
+  --interactive-subtle: var(--blue-50);
+  --interactive-subtle-hover: var(--blue-100);
+  --interactive-muted: var(--blue-100);
+
+  /* Status */
+  --status-success: var(--green-700);
+  --status-success-bg: var(--green-50);
+  --status-success-border: var(--green-200);
+  --status-success-subtle: var(--green-100);
+
+  --status-brand: var(--blue-600);
+  --status-brand-bg: var(--blue-50);
+  --status-brand-border: var(--blue-200);
+  --status-brand-subtle: var(--blue-100);
+
+  --status-warning: var(--amber-700);
+  --status-warning-bg: var(--amber-50);
+  --status-warning-border: var(--amber-200);
+  --status-warning-subtle: var(--amber-100);
+
+  --status-danger: var(--red-700);
+  --status-danger-bg: var(--red-50);
+  --status-danger-border: var(--red-200);
+  --status-danger-subtle: var(--red-100);
+
+  --status-info: var(--blue-700);
+  --status-info-bg: var(--blue-50);
+  --status-info-border: var(--blue-200);
+  --status-info-subtle: var(--blue-100);
+
+  --status-neutral: var(--gray-600);
+  --status-neutral-bg: var(--gray-100);
+  --status-neutral-border: var(--gray-200);
+  --status-neutral-subtle: var(--gray-50);
+
+  /* Elevation */
+  --elevation-e0: none;
+  --elevation-e1: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --elevation-e2: 0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02);
+  --elevation-e3: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DENSITY
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 768px) {
+  :root {
+    --component-padding: var(--space-3);
+    --component-gap: var(--space-2);
+    --input-height: 40px;
+    --button-height: 40px;
+    --touch-target-min: 36px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOCUS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: var(--focus-ring-width) var(--focus-ring-style) var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: inherit;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 16px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid CanvasText;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTION — REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-micro: 0ms;
+    --motion-duration-quick: 0ms;
+    --motion-duration-standard: 0ms;
+    --motion-duration-slow: 0ms;
+    --motion-duration-expressive: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fadeIn var(--duration-standard) var(--ease-enter);
+  }
+}

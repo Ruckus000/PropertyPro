@@ -78,15 +78,15 @@ export const primitiveFonts = {
     sans: "var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif)",
     mono: "var(--font-mono, 'JetBrains Mono', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace)",
   },
-  // Modular scale (base 15px, ratio 1.2) using rem units
+  // Modular scale (base 16px, ratio ~1.2) using rem units
   size: {
-    xs: "var(--font-size-xs, 0.694rem)", // ~10.4px @ 15px base
-    sm: "var(--font-size-sm, 0.833rem)", // ~12.5px @ 15px base
-    base: "var(--font-size-base, 1rem)", // 15px @ 15px base
-    lg: "var(--font-size-lg, 1.2rem)", // 18px @ 15px base
-    xl: "var(--font-size-xl, 1.44rem)", // 21.6px @ 15px base
-    "2xl": "var(--font-size-2xl, 1.728rem)", // 25.9px @ 15px base
-    "3xl": "var(--font-size-3xl, 2.074rem)", // 31.1px @ 15px base
+    xs: "var(--font-size-xs, 0.6875rem)", // 11px
+    sm: "var(--font-size-sm, 0.8125rem)", // 13px
+    base: "var(--font-size-base, 1rem)", // 16px
+    lg: "var(--font-size-lg, 1.125rem)", // 18px
+    xl: "var(--font-size-xl, 1.25rem)", // 20px
+    "2xl": "var(--font-size-2xl, 1.5rem)", // 24px
+    "3xl": "var(--font-size-3xl, 1.875rem)", // 30px
   },
   lineHeight: {
     tight: 1.2,
@@ -134,14 +134,15 @@ export const primitiveSpace = {
 
 export const primitiveRadius = {
   none: 0,
-  sm: 4,
-  md: 8,
-  lg: 12,
-  xl: 16,
+  sm: 6,
+  md: 10,
+  lg: 16,
+  xl: 20,
   "2xl": 24,
   full: 9999,
 } as const;
 
+// Primitive shadow values that back the semantic elevation system.
 export const primitiveShadow = {
   none: "none",
   xs: "0 1px 2px rgba(0,0,0,0.03)",
@@ -354,7 +355,7 @@ export const semanticTypography = {
 } as const;
 
 export const semanticSpacing = {
-  // Inline spacing (horizontal gaps)
+  // ── Micro tokens (component internals) ──
   inline: {
     xs: primitiveSpace[1],  // 4px
     sm: primitiveSpace[2],  // 8px
@@ -362,7 +363,6 @@ export const semanticSpacing = {
     lg: primitiveSpace[4],  // 16px
     xl: primitiveSpace[6],  // 24px
   },
-  // Stack spacing (vertical gaps)
   stack: {
     xs: primitiveSpace[2],  // 8px
     sm: primitiveSpace[3],  // 12px
@@ -370,14 +370,6 @@ export const semanticSpacing = {
     lg: primitiveSpace[6],  // 24px
     xl: primitiveSpace[8],  // 32px
   },
-  // Section spacing (major divisions)
-  section: {
-    sm: primitiveSpace[6],  // 24px
-    md: primitiveSpace[8],  // 32px
-    lg: primitiveSpace[12], // 48px
-    xl: primitiveSpace[16], // 64px
-  },
-  // Inset padding (internal component padding)
   inset: {
     xs: primitiveSpace[2],  // 8px
     sm: primitiveSpace[3],  // 12px
@@ -385,7 +377,53 @@ export const semanticSpacing = {
     lg: primitiveSpace[5],  // 20px
     xl: primitiveSpace[6],  // 24px
   },
+  // ── Macro tokens (section/page composition) ──
+  section: {
+    sm: primitiveSpace[6],  // 24px
+    md: primitiveSpace[8],  // 32px
+    lg: primitiveSpace[12], // 48px
+    xl: primitiveSpace[16], // 64px
+  },
+  page: {
+    sm: primitiveSpace[12], // 48px
+    md: primitiveSpace[16], // 64px
+    lg: primitiveSpace[20], // 80px
+  },
 } as const;
+
+/**
+ * Elevation System
+ *
+ * E0 — Flat: Default content surfaces (cards at rest, page content)
+ * E1 — Raised: Hover states, sticky headers, subtle emphasis
+ * E2 — Overlay: Menus, popovers, dropdowns, bottom sheets
+ * E3 — Modal: Dialogs, command palettes, full-screen overlays
+ *
+ * Rules:
+ * - E2/E3 are ONLY for elements that overlay page content
+ * - Prefer borders over shadows for hierarchy; use elevation sparingly
+ * - Mobile bottom sheets use E2
+ */
+export const semanticElevation = {
+  e0: {
+    shadow: primitiveShadow.none,
+    description: "Flat — default content surface",
+  },
+  e1: {
+    shadow: primitiveShadow.sm,
+    description: "Raised — hover lift, sticky bars, subtle emphasis",
+  },
+  e2: {
+    shadow: primitiveShadow.md,
+    description: "Overlay — menus, popovers, dropdowns, bottom sheets",
+  },
+  e3: {
+    shadow: primitiveShadow.lg,
+    description: "Modal — dialogs, command palettes",
+  },
+} as const;
+
+export type ElevationLevel = keyof typeof semanticElevation;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENT TOKENS
@@ -395,7 +433,7 @@ export const semanticSpacing = {
 export const componentTokens = {
   button: {
     height: {
-      sm: 32,
+      sm: 36,
       md: 40,
       lg: 48,
     },
@@ -433,7 +471,7 @@ export const componentTokens = {
   },
   input: {
     height: {
-      sm: 32,
+      sm: 36,
       md: 40,
       lg: 48,
     },
@@ -442,8 +480,9 @@ export const componentTokens = {
       md: primitiveSpace[3],
       lg: primitiveSpace[4],
     },
-    radius: primitiveRadius.md,
+    radius: primitiveRadius.sm,
     borderWidth: 1,
+    focusBorderWidth: 2,
   },
   card: {
     padding: {
@@ -451,8 +490,13 @@ export const componentTokens = {
       md: primitiveSpace[5],
       lg: primitiveSpace[6],
     },
-    radius: primitiveRadius.lg,
+    radius: primitiveRadius.md,
     gap: primitiveSpace[4],
+    elevation: {
+      rest: "e0",
+      hover: "e1",
+      interactive: "e1",
+    },
   },
   nav: {
     rail: {
@@ -488,12 +532,140 @@ export const componentTokens = {
       xl: 960,
     },
     padding: primitiveSpace[6],
-    radius: primitiveRadius.xl,
+    radius: primitiveRadius.lg,
+    elevation: "e3",
   },
   tooltip: {
     padding: `${primitiveSpace[2]}px ${primitiveSpace[3]}px`,
     radius: primitiveRadius.md,
     maxWidth: 280,
+  },
+} as const;
+
+/**
+ * Interaction Sizing
+ *
+ * Minimum interactive element dimensions for accessibility.
+ * Based on WCAG 2.2 Target Size (Level AA: 24px minimum, AAA: 44px).
+ * We target 44px on touch, 36px on pointer devices.
+ */
+export const interactionSizing = {
+  touchTarget: {
+    minimum: 44,
+    comfortable: 48,
+  },
+  pointerTarget: {
+    minimum: 36,
+    comfortable: 40,
+  },
+} as const;
+
+/**
+ * Compliance Status Escalation
+ *
+ * Defines how status presentation intensifies as deadlines approach.
+ * Components should use these tiers to determine rendering treatment.
+ *
+ * - calm: > 30 days out. Subtle background only, no icon emphasis.
+ * - aware: 8–30 days out. Standard badge with icon.
+ * - urgent: 1–7 days out. Prominent badge, stronger color, icon pulse optional.
+ * - critical: Overdue. Full danger treatment, persistent visibility.
+ *
+ * Rules:
+ * - NEVER rely on color alone. Always pair with icon + text.
+ * - Critical items must be visible without scrolling on the dashboard.
+ */
+export const complianceEscalation = {
+  calm: {
+    variant: "neutral" as const,
+    treatment: "subtle",
+    iconEmphasis: false,
+    description: "> 30 days from deadline",
+  },
+  aware: {
+    variant: "brand" as const,
+    treatment: "standard",
+    iconEmphasis: false,
+    description: "8–30 days from deadline",
+  },
+  urgent: {
+    variant: "warning" as const,
+    treatment: "prominent",
+    iconEmphasis: true,
+    description: "1–7 days from deadline",
+  },
+  critical: {
+    variant: "danger" as const,
+    treatment: "persistent",
+    iconEmphasis: true,
+    description: "Overdue",
+  },
+} as const;
+
+export type EscalationTier = keyof typeof complianceEscalation;
+
+/**
+ * Semantic Motion
+ *
+ * Motion is functional in PropertyPro, not decorative.
+ * Every animation must serve one of these purposes:
+ * - Feedback: Confirm user action completed
+ * - Orientation: Show where content came from or went
+ * - Attention: Draw focus to status changes or deadlines
+ *
+ * Rules:
+ * - ALWAYS respect prefers-reduced-motion
+ * - Status transitions (compliant → overdue) use `attention` timing
+ * - Page transitions use `orientation` timing
+ * - Button/hover states use `feedback` timing
+ */
+export const semanticMotion = {
+  feedback: {
+    duration: primitiveMotion.duration.quick,
+    easing: primitiveMotion.easing.standard,
+    description: "Hover, press, toggle — immediate response",
+  },
+  orientation: {
+    duration: primitiveMotion.duration.standard,
+    easing: primitiveMotion.easing.enter,
+    description: "Page transitions, panel slides, content reveals",
+  },
+  attention: {
+    duration: primitiveMotion.duration.slow,
+    easing: primitiveMotion.easing.bounce,
+    description: "Status changes, deadline alerts, celebration moments",
+  },
+  none: {
+    duration: primitiveMotion.duration.instant,
+    easing: primitiveMotion.easing.linear,
+    description: "Reduced motion fallback",
+  },
+} as const;
+
+/**
+ * Responsive Density
+ *
+ * Density is NOT a user toggle. It is driven by viewport:
+ * - Mobile (< 768px): "spacious" — larger touch targets, generous padding
+ * - Desktop (>= 768px): "default" — tighter components, same macro spacing
+ *
+ * Implementation:
+ * - Component tokens adjust padding/gap by one step down at desktop breakpoints
+ * - Section/page spacing (macro) stays constant across all viewports
+ * - Touch targets: 44px minimum on mobile, 36px minimum on desktop
+ */
+export const responsiveDensity = {
+  spacious: {
+    componentPadding: "inset.md",
+    componentGap: "inline.md",
+    buttonHeight: componentTokens.button.height.lg,
+    inputHeight: componentTokens.input.height.lg,
+  },
+  default: {
+    componentPadding: "inset.sm",
+    componentGap: "inline.sm",
+    buttonHeight: componentTokens.button.height.md,
+    inputHeight: componentTokens.input.height.md,
   },
 } as const;
 
@@ -518,11 +690,11 @@ export function createTransition(
 /**
  * Get spacing value from semantic spacing
  */
-export function space(
-  category: keyof typeof semanticSpacing,
-  size: "xs" | "sm" | "md" | "lg" | "xl"
+export function space<C extends keyof typeof semanticSpacing>(
+  category: C,
+  size: keyof (typeof semanticSpacing)[C]
 ): number {
-  return semanticSpacing[category][size];
+  return semanticSpacing[category][size] as number;
 }
 
 /**
@@ -555,7 +727,12 @@ export const theme = {
   components: componentTokens,
   radius: primitiveRadius,
   shadow: primitiveShadow,
+  elevation: semanticElevation,
   motion: primitiveMotion,
+  motionSemantic: semanticMotion,
+  escalation: complianceEscalation,
+  interactionSizing,
+  density: responsiveDensity,
   breakpoints: primitiveBreakpoints,
 } as const;
 
