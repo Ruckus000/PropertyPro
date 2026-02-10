@@ -7,7 +7,11 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   external: [
+    "drizzle-orm",
+    "postgres",
     "next/headers",
     "next/server",
+    "@supabase/ssr",
+    "@supabase/supabase-js",
   ],
 });

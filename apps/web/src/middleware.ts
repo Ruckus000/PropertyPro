@@ -5,17 +5,26 @@
  * 1. Refresh Supabase auth session without blocking rendering
  * 2. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
  */
-import { type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 
-export async function middleware(request: NextRequest) {
+/**
+ * NOTE: pnpm may resolve separate `next` virtual packages for the web app
+ * and the db package (due to differing optional peers from @sentry/nextjs).
+ * The NextRequest/NextResponse types are structurally identical at runtime,
+ * but TypeScript sees them as distinct nominal types because of private
+ * symbols like [INTERNALS]. We cast through `unknown` at the boundary.
+ */
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Refresh Supabase session (reads + writes cookies)
-  const { response } = await createMiddlewareClient(request);
+  const { response } = await createMiddlewareClient(
+    request as unknown as Parameters<typeof createMiddlewareClient>[0],
+  );
 
   // AGENTS #45: Generate a UUID request ID for tracing
   response.headers.set('X-Request-ID', crypto.randomUUID());
 
-  return response;
+  return response as unknown as NextResponse;
 }
 
 export const config = {
