@@ -27,5 +27,9 @@ export {
   deleteStorageObject,
 } from './supabase/storage';
 
+// Audit logger
+export { logAuditEvent } from './utils/audit-logger';
+export type { AuditAction, AuditEventParams } from './utils/audit-logger';
+
 // Schema & types
 export * from './schema';

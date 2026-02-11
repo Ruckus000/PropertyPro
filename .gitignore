@@ -16,6 +16,7 @@ dist/
 build/
 .next/
 .turbo/
+*.tsbuildinfo
 
 # Environment files
 .env
