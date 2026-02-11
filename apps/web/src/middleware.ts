@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   );
 
   // AGENTS #45: Generate a UUID request ID for tracing
-  response.headers.set('X-Request-ID', crypto.randomUUID());
+  response.headers.set('X-Request-ID', request.headers.get('x-request-id') || crypto.randomUUID());
 
   return response as unknown as NextResponse;
 }
