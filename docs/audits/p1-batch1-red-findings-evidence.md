@@ -21,3 +21,15 @@
   - Migration that enforces append-only at DB level for `compliance_audit_log` (block UPDATE/DELETE).
   - DB-level integration test proving direct UPDATE/DELETE is rejected even outside scoped-client guards.
   - Regression check that INSERT remains allowed.
+
+## Auth Hardening Addendum (2026-02-11)
+- Runtime identity for `/api/v1` mutation routes now resolves from Supabase server session cookies instead of `x-user-id` request headers.
+- Middleware now differentiates unauthenticated outcomes by route type:
+  - Page routes continue redirecting to `/auth/login?returnTo=...`.
+  - API routes under `/api/v1` return JSON `401` without redirect.
+- Unverified users on protected API routes now receive JSON `403` (`Email verification required`) instead of HTML redirects.
+
+## Community Authorization Follow-Up (Merge Gate)
+- **Issue:** [#2](https://github.com/Ruckus000/PropertyPro/issues/2) — `[P1][High] Enforce communityId membership authorization on document/compliance mutations`
+- **Status:** Open, labeled (`security`, `multi-tenant`, `backend`), assigned to PR author.
+- **Truthful classification:** identity hardening is complete; membership authorization on `communityId` remains pending and is tracked in #2.
