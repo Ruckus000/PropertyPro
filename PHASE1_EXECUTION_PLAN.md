@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0 and Batch 0.5 merged on `main`; Batch 1 partially complete (`P1-27b` merged), remaining Batch 1 tasks are active on feature worktrees
+**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; Batch 2 is next
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -25,9 +25,11 @@ Milestones:
 - [2026-02-11] Batch 1 kickoff (`main`) — created worktrees/branches for remaining Batch 1 tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`).
 - [2026-02-11] Batch 1 execution pause (`main`) — background Claude runs hit permission prompts in worktrees and were rerun with non-interactive permissions.
 - [2026-02-11] Batch 1 throttle checkpoint (`main`) — latest run stopped by usage limit reset at **4:00 PM America/New_York**; no new merges, WIP exists in `p1-09`, `p1-17`, `p1-18`, `p1-21`, `p1-22`, `p1-28`, while `p1-11` is still clean.
+- [2026-02-11] Batch 1 merges complete (`main`) — merged `P1-28` (`40497ea`), `P1-22` (`3649149`), `P1-21` (`715abbf`), `P1-11` (`ab4aa2b`), `P1-17` (`7f06ec5`), `P1-18` (`fa0feac`), and `P1-09` (`9ba3dc8`).
+- [2026-02-11] Batch 1 verification gate (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all passed after merges.
 
 Current cursor:
-- Next actions: checkpoint current WIP on active Batch 1 branches, resume task execution after quota reset (prefer lower parallelism), then complete remaining Batch 1 branches (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) and run the Batch 1 merge/verification gate.
+- Next actions: start Batch 2 branch creation and execution for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
 
 ---
 
