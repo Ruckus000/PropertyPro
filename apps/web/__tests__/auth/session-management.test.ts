@@ -133,6 +133,41 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
+  it('allows API request after deterministic refresh transition', async () => {
+    getUserMock
+      .mockResolvedValueOnce({
+        data: {
+          user: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          user: {
+            id: 'user-1',
+            email_confirmed_at: '2026-02-11T21:00:00.000Z',
+          },
+        },
+      });
+
+    createMiddlewareClientMock.mockImplementationOnce(async () => {
+      // Simulate middleware refresh call before route protection check.
+      await getUserMock();
+      return {
+        supabase: {
+          auth: {
+            getUser: getUserMock,
+          },
+        },
+        response: NextResponse.next(),
+      };
+    });
+
+    const response = await middleware(request('http://localhost:3000/api/v1/upload'));
+
+    expect(response.status).toBe(200);
+    expect(getUserMock).toHaveBeenCalledTimes(2);
+  });
+
   it('redirects authenticated users away from auth pages to dashboard by default', async () => {
     getUserMock.mockResolvedValue({
       data: {
