@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0 complete on `main`; Batch 0.5 and Batch 1 partially complete on feature branches (pending merge)
+**Status:** In Progress — Batch 0 and Batch 0.5 merged on `main`; Batch 1 partially complete (`P1-27b` merged)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -20,11 +20,12 @@ Milestones:
 - [2026-02-11] Batch 0 complete (`feature/p0-middleware-request-id-fix` → `main`, commit `391b329`) — middleware preserves incoming `x-request-id`.
 - [2026-02-11] Batch 0.5 complete (`feature/p1-27a-audit-logging-foundation` → `main`, commit `8b2a5dc`) — audit schema + `logAuditEvent()` foundation added.
 - [2026-02-11] Gap remediation complete (`main`) — `AuditEventParams.communityId` aligned to `number`, migration/hygiene gates added, `.tsbuildinfo` untracked and ignored.
-- [2026-02-11] Reconciliation update (`main`) — `P1-27a` implementation exists on `codex/p1-27a-audit-logging-foundation` (`0348f8d`) and is **not merged** to `main` yet.
-- [2026-02-11] Batch 1 partial (`feature/p1-27b-audit-logging-middleware`) — `P1-27b` implemented and pushed (`0f0ed93`, `9e811f0`), pending merge to `main`.
+- [2026-02-11] Batch 0.5 merge complete (`codex/p1-27a-audit-logging-foundation` → `main`, merge commit `0c0bd22`) — audit schema/logger foundation now on `main`.
+- [2026-02-11] Batch 1 partial merge (`feature/p1-27b-audit-logging-middleware` → `main`, merge commit `894f56c`) — append-only guards + audit middleware/tests now on `main`.
+- [2026-02-11] Verification gate checkpoint (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm --filter @propertypro/db test:integration` all passed.
 
 Current cursor:
-- Next actions: merge `codex/p1-27a-audit-logging-foundation` into `main`, then merge `feature/p1-27b-audit-logging-middleware`, then continue remaining Batch 1 branches.
+- Next actions: continue remaining Batch 1 branches (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`), then run Batch 1 merge/verification gate.
 
 ---
 
@@ -270,7 +271,7 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 **Tasks:** 1 (quick foundation task, ~15 min)
 **Purpose:** Provide `logAuditEvent()` function so all Batch 1 mutation tasks can call it.
 **Merge to main before Batch 1.**
-**Execution status:** Implemented on `codex/p1-27a-audit-logging-foundation` (`0348f8d`), pending merge to `main` (2026-02-11)
+**Execution status:** Completed and merged to `main` (merge commit `0c0bd22`, 2026-02-11)
 
 #### P1-27a — Audit Logging Foundation
 
