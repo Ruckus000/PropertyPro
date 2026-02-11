@@ -11,6 +11,7 @@ export * from './documents';
 export * from './announcements';
 export * from './notification-preferences';
 export * from './compliance-audit-log';
+export * from './compliance-checklist-items';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -24,6 +25,7 @@ import type { documents } from './documents';
 import type { announcements } from './announcements';
 import type { notificationPreferences } from './notification-preferences';
 import type { complianceAuditLog } from './compliance-audit-log';
+import type { complianceChecklistItems } from './compliance-checklist-items';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -59,3 +61,7 @@ export type NewNotificationPreference = typeof notificationPreferences.$inferIns
 
 // Compliance Audit Log (append-only — no Insert type needed, use logAuditEvent())
 export type ComplianceAuditLogRecord = typeof complianceAuditLog.$inferSelect;
+
+// Compliance Checklist Items
+export type ComplianceChecklistItem = typeof complianceChecklistItems.$inferSelect;
+export type NewComplianceChecklistItem = typeof complianceChecklistItems.$inferInsert;
