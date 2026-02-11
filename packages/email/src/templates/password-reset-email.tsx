@@ -15,6 +15,8 @@ export function PasswordResetEmail({
   resetUrl,
   expiresInMinutes = 60,
 }: PasswordResetEmailProps) {
+  const expirationText = `${expiresInMinutes} minute${expiresInMinutes !== 1 ? 's' : ''}`;
+
   return (
     <EmailLayout
       branding={branding}
@@ -33,8 +35,7 @@ export function PasswordResetEmail({
         Reset Password
       </Button>
       <Text style={smallTextStyle}>
-        This link expires in {expiresInMinutes} minute
-        {expiresInMinutes !== 1 ? "s" : ""}. If you did not request a
+        This link expires in {expirationText}. If you did not request a
         password reset, you can safely ignore this email. Your password will
         not be changed.
       </Text>

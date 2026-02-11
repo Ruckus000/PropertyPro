@@ -1,6 +1,4 @@
-/**
- * Shared types for the email package.
- */
+import type { ReactElement } from 'react';
 
 /** Community branding fields injected into every email. */
 export interface CommunityBranding {
@@ -16,13 +14,13 @@ export interface BaseEmailProps {
 }
 
 /** Classification of an email for List-Unsubscribe handling. */
-export type EmailCategory = "transactional" | "non-transactional";
+export type EmailCategory = 'transactional' | 'non-transactional';
 
 /** Options passed to the send helper. */
 export interface SendEmailOptions {
   to: string | string[];
   subject: string;
-  react: React.ReactElement;
+  react: ReactElement;
   category: EmailCategory;
   /** Required for non-transactional emails. mailto: or https: URI. */
   unsubscribeUrl?: string;

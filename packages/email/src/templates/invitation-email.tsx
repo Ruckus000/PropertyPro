@@ -19,6 +19,8 @@ export function InvitationEmail({
   inviteUrl,
   expiresInDays = 7,
 }: InvitationEmailProps) {
+  const expirationText = `${expiresInDays} day${expiresInDays !== 1 ? 's' : ''}`;
+
   return (
     <EmailLayout
       branding={branding}
@@ -44,8 +46,7 @@ export function InvitationEmail({
         Accept Invitation
       </Button>
       <Text style={smallTextStyle}>
-        This invitation expires in {expiresInDays} day
-        {expiresInDays !== 1 ? "s" : ""}. If you did not expect this
+        This invitation expires in {expirationText}. If you did not expect this
         invitation, you can safely ignore this email.
       </Text>
     </EmailLayout>
