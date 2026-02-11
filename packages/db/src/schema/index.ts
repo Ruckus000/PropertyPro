@@ -8,6 +8,7 @@ export * from './user-roles';
 export * from './units';
 export * from './document-categories';
 export * from './documents';
+export * from './announcements';
 export * from './notification-preferences';
 export * from './compliance-audit-log';
 
@@ -20,6 +21,7 @@ import type { userRoles } from './user-roles';
 import type { units } from './units';
 import type { documentCategories } from './document-categories';
 import type { documents } from './documents';
+import type { announcements } from './announcements';
 import type { notificationPreferences } from './notification-preferences';
 import type { complianceAuditLog } from './compliance-audit-log';
 
@@ -46,6 +48,10 @@ export type NewDocumentCategory = typeof documentCategories.$inferInsert;
 // Documents
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
+
+// Announcements
+export type Announcement = typeof announcements.$inferSelect;
+export type NewAnnouncement = typeof announcements.$inferInsert;
 
 // Notification Preferences
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;

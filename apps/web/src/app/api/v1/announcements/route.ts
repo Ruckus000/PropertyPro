@@ -1,0 +1,296 @@
+/**
+ * Announcements API — CRUD operations for community announcements.
+ *
+ * All mutations use:
+ * - withErrorHandler for structured error responses
+ * - withAuditLog for compliance audit trail
+ * - createScopedClient for cross-tenant isolation
+ * - Zod validation for input
+ *
+ * Email delivery is deferred to P1-17c.
+ */
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import {
+  createScopedClient,
+  type Announcement,
+  announcements,
+} from '@propertypro/db';
+import { eq } from 'drizzle-orm';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { withAuditLog } from '@/lib/middleware/audit-middleware';
+import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { NotFoundError } from '@/lib/api/errors/NotFoundError';
+import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+
+// ---------------------------------------------------------------------------
+// Validation schemas
+// ---------------------------------------------------------------------------
+
+const createAnnouncementSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(500, 'Title must be 500 characters or fewer'),
+  body: z.string().min(1, 'Body is required'),
+  audience: z.enum(['all', 'board_only']).default('all'),
+  isPinned: z.boolean().default(false),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
+  publishedBy: z.string().uuid('Published by must be a valid user UUID'),
+});
+
+const updateAnnouncementSchema = z.object({
+  id: z.number().int().positive('Announcement ID must be a positive integer'),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
+  title: z.string().min(1, 'Title is required').max(500, 'Title must be 500 characters or fewer').optional(),
+  body: z.string().min(1, 'Body is required').optional(),
+  audience: z.enum(['all', 'board_only']).optional(),
+  isPinned: z.boolean().optional(),
+  userId: z.string().uuid('User ID must be a valid UUID'),
+});
+
+const pinActionSchema = z.object({
+  id: z.number().int().positive('Announcement ID must be a positive integer'),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
+  isPinned: z.boolean(),
+  userId: z.string().uuid('User ID must be a valid UUID'),
+});
+
+const archiveActionSchema = z.object({
+  id: z.number().int().positive('Announcement ID must be a positive integer'),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
+  archive: z.boolean(),
+  userId: z.string().uuid('User ID must be a valid UUID'),
+});
+
+// ---------------------------------------------------------------------------
+// GET — List announcements (pinned first, chronological)
+// ---------------------------------------------------------------------------
+
+export const GET = withErrorHandler(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+  const communityIdParam = searchParams.get('communityId');
+  const includeArchived = searchParams.get('includeArchived') === 'true';
+
+  if (!communityIdParam) {
+    throw new ValidationError('communityId query parameter is required');
+  }
+
+  const communityId = Number(communityIdParam);
+  if (!Number.isInteger(communityId) || communityId <= 0) {
+    throw new ValidationError('communityId must be a positive integer');
+  }
+
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(announcements);
+
+  // Filter out archived unless requested, then sort: pinned first, then by publishedAt desc
+  const filtered = includeArchived
+    ? rows
+    : rows.filter((r) => r['archivedAt'] == null);
+
+  const sorted = (filtered as Announcement[]).sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+  });
+
+  return NextResponse.json({ data: sorted });
+});
+
+// ---------------------------------------------------------------------------
+// POST — Create, update, pin/unpin, or archive an announcement
+// ---------------------------------------------------------------------------
+
+export const POST = withErrorHandler(
+  withAuditLog(
+    async (req: NextRequest) => {
+      const body = await req.clone().json() as Record<string, unknown>;
+      const action = body['action'] as string | undefined;
+
+      // Extract userId and communityId from the body for audit context
+      const userId = String(body['userId'] ?? body['publishedBy'] ?? '');
+      const communityId = Number(body['communityId'] ?? 0);
+
+      return { userId, communityId };
+    },
+    async (req, _ctx, audit) => {
+      const body = await req.json() as Record<string, unknown>;
+      const action = body['action'] as string | undefined;
+
+      // Route to the appropriate handler based on action
+      if (action === 'update') {
+        return handleUpdate(body, audit);
+      }
+      if (action === 'pin') {
+        return handlePin(body, audit);
+      }
+      if (action === 'archive') {
+        return handleArchive(body, audit);
+      }
+
+      // Default: create
+      return handleCreate(body, audit);
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+interface AuditLog {
+  log(params: {
+    action: 'create' | 'update' | 'delete';
+    resourceType: string;
+    resourceId: string;
+    oldValues?: Record<string, unknown>;
+    newValues?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  }): Promise<void>;
+}
+
+async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+  const result = createAnnouncementSchema.safeParse(body);
+  if (!result.success) {
+    throw new ValidationError('Invalid announcement data', {
+      fields: formatZodErrors(result.error),
+    });
+  }
+
+  const { communityId, publishedBy, ...data } = result.data;
+  const scoped = createScopedClient(communityId);
+
+  const rows = await scoped.insert(announcements, {
+    ...data,
+    publishedBy,
+  });
+  const created = rows[0] as Announcement;
+
+  await audit.log({
+    action: 'create',
+    resourceType: 'announcement',
+    resourceId: String(created.id),
+    newValues: { title: data.title, audience: data.audience, isPinned: data.isPinned },
+  });
+
+  return NextResponse.json({ data: created }, { status: 201 });
+}
+
+async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+  const result = updateAnnouncementSchema.safeParse(body);
+  if (!result.success) {
+    throw new ValidationError('Invalid update data', {
+      fields: formatZodErrors(result.error),
+    });
+  }
+
+  const { id, communityId, userId: _userId, ...fields } = result.data;
+  const scoped = createScopedClient(communityId);
+
+  // Fetch existing to capture old values for audit
+  const existing = (await scoped.query(announcements)).find(
+    (r) => (r as Announcement).id === id,
+  ) as Announcement | undefined;
+
+  if (!existing) {
+    throw new NotFoundError('Announcement not found');
+  }
+
+  const oldValues: Record<string, unknown> = {};
+  const newValues: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) {
+      oldValues[key] = existing[key as keyof Announcement];
+      newValues[key] = value;
+    }
+  }
+
+  const updated = await scoped.update(
+    announcements,
+    newValues,
+    eq(announcements.id, id),
+  );
+
+  await audit.log({
+    action: 'update',
+    resourceType: 'announcement',
+    resourceId: String(id),
+    oldValues,
+    newValues,
+  });
+
+  return NextResponse.json({ data: updated[0] });
+}
+
+async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+  const result = pinActionSchema.safeParse(body);
+  if (!result.success) {
+    throw new ValidationError('Invalid pin action data', {
+      fields: formatZodErrors(result.error),
+    });
+  }
+
+  const { id, communityId, isPinned, userId: _userId } = result.data;
+  const scoped = createScopedClient(communityId);
+
+  const existing = (await scoped.query(announcements)).find(
+    (r) => (r as Announcement).id === id,
+  ) as Announcement | undefined;
+
+  if (!existing) {
+    throw new NotFoundError('Announcement not found');
+  }
+
+  const updated = await scoped.update(
+    announcements,
+    { isPinned },
+    eq(announcements.id, id),
+  );
+
+  await audit.log({
+    action: 'update',
+    resourceType: 'announcement',
+    resourceId: String(id),
+    oldValues: { isPinned: existing.isPinned },
+    newValues: { isPinned },
+    metadata: { subAction: 'pin' },
+  });
+
+  return NextResponse.json({ data: updated[0] });
+}
+
+async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+  const result = archiveActionSchema.safeParse(body);
+  if (!result.success) {
+    throw new ValidationError('Invalid archive action data', {
+      fields: formatZodErrors(result.error),
+    });
+  }
+
+  const { id, communityId, archive, userId: _userId } = result.data;
+  const scoped = createScopedClient(communityId);
+
+  const existing = (await scoped.query(announcements)).find(
+    (r) => (r as Announcement).id === id,
+  ) as Announcement | undefined;
+
+  if (!existing) {
+    throw new NotFoundError('Announcement not found');
+  }
+
+  const archivedAt = archive ? new Date() : null;
+  const updated = await scoped.update(
+    announcements,
+    { archivedAt },
+    eq(announcements.id, id),
+  );
+
+  await audit.log({
+    action: 'update',
+    resourceType: 'announcement',
+    resourceId: String(id),
+    oldValues: { archivedAt: existing.archivedAt },
+    newValues: { archivedAt },
+    metadata: { subAction: archive ? 'archive' : 'unarchive' },
+  });
+
+  return NextResponse.json({ data: updated[0] });
+}
