@@ -18,10 +18,9 @@ Rules:
 
 Milestones:
 - [2026-02-11] Batch 0 complete (`feature/p0-middleware-request-id-fix` → `main`, commit `391b329`) — middleware preserves incoming `x-request-id`.
-- [2026-02-11] Batch 0.5 complete (`feature/p1-27a-audit-logging-foundation` → `main`, commit `8b2a5dc`) — audit schema + `logAuditEvent()` foundation added.
 - [2026-02-11] Gap remediation complete (`main`) — `AuditEventParams.communityId` aligned to `number`, migration/hygiene gates added, `.tsbuildinfo` untracked and ignored.
-- [2026-02-11] Batch 0.5 merge complete (`codex/p1-27a-audit-logging-foundation` → `main`, merge commit `0c0bd22`) — audit schema/logger foundation now on `main`.
-- [2026-02-11] Batch 1 partial merge (`feature/p1-27b-audit-logging-middleware` → `main`, merge commit `894f56c`) — append-only guards + audit middleware/tests now on `main`.
+- [2026-02-11] Batch 0.5 audit logging foundation implemented on feature branch (`8b2a5dc`) and merged to `main` (`0c0bd22`).
+- [2026-02-11] Batch 1 partial (`P1-27b`) implemented on feature branch (`0f0ed93`, `9e811f0`) and merged to `main` (`894f56c`).
 - [2026-02-11] Verification gate checkpoint (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm --filter @propertypro/db test:integration` all passed.
 
 Current cursor:
