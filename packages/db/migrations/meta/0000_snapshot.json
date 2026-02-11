@@ -207,6 +207,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -242,17 +248,29 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "user_roles_unit_id_units_id_fk": {
+          "name": "user_roles_unit_id_units_id_fk",
+          "tableFrom": "user_roles",
+          "tableTo": "units",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "user_roles_user_community_role_unique": {
-          "name": "user_roles_user_community_role_unique",
+        "user_roles_user_community_unique": {
+          "name": "user_roles_user_community_unique",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
-            "community_id",
-            "role"
+            "community_id"
           ]
         }
       },
@@ -703,10 +721,13 @@
       "name": "user_role",
       "schema": "public",
       "values": [
-        "admin",
-        "manager",
-        "auditor",
-        "resident"
+        "owner",
+        "tenant",
+        "board_member",
+        "board_president",
+        "cam",
+        "site_manager",
+        "property_manager_admin"
       ]
     }
   },

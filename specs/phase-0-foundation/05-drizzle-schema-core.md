@@ -14,7 +14,7 @@ P0 — Must Have
 ## Functional Requirements
 - Define communities table with community_type enum (condo_718, hoa_720, apartment), timezone (default America/New_York), subdomain, branding fields (logo_url, primary_color, secondary_color)
 - Define users table with email, first_name, last_name, avatar_url, created_at, updated_at, deleted_at
-- Define user_roles table with user_id FK, community_id FK, role enum (admin, manager, auditor, resident), unit_id FK (nullable for non-unit-based roles)
+- Define user_roles table with user_id FK, community_id FK, role enum (owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin), unit_id FK (nullable for non-unit-based roles). Note: platform_admin is system-scoped (not in user_roles); auditor deferred to v2 per ADR-001. Enforce one active role per (user_id, community_id). Validate role against community_type constraints per ADR-001.
 - Define units table with community_id FK, unit_number, property_address, parking_spots (condo-specific, default 0), storage_units (condo-specific, default 0), voting_share (condo-specific, default 1.0), rent_amount (apartment-specific, nullable), availability_date (apartment-specific, nullable)
 - Define document_categories table with community_id FK, name, icon, display_order
 - Define documents table with community_id FK, category_id FK, title, description, file_url, search_text, search_vector (tsvector for full-text search), uploaded_by user_id FK, created_at, updated_at (no deleted_at — preserve all document history)
@@ -30,7 +30,7 @@ P0 — Must Have
 - [ ] `pnpm db:migrate` applies migration to Supabase successfully
 - [ ] All tables exist in the database with correct columns and types
 - [ ] community_type enum enforces valid values (condo_718, hoa_720, apartment)
-- [ ] user_roles enum enforces valid values (admin, manager, auditor, resident)
+- [ ] user_roles enum enforces canonical v1 values (owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin) per ADR-001
 - [ ] All timestamps are stored in UTC (type: timestamp with time zone)
 - [ ] Foreign keys have proper ON DELETE CASCADE/SET NULL behavior
 - [ ] TypeScript types are generated and exported from packages/db

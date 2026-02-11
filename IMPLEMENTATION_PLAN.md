@@ -116,8 +116,8 @@ These edge cases MUST have explicit test coverage. They are the failure modes mo
 - Florida timezone split → community in Pensacola (Central) vs Miami (Eastern) with same compliance deadline
 
 **Multi-Tenant Isolation (P0-06, P2-43):**
-- CommunityA admin queries with communityB ID explicitly passed → must be rejected
-- CommunityA admin creates record → communityB admin must NOT see it
+- CommunityA board_president queries with communityB ID explicitly passed → must be rejected
+- CommunityA board_president creates record → communityB board_president must NOT see it
 - Soft-deleted record from communityA → must not appear in communityA queries OR communityB queries
 - Missing community context → TenantContextMissing error, not empty results
 - Audit log query → must return ALL audit entries regardless of soft-delete (append-only exception)
@@ -377,7 +377,9 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Blocks:** P1-09, P1-13, P1-16, P1-17, P1-18, P1-26, P1-27, P2-36, P2-37, P2-40, P3-47, P3-50, P3-52 (17 specs depend on this — most-depended-upon spec)
 - **Acceptance Criteria:**
   - Migration creates all tables correctly on Supabase PostgreSQL
-  - Enums enforce valid values: community_type (condo_718, hoa_720, apartment), role (admin, manager, auditor, resident)
+  - Enums enforce valid values: community_type (condo_718, hoa_720, apartment), role (owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin). Note: platform_admin is system-scoped (not in user_roles); auditor deferred to v2 per ADR-001.
+  - `user_roles` enforces one active canonical role per `(user_id, community_id)` via DB unique constraint
+  - `user_roles.unit_id` FK exists (nullable) to support ADR-001 unit assignment policy enforcement
   - All timestamps are `timestamp with time zone` defaulting to `now()`, stored as UTC
   - Foreign keys have explicit ON DELETE behavior (CASCADE for owned resources, RESTRICT for referenced entities)
   - Soft-delete: `deleted_at` column on all soft-deletable tables (nullable timestamp)
@@ -681,13 +683,15 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Acceptance Criteria:**
   - CRUD operations for residents work
   - Residents assigned to units via user_roles (user_id, community_id, unit_id)
-  - Role assignment works: resident, auditor, manager, admin
+  - Role assignment works: owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin with community-type constraints enforced per ADR-001
+  - One active canonical role per `(user_id, community_id)` is enforced
+  - Unit assignment policy enforced: owner/tenant require unit_id; non-unit roles keep unit_id nullable
   - A user can have different roles in different communities
   - Contact info (email, phone) manageable
 - **Known Pitfalls:**
   - [AGENTS #2] Roles are per-community via user_roles junction table (user_id, community_id), NOT a global role column
   - [AGENTS #36] Use declarative policy matrix: role × community_type × document_category → allow/deny
-- **Testing:** CRUD integration tests. Role assignment test: assign user as admin in community A and resident in community B, verify both roles exist correctly. Unit assignment test. Scoping test: verify resident list only shows residents from current community.
+- **Testing:** CRUD integration tests. Role assignment test: assign user as board_president in community A and tenant in community B, verify both roles exist correctly. Unit assignment test. Scoping test: verify resident list only shows residents from current community.
 - **Estimated Effort:** Medium
 - **Risk:** Low
 
@@ -820,18 +824,18 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Blocks:** P4-57
 - **Acceptance Criteria:**
   - Residents see only documents allowed by access control matrix
-  - Admin sees all documents
-  - Manager sees management + public documents
-  - Auditor sees audit + financial + public documents
+  - Owner/board_member/board_president/property_manager_admin document access follows approved ADR-001 matrix
+  - CAM/site_manager operational-document access follows ADR-001 community-type constraints
+  - Tenant access is restricted to approved ADR-001 categories by community type
   - Category filtering and search work within access-controlled set
   - Download works (presigned URL for authorized users only)
 - **Known Pitfalls:**
   - [AGENTS #34-37] Never check community_type directly in components — use CommunityFeatures config object. Enforce access control in Drizzle WHERE clauses (DB layer), not UI only.
   - [AGENTS #41] Ensure specific test coverage for role-based document filtering
 - **Testing (CRITICAL — access control must be enforced at DB layer):**
-  - Role matrix test: for each role (admin, manager, auditor, resident) × each document category → verify correct allow/deny
+  - Role matrix test: for each canonical role (owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin) × each document category → verify correct allow/deny per ADR-001
   - DB enforcement test: manually construct a query bypassing UI → verify DB-level WHERE clause still filters correctly
-  - Cross-role test: user with "resident" role queries for "management" category docs → verify zero results
+  - Cross-role test: user with "tenant" role queries for restricted category docs → verify zero results per ADR-001
   - Scoping test: verify documents from other communities are never visible regardless of role
 - **Estimated Effort:** Medium
 - **Risk:** High — Access control matrix is complex (role × community_type × document_category). Must be enforced at DB layer, not just UI.
@@ -869,11 +873,11 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - `logAuditEvent()` utility function for manual logging
   - Middleware auto-injects audit logs on Route Handler mutations
   - Audit log queries are exempt from soft-delete filtering (returns ALL entries)
-  - community_id scoping still applies to audit log reads (admin sees own community's audit trail only)
+  - community_id scoping still applies to audit log reads (authorized canonical roles only, scoped to own/managed communities per ADR-001 matrix)
 - **Known Pitfalls:**
   - [AGENTS #8] compliance_audit_log excluded from soft-delete filtering — append-only, never deleted
   - [AGENTS #44] Every mutation must call logAuditEvent for compliance-relevant actions
-- **Testing:** Append-only test: attempt UPDATE on audit_logs → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A admin cannot see community B's audit trail.
+- **Testing:** Append-only test: attempt UPDATE on audit_logs → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A board_president cannot see community B's audit trail.
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Must be wired into every mutation route. Easy to miss one. Consider adding a lint rule or code review checklist.
 
@@ -993,7 +997,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - Subdomain availability checked in real-time (debounced)
   - Reserved subdomains rejected with clear message
   - Email verification sent via Resend
-  - Initial admin user and community record created
+  - Initial community-admin user and community record created (board_president for condo_718/hoa_720, site_manager for apartment)
 - **Known Pitfalls:**
   - [AGENTS #22] Reserved subdomains must be blocked during signup
 - **Testing:** Signup flow integration test. Subdomain availability test: taken subdomain → unavailable, free subdomain → available. Reserved subdomain test: "admin" → rejected. Validation test: weak password, invalid email → rejected with clear messages.
@@ -1037,7 +1041,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Dependencies:** P2-34, P0-05, P0-06
 - **Blocks:** P2-38, P2-39
 - **Acceptance Criteria:**
-  - Provisioning steps execute in order: create community → create storage bucket → create admin user_role → create Stripe customer → send welcome email
+  - Provisioning steps execute in order: create community → create storage bucket → create canonical initial user_role (board_president for condo_718/hoa_720, site_manager for apartment) → create Stripe customer → send welcome email
   - Each step is idempotent (can be safely retried)
   - Provisioning events table tracks each step's status (pending → completed → failed)
   - Partial failure: if step 3 fails, steps 1-2 are not rolled back but step 3 can be retried
@@ -1196,7 +1200,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Dependencies:** P0-06, P2-30
 - **Blocks:** P4-55
 - **Acceptance Criteria:**
-  - Community A admin cannot query community B data via any endpoint
+  - Community A board_president cannot query community B data via any endpoint
   - Scoped query builder enforces isolation at DB level
   - Soft-delete filtering works correctly per tenant
   - All CRUD endpoints tested for cross-tenant access
@@ -1206,8 +1210,8 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - [AGENTS #40] Missing cross-tenant isolation tests is explicitly flagged as a critical pitfall
 - **Testing (COMPREHENSIVE — security critical):**
   - For EACH entity type (documents, meetings, announcements, residents, audit logs, compliance items): seed data in community A and B → query from community A → verify zero community B results
-  - Direct ID access test: community A admin requests /api/v1/documents/[communityB-doc-id] → verify 404 (not 403, to avoid information leakage)
-  - Mutation test: community A admin attempts to create record with communityB.id → verify rejection
+  - Direct ID access test: community A board_president requests /api/v1/documents/[communityB-doc-id] → verify 404 (not 403, to avoid information leakage)
+  - Mutation test: community A board_president attempts to create record with communityB.id → verify rejection
   - Subdomain mismatch test: request to communityA subdomain with communityB auth token → verify tenant context from subdomain takes precedence
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Critical for security. Must be thorough.
@@ -1436,14 +1440,14 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - SELECT policies: users can only read rows matching their community_id (derived from auth.uid() → user_roles → community_id)
   - INSERT policies: new rows automatically get community_id from user's context
   - UPDATE/DELETE policies: only allowed on own community's data
-  - Audit logs: SELECT restricted to admin/manager roles for own community
+  - Audit logs: SELECT restricted to authorized canonical roles per ADR-001 matrix for own/managed communities
   - Service role bypasses RLS (for background jobs and migrations)
 - **Known Pitfalls:**
   - [AGENTS #13] Defense-in-depth: RLS is the database-level complement to the scoped query builder. Both must enforce isolation.
 - **Testing (CRITICAL — database-level security):**
   - For each table: connect as community A user → SELECT → verify zero community B rows
   - For each table: connect as community A user → INSERT with community B id → verify rejection
-  - Audit log test: connect as resident role → SELECT audit_logs → verify rejection
+  - Audit log test: connect as tenant role → SELECT audit_logs → verify rejection
   - Service role test: connect with service_role → verify RLS bypassed (can see all communities)
   - Policy coverage test: verify every tenant-scoped table has RLS enabled (query pg_tables for relrowsecurity)
 - **Estimated Effort:** Large
@@ -1478,7 +1482,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Dependencies:** P4-56, P1-25
 - **Blocks:** P4-58
 - **Acceptance Criteria:**
-  - RBAC matrix fully documented: role (admin/manager/auditor/resident) × community_type (condo_718/hoa_720/apartment) × resource (documents/meetings/announcements/residents/settings/audit/compliance/maintenance/contracts) → permission (read/write/none)
+  - RBAC matrix fully documented: role (owner/tenant/board_member/board_president/cam/site_manager/property_manager_admin) × community_type (condo_718/hoa_720/apartment) × resource (documents/meetings/announcements/residents/settings/audit/compliance/maintenance/contracts) → permission (read/write/none) per ADR-001
   - `checkPermission(role, communityType, resource, action)` utility returns boolean
   - Unit test for EVERY cell in the RBAC matrix (no gaps)
   - Access control enforced at Route Handler level (not just UI conditional rendering)
@@ -1487,7 +1491,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - [AGENTS #37] Enforce at DB query layer (WHERE clauses in Drizzle), not UI only. UI hides buttons; DB blocks queries.
 - **Testing:** Matrix coverage test: generate test cases programmatically from the RBAC matrix → verify each combination. Negative test: for each "none" permission → verify 403 returned. Positive test: for each "read" or "write" permission → verify success. UI bypass test: call API directly without using UI → verify access control still enforced.
 - **Estimated Effort:** Medium
-- **Risk:** Medium — Combinatorial explosion (4 roles × 3 types × 9 resources × 2 actions = 216 test cases). Automate test generation from the matrix.
+- **Risk:** Medium — Combinatorial explosion (7 canonical roles × 3 types × 9 resources × 2 actions = 378 test cases per ADR-001). Automate test generation from the matrix.
 
 ---
 
@@ -1501,7 +1505,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - Full flow tests: signup → provision → login → upload document → check compliance → view dashboard
   - Document lifecycle: upload → extract text → search → download → delete (soft) → verify gone from search
   - Compliance flow: create community → auto-generate checklist → upload statutory doc → verify checklist item satisfied
-  - Role isolation: admin action succeeds → same action as resident → rejected
+  - Role isolation: board_president action succeeds → same action as tenant → rejected
   - Code coverage > 80% across apps/web/src/
 - **Known Pitfalls:**
   - [AGENTS #38] Tests MUST exist before implementation is considered complete — this spec adds the comprehensive integration layer

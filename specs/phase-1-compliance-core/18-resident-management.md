@@ -14,7 +14,10 @@ P1
 - P0-06
 
 ## Functional Requirements
-- Add/edit/remove residents with name, email, unit assignment (FK to units table), role assignment (owner, tenant, board_member, board_president, cam, site_manager)
+- Add/edit/remove residents with name, email, unit assignment (FK to units table), role assignment (owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin) per ADR-001
+- Enforce one active canonical role per (user_id, community_id); if user has both owner and board eligibility, assign board role (board-over-owner precedence per ADR-001)
+- Unit assignment policy: required for owner/tenant; optional for board_member, board_president, cam, site_manager, property_manager_admin
+- Note: platform_admin is system-scoped (not assigned via resident management)
 - Differentiate owners vs tenants in condo/HOA
 - All residents are tenants in apartments
 - Track login activity (last_login timestamp)
@@ -23,7 +26,7 @@ P1
 - Create notification_preferences record when user_role is created
 
 ## Acceptance Criteria
-- [ ] Admin can add a resident with correct role
+- [ ] Authorized community-admin role (board_president, cam, site_manager, property_manager_admin) can add a resident with correct role
 - [ ] User_roles record created with correct community_id, unit_id, role
 - [ ] Notification preferences auto-created
 - [ ] Resident list filterable by role
@@ -31,8 +34,8 @@ P1
 - [ ] `pnpm test` passes
 
 ## Technical Notes
-- Role validation per community type (owner/board_member only in condo_718/hoa_720)
-- Unit_id is optional for some roles (CAM, site_manager)
+- Role validation per community type per ADR-001: condo_718/hoa_720 allow owner, tenant, board_member, board_president, cam, property_manager_admin; apartment allows tenant, site_manager, property_manager_admin. Reject disallowed role/community combinations.
+- Unit assignment policy per ADR-001: required for owner/tenant; optional for board_member, board_president, cam, site_manager, property_manager_admin
 - last_login updated in middleware on successful auth
 - Soft-delete support: deleted_at timestamp
 

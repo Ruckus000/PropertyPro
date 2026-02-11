@@ -1,5 +1,10 @@
+-- ADR-001 Canonical Role Model: Pre-production baseline reset migration.
+-- No automatic legacy semantic mapping is canonical policy per ADR-001.
+-- If non-test data exists, stop and require a separate migration ADR.
 CREATE TYPE "public"."community_type" AS ENUM('condo_718', 'hoa_720', 'apartment');--> statement-breakpoint
-CREATE TYPE "public"."user_role" AS ENUM('admin', 'manager', 'auditor', 'resident');--> statement-breakpoint
+-- Canonical community-scoped roles per ADR-001.
+-- Note: platform_admin is system-scoped (stored separately). Auditor deferred to v2.
+CREATE TYPE "public"."user_role" AS ENUM('owner', 'tenant', 'board_member', 'board_president', 'cam', 'site_manager', 'property_manager_admin');--> statement-breakpoint
 CREATE TABLE "communities" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
@@ -34,8 +39,9 @@ CREATE TABLE "user_roles" (
 	"user_id" uuid NOT NULL,
 	"community_id" bigint NOT NULL,
 	"role" "user_role" NOT NULL,
+	"unit_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "user_roles_user_community_role_unique" UNIQUE("user_id","community_id","role")
+	CONSTRAINT "user_roles_user_community_unique" UNIQUE("user_id","community_id")
 );
 --> statement-breakpoint
 CREATE TABLE "units" (
@@ -94,6 +100,7 @@ CREATE TABLE "notification_preferences" (
 --> statement-breakpoint
 ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_unit_id_units_id_fk" FOREIGN KEY ("unit_id") REFERENCES "public"."units"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "units" ADD CONSTRAINT "units_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "units" ADD CONSTRAINT "units_owner_user_id_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_categories" ADD CONSTRAINT "document_categories_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
