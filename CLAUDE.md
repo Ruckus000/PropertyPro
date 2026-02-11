@@ -117,6 +117,20 @@ pnpm build
 pnpm test
 ```
 
+## Environment Setup
+
+Environment variables are stored in the root `.env.local` file. Run the setup script after cloning:
+
+```bash
+# First-time setup (creates necessary symlinks)
+./scripts/setup.sh
+
+# Install dependencies
+pnpm install
+```
+
+The setup script creates a symlink at `apps/web/.env.local` pointing to the root env file, since Next.js only loads `.env*` from its own directory.
+
 ## Documentation
 
 See `/docs` for detailed documentation:
