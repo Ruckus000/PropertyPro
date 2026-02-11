@@ -70,7 +70,6 @@ export function useDocumentUpload() {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-user-id': 'client-upload-user',
         },
         body: JSON.stringify({
           communityId: request.communityId,
@@ -93,7 +92,6 @@ export function useDocumentUpload() {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-user-id': 'client-upload-user',
         },
         body: JSON.stringify({
           communityId: request.communityId,
