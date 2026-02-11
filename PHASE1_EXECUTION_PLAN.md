@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Phase 1 contains 21 tasks (P1-09 through P1-29) that build the compliance core: document management, meeting management, resident management, announcements, auth flows, and the compliance engine itself. The dependency graph permits significant parallelism — up to 8 tasks can run concurrently in the first batch.
+Phase 1 contains 22 tasks (P1-09 through P1-29, plus P1-17c) that build the compliance core: document management, meeting management, resident management, announcements, auth flows, and the compliance engine itself. The dependency graph permits significant parallelism — up to 8 tasks can run concurrently in the first batch.
 
 This plan uses the Ralph Wiggum technique (iterative autonomous agent loops) with `git worktree` isolation to maximize throughput while preventing cross-task interference. Tasks are organized into 6 sequential batches. Within each batch, tasks run as parallel Ralph loops on isolated worktrees. Between batches, branches merge to `main` and a verification gate confirms integration before the next batch starts.
 
@@ -76,14 +76,15 @@ P1-12  Magic Bytes Validation  ←── P1-11                    │
 P1-13  Text Extraction         ←── P1-11                    │
 P1-16  Meeting Management      ←── P1-09                    │
 P1-19  CSV Import              ←── P1-18                    │
-P1-20  Invitation Auth Flow    ←── P1-18                    │
+P1-20  Invitation Auth Flow    ←── P1-18, P1-22             │
 P1-26  Notification Preferences←── P1-18                    │
                       │                                     │
                       ┌────── merge to main + verify ──────┐
                       ▼                                     │
-BATCH 3 (4 parallel)                                        │
+BATCH 3 (5 parallel)                                        │
 ═══════════════════════════════════════════════════          │
 P1-14  Document Search         ←── P1-13                    │
+P1-17c Announcement Emails     ←── P1-17, P1-26, P1-28     │
 P1-23  Public Website          ←── P1-16                    │
 P1-24  Resident Portal Dash    ←── P1-16, P1-17            │
 P1-29  Demo Seed Data          ←── P1-09, P1-10, P1-11, P1-12
@@ -210,9 +211,15 @@ Integration tests running in parallel worktrees can conflict when sharing the sa
 ```bash
 # After merging all Batch N branches to main
 cd /path/to/PropertyPro
-pnpm drizzle-kit generate  # single migration covering all new tables
-pnpm drizzle-kit migrate   # apply to Supabase
-pnpm build && pnpm typecheck && pnpm test
+
+# Migration commands — use DIRECT connection (bypasses PgBouncer)
+# The pooled connection uses PgBouncer in transaction mode which doesn't work
+# reliably with DDL statements. Always use DIRECT_DATABASE_URL for migrations.
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate  # single migration covering all new tables
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate   # apply to Supabase
+
+# App/test queries use the pooled connection (default DATABASE_URL)
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```
 
@@ -263,19 +270,23 @@ git merge feature/p1-27a-audit-logging-foundation
 // packages/db/src/utils/audit-logger.ts
 export async function logAuditEvent(params: {
   userId: string;
-  action: 'create' | 'update' | 'delete';
+  action:
+    | 'create' | 'update' | 'delete'                              // Generic CRUD
+    | 'user_invited' | 'settings_changed'                         // User lifecycle
+    | 'meeting_notice_posted' | 'meeting_minutes_approved'        // Meeting events
+    | 'announcement_email_sent' | 'document_deleted';             // Domain events
   resourceType: string;
   resourceId: string;
   communityId: string;
   oldValues?: Record<string, unknown>;
   newValues?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;  // For bulk counts, recipient lists, etc.
 }) {
   if (process.env.NODE_ENV === 'development') {
     console.log('[AUDIT]', params);
     return;
   }
-  // Full implementation in P1-27b
-  // For now, just console.log in all environments
+  // P1-27a stub: console.log only. P1-27b upgrades this to actual DB inserts.
   console.log('[AUDIT]', params);
 }
 ```
@@ -294,7 +305,7 @@ These tasks share no Phase 1 dependencies — they only depend on Phase 0 artifa
 | File | Tasks that touch it | Resolution |
 |------|-------------------|------------|
 | `packages/db/src/schema/index.ts` | P1-09, P1-17, P1-27a | Manual merge (add all export lines) |
-| `apps/web/src/middleware.ts` | P1-22 | Only P1-22 touches this; no conflict |
+| `apps/web/src/middleware.ts` | P1-22, P1-27b | Merge carefully — P1-22 adds session refresh, P1-27b adds audit injection |
 | `packages/shared/src/` | P1-09 (compliance templates) | Only P1-09 touches this; no conflict |
 | `packages/email/src/` | P1-28 | Only P1-28 touches this; no conflict |
 
@@ -439,7 +450,7 @@ Key requirements:
 Tests:
 - Happy path: request reset → click link → set new password → login works
 - Rate limit: 4th request in same hour is rejected
-- Timing attack prevention: response time for valid vs invalid email within 100ms
+- Timing attack prevention: verify implementation uses constant-time strategy (same code path for valid/invalid emails, artificial delay to normalize response times) rather than flaky timing assertions
 - Reset link expiry
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
@@ -541,12 +552,12 @@ git merge feature/p1-09-compliance-engine       # most files — merge last
 
 # 3. Resolve any conflicts in schema/index.ts barrel exports (expected)
 
-# 4. Generate single migration for all new tables
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+# 4. Generate single migration for all new tables — use DIRECT connection
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
 
 # 5. Verification gate
-pnpm build && pnpm typecheck && pnpm test
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 
 # 6. Clean up worktrees
@@ -655,12 +666,14 @@ Key requirements:
 - Documents attachable to meetings via meeting_documents join table
 - All date calculations use date-fns, stored as UTC, displayed in community timezone
 - Wrap all route handlers with withErrorHandler from apps/web/src/lib/api/error-handler.ts
+- Call logAuditEvent() from packages/db after every create/update/delete mutation (meeting_notice_posted, meeting_minutes_approved events)
 
 Tests:
 - Deadline calculation with same DST/timezone edge cases as P1-09
 - CRUD integration
 - Document attachment
 - Cross-tenant isolation
+- Audit log entries created for meeting mutations
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
 Verify all items in the Platform Invariants Checklist are satisfied.
@@ -682,6 +695,7 @@ Key requirements:
 - Clear error reporting: row number + column + error message
 - Duplicate detection by email address
 - Wrap all route handlers with withErrorHandler from apps/web/src/lib/api/error-handler.ts
+- Call logAuditEvent() from packages/db after every user creation (user_invited event with bulk count in metadata)
 
 Tests:
 - Commas in quoted fields
@@ -690,19 +704,20 @@ Tests:
 - Empty rows, trailing commas
 - Duplicate email detection
 - Error report with correct row numbers
+- Audit log entries created for bulk user import
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
 Verify all items in the Platform Invariants Checklist are satisfied.
 Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
 ```
 
-**P1-20 — Invitation Auth Flow** (depends on P1-18)
+**P1-20 — Invitation Auth Flow** (depends on P1-18, uses P1-22 session patterns)
 
 ```bash
 ralph -n 10 -p "ALL TESTS PASSING" \
   "Read IMPLEMENTATION_PLAN.md task P1-20 (Invitation Auth Flow). Implement it fully.
 
-Resident management (P1-18) and email infrastructure (P1-28) are already implemented.
+Resident management (P1-18), email infrastructure (P1-28), and session management (P1-22) are already implemented. Use the session patterns from P1-22 for authenticated state after invitation acceptance.
 
 Key requirements:
 - Invitation API at apps/web/src/app/api/v1/invitations/route.ts
@@ -712,12 +727,14 @@ Key requirements:
 - Token is ONE-TIME USE — second click shows 'already used'
 - Token expires after 7 days (configurable)
 - Wrap all route handlers with withErrorHandler from apps/web/src/lib/api/error-handler.ts
+- Call logAuditEvent() from packages/db for invitation creation (user_invited) and token consumption
 
 Tests:
 - Create invitation → accept → set password → login succeeds
 - Token reuse → rejected
 - Token expiry → rejected with clear message
 - Email contains correct link and community name
+- Audit log entries created for invitation lifecycle
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
 Verify all items in the Platform Invariants Checklist are satisfied.
@@ -733,17 +750,21 @@ ralph -n 8 -p "ALL TESTS PASSING" \
 Key requirements:
 - notification_preferences table already exists from P0-05 schema — verify structure and adapt if needed
 - Settings page at apps/web/src/app/(authenticated)/settings/page.tsx
-- Preferences: email_frequency (immediate, daily_digest, weekly_digest, never), in_app_enabled (boolean)
+- Preferences: email_frequency (immediate, daily_digest, weekly_digest, never), email_announcements (boolean, default true), email_meetings (boolean, default true), in_app_enabled (boolean)
 - Email sending must respect frequency preference
 - Default for new users: immediate + in_app_enabled
 - CRITICAL: Password reset and invitation emails always send regardless of preference
+- Call logAuditEvent() from packages/db for preference updates (settings_changed event)
 
 Tests:
 - Preference CRUD
-- Set preference to 'never' → announcement email NOT sent
+- Default values applied for new users (immediate frequency, all types enabled)
+- Preference updates persist correctly
 - Set preference to 'never' → password reset email IS sent (critical emails bypass preferences)
+- Audit log entries created for preference changes
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
+Verify all items in the Platform Invariants Checklist are satisfied.
 Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
 ```
 
@@ -760,9 +781,11 @@ git merge feature/p1-26-notification-preferences
 git merge feature/p1-10-compliance-dashboard-ui
 git merge feature/p1-16-meeting-management
 
-# Generate migration, verify
-pnpm drizzle-kit generate && pnpm drizzle-kit migrate
-pnpm build && pnpm typecheck && pnpm test
+# Migration commands — use DIRECT connection (bypasses PgBouncer)
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
+
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```
 
@@ -770,7 +793,7 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 
 ### Batch 3: Second Dependent Layer
 
-**Tasks:** 4 parallel Ralph loops
+**Tasks:** 5 parallel Ralph loops
 **Depends on:** All Batch 2 tasks merged to main
 **Estimated time:** 1 day
 
@@ -798,6 +821,36 @@ Tests:
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
 Verify all items in the Platform Invariants Checklist are satisfied.
+Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
+```
+
+**P1-17c — Announcement Email Integration** (depends on P1-17, P1-26, P1-28)
+
+```bash
+ralph -n 8 -p "ALL TESTS PASSING" \
+  "Implement announcement email integration. Wire the announcement publish flow to send email notifications.
+
+Announcements (P1-17), email infrastructure (P1-28), and notification preferences (P1-26) are all implemented.
+
+Key requirements:
+- Add email sending hook to announcement publish flow in apps/web/src/app/api/v1/announcements/route.ts
+- Check notification_preferences: email_announcements=true AND email_frequency != 'never' before sending
+- Use the announcement React Email template from packages/email/src/templates/announcement.tsx
+- Queue emails asynchronously — NEVER block the publish response waiting for email delivery
+- Batch email sending for large recipient lists (max 100 per Resend API call)
+- Include List-Unsubscribe header (already configured in P1-28 templates)
+- Target audience filtering: respect announcement target_audience field (all, owners_only, board_only, tenants_only)
+- Call logAuditEvent() for announcement_email_sent action with recipient count
+
+Tests:
+- Publish announcement → email sent to users with email_announcements=true AND email_frequency != 'never'
+- Publish announcement → NO email to users with email_announcements=false
+- Publish announcement → NO email to users with email_frequency='never' (regardless of email_announcements)
+- Target audience filtering: board_only announcement → only board members receive email
+- Large recipient list → batched correctly (mock Resend to verify batch sizes)
+- Async verification: publish response returns before emails are sent
+
+Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
 Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
 ```
 
@@ -882,12 +935,16 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. pnpm se
 
 ```bash
 git merge feature/p1-14-document-search
+git merge feature/p1-17c-announcement-emails
 git merge feature/p1-23-public-website
 git merge feature/p1-24-resident-portal-dashboard
 git merge feature/p1-29-demo-seed-data
 
-pnpm drizzle-kit generate && pnpm drizzle-kit migrate
-pnpm build && pnpm typecheck && pnpm test
+# Migration commands — use DIRECT connection (bypasses PgBouncer)
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
+
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```
 
@@ -912,14 +969,17 @@ Key requirements:
 - Version history for documents with multiple versions
 - Soft-delete functionality
 - Use UI components from packages/ui
+- Call logAuditEvent() from packages/db for document soft-delete (document_deleted event)
 
 Tests:
 - Component tests for upload area (drag events)
 - Document list rendering
 - Filter interactions
 - Version history display
+- Audit log entries created for document soft-delete
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
+Verify all items in the Platform Invariants Checklist are satisfied.
 Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
 ```
 
@@ -928,7 +988,11 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ```bash
 git merge feature/p1-15-document-management-ui
 
-pnpm build && pnpm typecheck && pnpm test
+# Migration commands — use DIRECT connection (bypasses PgBouncer)
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
+
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```
 
@@ -972,7 +1036,11 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ```bash
 git merge feature/p1-25-resident-document-library
 
-pnpm build && pnpm typecheck && pnpm test
+# Migration commands — use DIRECT connection (bypasses PgBouncer)
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
+DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
+
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```
 
@@ -1031,10 +1099,10 @@ If a task doesn't hit its completion promise within the iteration limit:
 | 0 | 1 (manual) | $0 | 15 min |
 | 1 | 8 | ~$40-80 (8 loops × ~$5-10 each) | 1-2 days |
 | 2 | 7 | ~$35-70 | 1 day |
-| 3 | 4 | ~$20-40 | 0.5-1 day |
+| 3 | 5 | ~$25-50 | 0.5-1 day |
 | 4 | 1 | ~$5-10 | 0.5 day |
 | 5 | 1 | ~$5-10 | 0.5 day |
-| **Total** | **21 tasks** | **~$105-210** | **~4-6 days** |
+| **Total** | **22 tasks** | **~$110-220** | **~4-6 days** |
 
 Cost estimates assume ~$5-10 per Ralph loop at 8-15 iterations per task with Claude Code. Actual costs depend on iteration count and model pricing.
 
@@ -1042,6 +1110,6 @@ Cost estimates assume ~$5-10 per Ralph loop at 8-15 iterations per task with Cla
 
 ## Summary
 
-Phase 1's 21 tasks compress into 6 sequential batches with up to 8-way parallelism. The critical path runs through the document pipeline (5 tasks across 5 batches). The highest-risk task is P1-09 (Compliance Engine) due to date arithmetic complexity — if it doesn't converge, it blocks both the compliance dashboard (P1-10) and meeting management (P1-16).
+Phase 1's 22 tasks compress into 6 sequential batches with up to 8-way parallelism. The critical path runs through the document pipeline (5 tasks across 5 batches). The highest-risk task is P1-09 (Compliance Engine) due to date arithmetic complexity — if it doesn't converge, it blocks both the compliance dashboard (P1-10) and meeting management (P1-16).
 
 The plan prioritizes catching integration issues early (batch verification gates), unblocking downstream tasks first (Batch 1 maximizes parallelism for everything that follows), and minimizing rework risk (schema migrations consolidated per-batch, access control tested exhaustively in P1-25).

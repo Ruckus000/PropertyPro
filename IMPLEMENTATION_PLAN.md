@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-11 (v3 — progress-updated, compatibility-checked)
+Generated: 2026-02-11 (v4 — Phase 1 execution readiness updated)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 execution orchestration is reviewed and ready (go).
 
 ### Progress Snapshot (2026-02-11)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -13,6 +13,7 @@ Generated: 2026-02-11 (v3 — progress-updated, compatibility-checked)
 - Added P0-04 storage integration suite: `packages/db/__tests__/supabase-storage.integration.test.ts` validates presigned upload/download/delete with the Supabase `documents` bucket prerequisite now satisfied.
 - Automated verification in this pass: `pnpm build`, `pnpm typecheck`, and `pnpm test` all succeeded.
 - DB integration execution (`pnpm --filter @propertypro/db test:integration`) passes end-to-end (`13/13`) now that the `documents` bucket exists.
+- Phase 1 execution orchestration review completed and approved: see `PHASE1_EXECUTION_PLAN.md` for batch sequencing, dependency updates, and merge gates.
 
 ---
 
@@ -207,7 +208,7 @@ Implementation MUST pause at these checkpoints. Do not proceed past a gate until
 | Canonical enums (`community_type`, `user_role`) | Meets | Enum labels match accepted canonical values used by role- and type-gated flows. | P1-18, P1-25 |
 | `documents.search_text` + `documents.search_vector` | Meets | Required search columns are present for extraction/search phases. | P1-13, P1-14 |
 | `user_roles` cardinality + `unit_id` FK | Meets | One active role per `(user_id, community_id)` and nullable unit FK are implemented. | P1-18 |
-| `notification_preferences` structure | Mismatch | Current schema uses boolean columns (`email_announcements`, etc.) while Phase 1 spec describes key/value preference records. | P1-26 |
+| `notification_preferences` structure | Resolved | Phase 1 execution plan standardizes on existing schema fields: `email_frequency`, `email_announcements`, `email_meetings`, and `in_app_enabled`. | P1-26 |
 | Meeting-related tables (`meetings`, `meeting_documents`) | Deferred | Not in Phase 0 core schema by design; to be added in Phase 1 meeting task. | P1-16 |
 | Audit log table (`compliance_audit_log`) | Deferred | Not in Phase 0 core schema by design; scheduled for audit logging task. | P1-27 |
 
@@ -555,6 +556,21 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ---
 
+## Phase 1 Execution Readiness (2026-02-11)
+
+- **Status:** Ready to Execute (planning complete, implementation tasks not started)
+- **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
+- **Review Outcome:** Go status after closing planning blockers:
+  - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
+  - Split announcement email delivery into post-dependency task (`P1-17c`) after `P1-17`, `P1-26`, and `P1-28`
+  - Updated dependency graph to show `P1-20` depending on both `P1-18` and `P1-22`
+  - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
+  - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
+  - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
+- **Tracking Note:** Task entries below remain `Not Started` until code is implemented and merged.
+
+---
+
 ## Phase 1 Tasks
 
 ### Task: P1-09 Compliance Checklist Engine
@@ -741,7 +757,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Blocks:** P1-24
 - **Acceptance Criteria:**
   - Announcements created and displayed in resident portal
-  - Email notifications sent to residents (respecting preferences when P1-26 is implemented; default to sending before then)
+  - Announcement publish flow exposes the integration hook for notification delivery; actual email delivery is completed in execution subtask P1-17c after P1-26 and P1-28
   - Pin/featured announcements appear at top
   - Archive functionality hides old announcements from default view
 - **Known Pitfalls:**
@@ -927,13 +943,13 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Dependencies:** P0-05, P1-18
 - **Blocks:** P2-41
 - **Acceptance Criteria:**
-  - Preferences saved: email_frequency (immediate, daily_digest, weekly_digest, never), in_app_enabled (boolean)
-  - Email sending respects frequency preference
+  - Preferences saved: email_frequency (immediate, daily_digest, weekly_digest, never), email_announcements (boolean), email_meetings (boolean), in_app_enabled (boolean)
+  - Email sending respects both frequency and per-notification-type toggles
   - Settings page renders current preferences and saves changes
-  - Default preference for new users: immediate + in_app_enabled
+  - Default preference for new users: immediate + email_announcements=true + email_meetings=true + in_app_enabled=true
 - **Known Pitfalls:**
   - [AGENTS #32] Verify notification preferences before sending any non-critical email. Critical emails (password reset, invitation) always send regardless of preference.
-- **Testing:** Preference CRUD test. Email gate test: set preference to "never" → trigger announcement email → verify email NOT sent. Critical email test: set preference to "never" → trigger password reset → verify email IS sent.
+- **Testing:** Preference CRUD test. Default-values test. Update persistence test. Critical email test: set preference to "never" → trigger password reset → verify email IS sent. Non-critical announcement-email suppression is validated in P1-17c integration tests (`email_announcements=false` and `email_frequency='never'` cases).
 - **Estimated Effort:** Small
 - **Risk:** Low
 
