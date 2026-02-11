@@ -119,3 +119,5 @@ Add entries here as failures are encountered during Ralph loops. Format:
 ```
 - [YYYY-MM-DD] [spec-id]: description of what went wrong and how to avoid it
 ```
+
+- [2026-02-11] [P1-27b]: `claude -p` + wrapper-based multiline prompts can silently stall or parse incorrectly (e.g., prompt consumed by flags). For Ralph loops, run from the task worktree (`pwd` + `git branch --show-current`), and use direct `claude "..."` prompt invocation unless print-mode piping is explicitly required.

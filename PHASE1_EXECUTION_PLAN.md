@@ -2,8 +2,27 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** Draft — Pending Review
+**Status:** In Progress — Batch 0 and Batch 0.5 complete; Batch 1 ready
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
+
+---
+
+## Execution Progress Log (Single-Writer)
+
+To prevent cross-worktree conflicts, treat this section as the only place to track live execution status.
+
+Rules:
+- Update this section on `main` only (never from feature worktrees).
+- Append one line per completed milestone with date, branch, and commit hash.
+- Do not edit historical lines; append new lines only.
+
+Milestones:
+- [2026-02-11] Batch 0 complete (`feature/p0-middleware-request-id-fix` → `main`, commit `391b329`) — middleware preserves incoming `x-request-id`.
+- [2026-02-11] Batch 0.5 complete (`feature/p1-27a-audit-logging-foundation` → `main`, commit `8b2a5dc`) — audit schema + `logAuditEvent()` foundation added.
+- [2026-02-11] Gap remediation complete (`main`) — `AuditEventParams.communityId` aligned to `number`, migration/hygiene gates added, `.tsbuildinfo` untracked and ignored.
+
+Current cursor:
+- Next task to execute: Batch 1 / `P1-27b` (`feature/p1-27b-audit-logging-middleware`)
 
 ---
 
@@ -218,6 +237,14 @@ cd /path/to/PropertyPro
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate  # single migration covering all new tables
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate   # apply to Supabase
 
+# Migration gate: if audit schema exists, migration SQL must include audit table creation.
+if rg --files packages/db/src/schema | rg '^packages/db/src/schema/compliance-audit-log.ts$' > /dev/null; then
+  rg "compliance_audit_log" packages/db/migrations/*.sql > /dev/null || {
+    echo "ERROR: compliance_audit_log is missing from migration SQL. Regenerate migrations from main before proceeding.";
+    exit 1;
+  }
+fi
+
 # App/test queries use the pooled connection (default DATABASE_URL)
 pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
@@ -232,6 +259,7 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 **Tasks:** 1 (not a Ralph loop — manual fix)
 **Estimated time:** 15 minutes
 **Merge to main before Batch 0.5.**
+**Execution status:** Completed (2026-02-11)
 
 ---
 
@@ -240,6 +268,7 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 **Tasks:** 1 (quick foundation task, ~15 min)
 **Purpose:** Provide `logAuditEvent()` function so all Batch 1 mutation tasks can call it.
 **Merge to main before Batch 1.**
+**Execution status:** Completed (2026-02-11)
 
 #### P1-27a — Audit Logging Foundation
 
@@ -277,7 +306,7 @@ export async function logAuditEvent(params: {
     | 'announcement_email_sent' | 'document_deleted';             // Domain events
   resourceType: string;
   resourceId: string;
-  communityId: string;
+  communityId: number;
   oldValues?: Record<string, unknown>;
   newValues?: Record<string, unknown>;
   metadata?: Record<string, unknown>;  // For bulk counts, recipient lists, etc.
@@ -510,6 +539,10 @@ Verify all items in the Platform Invariants Checklist are satisfied.
 Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output <promise>ALL TESTS PASSING</promise> when done."
 ```
 
+Merge-blocking requirement for `feature/p1-27b-audit-logging-middleware`:
+- Must include an append-only rejection test for `compliance_audit_log`.
+- Must include a cross-tenant audit-read isolation test (community A cannot read community B).
+
 **P1-28 — Email Infrastructure**
 
 ```bash
@@ -556,11 +589,25 @@ git merge feature/p1-09-compliance-engine       # most files — merge last
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit migrate
 
-# 5. Verification gate
+# 5. Migration gate for audit table (required once P1-27a schema exists)
+if rg --files packages/db/src/schema | rg '^packages/db/src/schema/compliance-audit-log.ts$' > /dev/null; then
+  rg "compliance_audit_log" packages/db/migrations/*.sql > /dev/null || {
+    echo "ERROR: compliance_audit_log is missing from migration SQL. Regenerate migrations from main before proceeding.";
+    exit 1;
+  }
+fi
+
+# 6. Repo hygiene gate (.tsbuildinfo should not be committed unless tooling config changes)
+if (git diff --name-only; git diff --name-only --cached) | sort -u | rg '\.tsbuildinfo$' > /dev/null; then
+  echo "ERROR: .tsbuildinfo detected in working diff. Remove it unless this merge intentionally changes TypeScript tooling configuration.";
+  exit 1;
+fi
+
+# 7. Verification gate
 pnpm build && pnpm typecheck && pnpm lint && pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 
-# 6. Clean up worktrees
+# 8. Clean up worktrees
 git worktree remove ../pp-worktrees/p1-09
 # ... repeat for all 8
 ```
