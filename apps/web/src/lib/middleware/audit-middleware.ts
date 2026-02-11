@@ -12,6 +12,7 @@ import {
   logAuditEvent,
   type AuditAction,
 } from '@propertypro/db';
+import { generateRequestId } from '../api/request-id';
 
 export interface AuditContext {
   /** Pre-bound audit logger with userId and communityId from request context. */
@@ -73,7 +74,7 @@ export function withAuditLog(
 ): RouteHandler {
   return async (req, context) => {
     const { userId, communityId } = await extractContext(req, context);
-    const requestId = req.headers.get('x-request-id') ?? '';
+    const requestId = req.headers.get('x-request-id')?.trim() || generateRequestId();
 
     const audit: AuditContext = {
       async log(params) {
