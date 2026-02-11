@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createPresignedUploadUrl } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { UnauthorizedError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
@@ -32,10 +33,7 @@ function validateFileSize(mimeType: string, fileSize: number): void {
 }
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new UnauthorizedError();
-  }
+  await requireAuthenticatedUserId();
 
   const body: unknown = await req.json();
   const parseResult = presignSchema.safeParse(body);

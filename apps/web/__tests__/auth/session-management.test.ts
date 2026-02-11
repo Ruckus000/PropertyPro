@@ -56,6 +56,18 @@ describe('p1-22 session middleware', () => {
     expect(response.headers.get('location')).toContain('returnTo=%2Fdashboard%3Ftab%3Doverview');
   });
 
+  it('returns 401 JSON for unauthenticated protected API routes', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/documents?communityId=8'),
+    );
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(response.headers.get('location')).toBeNull();
+    expect(json.error).toBe('Unauthorized');
+  });
+
   it('redirects authenticated but unverified users to /auth/verify-email', async () => {
     getUserMock.mockResolvedValue({
       data: {
@@ -73,6 +85,24 @@ describe('p1-22 session middleware', () => {
     expect(response.headers.get('location')).toContain('returnTo=%2Fdashboard');
   });
 
+  it('returns 403 JSON for unverified users on protected API routes', async () => {
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          email_confirmed_at: null,
+        },
+      },
+    });
+
+    const response = await middleware(request('http://localhost:3000/api/v1/documents'));
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('location')).toBeNull();
+    expect(json.error).toBe('Email verification required');
+  });
+
   it('allows authenticated + verified users to access protected routes', async () => {
     getUserMock.mockResolvedValue({
       data: {
@@ -84,6 +114,21 @@ describe('p1-22 session middleware', () => {
     });
 
     const response = await middleware(request('http://localhost:3000/dashboard'));
+
+    expect(response.status).toBe(200);
+  });
+
+  it('allows authenticated + verified users to access protected API routes', async () => {
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          email_confirmed_at: '2026-02-11T21:00:00.000Z',
+        },
+      },
+    });
+
+    const response = await middleware(request('http://localhost:3000/api/v1/documents'));
 
     expect(response.status).toBe(200);
   });
