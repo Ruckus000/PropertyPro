@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, type FormEvent } from 'react';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { resetPasswordSchema } from '@/lib/auth/schemas';
 import { updatePasswordAction } from '@/lib/auth/actions';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
@@ -19,14 +20,16 @@ export function ResetPasswordForm() {
     // The browser client picks it up automatically via onAuthStateChange.
     const supabase = createBrowserClient();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSessionReady(true);
       }
     });
 
     // Also check if we already have a session (page might have loaded with the token)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       if (session) {
         setSessionReady(true);
       }
@@ -78,13 +81,13 @@ export function ResetPasswordForm() {
   if (sessionError) {
     return (
       <div className="text-center" data-testid="reset-password-expired">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Invalid or expired link</h2>
-        <p className="text-gray-600 mb-4">
+        <h2 className="mb-2 text-xl font-semibold text-gray-900">Invalid or expired link</h2>
+        <p className="mb-4 text-gray-600">
           This password reset link has expired or is invalid. Please request a new one.
         </p>
         <a
           href="/auth/forgot-password"
-          className="inline-block text-blue-600 hover:text-blue-700 underline"
+          className="inline-block text-blue-600 underline hover:text-blue-700"
         >
           Request new reset link
         </a>
@@ -95,14 +98,11 @@ export function ResetPasswordForm() {
   if (success) {
     return (
       <div className="text-center" data-testid="reset-password-success">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Password updated</h2>
-        <p className="text-gray-600 mb-4">
+        <h2 className="mb-2 text-xl font-semibold text-gray-900">Password updated</h2>
+        <p className="mb-4 text-gray-600">
           Your password has been updated successfully. You can now log in with your new password.
         </p>
-        <a
-          href="/auth/login"
-          className="inline-block text-blue-600 hover:text-blue-700 underline"
-        >
+        <a href="/auth/login" className="inline-block text-blue-600 underline hover:text-blue-700">
           Go to login
         </a>
       </div>
@@ -120,7 +120,7 @@ export function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="reset-password-form">
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
           New password
         </label>
         <input
@@ -140,7 +140,7 @@ export function ResetPasswordForm() {
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-gray-700">
           Confirm new password
         </label>
         <input
