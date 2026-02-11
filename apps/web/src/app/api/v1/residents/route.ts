@@ -14,24 +14,21 @@
  * - ADR-001 role constraints via role-validator
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import {
+  communities,
   createScopedClient,
   logAuditEvent,
-  users,
+  notificationPreferences,
   userRoles,
-  communities,
+  users,
 } from '@propertypro/db';
 import { COMMUNITY_ROLES, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError, NotFoundError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
-
-// ---------------------------------------------------------------------------
-// Zod schemas
-// ---------------------------------------------------------------------------
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -40,7 +37,7 @@ const createResidentSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1, 'Full name is required'),
   phone: z.string().nullable().optional(),
-  role: z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<CommunityRole>,
+  role: z.enum(COMMUNITY_ROLES) as z.ZodType<CommunityRole>,
   unitId: z.number().int().positive().nullable().optional(),
 });
 
@@ -49,7 +46,7 @@ const updateResidentSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().min(1).optional(),
   phone: z.string().nullable().optional(),
-  role: z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]).optional() as z.ZodType<CommunityRole | undefined>,
+  role: (z.enum(COMMUNITY_ROLES) as z.ZodType<CommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
 });
 
@@ -57,6 +54,18 @@ const deleteResidentSchema = z.object({
   communityId: z.number().int().positive(),
   userId: z.string().uuid(),
 });
+
+async function getCommunityType(communityId: number): Promise<CommunityType> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(communities);
+  const community = rows.find((row) => row['id'] === communityId);
+
+  if (!community) {
+    throw new NotFoundError(`Community ${communityId} not found`);
+  }
+
+  return community['communityType'] as CommunityType;
+}
 
 // ---------------------------------------------------------------------------
 // GET — list residents for a community
@@ -76,41 +85,36 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = communityIdResult.data;
   const scoped = createScopedClient(communityId);
 
-  // Fetch user_roles scoped to this community
-  const roles = await scoped.query(userRoles);
-
-  // Fetch user details for each role
-  // Users table has no communityId — use scoped client on communities table
-  // to verify community exists, then query users by IDs from roles
-  const userIds = roles.map((r) => r['userId'] as string);
-
-  if (userIds.length === 0) {
+  const roleRows = await scoped.query(userRoles);
+  if (roleRows.length === 0) {
     return NextResponse.json({ data: [] });
   }
 
-  // Fetch all users who have roles in this community
-  // users table doesn't have communityId, so we query it via the unscoped
-  // result set from userRoles (which is already scoped)
-  const allUsers = await scoped.query(users);
-  const userMap = new Map(
-    (allUsers as Array<Record<string, unknown>>)
-      .filter((u) => userIds.includes(u['id'] as string))
-      .map((u) => [u['id'] as string, u]),
-  );
+  const userIds = new Set(roleRows.map((row) => row['userId'] as string));
+  const userRows = await scoped.query(users);
 
-  const residents = roles.map((role) => {
-    const userId = role['userId'] as string;
-    const user = userMap.get(userId);
+  const userMap = new Map<string, Record<string, unknown>>();
+  for (const row of userRows) {
+    const userId = row['id'] as string;
+    if (userIds.has(userId)) {
+      userMap.set(userId, row as Record<string, unknown>);
+    }
+  }
+
+  const residents = roleRows.map((roleRow) => {
+    const userId = roleRow['userId'] as string;
+    const userRow = userMap.get(userId);
+
     return {
       userId,
       communityId,
-      role: role['role'] as string,
-      unitId: (role['unitId'] as number | null) ?? null,
-      roleId: role['id'] as number,
-      email: user ? (user['email'] as string) : null,
-      fullName: user ? (user['fullName'] as string) : null,
-      phone: user ? (user['phone'] as string | null) : null,
-      createdAt: role['createdAt'] as string,
+      roleId: roleRow['id'] as number,
+      role: roleRow['role'] as string,
+      unitId: (roleRow['unitId'] as number | null) ?? null,
+      email: (userRow?.['email'] as string | undefined) ?? null,
+      fullName: (userRow?.['fullName'] as string | undefined) ?? null,
+      phone: (userRow?.['phone'] as string | undefined) ?? null,
+      createdAt: roleRow['createdAt'] as string,
     };
   });
 
@@ -134,76 +138,69 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const { communityId, email, fullName, phone, role, unitId } = parseResult.data;
   const scoped = createScopedClient(communityId);
 
-  // Look up community to get communityType for role constraint validation
-  const communityRows = await scoped.query(communities);
-  // communities table doesn't have communityId column so scoped query
-  // returns all non-deleted communities. Filter by the actual id.
-  const community = communityRows.find(
-    (c) => (c['id'] as number) === communityId,
-  );
-  if (!community) {
-    throw new NotFoundError(`Community ${communityId} not found`);
-  }
+  const communityType = await getCommunityType(communityId);
 
-  const communityType = community['communityType'] as CommunityType;
-
-  // Validate role assignment per ADR-001
   const validation = validateRoleAssignment(role, communityType, unitId ?? null);
   if (!validation.valid) {
-    throw new ValidationError(validation.error!);
+    throw new ValidationError(validation.error ?? 'Invalid role assignment');
   }
 
-  // Check if user already exists by email
+  // users table is global; scoped query applies only deleted_at filtering here.
   const existingUsers = await scoped.query(users);
-  let user = existingUsers.find(
-    (u) => (u['email'] as string).toLowerCase() === email.toLowerCase(),
+  const normalizedEmail = email.toLowerCase();
+
+  let userRow = existingUsers.find(
+    (row) => (row['email'] as string).toLowerCase() === normalizedEmail,
   );
 
-  let userId: string;
-  let isNewUser = false;
+  const isNewUser = !userRow;
+  const userId = isNewUser ? crypto.randomUUID() : (userRow?.['id'] as string);
 
-  if (user) {
-    userId = user['id'] as string;
-
-    // Check if user already has a role in this community
-    const existingRoles = await scoped.query(userRoles);
-    const existingRole = existingRoles.find(
-      (r) => (r['userId'] as string) === userId,
-    );
-
-    if (existingRole) {
-      throw new ValidationError(
-        `User already has role "${existingRole['role']}" in this community. Use PATCH to update.`,
-      );
-    }
-  } else {
-    // Create new user
-    isNewUser = true;
-    const newUserId = crypto.randomUUID();
-    const inserted = await scoped.insert(users, {
-      id: newUserId,
-      email: email.toLowerCase(),
+  if (isNewUser) {
+    const insertedUsers = await scoped.insert(users, {
+      id: userId,
+      email: normalizedEmail,
       fullName,
       phone: phone ?? null,
     });
-    userId = inserted[0]!['id'] as string;
+
+    userRow = insertedUsers[0] as Record<string, unknown>;
   }
 
-  // Assign role in this community
-  const roleInserted = await scoped.insert(userRoles, {
+  const existingRoles = await scoped.query(userRoles);
+  const existingRole = existingRoles.find((row) => row['userId'] === userId);
+
+  if (existingRole) {
+    throw new ValidationError(
+      `User already has role "${existingRole['role']}" in this community. Use PATCH to update.`,
+    );
+  }
+
+  const insertedRoles = await scoped.insert(userRoles, {
     userId,
     role,
     unitId: unitId ?? null,
   });
 
-  // Audit log
+  // Acceptance criterion: create notification_preferences when user role is created.
+  await scoped.insert(notificationPreferences, {
+    userId,
+  });
+
   await logAuditEvent({
     userId,
     action: 'create',
     resourceType: 'resident',
     resourceId: userId,
     communityId,
-    newValues: { email, fullName, role, unitId: unitId ?? null, isNewUser },
+    newValues: {
+      email: normalizedEmail,
+      fullName,
+      phone: phone ?? null,
+      role,
+      unitId: unitId ?? null,
+      isNewUser,
+    },
   });
 
   return NextResponse.json(
@@ -213,8 +210,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         communityId,
         role,
         unitId: unitId ?? null,
-        roleId: roleInserted[0]!['id'] as number,
-        email: email.toLowerCase(),
+        roleId: insertedRoles[0]?.['id'] as number,
+        email: normalizedEmail,
         fullName,
         phone: phone ?? null,
       },
@@ -240,81 +237,73 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const { communityId, userId, fullName, phone, role, unitId } = parseResult.data;
   const scoped = createScopedClient(communityId);
 
-  // Find the existing role for this user in this community
-  const existingRoles = await scoped.query(userRoles);
-  const existingRole = existingRoles.find(
-    (r) => (r['userId'] as string) === userId,
-  );
+  const roleRows = await scoped.query(userRoles);
+  const existingRole = roleRows.find((row) => row['userId'] === userId);
 
   if (!existingRole) {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
   }
 
   const oldRole = existingRole['role'] as CommunityRole;
-  const oldUnitId = existingRole['unitId'] as number | null;
+  const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
-  // Determine final role and unitId for validation
   const newRole = role ?? oldRole;
   const newUnitId = unitId !== undefined ? (unitId ?? null) : oldUnitId;
 
-  // If role or unitId are changing, validate the new assignment
   if (role !== undefined || unitId !== undefined) {
-    const communityRows = await scoped.query(communities);
-    const community = communityRows.find(
-      (c) => (c['id'] as number) === communityId,
-    );
-    if (!community) {
-      throw new NotFoundError(`Community ${communityId} not found`);
-    }
-
-    const communityType = community['communityType'] as CommunityType;
+    const communityType = await getCommunityType(communityId);
     const validation = validateRoleAssignment(newRole, communityType, newUnitId);
     if (!validation.valid) {
-      throw new ValidationError(validation.error!);
+      throw new ValidationError(validation.error ?? 'Invalid role assignment');
     }
   }
 
   const oldValues: Record<string, unknown> = {};
   const newValues: Record<string, unknown> = {};
 
-  // Update user fields if provided
   if (fullName !== undefined || phone !== undefined) {
+    const userRows = await scoped.query(users);
+    const currentUser = userRows.find((row) => row['id'] === userId);
+
     const userUpdate: Record<string, unknown> = {};
+
     if (fullName !== undefined) {
-      oldValues['fullName'] = undefined; // We don't have old value readily
+      oldValues['fullName'] = currentUser?.['fullName'] ?? null;
       newValues['fullName'] = fullName;
       userUpdate['fullName'] = fullName;
     }
+
     if (phone !== undefined) {
+      oldValues['phone'] = currentUser?.['phone'] ?? null;
       newValues['phone'] = phone;
       userUpdate['phone'] = phone;
     }
 
-    await scoped.update(users, userUpdate, eq(users.id, userId));
+    if (Object.keys(userUpdate).length > 0) {
+      await scoped.update(users, userUpdate, eq(users.id, userId));
+    }
   }
 
-  // Update role assignment if role or unitId changed
   if (role !== undefined || unitId !== undefined) {
     const roleUpdate: Record<string, unknown> = {};
+
     if (role !== undefined) {
       oldValues['role'] = oldRole;
       newValues['role'] = role;
       roleUpdate['role'] = role;
     }
+
     if (unitId !== undefined) {
       oldValues['unitId'] = oldUnitId;
       newValues['unitId'] = unitId ?? null;
       roleUpdate['unitId'] = unitId ?? null;
     }
 
-    await scoped.update(
-      userRoles,
-      roleUpdate,
-      eq(userRoles.userId, userId),
-    );
+    if (Object.keys(roleUpdate).length > 0) {
+      await scoped.update(userRoles, roleUpdate, eq(userRoles.userId, userId));
+    }
   }
 
-  // Audit log
   await logAuditEvent({
     userId,
     action: 'update',
@@ -352,20 +341,15 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const { communityId, userId } = parseResult.data;
   const scoped = createScopedClient(communityId);
 
-  // Find the existing role
-  const existingRoles = await scoped.query(userRoles);
-  const existingRole = existingRoles.find(
-    (r) => (r['userId'] as string) === userId,
-  );
+  const roleRows = await scoped.query(userRoles);
+  const existingRole = roleRows.find((row) => row['userId'] === userId);
 
   if (!existingRole) {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
   }
 
-  // user_roles has no deletedAt — use hardDelete
   await scoped.hardDelete(userRoles, eq(userRoles.userId, userId));
 
-  // Audit log
   await logAuditEvent({
     userId,
     action: 'delete',
