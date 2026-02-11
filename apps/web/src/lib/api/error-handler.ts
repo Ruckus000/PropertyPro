@@ -11,6 +11,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { AppError } from './errors/AppError';
+import { extractSentryRequestContext } from '../sentry/request-context';
 
 type RouteHandler = (
   req: NextRequest,
@@ -34,7 +35,8 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
       const response = await handler(req, context);
       return response;
     } catch (error) {
-      const requestId = req.headers.get('x-request-id') ?? '';
+      const sentryContext = extractSentryRequestContext(req.headers);
+      const requestId = sentryContext.requestId;
 
       if (error instanceof AppError) {
         return NextResponse.json(error.toJSON(), {
@@ -48,7 +50,13 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
 
       // Report to Sentry with request_id for correlation
       Sentry.withScope((scope) => {
-        scope.setTag('request_id', requestId);
+        scope.setTag('request_id', sentryContext.requestId);
+        if (sentryContext.communityId) {
+          scope.setTag('community_id', sentryContext.communityId);
+        }
+        if (sentryContext.userId) {
+          scope.setUser({ id: sentryContext.userId });
+        }
         Sentry.captureException(error);
       });
 

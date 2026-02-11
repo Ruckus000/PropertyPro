@@ -5,25 +5,30 @@
  * Run with: pnpm --filter @propertypro/db test:integration
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
 import { communities } from '../src/schema/communities';
 import { units } from '../src/schema/units';
-import { createScopedClient } from '../src/scoped-client';
 import { TenantContextMissing } from '../src/errors/TenantContextMissing';
 
 // Skip entirely if no DATABASE_URL is set
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const TEST_HARD_DELETE_CONFLICT_UNIT = '__test_hard_delete_conflict__';
+type CreateScopedClient = typeof import('../src/scoped-client').createScopedClient;
 
 describeDb('scoped-client (integration)', () => {
   let sql: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
   let communityAId: number;
   let communityBId: number;
+  let createScopedClient: CreateScopedClient;
 
   beforeAll(async () => {
+    // Import lazily so DATABASE_URL-less environments can skip the suite cleanly.
+    createScopedClient = (await import('../src/scoped-client')).createScopedClient;
+
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
 
@@ -31,6 +36,7 @@ describeDb('scoped-client (integration)', () => {
     await db.delete(units).where(eq(units.unitNumber, '__test_a1__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_a2__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_b1__'));
+    await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
     await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
     await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
 
@@ -76,6 +82,7 @@ describeDb('scoped-client (integration)', () => {
       await db.delete(units).where(eq(units.unitNumber, '__test_a1__'));
       await db.delete(units).where(eq(units.unitNumber, '__test_a2__'));
       await db.delete(units).where(eq(units.unitNumber, '__test_b1__'));
+      await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
       await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
       await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
     }
@@ -150,5 +157,50 @@ describeDb('scoped-client (integration)', () => {
 
     // Clean up
     await db.delete(units).where(eq(units.unitNumber, '__test_bypass__'));
+  });
+
+  it('community A client cannot bypass scoping with conflicting tenant WHERE in update', async () => {
+    const clientA = createScopedClient(communityAId, db);
+
+    const updated = await clientA.update(
+      units,
+      { building: 'Bypass Attempt' },
+      and(
+        eq(units.unitNumber, '__test_a2__'),
+        eq(units.communityId, communityBId),
+      ),
+    );
+
+    expect(updated).toHaveLength(0);
+  });
+
+  it('community A client cannot bypass scoping with conflicting tenant WHERE in hardDelete', async () => {
+    const clientA = createScopedClient(communityAId, db);
+
+    await db.insert(units).values({
+      communityId: communityAId,
+      unitNumber: TEST_HARD_DELETE_CONFLICT_UNIT,
+    });
+
+    const deleted = await clientA.hardDelete(
+      units,
+      and(
+        eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT),
+        eq(units.communityId, communityBId),
+      ),
+    );
+
+    expect(deleted).toHaveLength(0);
+
+    const remaining = await clientA.query(units);
+    const conflictRow = remaining.find(
+      (row: Record<string, unknown>) =>
+        row['unitNumber'] === TEST_HARD_DELETE_CONFLICT_UNIT,
+    );
+
+    expect(conflictRow).toBeDefined();
+
+    // Clean up
+    await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
   });
 });

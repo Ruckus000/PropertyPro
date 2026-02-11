@@ -1,12 +1,28 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Mock Sentry before importing error-handler
+const sentryMocks = vi.hoisted(() => {
+  const setTag = vi.fn();
+  const setUser = vi.fn();
+  const captureException = vi.fn();
+  const withScope = vi.fn(
+    (
+      cb: (scope: {
+        setTag: ReturnType<typeof vi.fn>;
+        setUser: ReturnType<typeof vi.fn>;
+      }) => void,
+    ) => {
+      cb({ setTag, setUser });
+    },
+  );
+
+  return { setTag, setUser, captureException, withScope };
+});
+
 vi.mock('@sentry/nextjs', () => ({
-  withScope: vi.fn((cb: (scope: { setTag: ReturnType<typeof vi.fn> }) => void) => {
-    cb({ setTag: vi.fn() });
-  }),
-  captureException: vi.fn(),
+  withScope: sentryMocks.withScope,
+  captureException: sentryMocks.captureException,
 }));
 
 import { withErrorHandler } from '../../src/lib/api/error-handler';
@@ -29,6 +45,10 @@ function createMockRequest(
 }
 
 describe('withErrorHandler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns the handler response on success', async () => {
     const handler = withErrorHandler(async () => {
       return NextResponse.json({ data: 'ok' });
@@ -87,6 +107,30 @@ describe('withErrorHandler', () => {
     expect(body.error.message).toBe('An unexpected error occurred');
     // Must NOT contain the original error message or stack trace
     expect(JSON.stringify(body)).not.toContain('database connection failed');
+    expect(sentryMocks.setTag).toHaveBeenCalledWith('request_id', 'test-request-id');
+    expect(sentryMocks.captureException).toHaveBeenCalledTimes(1);
+
+    consoleSpy.mockRestore();
+  });
+
+  it('tags community_id and user context when headers are present', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const handler = withErrorHandler(async () => {
+      throw new Error('boom');
+    });
+
+    const req = createMockRequest('http://localhost:3000/api/test', {
+      'x-community-id': '42',
+      'x-user-id': 'user_123',
+    });
+
+    await handler(req);
+
+    expect(sentryMocks.setTag).toHaveBeenCalledWith('request_id', 'test-request-id');
+    expect(sentryMocks.setTag).toHaveBeenCalledWith('community_id', '42');
+    expect(sentryMocks.setUser).toHaveBeenCalledWith({ id: 'user_123' });
+    expect(sentryMocks.captureException).toHaveBeenCalledTimes(1);
 
     consoleSpy.mockRestore();
   });

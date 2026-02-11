@@ -13,7 +13,10 @@
  * deeply-nested per-table generics conflict with our generic wrapper pattern.
  * Every cast is backed by a runtime check (column introspection) that
  * guarantees correctness. The database itself also validates query shapes.
- * No `any` or `@ts-ignore` is used anywhere (AGENTS #42).
+ *
+ * NOTE ON COMMUNITY ID TYPE:
+ * We intentionally use `number` in Phase 0 because the current Drizzle schema
+ * defines bigint columns with `mode: 'number'`.
  */
 import {
   type SQL,
@@ -26,8 +29,11 @@ import {
 } from 'drizzle-orm';
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
+import type { ScopedClient } from './types/scoped-client';
 import { TenantContextMissing } from './errors/TenantContextMissing';
 import { db as defaultDb } from './drizzle';
+
+export type { ScopedClient } from './types/scoped-client';
 
 // ---------------------------------------------------------------------------
 // Table exemption registry
@@ -85,11 +91,9 @@ async function execSelect(
   table: PgTable<TableConfig>,
   whereClause: SQL | undefined,
 ): Promise<Record<string, unknown>[]> {
-  /* eslint-disable @typescript-eslint/no-explicit-any -- see module header */
   const q = (database as unknown as { select(): { from(t: unknown): { where(w: unknown): Promise<unknown[]>; then: Promise<unknown[]>['then'] } } }).select().from(table);
   const rows = whereClause ? await q.where(whereClause) : await q;
   return rows as Record<string, unknown>[];
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
 /** INSERT INTO table VALUES (data) RETURNING * → rows */
@@ -129,49 +133,6 @@ async function execDelete(
     ? await q.where(whereClause).returning()
     : await q.returning();
   return rows as Record<string, unknown>[];
-}
-
-// ---------------------------------------------------------------------------
-// Scoped client type
-// ---------------------------------------------------------------------------
-
-/**
- * A tenant-scoped database client.
- *
- * All methods auto-inject community_id and soft-delete filters.
- * The raw Drizzle db is NOT exposed.
- */
-export interface ScopedClient {
-  /** The community ID this client is scoped to. */
-  readonly communityId: number;
-
-  /** SELECT with auto-scoped WHERE (community_id + soft-delete). */
-  query: (table: PgTable<TableConfig>) => Promise<Record<string, unknown>[]>;
-
-  /** INSERT with auto-injected community_id. Overrides caller-supplied value. */
-  insert: (
-    table: PgTable<TableConfig>,
-    data: Record<string, unknown>,
-  ) => Promise<Record<string, unknown>[]>;
-
-  /** UPDATE with auto-scoped WHERE and auto updatedAt. Strips communityId from SET. */
-  update: (
-    table: PgTable<TableConfig>,
-    data: Record<string, unknown>,
-    additionalWhere?: SQL,
-  ) => Promise<Record<string, unknown>[]>;
-
-  /** Soft-delete: sets deleted_at = now(). Throws if table has no deleted_at. */
-  softDelete: (
-    table: PgTable<TableConfig>,
-    additionalWhere?: SQL,
-  ) => Promise<Record<string, unknown>[]>;
-
-  /** Hard DELETE with auto-scoped WHERE. Use sparingly. */
-  hardDelete: (
-    table: PgTable<TableConfig>,
-    additionalWhere?: SQL,
-  ) => Promise<Record<string, unknown>[]>;
 }
 
 // ---------------------------------------------------------------------------

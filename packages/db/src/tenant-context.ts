@@ -8,7 +8,12 @@
  * AGENTS #14: All database access must go through createScopedClient.
  */
 export interface TenantContext {
-  /** The community ID for the current request scope. */
+  /**
+   * The community ID for the current request scope.
+   *
+   * Intentionally `number` in Phase 0 because Drizzle bigint columns are
+   * currently configured with `mode: 'number'`.
+   */
   communityId: number;
 }
 
