@@ -1,8 +1,12 @@
 /**
- * Audit Logger — logs compliance and security events.
+ * Audit Logger — logs compliance and security events to compliance_audit_log.
  *
- * P1-27a stub: console.log only. P1-27b upgrades this to actual DB inserts.
+ * P1-27b: Upgraded from console.log stub to actual DB inserts.
+ * Uses raw db directly (not scoped client) since communityId is explicitly provided.
  */
+
+import { db } from '../drizzle';
+import { complianceAuditLog } from '../schema/compliance-audit-log';
 
 /** Widened action union covering generic CRUD, user lifecycle, meeting, and domain events. */
 export type AuditAction =
@@ -23,11 +27,21 @@ export interface AuditEventParams {
 }
 
 /**
- * Log an audit event. Called from mutation handlers across the application.
+ * Log an audit event by INSERTing into compliance_audit_log.
  *
- * P1-27a: console-log stub only. P1-27b will upgrade to INSERT into compliance_audit_log.
+ * Called from mutation handlers across the application.
+ * Throws on database error — callers should handle or let it propagate
+ * so that unaudited mutations do not silently succeed.
  */
 export async function logAuditEvent(params: AuditEventParams): Promise<void> {
-  // P1-27a stub: console.log only. P1-27b upgrades this to actual DB inserts.
-  console.log('[AUDIT]', params);
+  await db.insert(complianceAuditLog).values({
+    userId: params.userId,
+    communityId: params.communityId,
+    action: params.action,
+    resourceType: params.resourceType,
+    resourceId: params.resourceId,
+    oldValues: params.oldValues ?? null,
+    newValues: params.newValues ?? null,
+    metadata: params.metadata ?? null,
+  });
 }
