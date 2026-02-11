@@ -4,7 +4,8 @@
  * Responsibilities:
  * 1. Refresh Supabase auth session without blocking rendering
  * 2. Redirect unauthenticated users away from protected routes to /auth/login?returnTo=<original>
- * 3. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
+ * 3. Redirect authenticated but unverified users to /auth/verify-email
+ * 4. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
@@ -18,9 +19,14 @@ const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/main
 
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
+const VERIFY_EMAIL_PATH = '/auth/verify-email';
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function buildReturnTo(request: NextRequest): string {
+  return `${request.nextUrl.pathname}${request.nextUrl.search}`;
 }
 
 /**
@@ -44,7 +50,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   const { pathname } = request.nextUrl;
 
-  // Only enforce auth on protected paths
+  // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
     const {
       data: { user },
@@ -53,18 +59,35 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (!user) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = '/auth/login';
-      loginUrl.searchParams.set('returnTo', pathname + request.nextUrl.search);
+      loginUrl.searchParams.set('returnTo', buildReturnTo(request));
       return NextResponse.redirect(loginUrl);
+    }
+
+    if (!user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
+      const verifyUrl = request.nextUrl.clone();
+      verifyUrl.pathname = VERIFY_EMAIL_PATH;
+      verifyUrl.searchParams.set('returnTo', buildReturnTo(request));
+      return NextResponse.redirect(verifyUrl);
     }
   }
 
-  // Redirect already-authenticated users away from auth pages (optional UX improvement)
-  if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== '/auth/verify-email') {
+  // Redirect already-authenticated users away from auth pages (except verify-email)
+  if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== VERIFY_EMAIL_PATH) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (user) {
+      if (!user.email_confirmed_at) {
+        const verifyUrl = request.nextUrl.clone();
+        verifyUrl.pathname = VERIFY_EMAIL_PATH;
+        const returnTo = request.nextUrl.searchParams.get('returnTo');
+        if (returnTo) {
+          verifyUrl.searchParams.set('returnTo', returnTo);
+        }
+        return NextResponse.redirect(verifyUrl);
+      }
+
       const returnTo = request.nextUrl.searchParams.get('returnTo');
       const destination = request.nextUrl.clone();
       destination.pathname = returnTo || '/dashboard';
