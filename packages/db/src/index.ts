@@ -9,7 +9,7 @@
  */
 
 // Scoped database client — the ONLY way to query tenant-scoped data
-export { createScopedClient, isSoftDeleteExempt } from './scoped-client';
+export { createScopedClient, isSoftDeleteExempt, isAppendOnlyTable } from './scoped-client';
 export type { ScopedClient, ScopedRow, ScopedTable } from './types/scoped-client';
 
 // Tenant context

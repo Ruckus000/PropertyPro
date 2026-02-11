@@ -42,9 +42,16 @@ export type { ScopedClient } from './types/scoped-client';
 /**
  * Tables exempt from soft-delete filtering.
  * compliance_audit_log is append-only and never deleted (AGENTS #8).
- * The actual table will be created in P1-27.
  */
 const SOFT_DELETE_EXEMPT_TABLES: ReadonlySet<string> = new Set([
+  'compliance_audit_log',
+]);
+
+/**
+ * Tables that are append-only (INSERT permitted, UPDATE/DELETE rejected).
+ * compliance_audit_log must never be modified or deleted for compliance.
+ */
+const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
 ]);
 
@@ -222,6 +229,13 @@ export function createScopedClient(
     },
 
     async update(table, data, additionalWhere?) {
+      const updateTableName = getTableName(table as unknown as Table);
+      if (APPEND_ONLY_TABLES.has(updateTableName)) {
+        throw new Error(
+          `Table "${updateTableName}" is append-only. UPDATE operations are not permitted.`,
+        );
+      }
+
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
         filters.push(additionalWhere);
@@ -243,6 +257,12 @@ export function createScopedClient(
     async softDelete(table, additionalWhere?) {
       const columns = getTableColumns(table) as ColumnRecord;
       const tableName = getTableName(table as unknown as Table);
+
+      if (APPEND_ONLY_TABLES.has(tableName)) {
+        throw new Error(
+          `Table "${tableName}" is append-only. DELETE operations are not permitted.`,
+        );
+      }
 
       if (!hasDeletedAtColumn(columns)) {
         throw new Error(
@@ -270,6 +290,13 @@ export function createScopedClient(
     },
 
     async hardDelete(table, additionalWhere?) {
+      const hardDeleteTableName = getTableName(table as unknown as Table);
+      if (APPEND_ONLY_TABLES.has(hardDeleteTableName)) {
+        throw new Error(
+          `Table "${hardDeleteTableName}" is append-only. DELETE operations are not permitted.`,
+        );
+      }
+
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
         filters.push(additionalWhere);
@@ -285,4 +312,11 @@ export function createScopedClient(
  */
 export function isSoftDeleteExempt(tableName: string): boolean {
   return SOFT_DELETE_EXEMPT_TABLES.has(tableName);
+}
+
+/**
+ * Exported for testing: allows checking if a table name is append-only.
+ */
+export function isAppendOnlyTable(tableName: string): boolean {
+  return APPEND_ONLY_TABLES.has(tableName);
 }
