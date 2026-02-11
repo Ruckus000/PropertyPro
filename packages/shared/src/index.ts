@@ -52,3 +52,5 @@ export const PERMISSION_PROFILE_MAP = {
   resident_owner: ["owner"],
   resident_tenant: ["tenant"],
 } as const;
+
+export * from './compliance/templates';
