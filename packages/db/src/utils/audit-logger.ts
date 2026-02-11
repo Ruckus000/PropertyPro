@@ -16,7 +16,7 @@ export interface AuditEventParams {
   action: AuditAction;
   resourceType: string;
   resourceId: string;
-  communityId: string;
+  communityId: number;
   oldValues?: Record<string, unknown>;
   newValues?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
