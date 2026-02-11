@@ -1,0 +1,13 @@
+=== p1-11 ===
+/Users/jphilistin/Documents/Coding/pp-worktrees/p1-11
+feature/p1-11-document-upload
+
+It seems I need permission to write files. Could you approve the file write permission? I need to create several new files for the P1-11 implementation:
+
+- `apps/web/src/app/api/v1/upload/route.ts` — presigned upload endpoint
+- `apps/web/src/app/api/v1/documents/route.ts` — document CRUD endpoint
+- `apps/web/src/hooks/useDocumentUpload.ts` — upload hook
+- `apps/web/src/components/documents/document-uploader.tsx` — uploader UI
+- `apps/web/__tests__/upload/*.test.ts` — test files
+
+Please approve the write permission so I can proceed.

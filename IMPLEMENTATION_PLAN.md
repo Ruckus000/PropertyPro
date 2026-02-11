@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-11 (v6 — Phase 1 merge and verification reconciliation)
+Generated: 2026-02-11 (v7 — Batch 1 kickoff checkpoint and execution pause tracking)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 execution is in progress with `P1-27a`/`P1-27b` merged on `main` and verified.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 execution is in progress with `P1-27a`/`P1-27b` merged on `main` and verified; remaining Batch 1 tasks are in feature worktrees with partial WIP and no new merges yet.
 
 ### Progress Snapshot (2026-02-11)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -17,6 +17,9 @@ Generated: 2026-02-11 (v6 — Phase 1 merge and verification reconciliation)
 - Batch 0 middleware fix is merged on `main` (`391b329`) and pushed.
 - `P1-27a` and `P1-27b` are merged to `main` via merge commits `0c0bd22` and `894f56c`.
 - Post-merge verification gate executed successfully on `main`: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm --filter @propertypro/db test:integration`.
+- Batch 1 kickoff worktrees/branches were created for `P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, and `P1-28`.
+- Latest parallel execution attempt halted at usage cap reset (`4:00 PM America/New_York` on 2026-02-11); no new Phase 1 branches are ahead of `main`.
+- Current WIP footprint before restart: uncommitted changes in `p1-09`, `p1-17`, `p1-18`, `p1-21`, `p1-22`, `p1-28`; `p1-11` has no file delta yet.
 
 ---
 
@@ -561,7 +564,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 1 Execution Readiness (2026-02-11)
 
-- **Status:** In Progress (Batch 0 merged; `P1-27a`/`P1-27b` merged and verified on `main`)
+- **Status:** In Progress (Batch 0 merged; `P1-27a`/`P1-27b` merged and verified on `main`; remaining Batch 1 tasks launched in feature worktrees)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -570,7 +573,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** Most Phase 1 entries remain `Not Started`; `P1-27` remains `In Progress` because core infrastructure is merged, while full mutation-route adoption continues as Batch 1 endpoints are implemented.
+- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Other Batch 1 tasks below are now marked `In Progress` at the branch/worktree level, but none are merged and batch verification has not yet rerun.
 
 ---
 
@@ -578,7 +581,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-09 Compliance Checklist Engine
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** packages/db/src/schema/compliance-checklist-items.ts, packages/shared/src/compliance/templates.ts (§718 and §720 constants), apps/web/src/app/api/v1/compliance/route.ts, apps/web/src/lib/utils/compliance-calculator.ts, apps/web/__tests__/compliance/
 - **Dependencies:** P0-05, P0-06
 - **Blocks:** P1-10, P1-16, P2-39, P1-29
@@ -631,7 +634,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-11 Document Upload Pipeline
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; no committed or uncommitted file delta yet)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/upload/route.ts (presign endpoint), apps/web/src/app/api/v1/documents/route.ts (create document record), apps/web/src/components/documents/document-uploader.tsx, apps/web/src/hooks/useDocumentUpload.ts, apps/web/__tests__/upload/
 - **Dependencies:** P0-04, P0-06
 - **Blocks:** P1-12, P1-13, P1-15, P1-29
@@ -754,7 +757,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-17 Announcement System
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** packages/db/src/schema/announcements.ts, apps/web/src/app/api/v1/announcements/route.ts, apps/web/src/components/announcements/announcement-composer.tsx, announcement-feed.tsx, announcement-toolbar.tsx
 - **Dependencies:** P0-05, P0-06, P0-03
 - **Blocks:** P1-24
@@ -773,7 +776,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-18 Resident Management
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/residents/route.ts, apps/web/src/components/residents/resident-form.tsx, resident-list.tsx, apps/web/src/lib/utils/role-validator.ts
 - **Dependencies:** P0-04, P0-05, P0-06
 - **Blocks:** P1-19, P1-20, P1-26
@@ -836,7 +839,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-21 Password Reset Flow
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** apps/web/src/app/auth/forgot-password/page.tsx, apps/web/src/app/auth/reset-password/page.tsx, apps/web/src/components/auth/forgot-password-form.tsx, reset-password-form.tsx
 - **Dependencies:** P0-04
 - **Blocks:** None
@@ -855,7 +858,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-22 Session Management
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** apps/web/src/lib/supabase/server.ts (createServerClient wrapper), client.ts (createBrowserClient wrapper), apps/web/src/middleware.ts (update auth refresh), apps/web/src/app/(authenticated)/layout.tsx, apps/web/src/app/auth/verify-email/page.tsx
 - **Dependencies:** P0-04
 - **Blocks:** None directly
@@ -987,7 +990,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-28 Email Infrastructure
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (feature branch active; uncommitted WIP exists, no commit/verification yet)
 - **Files to Create/Modify:** packages/email/src/templates/invitation-email.tsx, password-reset-email.tsx, meeting-notice-email.tsx, compliance-alert-email.tsx, announcement-email.tsx, packages/email/src/send.ts, packages/email/package.json
 - **Dependencies:** P0-00
 - **Blocks:** P2-41

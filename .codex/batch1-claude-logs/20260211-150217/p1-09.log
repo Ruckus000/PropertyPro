@@ -1,0 +1,5 @@
+=== p1-09 ===
+/Users/jphilistin/Documents/Coding/pp-worktrees/p1-09
+feature/p1-09-compliance-engine
+
+I need your approval to install the `date-fns` dependency. Could you approve the `pnpm add date-fns --filter @propertypro/web` command? This is required per the spec for all date arithmetic in the compliance engine.
