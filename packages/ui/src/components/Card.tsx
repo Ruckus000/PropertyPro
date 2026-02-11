@@ -1,22 +1,16 @@
 /**
- * Card — Container for grouped content
+ * Card — Container for grouped content.
  *
- * Compound component with Header, Body, Footer, Section slots.
+ * Compound component with Header, Body, Footer, and Section slots.
  */
 
 import React, {
-  forwardRef,
   createContext,
+  forwardRef,
   useContext,
-  type ReactNode,
   type HTMLAttributes,
+  type ReactNode,
 } from "react";
-import {
-  semanticColors,
-  componentTokens,
-  semanticElevation,
-  primitiveSpace,
-} from "../tokens";
 import type { StatusVariant } from "../tokens";
 import { Stack } from "../primitives/Stack";
 import { Text } from "../primitives/Text";
@@ -43,150 +37,226 @@ const CardContext = createContext<CardContextValue | null>(null);
 
 function useCardContext() {
   const context = useContext(CardContext);
-  return context || { size: "md" as CardSize, interactive: false };
+  return context ?? { size: "md" as CardSize, interactive: false };
 }
 
-// Card.Header
+function cn(...values: Array<string | null | undefined | false>): string {
+  return values.filter(Boolean).join(" ");
+}
+
+const cardPaddingClasses: Record<CardSize, string> = {
+  sm: "p-4",
+  md: "p-5",
+  lg: "p-6",
+};
+
+const bodyPaddingClasses: Record<CardSize, string> = {
+  sm: "p-4",
+  md: "p-5",
+  lg: "p-6",
+};
+
+const headerPaddingClasses: Record<CardSize, { bordered: string; unbordered: string }> = {
+  sm: {
+    bordered: "px-4 py-4",
+    unbordered: "px-4 pt-4 pb-2",
+  },
+  md: {
+    bordered: "px-5 py-5",
+    unbordered: "px-5 pt-5 pb-2.5",
+  },
+  lg: {
+    bordered: "px-6 py-6",
+    unbordered: "px-6 pt-6 pb-3",
+  },
+};
+
+const footerPaddingClasses: Record<CardSize, { bordered: string; unbordered: string }> = {
+  sm: {
+    bordered: "px-4 pt-4 pb-4",
+    unbordered: "px-4 pt-2 pb-4",
+  },
+  md: {
+    bordered: "px-5 pt-5 pb-5",
+    unbordered: "px-5 pt-2.5 pb-5",
+  },
+  lg: {
+    bordered: "px-6 pt-6 pb-6",
+    unbordered: "px-6 pt-3 pb-6",
+  },
+};
+
+const statusBorderClasses: Record<StatusVariant, string> = {
+  success:
+    "border-l-[3px] border-l-[var(--status-success)] dark:border-l-green-400",
+  brand:
+    "border-l-[3px] border-l-[var(--status-brand)] dark:border-l-blue-400",
+  warning:
+    "border-l-[3px] border-l-[var(--status-warning)] dark:border-l-amber-400",
+  danger:
+    "border-l-[3px] border-l-[var(--status-danger)] dark:border-l-red-400",
+  info: "border-l-[3px] border-l-[var(--status-info)] dark:border-l-sky-400",
+  neutral:
+    "border-l-[3px] border-l-[var(--status-neutral)] dark:border-l-gray-400",
+};
+
 interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {
   bordered?: boolean;
   children?: ReactNode;
 }
 
 const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
-  ({ bordered = false, children, style, ...props }, ref) => {
+  ({ bordered = false, children, className, ...props }, ref) => {
     const { size } = useCardContext();
-    const padding = componentTokens.card.padding[size];
 
     return (
       <div
         ref={ref}
-        style={{
-          padding: `${padding}px ${padding}px ${bordered ? padding : padding / 2}px`,
-          borderBottom: bordered ? `1px solid ${semanticColors.border.subtle}` : undefined,
-          ...style,
-        }}
+        className={cn(
+          bordered
+            ? headerPaddingClasses[size].bordered
+            : headerPaddingClasses[size].unbordered,
+          bordered
+            ? "border-b border-[var(--border-subtle)] dark:border-gray-700"
+            : null,
+          className,
+        )}
         {...props}
       >
-        <Stack direction="row" align="center" justify="space-between" gap={primitiveSpace[4]}>
+        <Stack direction="row" align="center" justify="space-between" gap={16}>
           {children}
         </Stack>
       </div>
     );
-  }
+  },
 );
 CardHeader.displayName = "Card.Header";
 
-// Card.Title
-const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement> & { children?: ReactNode }>(
-  ({ children, style, ...props }, ref) => (
-    <Text ref={ref} as="h3" variant="heading3" color="primary" style={{ flex: 1, ...style }} {...props}>
-      {children}
-    </Text>
-  )
-);
+const CardTitle = forwardRef<
+  HTMLHeadingElement,
+  HTMLAttributes<HTMLHeadingElement> & { children?: ReactNode }
+>(({ children, className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    as="h3"
+    variant="heading3"
+    color="primary"
+    className={cn("flex-1 dark:text-gray-100", className)}
+    {...props}
+  >
+    {children}
+  </Text>
+));
 CardTitle.displayName = "Card.Title";
 
-// Card.Subtitle
-const CardSubtitle = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement> & { children?: ReactNode }>(
-  ({ children, style, ...props }, ref) => (
-    <Text ref={ref} as="span" variant="caption" color="tertiary" style={style} {...props}>
-      {children}
-    </Text>
-  )
-);
+const CardSubtitle = forwardRef<
+  HTMLSpanElement,
+  HTMLAttributes<HTMLSpanElement> & { children?: ReactNode }
+>(({ children, className, ...props }, ref) => (
+  <Text
+    ref={ref}
+    as="span"
+    variant="caption"
+    color="tertiary"
+    className={cn("dark:text-gray-400", className)}
+    {...props}
+  >
+    {children}
+  </Text>
+));
 CardSubtitle.displayName = "Card.Subtitle";
 
-// Card.Actions
-const CardActions = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { children?: ReactNode }>(
-  ({ children, style, ...props }, ref) => (
-    <Stack
-      ref={ref}
-      direction="row"
-      align="center"
-      gap={primitiveSpace[2]}
-      style={{ flexShrink: 0, ...style }}
-      {...props}
-    >
-      {children}
-    </Stack>
-  )
-);
+const CardActions = forwardRef<
+  HTMLDivElement,
+  HTMLAttributes<HTMLDivElement> & { children?: ReactNode }
+>(({ children, className, ...props }, ref) => (
+  <Stack
+    ref={ref}
+    direction="row"
+    align="center"
+    gap={8}
+    className={cn("shrink-0", className)}
+    {...props}
+  >
+    {children}
+  </Stack>
+));
 CardActions.displayName = "Card.Actions";
 
-// Card.Body
-const CardBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { children?: ReactNode }>(
-  ({ children, style, ...props }, ref) => {
-    const { size } = useCardContext();
-    const padding = componentTokens.card.padding[size];
+const CardBody = forwardRef<
+  HTMLDivElement,
+  HTMLAttributes<HTMLDivElement> & { children?: ReactNode }
+>(({ children, className, ...props }, ref) => {
+  const { size } = useCardContext();
 
-    return (
-      <div ref={ref} style={{ padding, ...style }} {...props}>
-        {children}
-      </div>
-    );
-  }
-);
+  return (
+    <div ref={ref} className={cn(bodyPaddingClasses[size], className)} {...props}>
+      {children}
+    </div>
+  );
+});
 CardBody.displayName = "Card.Body";
 
-// Card.Footer
 interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {
   bordered?: boolean;
   children?: ReactNode;
 }
 
 const CardFooter = forwardRef<HTMLDivElement, CardFooterProps>(
-  ({ bordered = false, children, style, ...props }, ref) => {
+  ({ bordered = false, children, className, ...props }, ref) => {
     const { size } = useCardContext();
-    const padding = componentTokens.card.padding[size];
 
     return (
       <div
         ref={ref}
-        style={{
-          padding: `${bordered ? padding : padding / 2}px ${padding}px ${padding}px`,
-          borderTop: bordered ? `1px solid ${semanticColors.border.subtle}` : undefined,
-          ...style,
-        }}
+        className={cn(
+          bordered
+            ? footerPaddingClasses[size].bordered
+            : footerPaddingClasses[size].unbordered,
+          bordered
+            ? "border-t border-[var(--border-subtle)] dark:border-gray-700"
+            : null,
+          className,
+        )}
         {...props}
       >
-        <Stack direction="row" align="center" justify="flex-end" gap={primitiveSpace[3]}>
+        <Stack direction="row" align="center" justify="flex-end" gap={12}>
           {children}
         </Stack>
       </div>
     );
-  }
+  },
 );
 CardFooter.displayName = "Card.Footer";
 
-// Card.Section
 interface CardSectionProps extends HTMLAttributes<HTMLDivElement> {
   bordered?: boolean;
   children?: ReactNode;
 }
 
 const CardSection = forwardRef<HTMLDivElement, CardSectionProps>(
-  ({ bordered = true, children, style, ...props }, ref) => {
+  ({ bordered = true, children, className, ...props }, ref) => {
     const { size } = useCardContext();
-    const padding = componentTokens.card.padding[size];
 
     return (
       <div
         ref={ref}
-        style={{
-          padding,
-          borderTop: bordered ? `1px solid ${semanticColors.border.subtle}` : undefined,
-          ...style,
-        }}
+        className={cn(
+          bodyPaddingClasses[size],
+          bordered
+            ? "border-t border-[var(--border-subtle)] dark:border-gray-700"
+            : null,
+          className,
+        )}
         {...props}
       >
         {children}
       </div>
     );
-  }
+  },
 );
 CardSection.displayName = "Card.Section";
 
-// Main Card
 const CardRoot = forwardRef<HTMLDivElement, CardProps>(
   (
     {
@@ -197,40 +267,40 @@ const CardRoot = forwardRef<HTMLDivElement, CardProps>(
       selected = false,
       noPadding = false,
       children,
-      style,
       onClick,
       className,
       onKeyDown,
       ...props
     },
-    ref
+    ref,
   ) => {
-    const { padding, radius, elevation } = componentTokens.card;
-
     const isClickable = !!onClick;
     const isInteractive = interactive && isClickable;
-    const keyboardClick = useKeyboardClick<HTMLDivElement>(isClickable ? onClick : undefined);
+    const keyboardClick = useKeyboardClick<HTMLDivElement>(
+      isClickable ? onClick : undefined,
+    );
 
     const hasCompoundChildren = React.Children.toArray(children).some(
       (child) =>
         React.isValidElement(child) &&
         [CardHeader, CardBody, CardFooter, CardSection].some(
-          (Comp) => child.type === Comp
-        )
+          (Comp) => child.type === Comp,
+        ),
     );
 
-    const statusBorderColor = status
-      ? semanticColors.status[status].foreground
-      : "transparent";
-
-    const restElevation = elevation.rest;
-    const hoverElevation = elevated ? elevation.interactive : elevation.hover;
-
-    const computedClassName = [
-      "pp-card",
-      isInteractive ? "pp-card--interactive" : null,
+    const computedClassName = cn(
+      "pp-card flex flex-col rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-primary)] shadow-[var(--elevation-e0)] transition-[box-shadow,border-color,background-color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100",
+      isInteractive
+        ? "pp-card--interactive cursor-pointer hover:shadow-[var(--elevation-e1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)]"
+        : null,
+      selected
+        ? "border-[var(--interactive-primary)] bg-[var(--interactive-subtle)] dark:border-blue-500 dark:bg-blue-950/30"
+        : null,
+      status ? statusBorderClasses[status] : null,
+      elevated ? "shadow-[var(--elevation-e1)]" : null,
+      hasCompoundChildren || noPadding ? "p-0" : cardPaddingClasses[size],
       className,
-    ].filter(Boolean).join(" ");
+    );
 
     return (
       <CardContext.Provider value={{ size, interactive: isInteractive }}>
@@ -239,35 +309,18 @@ const CardRoot = forwardRef<HTMLDivElement, CardProps>(
           onClick={onClick}
           role={keyboardClick.role}
           tabIndex={keyboardClick.tabIndex}
-          onKeyDown={(e) => {
-            keyboardClick.onKeyDown?.(e);
-            onKeyDown?.(e);
+          onKeyDown={(event) => {
+            keyboardClick.onKeyDown?.(event);
+            onKeyDown?.(event);
           }}
           className={computedClassName}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            background: selected
-              ? semanticColors.interactive.subtle
-              : semanticColors.surface.default,
-            borderRadius: `${radius}px`,
-            border: `1px solid ${
-              selected ? semanticColors.interactive.default : semanticColors.border.subtle
-            }`,
-            borderLeft: status ? `3px solid ${statusBorderColor}` : undefined,
-            boxShadow: semanticElevation[restElevation].shadow,
-            padding: hasCompoundChildren || noPadding ? 0 : padding[size],
-            cursor: isInteractive ? "pointer" : undefined,
-            transition: `box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), background 150ms cubic-bezier(0.4, 0, 0.2, 1)`,
-            ...style,
-          }}
           {...props}
         >
           {children}
         </div>
       </CardContext.Provider>
     );
-  }
+  },
 );
 
 CardRoot.displayName = "Card";

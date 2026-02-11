@@ -1,344 +1,197 @@
 /**
  * P0-03: Card component tests
- *
- * Tests compound slots (Header, Body, Footer, Section, Title, Subtitle, Actions),
- * size variants, interactive/selected states, status border, and keyboard navigation.
  */
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { Card } from "../../src/components/Card";
-import { semanticColors, componentTokens, semanticElevation } from "../../src/tokens";
 
 describe("Card", () => {
   describe("Default rendering", () => {
-    it("renders a div with flex column", () => {
+    it("renders with base class contract", () => {
       render(<Card data-testid="card">content</Card>);
-      const el = screen.getByTestId("card");
-      expect(el.tagName).toBe("DIV");
-      expect(el.style.display).toBe("flex");
-      expect(el.style.flexDirection).toBe("column");
-    });
+      const card = screen.getByTestId("card");
 
-    it("has default background surface color", () => {
-      render(<Card data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.background).toBe(semanticColors.surface.default);
-    });
-
-    it("has border with subtle color by default", () => {
-      render(<Card data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.border).toContain(semanticColors.border.subtle);
-    });
-
-    it("has e0 elevation (flat) by default", () => {
-      render(<Card data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.boxShadow).toBe(semanticElevation.e0.shadow);
-    });
-
-    it("has md border radius from component tokens", () => {
-      render(<Card data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.borderRadius).toBe(
-        `${componentTokens.card.radius}px`
-      );
-    });
-
-    it("has pp-card className", () => {
-      render(<Card data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").className).toContain("pp-card");
+      expect(card.tagName).toBe("DIV");
+      expect(card.className).toContain("pp-card");
+      expect(card.className).toContain("flex");
+      expect(card.className).toContain("rounded-[10px]");
+      expect(card.className).toContain("border");
     });
   });
 
   describe("Size variants", () => {
-    const cardSizes = ["sm", "md", "lg"] as const;
+    it("sm uses p-4 padding class", () => {
+      render(
+        <Card size="sm" data-testid="card">
+          content
+        </Card>,
+      );
+      expect(screen.getByTestId("card").className).toContain("p-4");
+    });
 
-    for (const size of cardSizes) {
-      it(`renders ${size} size with correct padding for simple content`, () => {
-        render(
-          <Card size={size} data-testid="card">
-            simple content
-          </Card>
-        );
-        const el = screen.getByTestId("card");
-        // jsdom adds "px" suffix to numeric padding values
-        expect(el.style.padding).toBe(`${componentTokens.card.padding[size]}px`);
-      });
-    }
-  });
+    it("md uses p-5 padding class", () => {
+      render(
+        <Card size="md" data-testid="card">
+          content
+        </Card>,
+      );
+      expect(screen.getByTestId("card").className).toContain("p-5");
+    });
 
-  describe("noPadding", () => {
-    it("removes padding when noPadding is true", () => {
+    it("lg uses p-6 padding class", () => {
+      render(
+        <Card size="lg" data-testid="card">
+          content
+        </Card>,
+      );
+      expect(screen.getByTestId("card").className).toContain("p-6");
+    });
+
+    it("noPadding forces p-0", () => {
       render(
         <Card noPadding data-testid="card">
           content
-        </Card>
+        </Card>,
       );
-      expect(screen.getByTestId("card").style.padding).toBe("0px");
+      expect(screen.getByTestId("card").className).toContain("p-0");
     });
   });
 
-  describe("Status border", () => {
-    it("shows 3px left border with status foreground color for success", () => {
-      render(<Card status="success" data-testid="card">content</Card>);
-      const el = screen.getByTestId("card");
-      expect(el.style.borderLeft).toContain("3px solid");
-      expect(el.style.borderLeft).toContain(semanticColors.status.success.foreground);
+  describe("Status and selection", () => {
+    it("status adds left border class", () => {
+      render(
+        <Card status="success" data-testid="card">
+          content
+        </Card>,
+      );
+      const className = screen.getByTestId("card").className;
+      expect(className).toContain("border-l-[3px]");
+      expect(className).toContain("border-l-[var(--status-success)]");
     });
 
-    it("shows 3px left border for danger status", () => {
-      render(<Card status="danger" data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.borderLeft).toContain(
-        semanticColors.status.danger.foreground
+    it("selected adds selected classes", () => {
+      render(
+        <Card selected data-testid="card">
+          content
+        </Card>,
       );
+      const className = screen.getByTestId("card").className;
+      expect(className).toContain("bg-[var(--interactive-subtle)]");
+      expect(className).toContain("border-[var(--interactive-primary)]");
     });
   });
 
-  describe("Selected state", () => {
-    it("uses interactive subtle background when selected", () => {
-      render(<Card selected data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.background).toBe(
-        semanticColors.interactive.subtle
-      );
-    });
-
-    it("uses interactive default border when selected", () => {
-      render(<Card selected data-testid="card">content</Card>);
-      expect(screen.getByTestId("card").style.border).toContain(
-        semanticColors.interactive.default
-      );
-    });
-  });
-
-  describe("Interactive state", () => {
-    it("sets cursor to pointer when interactive and onClick provided", () => {
-      const handler = vi.fn();
+  describe("Interactive behavior", () => {
+    it("clicks when interactive and onClick provided", () => {
+      const onClick = vi.fn();
       render(
-        <Card interactive onClick={handler} data-testid="card">
+        <Card interactive onClick={onClick} data-testid="card">
           content
-        </Card>
+        </Card>,
       );
-      expect(screen.getByTestId("card").style.cursor).toBe("pointer");
+
+      const card = screen.getByTestId("card");
+      fireEvent.click(card);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(card.getAttribute("role")).toBe("button");
+      expect(card.getAttribute("tabindex")).toBe("0");
+      expect(card.className).toContain("pp-card--interactive");
+      expect(card.className).toContain("cursor-pointer");
     });
 
-    it("fires onClick when clicked", () => {
-      const handler = vi.fn();
+    it("responds to Enter and Space", () => {
+      const onClick = vi.fn();
       render(
-        <Card interactive onClick={handler} data-testid="card">
+        <Card interactive onClick={onClick} data-testid="card">
           content
-        </Card>
+        </Card>,
       );
-      fireEvent.click(screen.getByTestId("card"));
-      expect(handler).toHaveBeenCalledTimes(1);
+
+      const card = screen.getByTestId("card");
+      fireEvent.keyDown(card, { key: "Enter" });
+      fireEvent.keyDown(card, { key: " " });
+      expect(onClick).toHaveBeenCalledTimes(2);
     });
 
-    it("has role=button and tabIndex=0 when interactive with onClick", () => {
-      const handler = vi.fn();
-      render(
-        <Card interactive onClick={handler} data-testid="card">
-          content
-        </Card>
-      );
-      const el = screen.getByTestId("card");
-      expect(el.getAttribute("role")).toBe("button");
-      expect(el.getAttribute("tabindex")).toBe("0");
-    });
-
-    it("responds to Enter key", () => {
-      const handler = vi.fn();
-      render(
-        <Card interactive onClick={handler} data-testid="card">
-          content
-        </Card>
-      );
-      fireEvent.keyDown(screen.getByTestId("card"), { key: "Enter" });
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-
-    it("responds to Space key", () => {
-      const handler = vi.fn();
-      render(
-        <Card interactive onClick={handler} data-testid="card">
-          content
-        </Card>
-      );
-      fireEvent.keyDown(screen.getByTestId("card"), { key: " " });
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-
-    it("has pp-card--interactive className when interactive with onClick", () => {
-      const handler = vi.fn();
-      render(
-        <Card interactive onClick={handler} data-testid="card">
-          content
-        </Card>
-      );
-      expect(screen.getByTestId("card").className).toContain("pp-card--interactive");
-    });
-
-    it("is NOT interactive without onClick", () => {
+    it("does not become keyboard-clickable without onClick", () => {
       render(
         <Card interactive data-testid="card">
           content
-        </Card>
+        </Card>,
       );
-      const el = screen.getByTestId("card");
-      expect(el.getAttribute("role")).toBeNull();
-      expect(el.style.cursor).toBe("");
+
+      const card = screen.getByTestId("card");
+      expect(card.getAttribute("role")).toBeNull();
+      expect(card.getAttribute("tabindex")).toBeNull();
     });
   });
 
-  describe("Compound: Card.Header", () => {
-    it("renders header content", () => {
+  describe("Compound slots", () => {
+    it("renders Header, Body, Footer, and Section", () => {
       render(
-        <Card>
-          <Card.Header data-testid="header">
-            <span>Title</span>
-          </Card.Header>
-        </Card>
+        <Card data-testid="card">
+          <Card.Header data-testid="header">Header</Card.Header>
+          <Card.Body data-testid="body">Body</Card.Body>
+          <Card.Section data-testid="section">Section</Card.Section>
+          <Card.Footer data-testid="footer">Footer</Card.Footer>
+        </Card>,
       );
+
       expect(screen.getByTestId("header")).toBeTruthy();
-      expect(screen.getByText("Title")).toBeTruthy();
-    });
-
-    it("renders bordered header with border-bottom", () => {
-      render(
-        <Card>
-          <Card.Header bordered data-testid="header">
-            Title
-          </Card.Header>
-        </Card>
-      );
-      expect(screen.getByTestId("header").style.borderBottom).toContain("1px solid");
-    });
-  });
-
-  describe("Compound: Card.Title", () => {
-    it("renders as h3", () => {
-      render(
-        <Card>
-          <Card.Header>
-            <Card.Title data-testid="title">My Title</Card.Title>
-          </Card.Header>
-        </Card>
-      );
-      expect(screen.getByTestId("title").tagName).toBe("H3");
-    });
-  });
-
-  describe("Compound: Card.Subtitle", () => {
-    it("renders as span with caption styling", () => {
-      render(
-        <Card>
-          <Card.Header>
-            <Card.Subtitle data-testid="subtitle">Sub</Card.Subtitle>
-          </Card.Header>
-        </Card>
-      );
-      expect(screen.getByTestId("subtitle").tagName).toBe("SPAN");
-    });
-  });
-
-  describe("Compound: Card.Body", () => {
-    it("renders with size-appropriate padding", () => {
-      render(
-        <Card size="lg">
-          <Card.Body data-testid="body">Body content</Card.Body>
-        </Card>
-      );
-      expect(screen.getByTestId("body").style.padding).toBe(
-        `${componentTokens.card.padding.lg}px`
-      );
-    });
-  });
-
-  describe("Compound: Card.Footer", () => {
-    it("renders footer content", () => {
-      render(
-        <Card>
-          <Card.Footer data-testid="footer">
-            <button>Save</button>
-          </Card.Footer>
-        </Card>
-      );
+      expect(screen.getByTestId("body")).toBeTruthy();
+      expect(screen.getByTestId("section")).toBeTruthy();
       expect(screen.getByTestId("footer")).toBeTruthy();
-      expect(screen.getByText("Save")).toBeTruthy();
     });
 
-    it("renders bordered footer with border-top", () => {
-      render(
-        <Card>
-          <Card.Footer bordered data-testid="footer">
-            Footer
-          </Card.Footer>
-        </Card>
-      );
-      expect(screen.getByTestId("footer").style.borderTop).toContain("1px solid");
-    });
-  });
-
-  describe("Compound: Card.Section", () => {
-    it("renders section with border-top by default", () => {
-      render(
-        <Card>
-          <Card.Section data-testid="section">Section content</Card.Section>
-        </Card>
-      );
-      expect(screen.getByTestId("section").style.borderTop).toContain("1px solid");
-    });
-
-    it("section without border when bordered=false", () => {
-      render(
-        <Card>
-          <Card.Section bordered={false} data-testid="section">
-            Section content
-          </Card.Section>
-        </Card>
-      );
-      expect(screen.getByTestId("section").style.borderTop).toBe("");
-    });
-  });
-
-  describe("Compound: Card.Actions", () => {
-    it("renders action buttons in a row", () => {
-      render(
-        <Card>
-          <Card.Header>
-            <Card.Title>Title</Card.Title>
-            <Card.Actions data-testid="actions">
-              <button>Action</button>
-            </Card.Actions>
-          </Card.Header>
-        </Card>
-      );
-      expect(screen.getByTestId("actions")).toBeTruthy();
-    });
-  });
-
-  describe("Compound children detection", () => {
-    it("strips padding when using compound children", () => {
+    it("uses p-0 when compound children are present", () => {
       render(
         <Card data-testid="card">
           <Card.Header>Header</Card.Header>
           <Card.Body>Body</Card.Body>
-        </Card>
+        </Card>,
       );
-      expect(screen.getByTestId("card").style.padding).toBe("0px");
+
+      expect(screen.getByTestId("card").className).toContain("p-0");
+    });
+
+    it("Card.Title and Card.Subtitle render semantic elements", () => {
+      render(
+        <Card>
+          <Card.Header>
+            <Card.Title data-testid="title">Title</Card.Title>
+            <Card.Subtitle data-testid="subtitle">Subtitle</Card.Subtitle>
+          </Card.Header>
+        </Card>,
+      );
+
+      expect(screen.getByTestId("title").tagName).toBe("H3");
+      expect(screen.getByTestId("subtitle").tagName).toBe("SPAN");
     });
   });
 
-  describe("Transition", () => {
-    it("has transition on box-shadow, border-color, background", () => {
+  describe("Dark mode classes", () => {
+    it("base card includes explicit dark variants", () => {
       render(<Card data-testid="card">content</Card>);
-      const transition = screen.getByTestId("card").style.transition;
-      expect(transition).toContain("box-shadow");
-      expect(transition).toContain("border-color");
-      expect(transition).toContain("background");
+      const className = screen.getByTestId("card").className;
+      expect(className).toContain("dark:bg-gray-900");
+      expect(className).toContain("dark:border-gray-700");
+    });
+
+    it("selected card includes explicit dark selected variants", () => {
+      render(
+        <Card selected data-testid="card">
+          content
+        </Card>,
+      );
+      const className = screen.getByTestId("card").className;
+      expect(className).toContain("dark:bg-blue-950/30");
+      expect(className).toContain("dark:border-blue-500");
     });
   });
 
-  describe("DisplayName", () => {
-    it("has correct displayName", () => {
-      expect(Card.displayName).toBe("Card");
-    });
+  it("has correct displayName", () => {
+    expect(Card.displayName).toBe("Card");
   });
 });

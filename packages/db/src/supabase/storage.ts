@@ -10,6 +10,14 @@ import { createAdminClient } from './admin';
 
 /** Default presigned URL expiration: 1 hour (in seconds) */
 const DEFAULT_EXPIRES_IN = 3600;
+const DEFAULT_DOWNLOAD_RETRY_ATTEMPTS = 5;
+const DEFAULT_DOWNLOAD_RETRY_DELAY_MS = 250;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 /**
  * Generates a presigned upload URL for direct browser-to-storage uploads.
@@ -52,15 +60,29 @@ export async function createPresignedDownloadUrl(
   expiresIn: number = DEFAULT_EXPIRES_IN,
 ) {
   const admin = createAdminClient();
-  const { data, error } = await admin.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresIn);
 
-  if (error) {
-    throw new Error(`Failed to create presigned download URL: ${error.message}`);
+  // Supabase storage can briefly report "Object not found" immediately after
+  // a successful upload. Retry a few times before treating it as a hard failure.
+  for (let attempt = 0; attempt <= DEFAULT_DOWNLOAD_RETRY_ATTEMPTS; attempt += 1) {
+    const { data, error } = await admin.storage
+      .from(bucket)
+      .createSignedUrl(path, expiresIn);
+
+    if (!error) {
+      return data.signedUrl;
+    }
+
+    const isObjectNotFound = error.message.toLowerCase().includes('object not found');
+    const isLastAttempt = attempt === DEFAULT_DOWNLOAD_RETRY_ATTEMPTS;
+
+    if (!isObjectNotFound || isLastAttempt) {
+      throw new Error(`Failed to create presigned download URL: ${error.message}`);
+    }
+
+    await sleep(DEFAULT_DOWNLOAD_RETRY_DELAY_MS);
   }
 
-  return data.signedUrl;
+  throw new Error('Failed to create presigned download URL: retry attempts exhausted');
 }
 
 /**

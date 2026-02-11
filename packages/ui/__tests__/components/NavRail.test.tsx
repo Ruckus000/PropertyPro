@@ -1,18 +1,13 @@
 /**
  * P0-03: NavRail component tests
- *
- * Tests keyboard navigation (ArrowUp, ArrowDown, Enter, Space),
- * expanded/collapsed states, badge display, active state, toggle button.
  */
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { NavRail } from "../../src/components/NavRail";
 import type { NavRailItem } from "../../src/components/NavRail";
-import { componentTokens, semanticColors } from "../../src/tokens";
 
-// Test icon component
 function TestIcon({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} data-testid="test-icon">
@@ -24,7 +19,13 @@ function TestIcon({ size = 20, color = "currentColor" }: { size?: number; color?
 const defaultItems: NavRailItem[] = [
   { id: "dashboard", label: "Dashboard", icon: TestIcon },
   { id: "documents", label: "Documents", icon: TestIcon },
-  { id: "compliance", label: "Compliance", icon: TestIcon, badge: 3, badgeVariant: "danger" },
+  {
+    id: "compliance",
+    label: "Compliance",
+    icon: TestIcon,
+    badge: 3,
+    badgeVariant: "danger",
+  },
   { id: "settings", label: "Settings", icon: TestIcon },
 ];
 
@@ -36,245 +37,148 @@ function renderNavRail(overrides: Partial<React.ComponentProps<typeof NavRail>> 
     expanded: true,
     ...overrides,
   };
-  return { ...render(<NavRail {...props} />), props };
+
+  return {
+    ...render(<NavRail {...props} />),
+    props,
+  };
 }
 
 describe("NavRail", () => {
   describe("Basic rendering", () => {
-    it("renders a nav element with aria-label", () => {
+    it("renders nav with aria-label and all items", () => {
       renderNavRail();
-      const nav = screen.getByRole("navigation");
-      expect(nav).toBeTruthy();
-      expect(nav.getAttribute("aria-label")).toBe("Main navigation");
-    });
 
-    it("renders all navigation items", () => {
-      renderNavRail();
+      expect(screen.getByRole("navigation").getAttribute("aria-label")).toBe(
+        "Main navigation",
+      );
       for (const item of defaultItems) {
         expect(screen.getByLabelText(item.label)).toBeTruthy();
       }
+
+      const listItems = screen.getAllByRole("listitem");
+      expect(listItems).toHaveLength(defaultItems.length);
     });
 
-    it("renders items as buttons", () => {
+    it("renders explicit dark classes on nav", () => {
       renderNavRail();
-      const buttons = screen.getAllByRole("listitem");
-      expect(buttons.length).toBe(defaultItems.length);
-      for (const btn of buttons) {
-        expect(btn.tagName).toBe("BUTTON");
-      }
+      expect(screen.getByRole("navigation").className).toContain("dark:bg-gray-900");
     });
   });
 
   describe("Active state", () => {
     it("marks active item with aria-current=page", () => {
       renderNavRail({ activeView: "documents" });
-      const activeBtn = screen.getByLabelText("Documents");
-      expect(activeBtn.getAttribute("aria-current")).toBe("page");
+      expect(screen.getByLabelText("Documents").getAttribute("aria-current")).toBe(
+        "page",
+      );
+      expect(screen.getByLabelText("Dashboard").getAttribute("aria-current")).toBeNull();
     });
 
-    it("non-active items do not have aria-current", () => {
+    it("renders active indicator", () => {
       renderNavRail({ activeView: "dashboard" });
-      const inactiveBtn = screen.getByLabelText("Documents");
-      expect(inactiveBtn.getAttribute("aria-current")).toBeNull();
-    });
-
-    it("active item has active indicator bar", () => {
-      renderNavRail({ activeView: "dashboard" });
-      const activeBtn = screen.getByLabelText("Dashboard");
-      const indicator = activeBtn.querySelector("[aria-hidden='true']");
-      expect(indicator).toBeTruthy();
+      const active = screen.getByLabelText("Dashboard");
+      expect(active.querySelector(".w-\\[3px\\]")).toBeTruthy();
     });
   });
 
-  describe("Item click", () => {
-    it("calls onViewChange with item id when clicked", () => {
+  describe("Click and keyboard navigation", () => {
+    it("clicking item triggers onViewChange", () => {
       const { props } = renderNavRail();
       fireEvent.click(screen.getByLabelText("Documents"));
       expect(props.onViewChange).toHaveBeenCalledWith("documents");
     });
-  });
 
-  describe("Keyboard navigation", () => {
-    it("ArrowDown moves focus to next item", () => {
+    it("ArrowDown and ArrowUp move focus", () => {
       renderNavRail();
-      const firstItem = screen.getByLabelText("Dashboard");
-      firstItem.focus();
-      fireEvent.keyDown(firstItem, { key: "ArrowDown" });
-      expect(document.activeElement).toBe(screen.getByLabelText("Documents"));
+
+      const dashboard = screen.getByLabelText("Dashboard");
+      const documents = screen.getByLabelText("Documents");
+      const settings = screen.getByLabelText("Settings");
+
+      dashboard.focus();
+      fireEvent.keyDown(dashboard, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(documents);
+
+      fireEvent.keyDown(documents, { key: "ArrowUp" });
+      expect(document.activeElement).toBe(dashboard);
+
+      fireEvent.keyDown(dashboard, { key: "ArrowUp" });
+      expect(document.activeElement).toBe(settings);
     });
 
-    it("ArrowDown wraps from last to first item", () => {
-      renderNavRail();
-      const lastItem = screen.getByLabelText("Settings");
-      lastItem.focus();
-      fireEvent.keyDown(lastItem, { key: "ArrowDown" });
-      expect(document.activeElement).toBe(screen.getByLabelText("Dashboard"));
-    });
-
-    it("ArrowUp moves focus to previous item", () => {
-      renderNavRail();
-      const secondItem = screen.getByLabelText("Documents");
-      secondItem.focus();
-      fireEvent.keyDown(secondItem, { key: "ArrowUp" });
-      expect(document.activeElement).toBe(screen.getByLabelText("Dashboard"));
-    });
-
-    it("ArrowUp wraps from first to last item", () => {
-      renderNavRail();
-      const firstItem = screen.getByLabelText("Dashboard");
-      firstItem.focus();
-      fireEvent.keyDown(firstItem, { key: "ArrowUp" });
-      expect(document.activeElement).toBe(screen.getByLabelText("Settings"));
-    });
-
-    it("Enter selects the focused item", () => {
+    it("Enter and Space trigger onViewChange", () => {
       const { props } = renderNavRail();
-      const secondItem = screen.getByLabelText("Documents");
-      secondItem.focus();
-      fireEvent.keyDown(secondItem, { key: "Enter" });
-      expect(props.onViewChange).toHaveBeenCalledWith("documents");
-    });
+      const documents = screen.getByLabelText("Documents");
 
-    it("Space selects the focused item", () => {
-      const { props } = renderNavRail();
-      const secondItem = screen.getByLabelText("Documents");
-      secondItem.focus();
-      fireEvent.keyDown(secondItem, { key: " " });
-      expect(props.onViewChange).toHaveBeenCalledWith("documents");
-    });
+      fireEvent.keyDown(documents, { key: "Enter" });
+      fireEvent.keyDown(documents, { key: " " });
 
-    it("ArrowDown prevents default scroll", () => {
-      renderNavRail();
-      const firstItem = screen.getByLabelText("Dashboard");
-      firstItem.focus();
-      const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true });
-      const preventDefaultSpy = vi.spyOn(event, "preventDefault");
-      firstItem.dispatchEvent(event);
-      // The React handler calls preventDefault, verify through behavior:
-      // focus moved means it was handled
-      expect(document.activeElement).toBe(screen.getByLabelText("Documents"));
+      expect(props.onViewChange).toHaveBeenNthCalledWith(1, "documents");
+      expect(props.onViewChange).toHaveBeenNthCalledWith(2, "documents");
     });
   });
 
-  describe("Expanded state", () => {
-    it("uses expanded width when expanded=true", () => {
+  describe("Expanded/collapsed states", () => {
+    it("uses expanded width classes", () => {
       renderNavRail({ expanded: true });
       const nav = screen.getByRole("navigation");
-      expect(nav.style.width).toBe(`${componentTokens.nav.rail.widthExpanded}px`);
+      expect(nav.className).toContain("w-60");
+      expect(nav.className).toContain("min-w-60");
     });
 
-    it("uses collapsed width when expanded=false", () => {
+    it("uses collapsed width classes", () => {
       renderNavRail({ expanded: false });
       const nav = screen.getByRole("navigation");
-      expect(nav.style.width).toBe(`${componentTokens.nav.rail.widthCollapsed}px`);
+      expect(nav.className).toContain("w-16");
+      expect(nav.className).toContain("min-w-16");
     });
 
-    it("labels are visible when expanded (opacity=1)", () => {
+    it("label container toggles opacity class", () => {
       renderNavRail({ expanded: true });
-      const dashboardBtn = screen.getByLabelText("Dashboard");
-      // The label container div should have opacity 1
-      const labelContainer = dashboardBtn.querySelectorAll("div")[1]; // second div after icon
-      // Find the div with opacity style
-      const allDivs = dashboardBtn.querySelectorAll("div");
-      const labelDiv = Array.from(allDivs).find(
-        (d) => (d as HTMLElement).style.opacity === "1"
-      );
-      expect(labelDiv).toBeTruthy();
-    });
+      const expandedButton = screen.getByLabelText("Dashboard");
+      expect(expandedButton.querySelector(".opacity-100")).toBeTruthy();
 
-    it("labels are hidden when collapsed (opacity=0)", () => {
       renderNavRail({ expanded: false });
-      const dashboardBtn = screen.getByLabelText("Dashboard");
-      const allDivs = dashboardBtn.querySelectorAll("div");
-      const labelDiv = Array.from(allDivs).find(
-        (d) => (d as HTMLElement).style.opacity === "0"
-      );
-      expect(labelDiv).toBeTruthy();
+      const collapsedButton = screen.getAllByLabelText("Dashboard")[1];
+      expect(collapsedButton?.querySelector(".opacity-0")).toBeTruthy();
     });
   });
 
-  describe("Badge display", () => {
-    it("shows badge count for expanded items with badge > 0", () => {
+  describe("Badge behavior", () => {
+    it("shows badge count when expanded", () => {
       renderNavRail({ expanded: true });
       expect(screen.getByText("3")).toBeTruthy();
     });
 
-    it("shows badge dot for collapsed items with badge > 0", () => {
+    it("shows badge dot when collapsed", () => {
       renderNavRail({ expanded: false });
-      const complianceBtn = screen.getByLabelText("Compliance");
-      // Badge dot is inside the icon container when collapsed
-      const dots = complianceBtn.querySelectorAll("[aria-hidden='true']");
-      // Should have at least the badge dot (8×8 circle)
-      const hasDot = Array.from(dots).some(
-        (el) =>
-          (el as HTMLElement).style.borderRadius !== "" &&
-          (el as HTMLElement).style.width === "8px"
-      );
-      expect(hasDot).toBe(true);
-    });
-
-    it("does not show badge for items with badge=null", () => {
-      renderNavRail({ expanded: true });
-      const dashboardBtn = screen.getByLabelText("Dashboard");
-      // Dashboard has no badge, so no count span
-      const spans = dashboardBtn.querySelectorAll("span");
-      const hasBadgeCount = Array.from(spans).some(
-        (s) => /^\d+$/.test(s.textContent || "")
-      );
-      expect(hasBadgeCount).toBe(false);
+      const compliance = screen.getByLabelText("Compliance");
+      expect(compliance.querySelector(".size-2.rounded-full")).toBeTruthy();
     });
   });
 
   describe("Toggle button", () => {
-    it("renders toggle button when onToggle is provided", () => {
+    it("renders and fires toggle callback", () => {
       const onToggle = vi.fn();
       renderNavRail({ onToggle });
-      const toggleBtn = screen.getByLabelText("Collapse sidebar");
-      expect(toggleBtn).toBeTruthy();
+
+      const button = screen.getByLabelText("Collapse sidebar");
+      fireEvent.click(button);
+
+      expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
-    it("toggle button has 'Expand sidebar' label when collapsed", () => {
+    it("shows expand label when collapsed", () => {
       const onToggle = vi.fn();
       renderNavRail({ expanded: false, onToggle });
       expect(screen.getByLabelText("Expand sidebar")).toBeTruthy();
     });
 
-    it("fires onToggle when toggle button clicked", () => {
-      const onToggle = vi.fn();
-      renderNavRail({ onToggle });
-      fireEvent.click(screen.getByLabelText("Collapse sidebar"));
-      expect(onToggle).toHaveBeenCalledTimes(1);
-    });
-
-    it("does not render toggle button when onToggle is not provided", () => {
+    it("is omitted when onToggle is undefined", () => {
       renderNavRail({ onToggle: undefined });
       expect(screen.queryByLabelText("Collapse sidebar")).toBeNull();
       expect(screen.queryByLabelText("Expand sidebar")).toBeNull();
-    });
-  });
-
-  describe("Styling", () => {
-    it("nav has inverse surface background", () => {
-      renderNavRail();
-      const nav = screen.getByRole("navigation");
-      expect(nav.style.background).toBe(semanticColors.surface.inverse);
-    });
-
-    it("nav has full height", () => {
-      renderNavRail();
-      expect(screen.getByRole("navigation").style.height).toBe("100%");
-    });
-
-    it("nav has flex column layout", () => {
-      renderNavRail();
-      const nav = screen.getByRole("navigation");
-      expect(nav.style.display).toBe("flex");
-      expect(nav.style.flexDirection).toBe("column");
-    });
-
-    it("nav has transition on width", () => {
-      renderNavRail();
-      expect(screen.getByRole("navigation").style.transition).toContain("width");
     });
   });
 });

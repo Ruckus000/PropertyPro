@@ -3,17 +3,16 @@ Generated: 2026-02-11 (v3 — progress-updated, compatibility-checked)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
-- **Blocked Tasks:** 0 (all Phase 0 tasks have no unmet external dependencies)
+- **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Active implementation in progress. Phase 0 foundations are in place, with P0-06/P0-07/P0-08 hardened and automated checks passing.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off.
 
 ### Progress Snapshot (2026-02-11)
-- P0-06 Scoped Query Builder hardening is implemented, including typed scoped-client exports and integration test loading fixes for DATABASE_URL-less environments.
-- P0-07 Error handling remains aligned with acceptance criteria and is covered by passing tests.
-- P0-08 Sentry setup now includes request-context tagging, global App Router error capture, and `onRequestError` instrumentation wiring.
-- Automated verification completed successfully in this pass: `pnpm build`, `pnpm typecheck`, `pnpm test`.
-- DB integration command behavior confirmed in no-DB environments: `pnpm --filter @propertypro/db test:integration` skips cleanly when `DATABASE_URL` is unset.
-- Remaining manual Gate 1 items are tracked below (auth flow, live Sentry verification, and DB-backed integration execution).
+- P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
+- Added Gate 0 schema sign-off integration suite: `packages/db/__tests__/schema-gate0.integration.test.ts` executes migration SQL against a temp schema via `DIRECT_URL` and validates tables, enums, FK `ON DELETE`, and package-root exports.
+- Added P0-04 storage integration suite: `packages/db/__tests__/supabase-storage.integration.test.ts` validates presigned upload/download/delete with the Supabase `documents` bucket prerequisite now satisfied.
+- Automated verification in this pass: `pnpm build`, `pnpm typecheck`, and `pnpm test` all succeeded.
+- DB integration execution (`pnpm --filter @propertypro/db test:integration`) passes end-to-end (`13/13`) now that the `documents` bucket exists.
 
 ---
 
@@ -179,9 +178,53 @@ Implementation MUST pause at these checkpoints. Do not proceed past a gate until
 - ✅ `pnpm dev` starts on port 3000 (`@propertypro/web`)
 - ✅ `pnpm typecheck` completed successfully
 - ✅ `pnpm test` completed successfully
-- ✅ `pnpm --filter @propertypro/db test:integration` does not hard-fail when `DATABASE_URL` is unset (suite skips cleanly)
-- ⏳ Remaining for full Gate 1 sign-off: Supabase auth E2E manual flow, DB-backed integration run with `DATABASE_URL`, Sentry dashboard capture verification
-- **Environment note (2026-02-11):** `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SENTRY_DSN`, and `NEXT_PUBLIC_SENTRY_DSN` are currently unset in this workspace shell, so live auth/database/Sentry verification remains blocked on environment configuration.
+- ✅ `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` passed (`13/13`) with storage prerequisites resolved (`documents` bucket present).
+- ✅ Supabase auth E2E smoke flow passed against configured project (create user → login → session refresh → logout → cleanup)
+- ✅ Sentry smoke event emitted and flushed from runtime (`SENTRY_EVENT_ID=f73df35f1db745d0bd08948dbdd3e34f`)
+- ✅ P0-04 storage E2E blocker resolved: Supabase `documents` bucket has been created.
+- ✅ Manual Sentry dashboard validation is complete using a Next.js Route Handler test path (`withErrorHandler` + explicit `Sentry.flush()`), confirming dashboard ingestion with `request_id`, `community_id`, and `userId` tags.
+- **Environment note (2026-02-11):** for env-dependent commands, use `set -a; source .env.local; set +a` so variables are exported to child processes.
+
+### Phase 0 Closeout Evidence (2026-02-11)
+
+**Verification command results (latest run)**
+- `pnpm build` → pass
+- `pnpm typecheck` → pass
+- `pnpm test` → pass (`303/303`)
+- `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` → pass (`13/13`) after `documents` bucket creation.
+- `set -a; source .env.local; set +a; pnpm --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/schema-gate0.integration.test.ts` → pass (`5/5`).
+- `set -a; source .env.local; set +a; pnpm --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/supabase-storage.integration.test.ts` → pass (`1/1`) with `documents` bucket provisioned.
+
+**Preflight facts**
+- Supabase bucket inventory now includes private `documents` storage.
+- Sentry verification is confirmed through dashboard evidence from the Next.js runtime path (Route Handler + `withErrorHandler` + explicit `Sentry.flush()`), not API lookup scopes.
+- `[eval1]` issues in Sentry were generated by `node -e` execution outside the Next.js runtime and are not application defects.
+
+**Manual schema-to-Phase-1 cross-check (P0-05 vs Phase 1 specs)**
+
+| Item | Status | Finding | Owning Spec/Task |
+|------|--------|---------|------------------|
+| Canonical enums (`community_type`, `user_role`) | Meets | Enum labels match accepted canonical values used by role- and type-gated flows. | P1-18, P1-25 |
+| `documents.search_text` + `documents.search_vector` | Meets | Required search columns are present for extraction/search phases. | P1-13, P1-14 |
+| `user_roles` cardinality + `unit_id` FK | Meets | One active role per `(user_id, community_id)` and nullable unit FK are implemented. | P1-18 |
+| `notification_preferences` structure | Mismatch | Current schema uses boolean columns (`email_announcements`, etc.) while Phase 1 spec describes key/value preference records. | P1-26 |
+| Meeting-related tables (`meetings`, `meeting_documents`) | Deferred | Not in Phase 0 core schema by design; to be added in Phase 1 meeting task. | P1-16 |
+| Audit log table (`compliance_audit_log`) | Deferred | Not in Phase 0 core schema by design; scheduled for audit logging task. | P1-27 |
+
+No `Partial` findings were identified in this closeout pass.
+
+**Gate Matrix (Phase 0 closeout)**
+
+| Gate | Status | Command evidence | Remaining blocker / owner/action |
+|------|--------|------------------|----------------------------------|
+| Gate 0 — Schema Review | Pass | `set -a; source .env.local; set +a; pnpm --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/schema-gate0.integration.test.ts` passed (`5/5`) on temp-schema migration execution; enum/FK/type-export assertions green. | None |
+| Gate 1 — Foundation Verification | Pass | `pnpm build` pass, `pnpm typecheck` pass, `pnpm test` pass (`303/303`), auth E2E smoke pass, storage prerequisite resolved (`documents` bucket created), and Sentry verified manually in dashboard via Next.js Route Handler path (`withErrorHandler` + explicit `Sentry.flush()`), with `request_id`, `community_id`, and `userId` tags present. | None |
+
+**Manual Sentry dashboard verification (completed)**
+1. Triggered a test error via Next.js Route Handler through `withErrorHandler` and explicit `Sentry.flush()`.
+2. Confirmed event arrival in Sentry project `propertypro` from the app runtime path.
+3. Verified tags: `request_id`, `community_id`, and `userId`.
+4. Marked `[eval1]` entries as Codex `node -e` execution artifacts outside Next.js runtime.
 
 **GATE 2: Compliance Core Verification (after all Phase 1 complete)**
 - All Phase 1 tests pass
@@ -345,7 +388,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 
 ### Task: P0-03 Priority Components
 - **Phase:** 0
-- **Status:** In Progress (2026-02-11, core matrix complete; dark-mode criterion pending)
+- **Status:** Completed (2026-02-11, spec-aligned dark-mode support verified)
 - **Files to Create/Modify:** packages/ui/src/components/Button.tsx, Card.tsx, Badge.tsx, NavRail.tsx, Icon.tsx, index.ts, packages/ui/__tests__/components/
 - **Dependencies:** P0-02
 - **Blocks:** P1-10, P1-15, P1-17, P1-23, P1-24, P2-31, P2-36, P3-45, P3-48, P3-49, P3-50
@@ -359,13 +402,13 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Testing:** Component tests for every variant × size combination. Keyboard event tests for NavRail (ArrowUp, ArrowDown, Enter, Tab). Loading state test verifying button is disabled and shows spinner.
 - **Estimated Effort:** Medium
 - **Risk:** Low — Reference implementations exist. Keyboard navigation on NavRail needs careful testing.
-- **Progress Update (2026-02-11):** `Button`, `Card`, `Badge`, and `NavRail` are implemented in `packages/ui/src/components/`; variant/size, loading/disabled, and keyboard interaction coverage is present in component tests and passes. `Tab` behavior is browser-native (not custom-handled), and explicit `dark:` Tailwind variant support is not yet implemented.
+- **Progress Update (2026-02-11):** Refactored `Button`, `Card`, `Badge`, and `NavRail` to Tailwind utility composition with explicit `dark:` variants for normal/hover/active/selected/disabled states. Updated tests (`packages/ui/__tests__/components/{Button,Card,Badge,NavRail}.test.tsx`) now include targeted dark-class assertions and keyboard/behavior regression checks; suite passes under root `pnpm test`.
 
 ---
 
 ### Task: P0-04 Supabase Setup
 - **Phase:** 0
-- **Status:** In Progress (2026-02-11, utilities implemented; env-backed E2E pending)
+- **Status:** Completed (2026-02-11)
 - **Files to Create/Modify:** packages/db/src/supabase/server.ts, client.ts, admin.ts, middleware.ts, storage.ts, apps/web/src/middleware.ts, .env.example
 - **Dependencies:** P0-00
 - **Blocks:** P0-05, P1-11, P1-18, P1-20, P1-21, P1-22, P2-30, P2-33
@@ -383,14 +426,14 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Testing:** Integration test for auth flow: signup → login → get session → refresh → logout. Storage test: generate presigned URL → upload file → download file → verify content. Middleware test: verify session refresh doesn't throw on expired token.
 - **Estimated Effort:** Medium
 - **Risk:** High — Auth in Server Components is a known pain point (AGENTS #1). Session refresh middleware must not block rendering. Presigned URL flow adds complexity.
-- **Progress Update (2026-02-11):** Supabase server/browser/admin/middleware/storage utilities are implemented in `packages/db/src/supabase/`, and web middleware integrates session refresh plus `X-Request-ID` in `apps/web/src/middleware.ts`. End-to-end auth/storage verification remains blocked until Supabase env vars are configured.
+- **Progress Update (2026-02-11):** Supabase server/browser/admin/middleware/storage utilities are implemented in `packages/db/src/supabase/`, and web middleware integrates session refresh plus `X-Request-ID` in `apps/web/src/middleware.ts`. Auth E2E smoke flow passes with configured env vars. Storage presigned upload/download/delete E2E is implemented in `packages/db/__tests__/supabase-storage.integration.test.ts`, and the prior blocker is resolved with the `documents` bucket now provisioned.
 
 ---
 
 ### Task: P0-05 Drizzle Schema Core
 - **Phase:** 0
-- **Status:** In Progress (2026-02-11, schema/migration implemented; DB-backed verification pending)
-- **Files to Create/Modify:** packages/db/src/schema/communities.ts, users.ts, user-roles.ts, units.ts, documents.ts, document-categories.ts, notification-preferences.ts, enums.ts, index.ts, drizzle.config.ts, migrations/0001_initial_schema.sql
+- **Status:** Completed (2026-02-11, Gate 0 formal sign-off complete)
+- **Files to Create/Modify:** packages/db/src/schema/communities.ts, users.ts, user-roles.ts, units.ts, documents.ts, document-categories.ts, notification-preferences.ts, enums.ts, index.ts, drizzle.config.ts, migrations/0000_flashy_toro.sql
 - **Dependencies:** P0-04
 - **Blocks:** P1-09, P1-13, P1-16, P1-17, P1-18, P1-26, P1-27, P2-36, P2-37, P2-40, P3-47, P3-50, P3-52 (17 specs depend on this — most-depended-upon spec)
 - **Acceptance Criteria:**
@@ -413,7 +456,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Testing:** Migration test: run migration on clean database, verify all tables exist with correct columns and types. Enum test: attempt to insert invalid community_type, verify rejection. FK test: attempt to insert user_role with non-existent community_id, verify rejection. Type test: verify TypeScript inferred types match expected shapes.
 - **Estimated Effort:** Large
 - **Risk:** High — This is the most critical schema in the project. 17 specs depend on it. Getting the schema wrong here cascades failures everywhere.
-- **Progress Update (2026-02-11):** Core schema files, enum definitions, and initial Drizzle migration are present (`packages/db/src/schema/*`, `packages/db/migrations/0000_flashy_toro.sql`) with FK/enum/tsvector/soft-delete columns and exported inferred types. Live migration validation against a configured Supabase database is still pending Gate 0 sign-off.
+- **Progress Update (2026-02-11):** Core schema files, enum definitions, and initial Drizzle migration are present (`packages/db/src/schema/*`, `packages/db/migrations/0000_flashy_toro.sql`) with FK/enum/tsvector/soft-delete columns and exported inferred types. Formal Gate 0 validation now passes via `packages/db/__tests__/schema-gate0.integration.test.ts` using temp-schema migration execution over `DIRECT_URL`, with assertions for exact enum labels, invalid enum rejection behavior, FK `ON DELETE` actions, and package-root type/schema exports. Manual schema-to-Phase-1 variance matrix is documented in this plan.
 
 ⚠️ **GATE 0: Schema Review** — After P0-05 completes, STOP and verify schema against all Phase 1+ specs before proceeding to P0-06. See Quality Gates section.
 
@@ -421,7 +464,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 
 ### Task: P0-06 Scoped Query Builder
 - **Phase:** 0
-- **Status:** In Progress (2026-02-11, implementation complete; formal Gate 0 sign-off pending)
+- **Status:** Completed (2026-02-11, implementation and integration verification complete)
 - **Files to Create/Modify:** packages/db/src/scoped-client.ts, tenant-context.ts, errors/TenantContextMissing.ts, types/scoped-client.ts, packages/db/__tests__/scoped-client.integration.test.ts, packages/db/__tests__/tenant-context.test.ts
 - **Dependencies:** P0-05, GATE 0
 - **Blocks:** P1-09, P1-11, P1-14, P1-16, P1-17, P1-18, P1-24, P1-25, P1-27, P2-30, P2-35, P2-36, P2-37, P2-43, P3-45, P3-50, P3-52, P4-55, P4-64
@@ -446,7 +489,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Estimated Effort:** Large
 - **Risk:** Critical — This is the safety layer preventing cross-tenant data leaks. Must have thorough integration tests from day one.
 - **Progress Update (2026-02-11):** Added scoped client surface types in `packages/db/src/types/scoped-client.ts` and exported them via `packages/db/src/index.ts`. Integration tests now lazy-import `createScopedClient` so DATABASE_URL-less environments skip cleanly. Write-path bypass resistance assertions were added for conflicting-tenant `update` and `hardDelete` predicates.
-- **Verification Snapshot (2026-02-11):** `pnpm build`, `pnpm typecheck`, and `pnpm test` pass. `pnpm --filter @propertypro/db test:integration` skips cleanly when `DATABASE_URL` is unset.
+- **Verification Snapshot (2026-02-11):** `pnpm build`, `pnpm typecheck`, and `pnpm test` pass. With env exported (`set -a; source .env.local; set +a`), `pnpm --filter @propertypro/db test:integration` passes end-to-end (`13/13`).
 
 ---
 
@@ -495,7 +538,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
 - **Estimated Effort:** Small
 - **Risk:** Low — Standard Sentry Next.js integration.
 - **Progress Update (2026-02-11):** Added shared request-context extraction (`request_id`, optional `communityId`, optional `userId`), wired tags/user context into `withErrorHandler`, added App Router `global-error.tsx`, and wired `onRequestError` in `instrumentation.ts`.
-- **Note:** Manual dashboard validation is still required for final Gate 1 sign-off.
+- **Note:** Manual dashboard validation is complete; `[eval1]` issues were caused by Codex `node -e` execution outside the Next.js runtime and are not application bugs.
 
 ⚠️ **GATE 1: Foundation Verification** — After all Phase 0 tasks complete, run the Gate 1 checklist before starting Phase 1. See Quality Gates section.
 
@@ -1673,7 +1716,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Blocked Tasks
 
-No tasks are currently blocked by unmet *external* dependencies. All Phase 0 tasks can begin immediately, provided external services (Supabase, etc.) are provisioned.
+No tasks are currently blocked by unmet *external* dependencies. Phase 0 closeout is complete and Phase 1 execution can proceed.
 
 **Tasks blocked by Phase 0 completion (cannot start until Phase 0 is done):**
 

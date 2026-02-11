@@ -1,20 +1,17 @@
 /**
- * Button — Interactive element for user actions
+ * Button — Interactive element for user actions.
  *
- * Compound component pattern with Icon, Label, Spinner slots.
- * 5 variants: primary, secondary, ghost, danger, link
- * 3 sizes: sm, md, lg
+ * Class-based styling with explicit dark variants.
  */
 
 import React, {
-  forwardRef,
   createContext,
+  forwardRef,
   useContext,
   useMemo,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
-import { semanticColors, componentTokens, primitiveFonts } from "../tokens";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
@@ -25,7 +22,8 @@ interface ButtonContextValue {
   disabled: boolean;
 }
 
-interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+interface ButtonProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   fullWidth?: boolean;
@@ -45,119 +43,108 @@ function useButtonContext() {
   return context;
 }
 
-interface VariantVars {
-  bg: string;
-  bgHover: string;
-  bgActive: string;
-  color: string;
-  colorHover?: string;
-  border: string;
-  textDecoration?: string;
-  textDecorationHover?: string;
+function cn(...values: Array<string | null | undefined | false>): string {
+  return values.filter(Boolean).join(" ");
 }
 
-function getVariantVars(variant: ButtonVariant): VariantVars {
-  switch (variant) {
-    case "primary":
-      return {
-        bg: semanticColors.interactive.default,
-        bgHover: semanticColors.interactive.hover,
-        bgActive: semanticColors.interactive.active,
-        color: semanticColors.text.inverse,
-        border: "none",
-      };
-    case "secondary":
-      return {
-        bg: "transparent",
-        bgHover: semanticColors.surface.subtle,
-        bgActive: semanticColors.surface.muted,
-        color: semanticColors.text.primary,
-        border: `1px solid ${semanticColors.border.default}`,
-      };
-    case "ghost":
-      return {
-        bg: "transparent",
-        bgHover: semanticColors.surface.subtle,
-        bgActive: semanticColors.surface.muted,
-        color: semanticColors.text.secondary,
-        border: "none",
-      };
-    case "danger":
-      return {
-        bg: semanticColors.status.danger.background,
-        bgHover: semanticColors.status.danger.foreground,
-        bgActive: semanticColors.status.danger.foreground,
-        color: semanticColors.status.danger.foreground,
-        colorHover: semanticColors.text.inverse,
-        border: `1px solid ${semanticColors.status.danger.border}`,
-      };
-    case "link":
-      return {
-        bg: "transparent",
-        bgHover: "transparent",
-        bgActive: "transparent",
-        color: semanticColors.text.link,
-        colorHover: semanticColors.text.linkHover,
-        border: "none",
-        textDecoration: "none",
-        textDecorationHover: "underline",
-      };
-    default: {
-      const _exhaustiveCheck: never = variant;
-      return _exhaustiveCheck;
-    }
-  }
-}
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "h-9 px-3 text-sm gap-2",
+  md: "h-10 px-4 text-sm gap-2",
+  lg: "h-12 px-5 text-base gap-2.5",
+};
 
-// Compound: Button.Icon
+const iconSizeClasses: Record<ButtonSize, string> = {
+  sm: "size-3.5",
+  md: "size-4",
+  lg: "size-[18px]",
+};
+
+const iconSizes: Record<ButtonSize, number> = {
+  sm: 14,
+  md: 16,
+  lg: 18,
+};
+
+const spinnerSizeClasses: Record<ButtonSize, string> = {
+  sm: "size-3.5",
+  md: "size-4",
+  lg: "size-[18px]",
+};
+
+const variantClasses: Record<ButtonVariant, string> = {
+  primary:
+    "border border-transparent bg-[var(--interactive-primary)] text-[var(--text-inverse)] hover:bg-[var(--interactive-primary-hover)] active:bg-[var(--interactive-primary-active)] dark:bg-blue-500 dark:text-gray-950 dark:hover:bg-blue-400 dark:active:bg-blue-300",
+  secondary:
+    "border border-[var(--border-default)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--surface-subtle)] active:bg-[var(--surface-muted)] dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800 dark:active:bg-gray-700",
+  ghost:
+    "border border-transparent bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] active:bg-[var(--surface-muted)] dark:text-gray-300 dark:hover:bg-gray-800 dark:active:bg-gray-700",
+  danger:
+    "border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger)] hover:bg-[var(--status-danger)] hover:text-[var(--text-inverse)] active:bg-[var(--status-danger)] active:text-[var(--text-inverse)] dark:border-red-400 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-500 dark:hover:text-white dark:active:bg-red-600",
+  link:
+    "border border-transparent bg-transparent px-0 text-[var(--text-link)] hover:text-[var(--text-link-hover)] hover:underline active:underline dark:text-blue-300 dark:hover:text-blue-200",
+};
+
+const disabledClassesByVariant: Record<ButtonVariant, string> = {
+  primary:
+    "disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-muted)] disabled:text-[var(--text-disabled)] dark:disabled:border-gray-700 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+  secondary:
+    "disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-muted)] disabled:text-[var(--text-disabled)] dark:disabled:border-gray-700 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+  ghost:
+    "disabled:border-transparent disabled:bg-[var(--surface-muted)] disabled:text-[var(--text-disabled)] dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+  danger:
+    "disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-muted)] disabled:text-[var(--text-disabled)] dark:disabled:border-gray-700 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+  link:
+    "disabled:border-transparent disabled:bg-transparent disabled:text-[var(--text-disabled)] disabled:no-underline dark:disabled:text-gray-500",
+};
+
 interface ButtonIconProps {
   children: ReactNode;
   position?: "start" | "end";
 }
 
-const ButtonIcon: React.FC<ButtonIconProps> = ({ children, position = "start" }) => {
+const ButtonIcon: React.FC<ButtonIconProps> = ({
+  children,
+  position = "start",
+}) => {
   const { size } = useButtonContext();
-  const iconSize = componentTokens.button.iconSize[size];
+  const iconSize = iconSizes[size];
 
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: iconSize,
-        height: iconSize,
-        flexShrink: 0,
-        order: position === "end" ? 1 : 0,
-      }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center",
+        iconSizeClasses[size],
+        position === "end" ? "order-1" : null,
+      )}
       aria-hidden="true"
     >
       {React.isValidElement(children)
-        ? React.cloneElement(children as React.ReactElement<{ size?: number }>, { size: iconSize })
+        ? React.cloneElement(
+            children as React.ReactElement<{ size?: number }>,
+            { size: iconSize },
+          )
         : children}
     </span>
   );
 };
 ButtonIcon.displayName = "Button.Icon";
 
-// Compound: Button.Label
 const ButtonLabel: React.FC<{ children: ReactNode }> = ({ children }) => {
-  return <span style={{ order: 0 }}>{children}</span>;
+  return <span>{children}</span>;
 };
 ButtonLabel.displayName = "Button.Label";
 
-// Compound: Button.Spinner
 const ButtonSpinner: React.FC = () => {
   const { size } = useButtonContext();
-  const spinnerSize = componentTokens.button.iconSize[size];
 
   return (
     <svg
-      width={spinnerSize}
-      height={spinnerSize}
       viewBox="0 0 24 24"
       fill="none"
-      className="button-spinner"
+      className={cn(
+        "button-spinner animate-spin",
+        spinnerSizeClasses[size],
+      )}
       aria-hidden="true"
     >
       <circle
@@ -166,27 +153,19 @@ const ButtonSpinner: React.FC = () => {
         r="10"
         stroke="currentColor"
         strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray="31.4 31.4"
-        opacity="0.25"
+        className="opacity-25"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
+      <path
+        d="M22 12a10 10 0 0 0-10-10"
         stroke="currentColor"
         strokeWidth="3"
         strokeLinecap="round"
-        strokeDasharray="31.4 31.4"
-        strokeDashoffset="62.8"
-        style={{ transformOrigin: "center" }}
       />
     </svg>
   );
 };
 ButtonSpinner.displayName = "Button.Spinner";
 
-// Main component
 const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
@@ -198,21 +177,17 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
       loading = false,
       disabled = false,
       children,
-      style,
       className,
       ...props
     },
-    ref
+    ref,
   ) => {
     const isDisabled = disabled || loading;
 
     const contextValue = useMemo<ButtonContextValue>(
       () => ({ size, variant, disabled: isDisabled }),
-      [size, variant, isDisabled]
+      [size, variant, isDisabled],
     );
-
-    const { height, padding, gap } = componentTokens.button;
-    const variantVars = getVariantVars(variant);
 
     const containsCompoundChildren = (node: ReactNode): boolean => {
       if (node === null || node === undefined) return false;
@@ -220,93 +195,29 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
       if (!React.isValidElement(node)) return false;
       if (node.type === ButtonIcon || node.type === ButtonLabel) return true;
       if (node.type === React.Fragment) {
-        return containsCompoundChildren((node.props as { children?: ReactNode }).children);
+        return containsCompoundChildren(
+          (node.props as { children?: ReactNode }).children,
+        );
       }
-      return containsCompoundChildren((node.props as { children?: ReactNode }).children);
+      return containsCompoundChildren(
+        (node.props as { children?: ReactNode }).children,
+      );
     };
 
     const hasCompoundChildren = containsCompoundChildren(children);
     const showSimpleIcons = !hasCompoundChildren && (leftIcon || rightIcon);
-    const isSimpleText = typeof children === "string" || typeof children === "number";
-    const isSimpleLayout = isSimpleText && !showSimpleIcons;
 
-    const computedClassName = [
-      "pp-button",
+    const computedClassName = cn(
+      "pp-button inline-flex items-center justify-center rounded-[10px] font-medium leading-none transition-colors duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)] disabled:cursor-not-allowed disabled:pointer-events-none",
       `pp-button--${variant}`,
       `pp-button--${size}`,
-      fullWidth ? "pp-button--fullWidth" : null,
+      sizeClasses[size],
+      variantClasses[variant],
+      disabledClassesByVariant[variant],
+      fullWidth ? "pp-button--fullWidth w-full" : "w-auto",
+      loading ? "opacity-70 pointer-events-none" : null,
       className,
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    const fontSize = size === "lg" ? primitiveFonts.size.base : primitiveFonts.size.sm;
-    const resolvedHeight = size === "md" ? "var(--button-height, 40px)" : `${height[size]}px`;
-    const resolvedGap = size === "md" ? "var(--component-gap, 8px)" : `${gap}px`;
-    const resolvedPadding = size === "md"
-      ? isSimpleLayout
-        ? "0 var(--component-padding, 16px)"
-        : "0 calc(var(--component-padding, 16px) - 4px)"
-      : isSimpleLayout
-        ? `0 ${padding[size]}px`
-        : `0 ${padding[size] - 4}px`;
-
-    const baseVars: Record<string, string> = {
-      "--pp-btn-height": resolvedHeight,
-      "--pp-btn-padding": resolvedPadding,
-      "--pp-btn-width": fullWidth ? "100%" : "auto",
-      "--pp-btn-gap": resolvedGap,
-      "--pp-btn-radius": `${componentTokens.button.radius}px`,
-      "--pp-btn-font-family": primitiveFonts.family.sans,
-      "--pp-btn-font-size": fontSize,
-      "--pp-btn-font-weight": String(primitiveFonts.weight.medium),
-      "--pp-btn-bg": variantVars.bg,
-      "--pp-btn-bg-hover": variantVars.bgHover,
-      "--pp-btn-bg-active": variantVars.bgActive,
-      "--pp-btn-color": variantVars.color,
-      "--pp-btn-color-hover": variantVars.colorHover ?? variantVars.color,
-      "--pp-btn-border": variantVars.border,
-      "--pp-btn-text-decoration": variantVars.textDecoration ?? "none",
-      "--pp-btn-text-decoration-hover": variantVars.textDecorationHover ?? variantVars.textDecoration ?? "none",
-    };
-
-    if (isDisabled) {
-      baseVars["--pp-btn-bg"] = variant === "link" ? "transparent" : semanticColors.surface.muted;
-      baseVars["--pp-btn-bg-hover"] = variant === "link" ? "transparent" : semanticColors.surface.muted;
-      baseVars["--pp-btn-bg-active"] = variant === "link" ? "transparent" : semanticColors.surface.muted;
-      baseVars["--pp-btn-color"] = semanticColors.text.disabled;
-      baseVars["--pp-btn-color-hover"] = semanticColors.text.disabled;
-      if (variant === "secondary") {
-        baseVars["--pp-btn-border"] = `1px solid ${semanticColors.border.subtle}`;
-      }
-      baseVars["--pp-btn-text-decoration"] = "none";
-      baseVars["--pp-btn-text-decoration-hover"] = "none";
-    }
-
-    const inlineStyles: React.CSSProperties = {
-      appearance: "none",
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: resolvedGap,
-      height: resolvedHeight,
-      padding: resolvedPadding,
-      width: fullWidth ? "100%" : "auto",
-      fontFamily: primitiveFonts.family.sans,
-      fontSize,
-      fontWeight: primitiveFonts.weight.medium,
-      lineHeight: 1,
-      textDecoration: variantVars.textDecoration ?? "none",
-      color: baseVars["--pp-btn-color"],
-      background: baseVars["--pp-btn-bg"],
-      border: baseVars["--pp-btn-border"],
-      borderRadius: `${componentTokens.button.radius}px`,
-      cursor: isDisabled ? "not-allowed" : "pointer",
-      opacity: loading ? 0.7 : 1,
-      pointerEvents: loading ? "none" : "auto",
-      transition: `background 100ms cubic-bezier(0.4, 0, 0.2, 1), color 100ms cubic-bezier(0.4, 0, 0.2, 1), border-color 100ms cubic-bezier(0.4, 0, 0.2, 1)`,
-      ...style,
-    };
+    );
 
     return (
       <ButtonContext.Provider value={contextValue}>
@@ -315,7 +226,6 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
           disabled={isDisabled}
           data-loading={loading ? "true" : "false"}
           className={computedClassName}
-          style={inlineStyles}
           {...props}
         >
           {loading && <ButtonSpinner />}
@@ -331,7 +241,7 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
         </button>
       </ButtonContext.Provider>
     );
-  }
+  },
 );
 
 ButtonRoot.displayName = "Button";

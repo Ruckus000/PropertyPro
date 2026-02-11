@@ -1,17 +1,10 @@
 /**
- * NavRail — Sidebar navigation with collapsible state
+ * NavRail — Sidebar navigation with collapsible state.
  *
- * Keyboard navigation: ArrowUp/ArrowDown to move between items, Enter/Space to select
+ * Keyboard navigation: ArrowUp/ArrowDown to move between items, Enter/Space to select.
  */
 
-import React, { useRef, useCallback } from "react";
-import {
-  semanticColors,
-  componentTokens,
-  primitiveFonts,
-  primitiveRadius,
-  createTransition,
-} from "../tokens";
+import React, { useCallback, useRef } from "react";
 import type { StatusVariant } from "../tokens";
 
 export type NavRailItem = {
@@ -30,6 +23,19 @@ export interface NavRailProps {
   onToggle?: () => void;
 }
 
+function cn(...values: Array<string | null | undefined | false>): string {
+  return values.filter(Boolean).join(" ");
+}
+
+const badgeDotClasses: Record<StatusVariant, string> = {
+  success: "bg-[var(--status-success)] dark:bg-green-300",
+  brand: "bg-[var(--status-brand)] dark:bg-blue-300",
+  warning: "bg-[var(--status-warning)] dark:bg-amber-300",
+  danger: "bg-[var(--status-danger)] dark:bg-red-300",
+  info: "bg-[var(--status-info)] dark:bg-sky-300",
+  neutral: "bg-[var(--status-neutral)] dark:bg-gray-400",
+};
+
 function ChevronLeftIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -44,23 +50,27 @@ function ChevronLeftIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-export function NavRail({ items, activeView, onViewChange, expanded, onToggle }: NavRailProps) {
-  const { rail, item } = componentTokens.nav;
-  const width = expanded ? rail.widthExpanded : rail.widthCollapsed;
+export function NavRail({
+  items,
+  activeView,
+  onViewChange,
+  expanded,
+  onToggle,
+}: NavRailProps) {
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, index: number) => {
+    (event: React.KeyboardEvent, index: number) => {
       let nextIndex: number | undefined;
 
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
         nextIndex = index < items.length - 1 ? index + 1 : 0;
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
         nextIndex = index > 0 ? index - 1 : items.length - 1;
-      } else if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
         const navItem = items[index];
         if (navItem) {
           onViewChange(navItem.id);
@@ -72,141 +82,93 @@ export function NavRail({ items, activeView, onViewChange, expanded, onToggle }:
         itemsRef.current[nextIndex]?.focus();
       }
     },
-    [items, onViewChange]
+    [items, onViewChange],
   );
 
   return (
     <nav
       aria-label="Main navigation"
-      style={{
-        width,
-        minWidth: width,
-        background: semanticColors.surface.inverse,
-        transition: createTransition(["width", "min-width"], "standard"),
-        overflow: "hidden",
-        height: "100%",
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-      }}
+      className={cn(
+        "relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--surface-inverse)] text-[var(--text-inverse)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] dark:bg-gray-900",
+        expanded ? "w-60 min-w-60" : "w-16 min-w-16",
+      )}
     >
-      <div role="list" style={{ flex: 1, padding: 8, overflowY: "auto" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div role="list" className="flex-1 overflow-y-auto p-2">
+        <div className="flex flex-col gap-1">
           {items.map((navItem, index) => {
             const isActive = activeView === navItem.id;
             const badge = navItem.badge ?? null;
             const badgeVariant: StatusVariant = navItem.badgeVariant ?? "neutral";
-            const badgeDotColor = semanticColors.status[badgeVariant]?.foreground ?? semanticColors.status.neutral.foreground;
             const Icon = navItem.icon;
 
             return (
               <button
                 key={navItem.id}
-                ref={(el) => { itemsRef.current[index] = el; }}
+                ref={(element) => {
+                  itemsRef.current[index] = element;
+                }}
                 role="listitem"
                 type="button"
                 onClick={() => onViewChange(navItem.id)}
-                onKeyDown={(e) => handleKeyDown(e, index)}
+                onKeyDown={(event) => handleKeyDown(event, index)}
                 aria-label={navItem.label}
                 aria-current={isActive ? "page" : undefined}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: item.gap,
-                  height: item.height,
-                  padding: `0 ${item.padding}px`,
-                  background: isActive ? "rgba(255,255,255,0.1)" : "transparent",
-                  border: "none",
-                  borderRadius: item.radius,
-                  cursor: "pointer",
-                  position: "relative",
-                  transition: createTransition("background", "micro"),
-                  width: "100%",
-                  color: isActive ? semanticColors.text.inverse : "rgba(255,255,255,0.6)",
-                }}
+                className={cn(
+                  "relative flex h-11 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
+                  isActive
+                    ? "bg-white/10 text-[var(--text-inverse)]"
+                    : "bg-transparent text-white/60 hover:bg-white/5 hover:text-white/80 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200",
+                )}
               >
                 {isActive && (
                   <div
                     aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      width: 3,
-                      height: 24,
-                      background: semanticColors.interactive.default,
-                      borderRadius: `0 ${primitiveRadius.sm}px ${primitiveRadius.sm}px 0`,
-                    }}
+                    className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-[6px] bg-[var(--interactive-primary)] dark:bg-blue-400"
                   />
                 )}
 
-                <div style={{ position: "relative", width: item.iconSize, height: item.iconSize }}>
-                  <div aria-hidden="true" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div className="relative size-5">
+                  <div className="flex size-full items-center justify-center" aria-hidden="true">
                     <Icon
-                      size={item.iconSize}
-                      color={isActive ? semanticColors.text.inverse : "rgba(255,255,255,0.6)"}
+                      size={20}
+                      color={isActive ? "#FFFFFF" : "rgba(255, 255, 255, 0.6)"}
                       strokeWidth={isActive ? 2 : 1.5}
                     />
                   </div>
+
                   {!expanded && badge !== null && badge > 0 && (
                     <div
                       aria-hidden="true"
-                      style={{
-                        position: "absolute",
-                        top: -2,
-                        right: -2,
-                        width: 8,
-                        height: 8,
-                        borderRadius: primitiveRadius.full,
-                        background: badgeDotColor,
-                        border: `2px solid ${semanticColors.surface.inverse}`,
-                      }}
+                      className={cn(
+                        "absolute -right-0.5 -top-0.5 size-2 rounded-full border-2 border-[var(--surface-inverse)] dark:border-gray-900",
+                        badgeDotClasses[badgeVariant],
+                      )}
                     />
                   )}
                 </div>
 
                 <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    flex: 1,
-                    opacity: expanded ? 1 : 0,
-                    transition: createTransition("opacity", "quick"),
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                  }}
+                  className={cn(
+                    "flex flex-1 items-center justify-between overflow-hidden whitespace-nowrap transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                    expanded ? "opacity-100" : "opacity-0",
+                  )}
                 >
                   <span
-                    style={{
-                      fontSize: primitiveFonts.size.sm,
-                      fontWeight: isActive ? primitiveFonts.weight.medium : primitiveFonts.weight.normal,
-                      color: isActive ? semanticColors.text.inverse : "rgba(255,255,255,0.7)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
+                    className={cn(
+                      "truncate text-sm",
+                      isActive ? "font-medium text-white" : "font-normal text-white/70 dark:text-gray-300",
+                    )}
                   >
                     {navItem.label}
                   </span>
                   {badge !== null && badge > 0 && (
                     <span
-                      style={{
-                        background:
-                          badgeVariant === "danger"
-                            ? semanticColors.status.danger.foreground
-                            : "rgba(255,255,255,0.15)",
-                        color: semanticColors.text.inverse,
-                        fontSize: primitiveFonts.size.xs,
-                        fontWeight: primitiveFonts.weight.semibold,
-                        padding: "0 6px",
-                        borderRadius: primitiveRadius.md,
-                        height: 20,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
+                      className={cn(
+                        "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold text-white",
+                        badgeVariant === "danger"
+                          ? "bg-[var(--status-danger)] dark:bg-red-500"
+                          : "bg-white/15 dark:bg-gray-700",
+                      )}
                     >
                       {badge}
                     </span>
@@ -219,30 +181,22 @@ export function NavRail({ items, activeView, onViewChange, expanded, onToggle }:
       </div>
 
       {onToggle && (
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+        <div className="border-t border-white/10 dark:border-gray-800">
           <button
             type="button"
             onClick={onToggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: expanded ? "flex-end" : "center",
-              padding: 12,
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              color: "rgba(255,255,255,0.6)",
-              width: "100%",
-            }}
+            className={cn(
+              "flex w-full items-center bg-transparent px-3 py-3 text-white/60 transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)] dark:text-gray-400 dark:hover:text-gray-200",
+              expanded ? "justify-end" : "justify-center",
+            )}
           >
             <span
               aria-hidden="true"
-              style={{
-                display: "inline-flex",
-                transform: expanded ? "rotate(0)" : "rotate(180deg)",
-                transition: createTransition("transform", "standard"),
-              }}
+              className={cn(
+                "inline-flex transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                expanded ? "rotate-0" : "rotate-180",
+              )}
             >
               <ChevronLeftIcon size={20} />
             </span>
