@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-11 (v4 — Phase 1 execution readiness updated)
+Generated: 2026-02-11 (v5 — Phase 1 execution progress reconciliation)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 execution orchestration is reviewed and ready (go).
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 execution is in progress with early branch work completed and pending merge.
 
 ### Progress Snapshot (2026-02-11)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -14,6 +14,8 @@ Generated: 2026-02-11 (v4 — Phase 1 execution readiness updated)
 - Automated verification in this pass: `pnpm build`, `pnpm typecheck`, and `pnpm test` all succeeded.
 - DB integration execution (`pnpm --filter @propertypro/db test:integration`) passes end-to-end (`13/13`) now that the `documents` bucket exists.
 - Phase 1 execution orchestration review completed and approved: see `PHASE1_EXECUTION_PLAN.md` for batch sequencing, dependency updates, and merge gates.
+- Batch 0 middleware fix is merged on `main` (`391b329`) and pushed.
+- `P1-27a` and `P1-27b` implementation work is complete on feature branches (`0348f8d`, `0f0ed93`, `9e811f0`) and pending merge to `main`.
 
 ---
 
@@ -558,7 +560,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 1 Execution Readiness (2026-02-11)
 
-- **Status:** Ready to Execute (planning complete, implementation tasks not started)
+- **Status:** In Progress (Batch 0 merged; `P1-27a`/`P1-27b` implemented on feature branches and pending merge)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -567,7 +569,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** Task entries below remain `Not Started` until code is implemented and merged.
+- **Tracking Note:** Most Phase 1 entries remain `Not Started`; `P1-27` is marked `In Progress` to reflect branch-level implementation that is pending merge/wiring completion.
 
 ---
 
@@ -957,7 +959,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-27 Audit Logging
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (implemented on feature branches, pending merge + full mutation-route wiring)
 - **Files to Create/Modify:** packages/db/src/schema/compliance-audit-log.ts, packages/db/src/utils/audit-logger.ts, apps/web/src/lib/middleware/audit-middleware.ts, packages/db/__tests__/audit-logging/
 - **Dependencies:** P0-05, P0-06
 - **Blocks:** P3-53
@@ -971,6 +973,10 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Known Pitfalls:**
   - [AGENTS #8] compliance_audit_log excluded from soft-delete filtering — append-only, never deleted
   - [AGENTS #44] Every mutation must call logAuditEvent for compliance-relevant actions
+- **Progress Update (2026-02-11):**
+  - Foundation branch `codex/p1-27a-audit-logging-foundation` (`0348f8d`) contains audit schema/logger foundation updates.
+  - Middleware branch `feature/p1-27b-audit-logging-middleware` (`0f0ed93`, `9e811f0`) contains append-only guards, middleware scaffolding, middleware tests, and request-id hardening.
+  - Remaining work is merge/integration: bring both branches onto `main` and ensure all Batch 1 mutation route handlers call `logAuditEvent` (directly or via `withAuditLog`).
 - **Testing:** Append-only test: attempt UPDATE on `compliance_audit_log` → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A board_president cannot see community B's audit trail.
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Must be wired into every mutation route. Easy to miss one. Consider adding a lint rule or code review checklist.
