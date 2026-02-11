@@ -6,4 +6,8 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
+  external: ["react"],
+  esbuildOptions(options) {
+    options.jsx = "automatic";
+  },
 });
