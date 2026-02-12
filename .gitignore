@@ -27,3 +27,4 @@ coverage/
 
 # Lock files (macOS)
 docs/.~lock.*
+.vercel
