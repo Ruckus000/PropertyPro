@@ -26,6 +26,9 @@ importers:
       '@propertypro/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@propertypro/email':
+        specifier: workspace:*
+        version: link:../../packages/email
       '@propertypro/shared':
         specifier: workspace:*
         version: link:../../packages/shared
