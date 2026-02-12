@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@propertypro/db": "workspace:*",
+    "@propertypro/email": "workspace:*",
     "@propertypro/shared": "workspace:*",
     "@propertypro/ui": "workspace:*",
     "@sentry/nextjs": "^10.38.0",
