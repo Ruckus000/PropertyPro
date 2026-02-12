@@ -6,7 +6,8 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { UnauthorizedError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const createDocumentSchema = z.object({
@@ -35,10 +36,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new UnauthorizedError();
-  }
+  const userId = await requireAuthenticatedUserId();
 
   const body: unknown = await req.json();
   const parseResult = createDocumentSchema.safeParse(body);

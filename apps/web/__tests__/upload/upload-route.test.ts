@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
-const { createPresignedUploadUrlMock } = vi.hoisted(() => ({
+const { createPresignedUploadUrlMock, requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
   createPresignedUploadUrlMock: vi.fn(),
+  requireAuthenticatedUserIdMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
   createPresignedUploadUrl: createPresignedUploadUrlMock,
+}));
+
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
 
 import { POST } from '../../src/app/api/v1/upload/route';
@@ -14,6 +20,7 @@ import { POST } from '../../src/app/api/v1/upload/route';
 describe('p1-11 upload presign route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     createPresignedUploadUrlMock.mockResolvedValue({
       token: 'signed-token',
       path: 'communities/42/documents/doc-1/test.pdf',
@@ -26,7 +33,6 @@ describe('p1-11 upload presign route', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-id': 'user-1',
       },
       body: JSON.stringify({
         communityId: 42,
@@ -52,7 +58,9 @@ describe('p1-11 upload presign route', () => {
     expect(body.data.uploadUrl).toContain('https://example.supabase.co');
   });
 
-  it('rejects missing authentication header', async () => {
+  it('rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
     const req = new NextRequest('http://localhost:3000/api/v1/upload', {
       method: 'POST',
       headers: {
@@ -75,7 +83,6 @@ describe('p1-11 upload presign route', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-id': 'user-1',
       },
       body: JSON.stringify({
         communityId: 42,

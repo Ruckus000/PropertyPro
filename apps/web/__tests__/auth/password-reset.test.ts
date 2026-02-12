@@ -13,6 +13,7 @@ vi.mock('@propertypro/db/supabase/server', () => ({
 import {
   requestPasswordReset,
   updatePassword,
+  _testInternals,
 } from '../../src/lib/auth/password-reset';
 import {
   checkPasswordResetRateLimit,
@@ -23,6 +24,7 @@ describe('p1-21 password reset flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetPasswordResetRateLimitStore();
+    vi.useRealTimers();
 
     createServerClientMock.mockResolvedValue({
       auth: {
@@ -76,18 +78,54 @@ describe('p1-21 password reset flow', () => {
     expect(result.rateLimitResult?.allowed).toBe(false);
   });
 
-  it('keeps valid and exceptional paths within similar timing bounds', async () => {
-    const t1 = Date.now();
-    await requestPasswordReset('resident@example.com');
-    const d1 = Date.now() - t1;
+  it('enforces minimum response delay on successful forgot-password requests', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 
-    resetPasswordForEmailMock.mockRejectedValueOnce(new Error('random failure'));
+    const pending = requestPasswordReset('resident@example.com');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(_testInternals.MIN_RESPONSE_MS);
+    const result = await pending;
 
-    const t2 = Date.now();
-    await requestPasswordReset('resident@example.com');
-    const d2 = Date.now() - t2;
+    expect(setTimeoutSpy).toHaveBeenCalled();
+    expect(setTimeoutSpy.mock.calls[0]?.[1]).toBe(_testInternals.MIN_RESPONSE_MS);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('If an account with that email exists');
+  });
 
-    expect(Math.abs(d1 - d2)).toBeLessThan(120);
+  it('enforces minimum response delay when supabase call throws', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    resetPasswordForEmailMock.mockRejectedValueOnce(new Error('network failure'));
+
+    const pending = requestPasswordReset('resident@example.com');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(_testInternals.MIN_RESPONSE_MS);
+    const result = await pending;
+
+    expect(setTimeoutSpy).toHaveBeenCalled();
+    expect(setTimeoutSpy.mock.calls[0]?.[1]).toBe(_testInternals.MIN_RESPONSE_MS);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('If an account with that email exists');
+  });
+
+  it('enforces minimum response delay on rate-limited requests', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    checkPasswordResetRateLimit('resident@example.com');
+    checkPasswordResetRateLimit('resident@example.com');
+    checkPasswordResetRateLimit('resident@example.com');
+
+    const pending = requestPasswordReset('resident@example.com');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(_testInternals.MIN_RESPONSE_MS);
+    const result = await pending;
+
+    expect(setTimeoutSpy).toHaveBeenCalled();
+    expect(setTimeoutSpy.mock.calls[0]?.[1]).toBe(_testInternals.MIN_RESPONSE_MS);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Too many reset requests');
   });
 
   it('updates password successfully with valid session', async () => {

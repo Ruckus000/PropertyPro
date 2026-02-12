@@ -15,7 +15,8 @@ import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
  * The Next.js route group `(authenticated)` is stripped from the URL,
  * so we match on the actual URL paths that live inside that group.
  */
-const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/maintenance'];
+const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/maintenance', '/api/v1'];
+const API_PATH_PREFIX = '/api/v1';
 
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
@@ -25,8 +26,28 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+function isApiPath(pathname: string): boolean {
+  return pathname.startsWith(API_PATH_PREFIX);
+}
+
 function buildReturnTo(request: NextRequest): string {
   return `${request.nextUrl.pathname}${request.nextUrl.search}`;
+}
+
+function attachResponseCookies(source: NextResponse, target: NextResponse): void {
+  for (const { name, value, ...options } of source.cookies.getAll()) {
+    target.cookies.set(name, value, options);
+  }
+}
+
+function withTracingAndCookies(
+  source: NextResponse,
+  target: NextResponse,
+  requestId: string,
+): NextResponse {
+  attachResponseCookies(source, target);
+  target.headers.set('X-Request-ID', requestId);
+  return target;
 }
 
 /**
@@ -41,12 +62,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { supabase, response } = await createMiddlewareClient(
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
+  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
 
   // AGENTS #45: Generate a UUID request ID for tracing
-  response.headers.set(
-    'X-Request-ID',
-    request.headers.get('x-request-id') || crypto.randomUUID(),
-  );
+  response.headers.set('X-Request-ID', requestId);
 
   const { pathname } = request.nextUrl;
 
@@ -57,17 +76,41 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     } = await supabase.auth.getUser();
 
     if (!user) {
+      if (isApiPath(pathname)) {
+        return withTracingAndCookies(
+          response as unknown as NextResponse,
+          NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+          requestId,
+        );
+      }
+
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = '/auth/login';
       loginUrl.searchParams.set('returnTo', buildReturnTo(request));
-      return NextResponse.redirect(loginUrl);
+      return withTracingAndCookies(
+        response as unknown as NextResponse,
+        NextResponse.redirect(loginUrl),
+        requestId,
+      );
     }
 
     if (!user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
+      if (isApiPath(pathname)) {
+        return withTracingAndCookies(
+          response as unknown as NextResponse,
+          NextResponse.json({ error: 'Email verification required' }, { status: 403 }),
+          requestId,
+        );
+      }
+
       const verifyUrl = request.nextUrl.clone();
       verifyUrl.pathname = VERIFY_EMAIL_PATH;
       verifyUrl.searchParams.set('returnTo', buildReturnTo(request));
-      return NextResponse.redirect(verifyUrl);
+      return withTracingAndCookies(
+        response as unknown as NextResponse,
+        NextResponse.redirect(verifyUrl),
+        requestId,
+      );
     }
   }
 
@@ -85,14 +128,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         if (returnTo) {
           verifyUrl.searchParams.set('returnTo', returnTo);
         }
-        return NextResponse.redirect(verifyUrl);
+        return withTracingAndCookies(
+          response as unknown as NextResponse,
+          NextResponse.redirect(verifyUrl),
+          requestId,
+        );
       }
 
       const returnTo = request.nextUrl.searchParams.get('returnTo');
       const destination = request.nextUrl.clone();
       destination.pathname = returnTo || '/dashboard';
       destination.searchParams.delete('returnTo');
-      return NextResponse.redirect(destination);
+      return withTracingAndCookies(
+        response as unknown as NextResponse,
+        NextResponse.redirect(destination),
+        requestId,
+      );
     }
   }
 

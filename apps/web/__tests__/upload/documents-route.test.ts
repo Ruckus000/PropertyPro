@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
   createScopedClientMock,
@@ -7,12 +8,14 @@ const {
   scopedInsertMock,
   scopedQueryMock,
   documentsTable,
+  requireAuthenticatedUserIdMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
   documentsTable: Symbol('documents'),
+  requireAuthenticatedUserIdMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -21,11 +24,16 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
 import { GET, POST } from '../../src/app/api/v1/documents/route';
 
 describe('p1-11 documents route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
 
     createScopedClientMock.mockReturnValue({
       insert: scopedInsertMock,
@@ -47,7 +55,6 @@ describe('p1-11 documents route', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-id': '95c454d2-9728-4f1f-8b75-5b9549fb9679',
       },
       body: JSON.stringify({
         communityId: 42,
@@ -100,7 +107,9 @@ describe('p1-11 documents route', () => {
     expect(json.data).toHaveLength(2);
   });
 
-  it('POST rejects missing auth header', async () => {
+  it('POST rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
       method: 'POST',
       headers: {

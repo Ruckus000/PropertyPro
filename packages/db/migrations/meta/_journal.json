@@ -8,6 +8,13 @@
       "when": 1770661017832,
       "tag": "0000_flashy_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770847885060,
+      "tag": "0001_condemned_mikhail_rasputin",
+      "breakpoints": true
     }
   ]
 }

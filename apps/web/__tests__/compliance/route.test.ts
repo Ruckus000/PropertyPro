@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
   createScopedClientMock,
@@ -8,6 +9,7 @@ const {
   scopedInsertMock,
   communitiesTable,
   complianceChecklistItemsTable,
+  requireAuthenticatedUserIdMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -15,6 +17,7 @@ const {
   scopedInsertMock: vi.fn(),
   communitiesTable: Symbol('communities'),
   complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
+  requireAuthenticatedUserIdMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -22,6 +25,10 @@ vi.mock('@propertypro/db', () => ({
   complianceChecklistItems: complianceChecklistItemsTable,
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
+}));
+
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
 
 vi.mock('@propertypro/shared', () => ({
@@ -62,6 +69,7 @@ import { GET, POST } from '../../src/app/api/v1/compliance/route';
 describe('p1-09 compliance route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81');
 
     createScopedClientMock.mockReturnValue({
       query: scopedQueryMock,
@@ -80,7 +88,6 @@ describe('p1-09 compliance route', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-id': 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
       },
       body: JSON.stringify({
         communityId: 7,
@@ -119,7 +126,6 @@ describe('p1-09 compliance route', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-id': 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
       },
       body: JSON.stringify({
         communityId: 42,
@@ -167,5 +173,23 @@ describe('p1-09 compliance route', () => {
 
     expect(createScopedClientMock).toHaveBeenCalledWith(55);
     expect(json.data[0]?.status).toBe('overdue');
+  });
+
+  it('POST rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const req = new NextRequest('http://localhost:3000/api/v1/compliance', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        communityType: 'condo_718',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(401);
   });
 });
