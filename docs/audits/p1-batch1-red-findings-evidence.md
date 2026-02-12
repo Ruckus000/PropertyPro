@@ -29,7 +29,7 @@
   - API routes under `/api/v1` return JSON `401` without redirect.
 - Unverified users on protected API routes now receive JSON `403` (`Email verification required`) instead of HTML redirects.
 
-## Community Authorization Follow-Up (Merge Gate)
+## Community Authorization Follow-Up (Pre-Gate-2 Security Requirement)
 - **Issue:** [#2](https://github.com/Ruckus000/PropertyPro/issues/2) — `[P1][High] Enforce communityId membership authorization on document/compliance mutations`
-- **Status:** Open, labeled (`security`, `multi-tenant`, `backend`), assigned to PR author.
-- **Truthful classification:** identity hardening is complete; membership authorization on `communityId` remains pending and is tracked in #2.
+- **Status:** Open, labeled (`security`, `multi-tenant`, `backend`), assigned to PR author, and intentionally deferred from this remediation PR.
+- **Truthful classification:** identity hardening is complete; membership authorization on `communityId` remains pending and is tracked in #2 as a required checkpoint before Phase 1 Gate 2 sign-off.

@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-11 (v8 — Batch 1 merged and verified on main)
+Generated: 2026-02-11 (v9 — Batch 1 merged on main; red-findings remediation tracked)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 2 is the next execution target.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Additional Batch 1 red-findings remediation is implemented on `codex/p1-batch1-red-findings-remediation` (`ahead_by: 8` vs `main`, pending merge). Batch 2 remains the next execution target after this remediation merges.
 
 ### Progress Snapshot (2026-02-11)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -21,6 +21,10 @@ Generated: 2026-02-11 (v8 — Batch 1 merged and verified on main)
 - Batch 1 branches were audited, checkpointed, completed, and merged to `main`: `P1-28` (`40497ea`), `P1-22` (`3649149`), `P1-21` (`715abbf`), `P1-11` (`ab4aa2b`), `P1-17` (`7f06ec5`), `P1-18` (`fa0feac`), `P1-09` (`9ba3dc8`).
 - Batch 1 gate rerun on `main` is green: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`.
 - Merge-hygiene follow-up: `pnpm-lock.yaml` was repaired post-merge to resolve a lockfile conflict (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`) before final gate verification.
+- Red-findings remediation was completed on `codex/p1-batch1-red-findings-remediation` and pushed (`ahead_by: 8`, `files changed: 16` vs `main`), including server-side session identity enforcement for protected mutation routes and middleware JSON API responses (`401` unauthenticated, `403` unverified) for `/api/v1/*`.
+- Removed legacy client `x-user-id` header injection and updated route/auth middleware tests to session-based behavior, including deterministic middleware refresh-transition coverage.
+- Open follow-up (pre-Gate-2 requirement): GitHub Issue #2 (`security`, `multi-tenant`, `backend`) tracks `communityId` membership authorization hardening that is intentionally deferred from this remediation branch and remains required before Phase 1 Gate 2 sign-off.
+- Remediation merge gate (behavior-focused): require `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`, plus confirmed passing behavior coverage for middleware auth splits (`apps/web/__tests__/auth/session-management.test.ts`) and unauthenticated mutation rejection in upload/documents/compliance route tests.
 
 ---
 
@@ -565,7 +569,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 1 Execution Readiness (2026-02-11)
 
-- **Status:** In Progress (Batch 0 and Batch 1 merged; Batch 1 verification gate completed on `main`)
+- **Status:** In Progress (Batch 0 and Batch 1 merged; Batch 1 verification gate completed on `main`; red-findings remediation branch is ready and awaiting merge)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -574,7 +578,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Batch 1 feature tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) are now complete and merged; proceed with Batch 2.
+- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Batch 1 feature tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) are complete on `main`, and additional red-findings remediation is queued on `codex/p1-batch1-red-findings-remediation`; proceed with Batch 2 after this branch merges while treating Issue #2 as tracked security debt that must be implemented before Phase 1 Gate 2 sign-off.
 
 ---
 
@@ -983,6 +987,8 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - `P1-27b` merged to `main` via `894f56c` (from `feature/p1-27b-audit-logging-middleware`) with append-only guards, middleware scaffolding, middleware tests, and request-id hardening.
   - Verification gate on `main` is green, including db integration tests.
   - Remaining work is endpoint adoption: ensure each new Batch 1 mutation route calls `logAuditEvent` directly or via `withAuditLog`.
+  - Red-findings remediation branch `codex/p1-batch1-red-findings-remediation` added additional endpoint adoption/hardening for mutation routes (`upload`, `documents`, `compliance`) by removing trust in client `x-user-id` and enforcing Supabase session identity server-side.
+  - Follow-up Issue #2 (labels: `security`, `multi-tenant`, `backend`) remains open by decision and is deferred from this remediation PR; keep `P1-27` status as `In Progress`, and require authorization-layer implementation/verification before Phase 1 Gate 2 sign-off.
 - **Testing:** Append-only test: attempt UPDATE on `compliance_audit_log` → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A board_president cannot see community B's audit trail.
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Must be wired into every mutation route. Easy to miss one. Consider adding a lint rule or code review checklist.
