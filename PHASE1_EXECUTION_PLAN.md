@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; Batch 2 is next
+**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; red-findings remediation is merged; Batch 2 kickoff is active
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -27,9 +27,12 @@ Milestones:
 - [2026-02-11] Batch 1 throttle checkpoint (`main`) — latest run stopped by usage limit reset at **4:00 PM America/New_York**; no new merges, WIP exists in `p1-09`, `p1-17`, `p1-18`, `p1-21`, `p1-22`, `p1-28`, while `p1-11` is still clean.
 - [2026-02-11] Batch 1 merges complete (`main`) — merged `P1-28` (`40497ea`), `P1-22` (`3649149`), `P1-21` (`715abbf`), `P1-11` (`ab4aa2b`), `P1-17` (`7f06ec5`), `P1-18` (`fa0feac`), and `P1-09` (`9ba3dc8`).
 - [2026-02-11] Batch 1 verification gate (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all passed after merges.
+- [2026-02-12] Batch 1 red-findings remediation merged (`codex/p1-batch1-red-findings-remediation` → `main`, merge commit `18c356d`) — merge gate passed with `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and db integration tests; middleware auth split coverage (`401` API unauthenticated, `403` API unverified, page-route redirects) and route-level unauthenticated mutation rejection coverage were confirmed in test suite.
+- [2026-02-12] Batch 2 kickoff unblocked (`main`) — Issue #2 (`communityId` membership authorization) remains intentionally deferred from remediation and is tracked as required security debt before Phase 1 Gate 2 sign-off.
 
 Current cursor:
-- Next actions: start Batch 2 branch creation and execution for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
+- Next actions: execute Batch 2 branch creation and parallel implementation for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
+- Gate note: Issue #2 authorization hardening must be implemented and validated before Phase 1 Gate 2 sign-off (`403` on authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects).
 
 ---
 
