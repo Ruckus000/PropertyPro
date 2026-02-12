@@ -15,6 +15,8 @@ import {
 import { generateRequestId } from '../api/request-id';
 
 export interface AuditContext {
+  userId: string;
+  communityId: number;
   /** Pre-bound audit logger with userId and communityId from request context. */
   log(params: {
     action: AuditAction;
@@ -77,6 +79,8 @@ export function withAuditLog(
     const requestId = req.headers.get('x-request-id')?.trim() || generateRequestId();
 
     const audit: AuditContext = {
+      userId,
+      communityId,
       async log(params) {
         await logAuditEvent({
           ...params,

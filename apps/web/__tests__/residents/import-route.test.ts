@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
   createScopedClientMock,
@@ -12,6 +13,7 @@ const {
   unitsTable,
   notificationPreferencesTable,
   requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +25,7 @@ const {
   unitsTable: Symbol('units'),
   notificationPreferencesTable: Symbol('notification_preferences'),
   requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -37,6 +40,10 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
 import { POST } from '../../src/app/api/v1/import-residents/route';
@@ -68,6 +75,10 @@ describe('p1-19 import-residents route', () => {
       { rowNumber: 3, column: 'email', message: "Duplicate email 'dup@example.com' in import" },
     ]);
     expect(json.data.header).toEqual(['name', 'email', 'role']);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
+      42,
+      '95c454d2-9728-4f1f-8b75-5b9549fb9679',
+    );
   });
 
   it('imports valid rows, creates users/roles, and logs audit events with bulk count', async () => {
@@ -137,5 +148,18 @@ describe('p1-19 import-residents route', () => {
       { rowNumber: 2, column: 'unit_number', message: "Unit '99' not found" },
     ]);
   });
-});
 
+  it('returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const csv = 'name,email,role\nOwner,owner@example.com,owner';
+    const req = new NextRequest('http://localhost:3000/api/v1/import-residents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 42, csv }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+  });
+});

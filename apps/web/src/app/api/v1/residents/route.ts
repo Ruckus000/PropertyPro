@@ -27,6 +27,8 @@ import {
 import { COMMUNITY_ROLES, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 
@@ -136,6 +138,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, email, fullName, phone, role, unitId } = parseResult.data;
+  const actorUserId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   const communityType = await getCommunityType(communityId);
@@ -188,7 +192,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 
   await logAuditEvent({
-    userId,
+    userId: actorUserId,
     action: 'create',
     resourceType: 'resident',
     resourceId: userId,
@@ -235,6 +239,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, userId, fullName, phone, role, unitId } = parseResult.data;
+  const actorUserId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);
@@ -305,7 +311,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   await logAuditEvent({
-    userId,
+    userId: actorUserId,
     action: 'update',
     resourceType: 'resident',
     resourceId: userId,
@@ -339,6 +345,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, userId } = parseResult.data;
+  const actorUserId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);
@@ -351,7 +359,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   await scoped.hardDelete(userRoles, eq(userRoles.userId, userId));
 
   await logAuditEvent({
-    userId,
+    userId: actorUserId,
     action: 'delete',
     resourceType: 'resident',
     resourceId: userId,

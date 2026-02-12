@@ -1,0 +1,323 @@
+/**
+ * Meetings API — CRUD operations + document attachments.
+ *
+ * Patterns:
+ * - withErrorHandler for structured error responses
+ * - createScopedClient for tenant isolation
+ * - logAuditEvent on every mutation
+ * - Zod validation
+ */
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { and, eq } from 'drizzle-orm';
+import {
+  createScopedClient,
+  logAuditEvent,
+  communities,
+  meetings,
+  meetingDocuments,
+  type Meeting,
+} from '@propertypro/db';
+import { type CommunityType } from '@propertypro/shared';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { ValidationError, NotFoundError } from '@/lib/api/errors';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import {
+  calculateMinutesPostingDeadline,
+  calculateNoticePostBy,
+  calculateOwnerVoteDocsDeadline,
+  type MeetingType,
+} from '@/lib/utils/meeting-calculator';
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+const meetingTypeSchema = z.enum([
+  'board',
+  'annual',
+  'special',
+  'budget',
+  'committee',
+]) as z.ZodType<MeetingType>;
+
+const isoDateString = z
+  .string()
+  .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid ISO date string');
+
+const createMeetingSchema = z.object({
+  communityId: z.number().int().positive(),
+  title: z.string().min(1),
+  meetingType: meetingTypeSchema,
+  startsAt: isoDateString,
+  location: z.string().min(1),
+});
+
+const updateMeetingSchema = z.object({
+  id: z.number().int().positive(),
+  communityId: z.number().int().positive(),
+  title: z.string().min(1).optional(),
+  meetingType: meetingTypeSchema.optional(),
+  startsAt: isoDateString.optional(),
+  location: z.string().min(1).optional(),
+});
+
+const deleteMeetingSchema = z.object({
+  id: z.number().int().positive(),
+  communityId: z.number().int().positive(),
+});
+
+const attachDocSchema = z.object({
+  action: z.literal('attach'),
+  communityId: z.number().int().positive(),
+  meetingId: z.number().int().positive(),
+  documentId: z.number().int().positive(),
+});
+
+const detachDocSchema = z.object({
+  action: z.literal('detach'),
+  communityId: z.number().int().positive(),
+  meetingId: z.number().int().positive(),
+  documentId: z.number().int().positive(),
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function getCommunityType(communityId: number): Promise<CommunityType> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(communities);
+  const community = rows.find((row) => row['id'] === communityId);
+  if (!community) throw new NotFoundError('Community not found');
+  return community['communityType'] as CommunityType;
+}
+
+function coerceMeeting(row: Record<string, unknown>): Meeting {
+  return row as unknown as Meeting;
+}
+
+// ---------------------------------------------------------------------------
+// GET — List meetings for a community (computed deadlines included)
+// ---------------------------------------------------------------------------
+
+export const GET = withErrorHandler(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+  const rawCommunityId = searchParams.get('communityId');
+  if (!rawCommunityId) {
+    throw new ValidationError('communityId query parameter is required');
+  }
+
+  const communityId = Number(rawCommunityId);
+  if (!Number.isInteger(communityId) || communityId <= 0) {
+    throw new ValidationError('communityId must be a positive integer');
+  }
+
+  const scoped = createScopedClient(communityId);
+  const communityType = await getCommunityType(communityId);
+
+  const rows = await scoped.query(meetings);
+  const data = rows
+    .map(coerceMeeting)
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+    .map((m) => {
+      const startsAt = new Date(m.startsAt);
+      return {
+        ...m,
+        deadlines: {
+          noticePostBy: calculateNoticePostBy(startsAt, m.meetingType as MeetingType, communityType),
+          ownerVoteDocsBy: calculateOwnerVoteDocsDeadline(startsAt),
+          minutesPostBy: calculateMinutesPostingDeadline(startsAt),
+        },
+      };
+    });
+
+  return NextResponse.json({ data });
+});
+
+// ---------------------------------------------------------------------------
+// POST — create, update, delete, attach, detach
+// ---------------------------------------------------------------------------
+
+export const POST = withErrorHandler(async (req: NextRequest) => {
+  const body = (await req.json()) as Record<string, unknown>;
+  const action = (body['action'] as string | undefined) ?? 'create';
+  const rawCommunityId = body['communityId'];
+  const communityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+  if (!Number.isInteger(communityId) || communityId <= 0) {
+    throw new ValidationError('communityId must be a positive integer');
+  }
+
+  const actorUserId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, actorUserId);
+
+  if (action === 'update') return handleUpdate(body, actorUserId);
+  if (action === 'delete') return handleDelete(body, actorUserId);
+  if (action === 'attach') return handleAttach(body, actorUserId);
+  if (action === 'detach') return handleDetach(body, actorUserId);
+  return handleCreate(body, actorUserId);
+});
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+async function handleCreate(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
+  const parsed = createMeetingSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid meeting data', { fields: formatZodErrors(parsed.error) });
+  }
+  const { communityId, ...data } = parsed.data;
+  const scoped = createScopedClient(communityId);
+
+  const [created] = await scoped.insert(meetings, {
+    title: data.title,
+    meetingType: data.meetingType,
+    startsAt: new Date(data.startsAt),
+    location: data.location,
+  });
+
+  const createdId = String((created as Record<string, unknown>)['id']);
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'create',
+    resourceType: 'meeting',
+    resourceId: createdId,
+    communityId,
+    newValues: {
+      title: data.title,
+      meetingType: data.meetingType,
+      startsAt: data.startsAt,
+      location: data.location,
+    },
+  });
+
+  return NextResponse.json({ data: created }, { status: 201 });
+}
+
+async function handleUpdate(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
+  const parsed = updateMeetingSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid update data', { fields: formatZodErrors(parsed.error) });
+  }
+  const { id, communityId, ...fields } = parsed.data;
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(meetings);
+  const existing = rows.find((r) => (r as Record<string, unknown>)['id'] === id) as
+    | Record<string, unknown>
+    | undefined;
+  if (!existing) throw new NotFoundError('Meeting not found');
+
+  const updateData: Record<string, unknown> = {};
+  const oldValues: Record<string, unknown> = {};
+  const newValues: Record<string, unknown> = {};
+  if (fields.title !== undefined) {
+    updateData['title'] = fields.title;
+    oldValues['title'] = existing['title'];
+    newValues['title'] = fields.title;
+  }
+  if (fields.meetingType !== undefined) {
+    updateData['meetingType'] = fields.meetingType;
+    oldValues['meetingType'] = existing['meetingType'];
+    newValues['meetingType'] = fields.meetingType;
+  }
+  if (fields.startsAt !== undefined) {
+    updateData['startsAt'] = new Date(fields.startsAt);
+    oldValues['startsAt'] = existing['startsAt'];
+    newValues['startsAt'] = fields.startsAt;
+  }
+  if (fields.location !== undefined) {
+    updateData['location'] = fields.location;
+    oldValues['location'] = existing['location'];
+    newValues['location'] = fields.location;
+  }
+
+  const [updated] = await scoped.update(meetings, updateData, eq(meetings.id, id));
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'update',
+    resourceType: 'meeting',
+    resourceId: String(id),
+    communityId,
+    oldValues,
+    newValues,
+  });
+
+  return NextResponse.json({ data: updated });
+}
+
+async function handleDelete(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
+  const parsed = deleteMeetingSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid delete data', { fields: formatZodErrors(parsed.error) });
+  }
+  const { id, communityId } = parsed.data;
+  const scoped = createScopedClient(communityId);
+
+  await scoped.softDelete(meetings, eq(meetings.id, id));
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'delete',
+    resourceType: 'meeting',
+    resourceId: String(id),
+    communityId,
+  });
+
+  return NextResponse.json({ data: { success: true } });
+}
+
+async function handleAttach(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
+  const parsed = attachDocSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid attachment data', { fields: formatZodErrors(parsed.error) });
+  }
+  const { communityId, meetingId, documentId } = parsed.data;
+  const scoped = createScopedClient(communityId);
+
+  const rows = await scoped.insert(meetingDocuments, {
+    meetingId,
+    documentId,
+    attachedBy: actorUserId,
+  });
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'update',
+    resourceType: 'meeting_document',
+    resourceId: String(rows[0]?.['id'] ?? ''),
+    communityId,
+    newValues: { meetingId, documentId },
+    metadata: { subAction: 'attach' },
+  });
+
+  return NextResponse.json({ data: rows[0] }, { status: 201 });
+}
+
+async function handleDetach(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
+  const parsed = detachDocSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid detach data', { fields: formatZodErrors(parsed.error) });
+  }
+  const { communityId, meetingId, documentId } = parsed.data;
+  const scoped = createScopedClient(communityId);
+
+  await scoped.hardDelete(
+    meetingDocuments,
+    and(eq(meetingDocuments.meetingId, meetingId), eq(meetingDocuments.documentId, documentId)),
+  );
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'update',
+    resourceType: 'meeting_document',
+    resourceId: `${meetingId}:${documentId}`,
+    communityId,
+    metadata: { subAction: 'detach' },
+  });
+
+  return NextResponse.json({ data: { success: true } });
+}

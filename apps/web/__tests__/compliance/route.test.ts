@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
   createScopedClientMock,
@@ -10,6 +11,7 @@ const {
   communitiesTable,
   complianceChecklistItemsTable,
   requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -18,6 +20,7 @@ const {
   communitiesTable: Symbol('communities'),
   complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
   requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -29,6 +32,10 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
 vi.mock('@propertypro/shared', () => ({
@@ -137,6 +144,10 @@ describe('p1-09 compliance route', () => {
     expect(res.status).toBe(201);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(42);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
+      42,
+      'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
+    );
     expect(scopedInsertMock).toHaveBeenCalledWith(
       complianceChecklistItemsTable,
       expect.objectContaining({
@@ -191,5 +202,23 @@ describe('p1-09 compliance route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(401);
+  });
+
+  it('POST returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest('http://localhost:3000/api/v1/compliance', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        communityType: 'condo_718',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
   });
 });

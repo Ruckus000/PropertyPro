@@ -19,6 +19,8 @@ import {
 import { eq } from 'drizzle-orm';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { withAuditLog } from '@/lib/middleware/audit-middleware';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
@@ -33,7 +35,6 @@ const createAnnouncementSchema = z.object({
   audience: z.enum(['all', 'board_only']).default('all'),
   isPinned: z.boolean().default(false),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
-  publishedBy: z.string().uuid('Published by must be a valid user UUID'),
 });
 
 const updateAnnouncementSchema = z.object({
@@ -43,21 +44,18 @@ const updateAnnouncementSchema = z.object({
   body: z.string().min(1, 'Body is required').optional(),
   audience: z.enum(['all', 'board_only']).optional(),
   isPinned: z.boolean().optional(),
-  userId: z.string().uuid('User ID must be a valid UUID'),
 });
 
 const pinActionSchema = z.object({
   id: z.number().int().positive('Announcement ID must be a positive integer'),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
   isPinned: z.boolean(),
-  userId: z.string().uuid('User ID must be a valid UUID'),
 });
 
 const archiveActionSchema = z.object({
   id: z.number().int().positive('Announcement ID must be a positive integer'),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
   archive: z.boolean(),
-  userId: z.string().uuid('User ID must be a valid UUID'),
 });
 
 // ---------------------------------------------------------------------------
@@ -103,11 +101,14 @@ export const POST = withErrorHandler(
   withAuditLog(
     async (req: NextRequest) => {
       const body = await req.clone().json() as Record<string, unknown>;
-      const action = body['action'] as string | undefined;
+      const rawCommunityId = body['communityId'];
+      const communityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+      if (!Number.isInteger(communityId) || communityId <= 0) {
+        throw new ValidationError('communityId must be a positive integer');
+      }
 
-      // Extract userId and communityId from the body for audit context
-      const userId = String(body['userId'] ?? body['publishedBy'] ?? '');
-      const communityId = Number(body['communityId'] ?? 0);
+      const userId = await requireAuthenticatedUserId();
+      await requireCommunityMembership(communityId, userId);
 
       return { userId, communityId };
     },
@@ -137,6 +138,8 @@ export const POST = withErrorHandler(
 // ---------------------------------------------------------------------------
 
 interface AuditLog {
+  userId: string;
+  communityId: number;
   log(params: {
     action: 'create' | 'update' | 'delete';
     resourceType: string;
@@ -155,12 +158,12 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
     });
   }
 
-  const { communityId, publishedBy, ...data } = result.data;
+  const { communityId, ...data } = result.data;
   const scoped = createScopedClient(communityId);
 
   const rows = await scoped.insert(announcements, {
     ...data,
-    publishedBy,
+    publishedBy: audit.userId,
   });
   const created = rows[0] as Announcement;
 
@@ -182,7 +185,7 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
     });
   }
 
-  const { id, communityId, userId: _userId, ...fields } = result.data;
+  const { id, communityId, ...fields } = result.data;
   const scoped = createScopedClient(communityId);
 
   // Fetch existing to capture old values for audit
@@ -228,7 +231,7 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
     });
   }
 
-  const { id, communityId, isPinned, userId: _userId } = result.data;
+  const { id, communityId, isPinned } = result.data;
   const scoped = createScopedClient(communityId);
 
   const existing = (await scoped.query(announcements)).find(
@@ -265,7 +268,7 @@ async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Pr
     });
   }
 
-  const { id, communityId, archive, userId: _userId } = result.data;
+  const { id, communityId, archive } = result.data;
   const scoped = createScopedClient(communityId);
 
   const existing = (await scoped.query(announcements)).find(

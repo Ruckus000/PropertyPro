@@ -121,3 +121,4 @@ Add entries here as failures are encountered during Ralph loops. Format:
 ```
 
 - [2026-02-11] [P1-27b]: `claude -p` + wrapper-based multiline prompts can silently stall or parse incorrectly (e.g., prompt consumed by flags). For Ralph loops, run from the task worktree (`pwd` + `git branch --show-current`), and use direct `claude "..."` prompt invocation unless print-mode piping is explicitly required.
+- [2026-02-12] [P1-16/P1-26]: Manual SQL migrations without corresponding Drizzle `meta/_journal.json` entry + snapshot cause `db:generate` to re-emit already-created tables (e.g., duplicate `invitations`). Keep journal/snapshots in lockstep with manual migration files before generating subsequent migrations.

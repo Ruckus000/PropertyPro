@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-12 (v10 — Batch 1 merged on main; red-findings remediation merged; Batch 2 kickoff active)
+Generated: 2026-02-12 (v11 — Batch 1 merged on main; red-findings remediation merged; Batch 2 partially complete)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal), and Batch 2 is now the active execution target. Issue #2 authorization hardening remains explicitly deferred to pre-Gate-2 completion.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is partially complete on `main`: `P1-10` (`02409c9`), `P1-13` (`54afb8c`), `P1-19` (`dbc9cec`), and `P1-20` (`b2335fc`) are merged; `P1-12`, `P1-16`, and `P1-26` remain pending. Issue #2 authorization hardening remains explicitly deferred to pre-Gate-2 completion, so Gate 2 is not yet satisfied.
 
 ### Progress Snapshot (2026-02-11)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -219,7 +219,7 @@ Implementation MUST pause at these checkpoints. Do not proceed past a gate until
 | Canonical enums (`community_type`, `user_role`) | Meets | Enum labels match accepted canonical values used by role- and type-gated flows. | P1-18, P1-25 |
 | `documents.search_text` + `documents.search_vector` | Meets | Required search columns are present for extraction/search phases. | P1-13, P1-14 |
 | `user_roles` cardinality + `unit_id` FK | Meets | One active role per `(user_id, community_id)` and nullable unit FK are implemented. | P1-18 |
-| `notification_preferences` structure | Resolved | Phase 1 execution plan standardizes on existing schema fields: `email_frequency`, `email_announcements`, `email_meetings`, and `in_app_enabled`. | P1-26 |
+| `notification_preferences` structure | Resolved | Phase 1 execution plan standardizes on existing schema fields: `email_announcements`, `email_documents`, `email_meetings`, and `email_maintenance`. | P1-26 |
 | Meeting-related tables (`meetings`, `meeting_documents`) | Deferred | Not in Phase 0 core schema by design; to be added in Phase 1 meeting task. | P1-16 |
 | Audit log table (`compliance_audit_log`) | Deferred | Not in Phase 0 core schema by design; scheduled for audit logging task. | P1-27 |
 
@@ -570,7 +570,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 1 Execution Readiness (2026-02-11)
 
-- **Status:** In Progress (Batch 0 and Batch 1 merged; Batch 1 red-findings remediation merged on `main`; Batch 2 kickoff in progress)
+- **Status:** In Progress (Batch 0 and Batch 1 merged; Batch 1 red-findings remediation merged on `main`; Batch 2 partially complete on `main`)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -579,7 +579,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Batch 1 feature tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) plus red-findings remediation are complete on `main`; proceed with Batch 2 while treating Issue #2 as tracked security debt that must be implemented before Phase 1 Gate 2 sign-off.
+- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Batch 1 feature tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) plus red-findings remediation are complete on `main`, and Batch 2 is partially complete (`P1-10`, `P1-13`, `P1-19`, `P1-20`). Continue with remaining Batch 2 tasks (`P1-12`, `P1-16`, `P1-26`) while treating Issue #2 as tracked security debt that must be implemented before Phase 1 Gate 2 sign-off.
 
 ---
 
@@ -622,7 +622,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-10 Compliance Dashboard UI
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged via `02409c9`)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx, apps/web/src/components/compliance/compliance-dashboard.tsx, compliance-checklist-item.tsx, compliance-badge.tsx, apps/web/src/lib/utils/pdf-export.ts
 - **Dependencies:** P1-09, P0-03
 - **Blocks:** P1-29
@@ -685,7 +685,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-13 Document Text Extraction
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged via `54afb8c`)
 - **Files to Create/Modify:** apps/web/src/lib/workers/pdf-extraction.ts, apps/web/src/lib/utils/extract-pdf-text.ts, packages/db/src/schema/documents.ts (verify search_text, search_vector columns), apps/web/__tests__/pdf-extraction/
 - **Dependencies:** P1-11, P0-05
 - **Blocks:** P1-14
@@ -805,7 +805,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-19 CSV Import
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged via `dbc9cec`)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/import-residents/route.ts, apps/web/src/lib/utils/csv-validator.ts, apps/web/src/components/residents/csv-import-dialog.tsx, csv-preview-table.tsx, csv-error-report.tsx
 - **Dependencies:** P1-18
 - **Blocks:** None
@@ -824,7 +824,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-20 Invitation Auth Flow
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged via `b2335fc`)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/invitations/route.ts, packages/email/src/templates/invitation-email.tsx, apps/web/src/app/auth/accept-invite/page.tsx, apps/web/src/components/auth/set-password-form.tsx, apps/web/__tests__/invitations/
 - **Dependencies:** P1-18, P0-04
 - **Blocks:** None directly
@@ -950,18 +950,18 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-26 Notification Preferences
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** In Progress (worktree implementation in progress; not yet merged to `main`)
 - **Files to Create/Modify:** packages/db/src/schema/notification-preferences.ts (verify table exists from P0-05), apps/web/src/app/(authenticated)/settings/page.tsx, apps/web/src/components/settings/notification-preferences.tsx, apps/web/src/lib/utils/email-preferences.ts, apps/web/__tests__/notification-preferences/
 - **Dependencies:** P0-05, P1-18
 - **Blocks:** P2-41
 - **Acceptance Criteria:**
-  - Preferences saved: email_frequency (immediate, daily_digest, weekly_digest, never), email_announcements (boolean), email_meetings (boolean), in_app_enabled (boolean)
-  - Email sending respects both frequency and per-notification-type toggles
+  - Preferences saved: email_announcements (boolean), email_documents (boolean), email_meetings (boolean), email_maintenance (boolean)
+  - Email sending respects per-notification-type toggles
   - Settings page renders current preferences and saves changes
-  - Default preference for new users: immediate + email_announcements=true + email_meetings=true + in_app_enabled=true
+  - Default preference for new users: email_announcements=true + email_documents=true + email_meetings=true + email_maintenance=true
 - **Known Pitfalls:**
   - [AGENTS #32] Verify notification preferences before sending any non-critical email. Critical emails (password reset, invitation) always send regardless of preference.
-- **Testing:** Preference CRUD test. Default-values test. Update persistence test. Critical email test: set preference to "never" → trigger password reset → verify email IS sent. Non-critical announcement-email suppression is validated in P1-17c integration tests (`email_announcements=false` and `email_frequency='never'` cases).
+- **Testing:** Preference CRUD test. Default-values test. Update persistence test. Critical email test: disable all non-critical toggles and trigger password reset → verify email IS sent. Non-critical announcement-email suppression is validated in P1-17c integration tests (`email_announcements=false` case).
 - **Estimated Effort:** Small
 - **Risk:** Low
 

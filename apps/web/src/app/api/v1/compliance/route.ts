@@ -14,6 +14,7 @@ import {
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import {
   calculateComplianceStatus,
@@ -81,6 +82,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, communityType } = parsedBody.data;
+  await requireCommunityMembership(communityId, userId);
   const scoped = createScopedClient(communityId);
 
   // Guard: ensure community exists in current tenant context.

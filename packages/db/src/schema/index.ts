@@ -13,6 +13,8 @@ export * from './notification-preferences';
 export * from './compliance-audit-log';
 export * from './compliance-checklist-items';
 export * from './invitations';
+export * from './meetings';
+export * from './meeting-documents';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -28,6 +30,8 @@ import type { notificationPreferences } from './notification-preferences';
 import type { complianceAuditLog } from './compliance-audit-log';
 import type { complianceChecklistItems } from './compliance-checklist-items';
 import type { invitations } from './invitations';
+import type { meetings } from './meetings';
+import type { meetingDocuments } from './meeting-documents';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -71,3 +75,11 @@ export type NewComplianceChecklistItem = typeof complianceChecklistItems.$inferI
 // Invitations
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+
+// Meetings
+export type Meeting = typeof meetings.$inferSelect;
+export type NewMeeting = typeof meetings.$inferInsert;
+
+// Meeting Documents
+export type MeetingDocument = typeof meetingDocuments.$inferSelect;
+export type NewMeetingDocument = typeof meetingDocuments.$inferInsert;

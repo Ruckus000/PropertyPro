@@ -4,6 +4,7 @@ import { createPresignedUploadUrl } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
@@ -33,7 +34,7 @@ function validateFileSize(mimeType: string, fileSize: number): void {
 }
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  await requireAuthenticatedUserId();
+  const userId = await requireAuthenticatedUserId();
 
   const body: unknown = await req.json();
   const parseResult = presignSchema.safeParse(body);
@@ -45,6 +46,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, fileName, fileSize, mimeType } = parseResult.data;
+  await requireCommunityMembership(communityId, userId);
   validateFileSize(mimeType, fileSize);
 
   const documentId = crypto.randomUUID();

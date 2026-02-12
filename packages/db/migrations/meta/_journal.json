@@ -15,6 +15,20 @@
       "when": 1770847885060,
       "tag": "0001_condemned_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770902637217,
+      "tag": "0002_invitation_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770902660815,
+      "tag": "0003_meetings",
+      "breakpoints": true
     }
   ]
 }

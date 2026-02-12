@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
+  createPresignedDownloadUrl,
   createScopedClient,
   documents,
   logAuditEvent,
@@ -8,8 +9,10 @@ import {
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
+import { validateFile } from '@/lib/utils/file-validation';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -19,8 +22,19 @@ const createDocumentSchema = z.object({
   filePath: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
-  mimeType: z.string().min(1),
+  mimeType: z.string().min(1).optional(),
 });
+
+async function downloadStorageBytes(path: string): Promise<Uint8Array> {
+  const signedUrl = await createPresignedDownloadUrl('documents', path, 300);
+  const res = await fetch(signedUrl);
+  if (!res.ok) {
+    throw new ValidationError(`Unable to read uploaded file from storage (status ${res.status})`);
+  }
+
+  const buffer = await res.arrayBuffer();
+  return new Uint8Array(buffer);
+}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
@@ -49,6 +63,18 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const payload = parseResult.data;
+  await requireCommunityMembership(payload.communityId, userId);
+
+  const storageBytes = await downloadStorageBytes(payload.filePath);
+  if (storageBytes.byteLength !== payload.fileSize) {
+    throw new ValidationError('Uploaded file size does not match storage object size');
+  }
+
+  const validation = await validateFile(storageBytes, storageBytes.byteLength);
+  if (!validation.ok || !validation.type) {
+    throw new ValidationError(validation.error ?? 'Unsupported file type');
+  }
+
   const scoped = createScopedClient(payload.communityId);
 
   const insertedRows = await scoped.insert(documents, {
@@ -57,8 +83,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     categoryId: payload.categoryId ?? null,
     filePath: payload.filePath,
     fileName: payload.fileName,
-    fileSize: payload.fileSize,
-    mimeType: payload.mimeType,
+    fileSize: storageBytes.byteLength,
+    mimeType: validation.type.mime,
     uploadedBy: userId,
   });
 
@@ -78,14 +104,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       categoryId: payload.categoryId ?? null,
       filePath: payload.filePath,
       fileName: payload.fileName,
-      fileSize: payload.fileSize,
-      mimeType: payload.mimeType,
+      fileSize: storageBytes.byteLength,
+      mimeType: validation.type.mime,
     },
   });
 
   // Fire-and-forget: trigger PDF text extraction without delaying the response
   try {
-    if (payload.mimeType.toLowerCase().includes('pdf')) {
+    if (validation.type.mime.toLowerCase().includes('pdf')) {
       const docId = Number((created as Record<string, unknown>)['id']);
       const communityId = Number((created as Record<string, unknown>)['communityId'] ?? payload.communityId);
       if (Number.isFinite(docId) && Number.isFinite(communityId)) {
@@ -93,7 +119,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           communityId,
           documentId: docId,
           path: payload.filePath,
-          mimeType: payload.mimeType,
+          mimeType: validation.type.mime,
           bucket: 'documents',
         });
       }

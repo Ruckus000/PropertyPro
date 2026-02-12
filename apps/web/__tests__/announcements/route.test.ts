@@ -1,16 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
   createScopedClientMock,
   auditLogMock,
   announcementsTableMock,
+  requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   auditLogMock: vi.fn().mockResolvedValue(undefined),
   announcementsTableMock: {
     id: Symbol('announcements.id'),
   },
+  requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -18,13 +23,25 @@ vi.mock('@propertypro/db', () => ({
   announcements: announcementsTableMock,
 }));
 
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
 vi.mock('@/lib/middleware/audit-middleware', () => ({
-  withAuditLog: (_extractContext: unknown, handler: unknown) => {
+  withAuditLog: (extractContext: unknown, handler: unknown) => {
     return async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
+      const extracted = await (extractContext as (
+        r: NextRequest,
+        c?: { params: Promise<Record<string, string>> },
+      ) => Promise<{ userId: string; communityId: number }>)(req, context);
       return (handler as (r: NextRequest, c: unknown, audit: unknown) => Promise<Response>)(
         req,
         context,
-        { log: auditLogMock },
+        { ...extracted, log: auditLogMock },
       );
     };
   },
@@ -35,6 +52,7 @@ import { GET, POST } from '../../src/app/api/v1/announcements/route';
 describe('p1-17 announcements route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
 
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockResolvedValue([]),
@@ -151,7 +169,6 @@ describe('p1-17 announcements route', () => {
         audience: 'all',
         isPinned: false,
         communityId: 200,
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
       }),
       headers: {
         'content-type': 'application/json',
@@ -169,7 +186,7 @@ describe('p1-17 announcements route', () => {
       expect.objectContaining({
         title: 'Board Meeting',
         audience: 'all',
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
+        publishedBy: 'session-user-1',
       }),
     );
     expect(auditLogMock).toHaveBeenCalledWith(
@@ -210,7 +227,6 @@ describe('p1-17 announcements route', () => {
         audience: 'all',
         isPinned: false,
         communityId: 777,
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
       }),
       headers: {
         'content-type': 'application/json',
@@ -219,5 +235,27 @@ describe('p1-17 announcements route', () => {
 
     await POST(req);
     expect(createScopedClientMock).toHaveBeenCalledWith(777);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(777, 'session-user-1');
+  });
+
+  it('POST returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Scoped',
+        body: 'Scoped body',
+        audience: 'all',
+        isPinned: false,
+        communityId: 777,
+      }),
+      headers: {
+        'content-type': 'application/json',
+      },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
   });
 });

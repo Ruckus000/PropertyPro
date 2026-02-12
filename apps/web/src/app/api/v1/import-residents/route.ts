@@ -16,6 +16,7 @@ import { validateResidentCsv } from "@/lib/utils/csv-validator";
 import { validateRoleAssignment } from "@/lib/utils/role-validator";
 import type { CommunityRole, CommunityType } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
+import { requireCommunityMembership } from "@/lib/api/community-membership";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
@@ -41,7 +42,7 @@ function getInsertedStringId(row: Record<string, unknown> | undefined): string |
 }
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  await requireAuthenticatedUserId();
+  const actorUserId = await requireAuthenticatedUserId();
 
   const body: unknown = await req.json();
   const parsed = importSchema.safeParse(body);
@@ -50,6 +51,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, csv, dryRun } = parsed.data;
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   // Parse and validate CSV
@@ -172,7 +174,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // Audit log one event per created user with bulkCount metadata
   for (const cu of createdUsers) {
     await logAuditEvent({
-      userId: cu.userId,
+      userId: actorUserId,
       action: "user_invited",
       resourceType: "resident",
       resourceId: cu.userId,

@@ -23,6 +23,7 @@ import {
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 
@@ -64,6 +65,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, userId, ttlDays } = parsed.data;
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   // Load community for branding

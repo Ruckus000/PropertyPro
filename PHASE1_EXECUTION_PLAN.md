@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; red-findings remediation is merged; Batch 2 kickoff is active
+**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; red-findings remediation is merged; Batch 2 is partially complete
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -30,9 +30,10 @@ Milestones:
 - [2026-02-12] Batch 1 red-findings remediation merged (`codex/p1-batch1-red-findings-remediation` → `main`, merge commit `18c356d`) — merge gate passed with `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and db integration tests; middleware auth split coverage (`401` API unauthenticated, `403` API unverified, page-route redirects) and route-level unauthenticated mutation rejection coverage were confirmed in test suite.
 - [2026-02-12] Batch 2 kickoff unblocked (`main`) — Issue #2 (`communityId` membership authorization) remains intentionally deferred from remediation and is tracked as required security debt before Phase 1 Gate 2 sign-off.
 - [2026-02-12] Batch 2 branch/worktree kickoff executed (`main`, commit `ae517d4`) — created `codex/p1-10-compliance-dashboard-ui`, `codex/p1-12-magic-bytes`, `codex/p1-13-text-extraction`, `codex/p1-16-meeting-management`, `codex/p1-19-csv-import`, `codex/p1-20-invitation-auth`, and `codex/p1-26-notification-preferences` on `../pp-worktrees/p1-10`, `../pp-worktrees/p1-12`, `../pp-worktrees/p1-13`, `../pp-worktrees/p1-16`, `../pp-worktrees/p1-19`, `../pp-worktrees/p1-20`, and `../pp-worktrees/p1-26`.
+- [2026-02-12] Batch 2 partial merges landed on `main` — merged `P1-10` (`02409c9`), `P1-13` (`54afb8c`), `P1-19` (`dbc9cec`), and `P1-20` (`b2335fc`); remaining Batch 2 tasks are `P1-12`, `P1-16`, and `P1-26`.
 
 Current cursor:
-- Next actions: run parallel implementation loops in existing Batch 2 worktrees for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
+- Next actions: finish remaining Batch 2 worktrees for `P1-12`, `P1-16`, and `P1-26`; merge to `main`, then implement Issue #2 authorization hardening across all authenticated `/api/v1` mutation routes.
 - Gate note: Issue #2 authorization hardening must be implemented and validated before Phase 1 Gate 2 sign-off (`403` on authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects).
 
 ---
@@ -818,17 +819,17 @@ ralph -n 8 -p "ALL TESTS PASSING" \
 Key requirements:
 - notification_preferences table already exists from P0-05 schema — verify structure and adapt if needed
 - Settings page at apps/web/src/app/(authenticated)/settings/page.tsx
-- Preferences: email_frequency (immediate, daily_digest, weekly_digest, never), email_announcements (boolean, default true), email_meetings (boolean, default true), in_app_enabled (boolean)
-- Email sending must respect frequency preference
-- Default for new users: immediate + in_app_enabled
+- Preferences: email_announcements (boolean, default true), email_documents (boolean, default true), email_meetings (boolean, default true), email_maintenance (boolean, default true)
+- Email sending must respect per-notification-type toggles
+- Default for new users: all notification toggles enabled
 - CRITICAL: Password reset and invitation emails always send regardless of preference
 - Call logAuditEvent() from packages/db for preference updates (settings_changed event)
 
 Tests:
 - Preference CRUD
-- Default values applied for new users (immediate frequency, all types enabled)
+- Default values applied for new users (all types enabled)
 - Preference updates persist correctly
-- Set preference to 'never' → password reset email IS sent (critical emails bypass preferences)
+- Disable all non-critical toggles → password reset email IS sent (critical emails bypass preferences)
 - Audit log entries created for preference changes
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).
@@ -841,13 +842,15 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 Same pattern as Batch 1. Expected schema conflicts: `meetings.ts` and `meeting-documents.ts` from P1-16 are new files (no conflict). Schema index barrel file will need manual resolution.
 
 ```bash
+# Already merged earlier in Batch 2:
+# - codex/p1-10-compliance-dashboard-ui
+# - codex/p1-13-text-extraction
+# - codex/p1-19-csv-import
+# - codex/p1-20-invitation-auth
+
 git merge codex/p1-12-magic-bytes
-git merge codex/p1-13-text-extraction
-git merge codex/p1-19-csv-import
-git merge codex/p1-20-invitation-auth
-git merge codex/p1-26-notification-preferences
-git merge codex/p1-10-compliance-dashboard-ui
 git merge codex/p1-16-meeting-management
+git merge codex/p1-26-notification-preferences
 
 # Migration commands — use DIRECT connection (bypasses PgBouncer)
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
@@ -898,11 +901,11 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ralph -n 8 -p "ALL TESTS PASSING" \
   "Implement announcement email integration. Wire the announcement publish flow to send email notifications.
 
-Announcements (P1-17), email infrastructure (P1-28), and notification preferences (P1-26) are all implemented.
+Announcements (P1-17) and email infrastructure (P1-28) are already implemented. Start this only after `P1-26` is merged.
 
 Key requirements:
 - Add email sending hook to announcement publish flow in apps/web/src/app/api/v1/announcements/route.ts
-- Check notification_preferences: email_announcements=true AND email_frequency != 'never' before sending
+- Check notification_preferences: email_announcements=true before sending
 - Use the announcement React Email template from packages/email/src/templates/announcement.tsx
 - Queue emails asynchronously — NEVER block the publish response waiting for email delivery
 - Batch email sending for large recipient lists (max 100 per Resend API call)
@@ -911,9 +914,8 @@ Key requirements:
 - Call logAuditEvent() for announcement_email_sent action with recipient count
 
 Tests:
-- Publish announcement → email sent to users with email_announcements=true AND email_frequency != 'never'
+- Publish announcement → email sent to users with email_announcements=true
 - Publish announcement → NO email to users with email_announcements=false
-- Publish announcement → NO email to users with email_frequency='never' (regardless of email_announcements)
 - Target audience filtering: board_only announcement → only board members receive email
 - Large recipient list → batched correctly (mock Resend to verify batch sizes)
 - Async verification: publish response returns before emails are sent
@@ -928,7 +930,7 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ralph -n 10 -p "ALL TESTS PASSING" \
   "Read IMPLEMENTATION_PLAN.md task P1-23 (Public Website). Implement it fully.
 
-Meeting management (P1-16) is implemented — meetings and notices data is available.
+Meeting management (P1-16) must be merged before this task starts.
 
 Key requirements:
 - Public pages at apps/web/src/app/(public)/[subdomain]/
@@ -954,7 +956,7 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ralph -n 8 -p "ALL TESTS PASSING" \
   "Read IMPLEMENTATION_PLAN.md task P1-24 (Resident Portal Dashboard). Implement it fully.
 
-Meetings (P1-16) and announcements (P1-17) are implemented.
+Announcements (P1-17) are implemented. `P1-16` must be merged before this task starts.
 
 Key requirements:
 - Dashboard at apps/web/src/app/(authenticated)/dashboard/page.tsx
@@ -980,7 +982,7 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 ralph -n 8 -p "ALL TESTS PASSING" \
   "Read IMPLEMENTATION_PLAN.md task P1-29 (Demo Seed Data). Implement it fully.
 
-Compliance engine, dashboard UI, document upload, and magic bytes are all implemented.
+Compliance engine, dashboard UI, and document upload are implemented. `P1-12` (magic bytes) must be merged before this task starts.
 
 Key requirements:
 - Seed script at scripts/seed-demo.ts, runnable via pnpm seed:demo
@@ -1027,7 +1029,7 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 ralph -n 10 -p "ALL TESTS PASSING" \
   "Read IMPLEMENTATION_PLAN.md task P1-15 (Document Management UI). Implement it fully.
 
-Document upload (P1-11), magic bytes (P1-12), and search (P1-14) are all implemented.
+Document upload (P1-11) is implemented. Start this after `P1-12` and `P1-14` are merged.
 
 Key requirements:
 - Document management page at apps/web/src/app/(authenticated)/communities/[id]/documents/page.tsx
@@ -1128,6 +1130,7 @@ After all Phase 1 tasks are merged and verified, run the Gate 2 checklist from I
 - [ ] Date edge cases (DST, leap year, weekends) all pass
 - [ ] Demo seed script runs cleanly (`pnpm seed:demo`)
 - [ ] `pnpm build && pnpm typecheck` clean
+- [ ] Issue #2 authorization hardening verified (`403` for authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects)
 
 ---
 

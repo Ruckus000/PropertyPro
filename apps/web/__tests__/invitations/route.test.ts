@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
   createScopedClientMock,
@@ -14,6 +15,7 @@ const {
   userRolesTable,
   invitationsTable,
   requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   scopedQueryMock: vi.fn(),
@@ -27,6 +29,7 @@ const {
   userRolesTable: Symbol('user_roles'),
   invitationsTable: Symbol('invitations'),
   requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -40,6 +43,10 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
 vi.mock('@propertypro/email', () => ({
@@ -85,6 +92,7 @@ describe('p1-20 invitation auth flow', () => {
     expect(res.status).toBe(201);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(99);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(99, 'inviter-uuid');
     expect(scopedInsertMock).toHaveBeenCalledWith(
       invitationsTable,
       expect.objectContaining({ userId: 'user-1' }),
@@ -104,6 +112,19 @@ describe('p1-20 invitation auth flow', () => {
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'user_invited', communityId: 99 }),
     );
+  });
+
+  it('POST returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 99, userId: 'user-1', ttlDays: 7 }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
   });
 
   it('PATCH consumes token, creates auth user, and returns email', async () => {
