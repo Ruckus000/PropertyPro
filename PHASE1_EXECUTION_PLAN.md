@@ -29,9 +29,10 @@ Milestones:
 - [2026-02-11] Batch 1 verification gate (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all passed after merges.
 - [2026-02-12] Batch 1 red-findings remediation merged (`codex/p1-batch1-red-findings-remediation` → `main`, merge commit `18c356d`) — merge gate passed with `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and db integration tests; middleware auth split coverage (`401` API unauthenticated, `403` API unverified, page-route redirects) and route-level unauthenticated mutation rejection coverage were confirmed in test suite.
 - [2026-02-12] Batch 2 kickoff unblocked (`main`) — Issue #2 (`communityId` membership authorization) remains intentionally deferred from remediation and is tracked as required security debt before Phase 1 Gate 2 sign-off.
+- [2026-02-12] Batch 2 branch/worktree kickoff executed (`main`, commit `ae517d4`) — created `codex/p1-10-compliance-dashboard-ui`, `codex/p1-12-magic-bytes`, `codex/p1-13-text-extraction`, `codex/p1-16-meeting-management`, `codex/p1-19-csv-import`, `codex/p1-20-invitation-auth`, and `codex/p1-26-notification-preferences` on `../pp-worktrees/p1-10`, `../pp-worktrees/p1-12`, `../pp-worktrees/p1-13`, `../pp-worktrees/p1-16`, `../pp-worktrees/p1-19`, `../pp-worktrees/p1-20`, and `../pp-worktrees/p1-26`.
 
 Current cursor:
-- Next actions: execute Batch 2 branch creation and parallel implementation for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
+- Next actions: run parallel implementation loops in existing Batch 2 worktrees for `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26`; follow the same per-branch verification and post-merge gate workflow.
 - Gate note: Issue #2 authorization hardening must be implemented and validated before Phase 1 Gate 2 sign-off (`403` on authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects).
 
 ---
@@ -632,7 +633,17 @@ git worktree remove ../pp-worktrees/p1-09
 **Depends on:** All Batch 1 tasks merged to main
 **Estimated time:** 1-2 days
 
-Worktree setup same pattern as Batch 1. Each branch created from current `main` (which now includes all Batch 1 work).
+Worktree setup command set from `main`:
+
+```bash
+git worktree add ../pp-worktrees/p1-10 -b codex/p1-10-compliance-dashboard-ui
+git worktree add ../pp-worktrees/p1-12 -b codex/p1-12-magic-bytes
+git worktree add ../pp-worktrees/p1-13 -b codex/p1-13-text-extraction
+git worktree add ../pp-worktrees/p1-16 -b codex/p1-16-meeting-management
+git worktree add ../pp-worktrees/p1-19 -b codex/p1-19-csv-import
+git worktree add ../pp-worktrees/p1-20 -b codex/p1-20-invitation-auth
+git worktree add ../pp-worktrees/p1-26 -b codex/p1-26-notification-preferences
+```
 
 #### Ralph prompts for Batch 2:
 
@@ -830,13 +841,13 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 Same pattern as Batch 1. Expected schema conflicts: `meetings.ts` and `meeting-documents.ts` from P1-16 are new files (no conflict). Schema index barrel file will need manual resolution.
 
 ```bash
-git merge feature/p1-12-magic-bytes
-git merge feature/p1-13-text-extraction
-git merge feature/p1-19-csv-import
-git merge feature/p1-20-invitation-auth
-git merge feature/p1-26-notification-preferences
-git merge feature/p1-10-compliance-dashboard-ui
-git merge feature/p1-16-meeting-management
+git merge codex/p1-12-magic-bytes
+git merge codex/p1-13-text-extraction
+git merge codex/p1-19-csv-import
+git merge codex/p1-20-invitation-auth
+git merge codex/p1-26-notification-preferences
+git merge codex/p1-10-compliance-dashboard-ui
+git merge codex/p1-16-meeting-management
 
 # Migration commands — use DIRECT connection (bypasses PgBouncer)
 DATABASE_URL=$DIRECT_DATABASE_URL pnpm drizzle-kit generate
