@@ -33,3 +33,13 @@ export type { AuditAction, AuditEventParams } from './utils/audit-logger';
 
 // Schema & types
 export * from './schema';
+
+// Query helpers
+export { searchDocuments } from './queries/document-search';
+export type {
+  DocumentSearchItem,
+  DocumentSearchParams,
+  DocumentSearchResult,
+} from './queries/document-search';
+
+export { findCommunityBySlugUnscoped } from './queries/community-lookup';

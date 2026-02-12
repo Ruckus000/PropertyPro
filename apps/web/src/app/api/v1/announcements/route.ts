@@ -7,7 +7,7 @@
  * - createScopedClient for cross-tenant isolation
  * - Zod validation for input
  *
- * Email delivery is deferred to P1-17c.
+ * P1-17c: Publish flow queues non-blocking announcement email delivery.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -15,6 +15,8 @@ import {
   createScopedClient,
   type Announcement,
   announcements,
+  logAuditEvent,
+  users,
 } from '@propertypro/db';
 import { eq } from 'drizzle-orm';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -24,6 +26,10 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import {
+  queueAnnouncementDelivery,
+  type AnnouncementAudience,
+} from '@/lib/services/announcement-delivery';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -32,7 +38,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 const createAnnouncementSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500, 'Title must be 500 characters or fewer'),
   body: z.string().min(1, 'Body is required'),
-  audience: z.enum(['all', 'board_only']).default('all'),
+  audience: z.enum(['all', 'owners_only', 'board_only', 'tenants_only']).default('all'),
   isPinned: z.boolean().default(false),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
 });
@@ -42,7 +48,7 @@ const updateAnnouncementSchema = z.object({
   communityId: z.number().int().positive('Community ID must be a positive integer'),
   title: z.string().min(1, 'Title is required').max(500, 'Title must be 500 characters or fewer').optional(),
   body: z.string().min(1, 'Body is required').optional(),
-  audience: z.enum(['all', 'board_only']).optional(),
+  audience: z.enum(['all', 'owners_only', 'board_only', 'tenants_only']).optional(),
   isPinned: z.boolean().optional(),
 });
 
@@ -173,6 +179,44 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
     resourceId: String(created.id),
     newValues: { title: data.title, audience: data.audience, isPinned: data.isPinned },
   });
+
+  const authorRows = await scoped.query(users);
+  const author = authorRows.find((row) => row['id'] === audit.userId);
+  const authorName =
+    typeof author?.['fullName'] === 'string'
+      ? (author['fullName'] as string)
+      : 'Community Team';
+
+  void queueAnnouncementDelivery({
+    communityId,
+    announcementId: created.id,
+    audience: data.audience as AnnouncementAudience,
+    title: data.title,
+    body: data.body,
+    isPinned: data.isPinned,
+    authorName,
+  })
+    .then(async (recipientCount) => {
+      await logAuditEvent({
+        userId: audit.userId,
+        action: 'announcement_email_sent',
+        resourceType: 'announcement',
+        resourceId: String(created.id),
+        communityId,
+        metadata: {
+          recipientCount,
+          audience: data.audience,
+        },
+      });
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error('[announcements] asynchronous delivery failed', {
+        communityId,
+        announcementId: created.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

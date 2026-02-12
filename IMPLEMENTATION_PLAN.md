@@ -1,13 +1,13 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-12 (v11 — Batch 1 merged on main; red-findings remediation merged; Batch 2 partially complete)
+Generated: 2026-02-12 (v14 — Batch 3 implemented and verified on main; cursor moved to Batch 4)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is partially complete on `main`: `P1-10` (`02409c9`), `P1-13` (`54afb8c`), `P1-19` (`dbc9cec`), and `P1-20` (`b2335fc`) are merged; `P1-12`, `P1-16`, and `P1-26` remain pending. Issue #2 authorization hardening remains explicitly deferred to pre-Gate-2 completion, so Gate 2 is not yet satisfied.
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is complete on `main` with `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26` landed; Issue #2 membership authorization hardening is implemented on authenticated mutation routes and verified. Batch 3 is implemented and verification is green on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with migration `0004_boring_whistler`; Phase 1 Gate 2 remains pending the remaining Phase 1 feature closeout (`P1-15`, `P1-25`, and `P1-27` endpoint adoption finalization).
 
-### Progress Snapshot (2026-02-11)
+### Progress Snapshot (2026-02-12)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
 - Added Gate 0 schema sign-off integration suite: `packages/db/__tests__/schema-gate0.integration.test.ts` executes migration SQL against a temp schema via `DIRECT_URL` and validates tables, enums, FK `ON DELETE`, and package-root exports.
 - Added P0-04 storage integration suite: `packages/db/__tests__/supabase-storage.integration.test.ts` validates presigned upload/download/delete with the Supabase `documents` bucket prerequisite now satisfied.
@@ -23,8 +23,17 @@ Generated: 2026-02-12 (v11 — Batch 1 merged on main; red-findings remediation 
 - Merge-hygiene follow-up: `pnpm-lock.yaml` was repaired post-merge to resolve a lockfile conflict (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`) before final gate verification.
 - Red-findings remediation was merged to `main` via `18c356d`, including server-side session identity enforcement for protected mutation routes and middleware JSON API responses (`401` unauthenticated, `403` unverified) for `/api/v1/*`.
 - Removed legacy client `x-user-id` header injection and updated route/auth middleware tests to session-based behavior, including deterministic middleware refresh-transition coverage.
-- Open follow-up (pre-Gate-2 requirement): GitHub Issue #2 (`security`, `multi-tenant`, `backend`) tracks `communityId` membership authorization hardening that is intentionally deferred from this merged remediation pass and remains required before Phase 1 Gate 2 sign-off.
+- Batch 2 completion checkpoint: `P1-12` (magic-bytes validation), `P1-16` (meeting management), and `P1-26` (notification preferences) are integrated on `main` with test coverage.
+- Issue #2 hardening is now implemented on authenticated mutation routes via shared community-membership enforcement, returning `403` for non-member foreign-`communityId` attempts and preserving success paths for valid members.
+- Drizzle migration state was reconciled after manual migration sequencing (`0002_invitation_auth`, `0003_meetings`), and `pnpm --filter @propertypro/db db:generate` now reports no schema drift.
+- Latest verification run is green: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` (`17/17`).
 - Remediation merge gate (behavior-focused): require `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`, plus confirmed passing behavior coverage for middleware auth splits (`apps/web/__tests__/auth/session-management.test.ts`) and unauthenticated mutation rejection in upload/documents/compliance route tests.
+- Batch 3 implementation checkpoint landed on `main`: P1-14 document search, P1-17c announcement email delivery logging, P1-23 public website, P1-24 resident dashboard, and P1-29 demo seed script with non-destructive idempotency.
+- Batch 3 migration checkpoint: generated `packages/db/migrations/0004_boring_whistler.sql` adding `announcement_delivery_log`, `demo_seed_registry`, and the `documents.search_vector` GIN index.
+- Post-Batch-3 verification checkpoint: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all pass; `pnpm --filter @propertypro/db db:generate` remains no-op.
+- Seed compatibility checkpoint: `scripts/seed-demo.ts` now preserves canonical-role behavior on current schema while adding legacy fallback mapping and deterministic non-registry upsert paths when older db environments are missing `demo_seed_registry` or canonical `user_role` constraints.
+- Batch 3 audit follow-up: Added `findCommunityBySlugUnscoped` to `@propertypro/db` for public tenant resolution (previously used a `createScopedClient(1)` workaround).
+- **Phase 4 Tech Debt:** Announcement email delivery (`P1-17c`) uses fire-and-forget pattern within request context; consider Vercel `waitUntil()` or a job queue (Inngest/Trigger.dev) for production reliability.
 
 ---
 
@@ -568,9 +577,9 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ---
 
-## Phase 1 Execution Readiness (2026-02-11)
+## Phase 1 Execution Readiness (2026-02-12)
 
-- **Status:** In Progress (Batch 0 and Batch 1 merged; Batch 1 red-findings remediation merged on `main`; Batch 2 partially complete on `main`)
+- **Status:** In Progress (Batch 0 through Batch 3 are implemented and verified on `main`; execution has advanced to Batch 4)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -579,7 +588,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** `P1-27` remains `In Progress` because core infrastructure is merged while endpoint adoption continues. Batch 1 feature tasks (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`) plus red-findings remediation are complete on `main`, and Batch 2 is partially complete (`P1-10`, `P1-13`, `P1-19`, `P1-20`). Continue with remaining Batch 2 tasks (`P1-12`, `P1-16`, `P1-26`) while treating Issue #2 as tracked security debt that must be implemented before Phase 1 Gate 2 sign-off.
+- **Tracking Note:** `P1-27` remains `In Progress` because infrastructure is merged while broader endpoint adoption continues. Batch 3 feature tasks are implemented and verified on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with additive migration sequencing validated by a no-op generation check; proceed to Batch 4 (`P1-15`) and Batch 5 (`P1-25`) toward Gate 2 completion.
 
 ---
 
@@ -661,7 +670,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-12 Magic Bytes Validation
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged on `main`)
 - **Files to Create/Modify:** apps/web/src/lib/utils/file-validation.ts, apps/web/src/lib/middleware/validate-upload.ts, apps/web/__tests__/file-validation/
 - **Dependencies:** P1-11
 - **Blocks:** P1-15, P1-29
@@ -705,7 +714,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-14 Document Search
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented and verified on `main`)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/documents/search/route.ts, packages/db/src/queries/document-search.ts, apps/web/src/components/documents/document-search.tsx, apps/web/__tests__/document-search/
 - **Dependencies:** P1-13, P0-06
 - **Blocks:** P1-15, P1-25
@@ -744,7 +753,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-16 Meeting Management
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, merged on `main`)
 - **Files to Create/Modify:** packages/db/src/schema/meetings.ts, packages/db/src/schema/meeting-documents.ts, apps/web/src/app/api/v1/meetings/route.ts, apps/web/src/lib/utils/meeting-calculator.ts, apps/web/src/components/meetings/meeting-form.tsx, meeting-list.tsx
 - **Dependencies:** P0-05, P0-06, P1-09
 - **Blocks:** P1-23, P1-24
@@ -769,7 +778,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Blocks:** P1-24
 - **Acceptance Criteria:**
   - Announcements created and displayed in resident portal
-  - Announcement publish flow exposes the integration hook for notification delivery; actual email delivery is completed in execution subtask P1-17c after P1-26 and P1-28
+  - Announcement publish flow sends email delivery asynchronously through the P1-17c integration path, logs per-recipient delivery status, and records summary audit events
   - Pin/featured announcements appear at top
   - Archive functionality hides old announcements from default view
 - **Known Pitfalls:**
@@ -884,7 +893,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-23 Public Website
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented and verified on `main`)
 - **Files to Create/Modify:** apps/web/src/app/(public)/[subdomain]/page.tsx, apps/web/src/app/(public)/[subdomain]/notices/page.tsx, apps/web/src/app/(public)/[subdomain]/not-found.tsx, apps/web/src/components/public/public-home.tsx, public-notices.tsx
 - **Dependencies:** P0-05, P0-03, P1-16
 - **Blocks:** None
@@ -905,7 +914,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-24 Resident Portal Dashboard
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented and verified on `main`)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/dashboard/page.tsx, apps/web/src/components/dashboard/dashboard-welcome.tsx, dashboard-announcements.tsx, dashboard-meetings.tsx, dashboard-quick-links.tsx
 - **Dependencies:** P0-03, P1-17, P1-16, P0-06
 - **Blocks:** P3-48
@@ -950,7 +959,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-26 Notification Preferences
 - **Phase:** 1
-- **Status:** In Progress (worktree implementation in progress; not yet merged to `main`)
+- **Status:** Complete (implemented, tested, merged on `main`)
 - **Files to Create/Modify:** packages/db/src/schema/notification-preferences.ts (verify table exists from P0-05), apps/web/src/app/(authenticated)/settings/page.tsx, apps/web/src/components/settings/notification-preferences.tsx, apps/web/src/lib/utils/email-preferences.ts, apps/web/__tests__/notification-preferences/
 - **Dependencies:** P0-05, P1-18
 - **Blocks:** P2-41
@@ -990,6 +999,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Remaining work is endpoint adoption: ensure each new Batch 1 mutation route calls `logAuditEvent` directly or via `withAuditLog`.
   - Red-findings remediation merged to `main` via `18c356d` and added endpoint adoption/hardening for mutation routes (`upload`, `documents`, `compliance`) by removing trust in client `x-user-id` and enforcing Supabase session identity server-side.
   - Follow-up Issue #2 (labels: `security`, `multi-tenant`, `backend`) remains open by decision and is deferred from this remediation pass; keep `P1-27` status as `In Progress`, and require authorization-layer implementation/verification before Phase 1 Gate 2 sign-off.
+  - [2026-02-12] Batch 2 route adoption and Issue #2 hardening landed on `main`: shared community-membership authorization checks were applied across authenticated mutation handlers (`announcements`, `residents`, `documents`, `upload`, `compliance`, `import-residents`, `invitations`, `meetings`, `notification-preferences`) and validated by route-level tests and db integration coverage.
 - **Testing:** Append-only test: attempt UPDATE on `compliance_audit_log` → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A board_president cannot see community B's audit trail.
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Must be wired into every mutation route. Easy to miss one. Consider adding a lint rule or code review checklist.
@@ -1020,8 +1030,8 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-29 Demo Seed Data
 - **Phase:** 1
-- **Status:** Not Started
-- **Files to Create/Modify:** scripts/seed-demo.ts, scripts/config/demo-data.ts, apps/web/__tests__/seed.integration.test.ts
+- **Status:** Complete (implemented and verified on `main`)
+- **Files to Create/Modify:** scripts/seed-demo.ts, scripts/config/demo-data.ts, packages/db/src/schema/demo-seed-registry.ts, packages/db/__tests__/seed-demo.integration.test.ts
 - **Dependencies:** P1-09, P1-10, P1-11, P1-12
 - **Blocks:** P2-44, P4-61
 - **Acceptance Criteria:**

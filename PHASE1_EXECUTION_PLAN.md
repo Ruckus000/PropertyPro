@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0, Batch 0.5, and Batch 1 are merged on `main`; red-findings remediation is merged; Batch 2 is partially complete
+**Status:** In Progress — Batch 0 through Batch 3 are implemented and verified on `main`; execution cursor has advanced to Batch 4
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -31,10 +31,18 @@ Milestones:
 - [2026-02-12] Batch 2 kickoff unblocked (`main`) — Issue #2 (`communityId` membership authorization) remains intentionally deferred from remediation and is tracked as required security debt before Phase 1 Gate 2 sign-off.
 - [2026-02-12] Batch 2 branch/worktree kickoff executed (`main`, commit `ae517d4`) — created `codex/p1-10-compliance-dashboard-ui`, `codex/p1-12-magic-bytes`, `codex/p1-13-text-extraction`, `codex/p1-16-meeting-management`, `codex/p1-19-csv-import`, `codex/p1-20-invitation-auth`, and `codex/p1-26-notification-preferences` on `../pp-worktrees/p1-10`, `../pp-worktrees/p1-12`, `../pp-worktrees/p1-13`, `../pp-worktrees/p1-16`, `../pp-worktrees/p1-19`, `../pp-worktrees/p1-20`, and `../pp-worktrees/p1-26`.
 - [2026-02-12] Batch 2 partial merges landed on `main` — merged `P1-10` (`02409c9`), `P1-13` (`54afb8c`), `P1-19` (`dbc9cec`), and `P1-20` (`b2335fc`); remaining Batch 2 tasks are `P1-12`, `P1-16`, and `P1-26`.
+- [2026-02-12] Batch 2 completion landed on `main` — merged remaining Batch 2 tasks (`P1-12`, `P1-16`, `P1-26`) and validated route/test integration.
+- [2026-02-12] Issue #2 hardening implemented on `main` — shared community-membership authorization guard added across authenticated `/api/v1` mutation routes; authenticated non-member foreign-`communityId` mutations return `403` and member mutations preserve expected behavior.
+- [2026-02-12] Migration reconciliation completed on `main` — Drizzle metadata chain aligned for manual sequencing (`0002_invitation_auth`, `0003_meetings`) and schema drift check now reports no pending generation.
+- [2026-02-12] Batch 2 verification gate rerun (`main`) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` passed (`17/17`).
+- [2026-02-12] Batch 3 implementation landed (`main`, commit pending) — completed `P1-14`, `P1-17c`, `P1-23`, `P1-24`, and `P1-29`, including new tenant resolver utilities, document search API/query layer, announcement delivery logging, public website routes, resident dashboard, and demo seed script with `demo_seed_registry`.
+- [2026-02-12] Batch 3 migration generation completed (`main`, commit pending) — generated `0004_boring_whistler` (adds `announcement_delivery_log`, `demo_seed_registry`, and document search GIN index) and confirmed `pnpm --filter @propertypro/db db:generate` is no-op post-generation.
+- [2026-02-12] Batch 3 verification checkpoint (`main`, commit pending) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, and `pnpm test` passed; db integration rerun in this execution environment is blocked by DNS/network resolution (`ENOTFOUND aws-0-us-west-2.pooler.supabase.com`), so Gate 2 remains pending external rerun.
+- [2026-02-12] Batch 3 verification rerun completed (`main`, commit pending) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all passed after seed compatibility updates for legacy db role/constraint drift (`6/6`, `20/20` integration).
 
 Current cursor:
-- Next actions: finish remaining Batch 2 worktrees for `P1-12`, `P1-16`, and `P1-26`; merge to `main`, then implement Issue #2 authorization hardening across all authenticated `/api/v1` mutation routes.
-- Gate note: Issue #2 authorization hardening must be implemented and validated before Phase 1 Gate 2 sign-off (`403` on authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects).
+- Next actions: begin Batch 4 execution from `main` with `P1-15` (Document Management UI), then continue Batch 5 (`P1-25`) once dependencies are merged.
+- Gate note: Issue #2 hardening requirement and Batch 3 verification gates are satisfied on `main`; Phase 1 Gate 2 remains pending completion of remaining Phase 1 tasks (`P1-15`, `P1-25`, and `P1-27` endpoint adoption closeout).
 
 ---
 
@@ -840,6 +848,7 @@ Completion criteria: pnpm build && pnpm typecheck && pnpm test all pass. Output 
 #### Batch 2 merge procedure:
 
 Same pattern as Batch 1. Expected schema conflicts: `meetings.ts` and `meeting-documents.ts` from P1-16 are new files (no conflict). Schema index barrel file will need manual resolution.
+Execution note (2026-02-12): this procedure has been completed on `main`; retain commands here as the repeatable template for future batch merges.
 
 ```bash
 # Already merged earlier in Batch 2:

@@ -211,6 +211,14 @@ export function createScopedClient(
       return ctx.communityId;
     },
 
+    buildWhere(table, additionalWhere) {
+      const filters = buildScopeFilters(table, ctx.communityId);
+      if (additionalWhere) {
+        filters.push(additionalWhere);
+      }
+      return combineFilters(filters);
+    },
+
     async query(table) {
       const filters = buildScopeFilters(table, ctx.communityId);
       return execSelect(database, table, combineFilters(filters));

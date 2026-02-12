@@ -17,6 +17,12 @@ export interface ScopedClient {
   /** SELECT with tenant + soft-delete scoping applied. */
   query: (table: ScopedTable) => Promise<ScopedRow[]>;
 
+  /**
+   * Build a scoped WHERE clause for advanced read queries.
+   * This preserves automatic community + soft-delete scoping.
+   */
+  buildWhere: (table: ScopedTable, additionalWhere?: SQL) => SQL | undefined;
+
   /** INSERT with communityId ownership enforced by scope. */
   insert: (table: ScopedTable, data: ScopedRow) => Promise<ScopedRow[]>;
 

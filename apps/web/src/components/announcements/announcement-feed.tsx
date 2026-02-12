@@ -88,11 +88,21 @@ export function AnnouncementFeed({
                     Archived
                   </span>
                 )}
-                {announcement.audience === 'board_only' && (
+                {announcement.audience === 'board_only' ? (
                   <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                     Board Only
                   </span>
-                )}
+                ) : null}
+                {announcement.audience === 'owners_only' ? (
+                  <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                    Owners Only
+                  </span>
+                ) : null}
+                {announcement.audience === 'tenants_only' ? (
+                  <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                    Tenants Only
+                  </span>
+                ) : null}
               </div>
               <span className="text-xs text-[var(--text-tertiary)] dark:text-gray-500">
                 {formatDate(announcement.publishedAt)}

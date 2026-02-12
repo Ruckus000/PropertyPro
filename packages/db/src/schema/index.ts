@@ -9,12 +9,14 @@ export * from './units';
 export * from './document-categories';
 export * from './documents';
 export * from './announcements';
+export * from './announcement-delivery-log';
 export * from './notification-preferences';
 export * from './compliance-audit-log';
 export * from './compliance-checklist-items';
 export * from './invitations';
 export * from './meetings';
 export * from './meeting-documents';
+export * from './demo-seed-registry';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -26,12 +28,14 @@ import type { units } from './units';
 import type { documentCategories } from './document-categories';
 import type { documents } from './documents';
 import type { announcements } from './announcements';
+import type { announcementDeliveryLog } from './announcement-delivery-log';
 import type { notificationPreferences } from './notification-preferences';
 import type { complianceAuditLog } from './compliance-audit-log';
 import type { complianceChecklistItems } from './compliance-checklist-items';
 import type { invitations } from './invitations';
 import type { meetings } from './meetings';
 import type { meetingDocuments } from './meeting-documents';
+import type { demoSeedRegistry } from './demo-seed-registry';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -61,6 +65,10 @@ export type NewDocument = typeof documents.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
 
+// Announcement Delivery Log
+export type AnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferSelect;
+export type NewAnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferInsert;
+
 // Notification Preferences
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;
@@ -83,3 +91,7 @@ export type NewMeeting = typeof meetings.$inferInsert;
 // Meeting Documents
 export type MeetingDocument = typeof meetingDocuments.$inferSelect;
 export type NewMeetingDocument = typeof meetingDocuments.$inferInsert;
+
+// Demo Seed Registry
+export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;
+export type NewDemoSeedRegistryRecord = typeof demoSeedRegistry.$inferInsert;

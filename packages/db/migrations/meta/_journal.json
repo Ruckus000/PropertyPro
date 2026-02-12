@@ -29,6 +29,13 @@
       "when": 1770902660815,
       "tag": "0003_meetings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770924460099,
+      "tag": "0004_boring_whistler",
+      "breakpoints": true
     }
   ]
 }

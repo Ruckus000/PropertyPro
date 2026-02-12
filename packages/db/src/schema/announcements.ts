@@ -27,7 +27,7 @@ export const announcements = pgTable('announcements', {
   title: text('title').notNull(),
   /** Rich-text body content (stored as HTML) */
   body: text('body').notNull(),
-  /** Target audience: 'all' (all residents), 'board_only' (board members only) */
+  /** Target audience: all, owners_only, board_only, tenants_only */
   audience: text('audience').notNull().default('all'),
   /** When true, the announcement is pinned to the top of the feed */
   isPinned: boolean('is_pinned').notNull().default(false),

@@ -8,7 +8,7 @@
 
 import React, { useState, useCallback, type FormEvent } from 'react';
 
-export type AnnouncementAudience = 'all' | 'board_only';
+export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
 export interface AnnouncementComposerProps {
   communityId: number;
@@ -130,7 +130,9 @@ export function AnnouncementComposer({
             className="rounded-md border border-[var(--border-default)] bg-[var(--surface-default)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="all">All Residents</option>
+            <option value="owners_only">Owners Only</option>
             <option value="board_only">Board Members Only</option>
+            <option value="tenants_only">Tenants Only</option>
           </select>
         </label>
 

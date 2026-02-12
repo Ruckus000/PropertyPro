@@ -5,15 +5,21 @@ import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 const {
   createScopedClientMock,
   auditLogMock,
+  logAuditEventMock,
+  queueAnnouncementDeliveryMock,
   announcementsTableMock,
+  usersTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   auditLogMock: vi.fn().mockResolvedValue(undefined),
+  logAuditEventMock: vi.fn().mockResolvedValue(undefined),
+  queueAnnouncementDeliveryMock: vi.fn().mockResolvedValue(3),
   announcementsTableMock: {
     id: Symbol('announcements.id'),
   },
+  usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
@@ -21,6 +27,8 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   announcements: announcementsTableMock,
+  users: usersTableMock,
+  logAuditEvent: logAuditEventMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -47,6 +55,10 @@ vi.mock('@/lib/middleware/audit-middleware', () => ({
   },
 }));
 
+vi.mock('@/lib/services/announcement-delivery', () => ({
+  queueAnnouncementDelivery: queueAnnouncementDeliveryMock,
+}));
+
 import { GET, POST } from '../../src/app/api/v1/announcements/route';
 
 describe('p1-17 announcements route', () => {
@@ -55,7 +67,12 @@ describe('p1-17 announcements route', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
 
     createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
+      query: vi.fn().mockImplementation(async (table) => {
+        if (table === usersTableMock) {
+          return [{ id: 'session-user-1', fullName: 'Session User' }];
+        }
+        return [];
+      }),
       insert: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue([]),
     });
@@ -156,7 +173,12 @@ describe('p1-17 announcements route', () => {
     const insert = vi.fn().mockResolvedValue([createdRow]);
 
     createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
+      query: vi.fn().mockImplementation(async (table) => {
+        if (table === usersTableMock) {
+          return [{ id: 'session-user-1', fullName: 'Session User' }];
+        }
+        return [];
+      }),
       insert,
       update: vi.fn(),
     });
@@ -196,12 +218,24 @@ describe('p1-17 announcements route', () => {
         resourceId: '9',
       }),
     );
+    expect(queueAnnouncementDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 200,
+        announcementId: 9,
+        audience: 'all',
+      }),
+    );
     expect(json.data.id).toBe(9);
   });
 
   it('POST create keeps tenant context scoped by body communityId', async () => {
     createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
+      query: vi.fn().mockImplementation(async (table) => {
+        if (table === usersTableMock) {
+          return [{ id: 'session-user-1', fullName: 'Session User' }];
+        }
+        return [];
+      }),
       insert: vi.fn().mockResolvedValue([
         {
           id: 4,

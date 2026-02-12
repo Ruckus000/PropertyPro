@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
+    "seed:demo": "node scripts/seed-demo.ts",
     "test:watch": "vitest",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
