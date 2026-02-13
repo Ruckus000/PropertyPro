@@ -15,6 +15,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import {
   calculateComplianceStatus,
@@ -29,6 +30,7 @@ const generateChecklistSchema = z.object({
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
   const { searchParams } = new URL(req.url);
   const parsedCommunityId = communityIdQuerySchema.safeParse(searchParams.get('communityId'));
 
@@ -38,7 +40,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const communityId = parsedCommunityId.data;
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
+  await requireCommunityMembership(communityId, userId);
   const scoped = createScopedClient(communityId);
 
   const rows = await scoped.query(complianceChecklistItems);
@@ -81,7 +84,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId, communityType } = parsedBody.data;
+  const communityId = resolveEffectiveCommunityId(req, parsedBody.data.communityId);
+  const { communityType } = parsedBody.data;
   await requireCommunityMembership(communityId, userId);
   const scoped = createScopedClient(communityId);
 

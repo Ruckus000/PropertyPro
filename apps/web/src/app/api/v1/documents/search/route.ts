@@ -5,6 +5,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const querySchema = z.object({
@@ -39,10 +40,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const userId = await requireAuthenticatedUserId();
   const params = parseResult.data;
-  const membership = await requireCommunityMembership(params.communityId, userId);
+  const communityId = resolveEffectiveCommunityId(req, params.communityId);
+  const membership = await requireCommunityMembership(communityId, userId);
 
   const result = await searchDocuments({
-    communityId: params.communityId,
+    communityId,
     query: params.q,
     categoryId: params.categoryId,
     mimeType: params.mimeType,

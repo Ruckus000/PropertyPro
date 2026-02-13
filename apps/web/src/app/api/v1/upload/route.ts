@@ -5,6 +5,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
@@ -48,7 +49,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId, fileName, fileSize, mimeType } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const { fileName, fileSize, mimeType } = parseResult.data;
   await requireCommunityMembership(communityId, userId);
   validateFileSize(mimeType, fileSize);
 

@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
-const { getUserMock, createMiddlewareClientMock } = vi.hoisted(() => ({
+const { getUserMock, createMiddlewareClientMock, fromMock, selectMock, eqMock, isMock, limitMock } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
   createMiddlewareClientMock: vi.fn(),
+  fromMock: vi.fn(),
+  selectMock: vi.fn(),
+  eqMock: vi.fn(),
+  isMock: vi.fn(),
+  limitMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
@@ -12,8 +17,13 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
 
 import { middleware } from '../../src/middleware';
 
-function request(url: string, headers?: Record<string, string>): NextRequest {
+function request(
+  url: string,
+  headers?: Record<string, string>,
+  method: string = 'GET',
+): NextRequest {
   return new NextRequest(url, {
+    method,
     headers,
   });
 }
@@ -22,11 +32,21 @@ describe('p1-22 session middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    limitMock.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+    isMock.mockReturnValue({ limit: limitMock });
+    eqMock.mockReturnValue({ is: isMock });
+    selectMock.mockReturnValue({ eq: eqMock });
+    fromMock.mockReturnValue({ select: selectMock });
+
     createMiddlewareClientMock.mockResolvedValue({
       supabase: {
         auth: {
           getUser: getUserMock,
         },
+        from: fromMock,
       },
       response: NextResponse.next(),
     });
@@ -66,6 +86,54 @@ describe('p1-22 session middleware', () => {
     expect(response.headers.get('content-type')).toContain('application/json');
     expect(response.headers.get('location')).toBeNull();
     expect(json.error).toBe('Unauthorized');
+  });
+
+  it('allows unauthenticated invitation token acceptance route', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/invitations', {}, 'PATCH'),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('keeps unauthenticated POST /api/v1/invitations protected', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/invitations', {}, 'POST'),
+    );
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(401);
+    expect(json.error).toBe('Unauthorized');
+  });
+
+  it('returns 404 for reserved tenant subdomains before auth checks', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/documents', {
+        host: 'admin.propertyprofl.com',
+      }),
+    );
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(404);
+    expect(json.error).toBe('Not Found');
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for unknown tenant subdomains', async () => {
+    limitMock.mockResolvedValueOnce({
+      data: [],
+      error: null,
+    });
+
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/documents', {
+        host: 'unknown.propertyprofl.com',
+      }),
+    );
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(404);
+    expect(json.error).toBe('Not Found');
   });
 
   it('redirects authenticated but unverified users to /auth/verify-email', async () => {

@@ -3,7 +3,8 @@
  *
  * Header conventions:
  * - request ID: `x-request-id`
- * - tenant/community ID: `x-community-id` (fallback `x-tenant-id`)
+ * - tenant/community ID: `x-community-id`
+ *   (legacy fallback `x-tenant-id` retained temporarily for compatibility)
  * - user ID: `x-user-id`
  */
 export interface SentryRequestContext {
@@ -13,6 +14,7 @@ export interface SentryRequestContext {
 }
 
 const REQUEST_ID_HEADER = 'x-request-id';
+// TODO(P2-30 hardening follow-up): remove x-tenant-id fallback after migration window.
 const COMMUNITY_ID_HEADERS: readonly string[] = ['x-community-id', 'x-tenant-id'];
 const USER_ID_HEADERS: readonly string[] = ['x-user-id'];
 

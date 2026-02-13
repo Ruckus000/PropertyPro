@@ -23,6 +23,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { withAuditLog } from '@/lib/middleware/audit-middleware';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
@@ -69,6 +70,7 @@ const archiveActionSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
   const { searchParams } = new URL(req.url);
   const communityIdParam = searchParams.get('communityId');
   const includeArchived = searchParams.get('includeArchived') === 'true';
@@ -77,10 +79,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('communityId query parameter is required');
   }
 
-  const communityId = Number(communityIdParam);
-  if (!Number.isInteger(communityId) || communityId <= 0) {
+  const parsedCommunityId = Number(communityIdParam);
+  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
     throw new ValidationError('communityId must be a positive integer');
   }
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+  await requireCommunityMembership(communityId, userId);
 
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(announcements);
@@ -108,10 +112,11 @@ export const POST = withErrorHandler(
     async (req: NextRequest) => {
       const body = await req.clone().json() as Record<string, unknown>;
       const rawCommunityId = body['communityId'];
-      const communityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
-      if (!Number.isInteger(communityId) || communityId <= 0) {
+      const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+      if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
         throw new ValidationError('communityId must be a positive integer');
       }
+      const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
 
       const userId = await requireAuthenticatedUserId();
       await requireCommunityMembership(communityId, userId);
@@ -120,21 +125,25 @@ export const POST = withErrorHandler(
     },
     async (req, _ctx, audit) => {
       const body = await req.json() as Record<string, unknown>;
-      const action = body['action'] as string | undefined;
+      const normalizedBody: Record<string, unknown> = {
+        ...body,
+        communityId: audit.communityId,
+      };
+      const action = normalizedBody['action'] as string | undefined;
 
       // Route to the appropriate handler based on action
       if (action === 'update') {
-        return handleUpdate(body, audit);
+        return handleUpdate(normalizedBody, audit);
       }
       if (action === 'pin') {
-        return handlePin(body, audit);
+        return handlePin(normalizedBody, audit);
       }
       if (action === 'archive') {
-        return handleArchive(body, audit);
+        return handleArchive(normalizedBody, audit);
       }
 
       // Default: create
-      return handleCreate(body, audit);
+      return handleCreate(normalizedBody, audit);
     },
   ),
 );

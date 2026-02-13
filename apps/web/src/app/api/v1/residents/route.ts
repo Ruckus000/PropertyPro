@@ -29,6 +29,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 
@@ -74,6 +75,7 @@ async function getCommunityType(communityId: number): Promise<CommunityType> {
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  const actorUserId = await requireAuthenticatedUserId();
   const { searchParams } = new URL(req.url);
   const rawCommunityId = searchParams.get('communityId');
 
@@ -84,7 +86,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const communityId = communityIdResult.data;
+  const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
+  await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);
@@ -137,7 +140,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId, email, fullName, phone, role, unitId } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const { email, fullName, phone, role, unitId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
@@ -238,7 +242,14 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId, userId, fullName, phone, role, unitId } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const {
+    userId,
+    fullName,
+    phone,
+    role,
+    unitId,
+  } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
@@ -344,7 +355,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId, userId } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const { userId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);

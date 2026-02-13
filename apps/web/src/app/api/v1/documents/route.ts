@@ -12,6 +12,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
@@ -49,6 +50,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (!Number.isInteger(communityId) || communityId <= 0) {
     throw new ValidationError('communityId query parameter is required and must be a positive integer');
   }
+  const effectiveCommunityId = resolveEffectiveCommunityId(req, communityId);
   let categoryId: number | null = null;
   if (categoryIdRaw != null) {
     const parsedCategoryId = Number(categoryIdRaw);
@@ -58,11 +60,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     categoryId = parsedCategoryId;
   }
 
-  const membership = await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(effectiveCommunityId, userId);
 
   const rows = await getAccessibleDocuments(
     {
-      communityId,
+      communityId: effectiveCommunityId,
       role: membership.role,
       communityType: membership.communityType,
     },
@@ -85,7 +87,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const payload = parseResult.data;
-  await requireCommunityMembership(payload.communityId, userId);
+  const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await requireCommunityMembership(effectiveCommunityId, userId);
 
   const storageBytes = await downloadStorageBytes(payload.filePath);
   if (storageBytes.byteLength !== payload.fileSize) {
@@ -97,7 +100,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError(validation.error ?? 'Unsupported file type');
   }
 
-  const scoped = createScopedClient(payload.communityId);
+  const scoped = createScopedClient(effectiveCommunityId);
 
   const insertedRows = await scoped.insert(documents, {
     title: payload.title,
@@ -120,7 +123,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     action: 'create',
     resourceType: 'document',
     resourceId: String(created['id']),
-    communityId: payload.communityId,
+    communityId: effectiveCommunityId,
     newValues: {
       title: payload.title,
       categoryId: payload.categoryId ?? null,
@@ -135,7 +138,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   try {
     if (validation.type.mime.toLowerCase().includes('pdf')) {
       const docId = Number((created as Record<string, unknown>)['id']);
-      const communityId = Number((created as Record<string, unknown>)['communityId'] ?? payload.communityId);
+      const communityId = Number((created as Record<string, unknown>)['communityId'] ?? effectiveCommunityId);
       if (Number.isFinite(docId) && Number.isFinite(communityId)) {
         queuePdfExtraction({
           communityId,
@@ -173,7 +176,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { id, communityId } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const { id } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
   if (!isElevatedRole(membership.role)) {
     throw new ForbiddenError('Only elevated roles can delete documents');

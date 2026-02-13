@@ -17,6 +17,7 @@ import { validateRoleAssignment } from "@/lib/utils/role-validator";
 import type { CommunityRole, CommunityType } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
+import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
@@ -50,7 +51,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError("Invalid import request", { fields: formatZodErrors(parsed.error) });
   }
 
-  const { communityId, csv, dryRun } = parsed.data;
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const { csv, dryRun } = parsed.data;
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 

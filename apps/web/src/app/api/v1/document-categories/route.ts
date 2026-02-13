@@ -8,6 +8,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const querySchema = z.object({
@@ -28,7 +29,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   await requireCommunityMembership(communityId, userId);
 
   const scoped = createScopedClient(communityId);

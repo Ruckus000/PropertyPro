@@ -23,6 +23,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import {
   calculateMinutesPostingDeadline,
@@ -104,16 +105,19 @@ function coerceMeeting(row: Record<string, unknown>): Meeting {
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  const actorUserId = await requireAuthenticatedUserId();
   const { searchParams } = new URL(req.url);
   const rawCommunityId = searchParams.get('communityId');
   if (!rawCommunityId) {
     throw new ValidationError('communityId query parameter is required');
   }
 
-  const communityId = Number(rawCommunityId);
-  if (!Number.isInteger(communityId) || communityId <= 0) {
+  const parsedCommunityId = Number(rawCommunityId);
+  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
     throw new ValidationError('communityId must be a positive integer');
   }
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+  await requireCommunityMembership(communityId, actorUserId);
 
   const scoped = createScopedClient(communityId);
   const communityType = await getCommunityType(communityId);
@@ -145,19 +149,21 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = (await req.json()) as Record<string, unknown>;
   const action = (body['action'] as string | undefined) ?? 'create';
   const rawCommunityId = body['communityId'];
-  const communityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
-  if (!Number.isInteger(communityId) || communityId <= 0) {
+  const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
     throw new ValidationError('communityId must be a positive integer');
   }
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+  const normalizedBody = { ...body, communityId };
 
   const actorUserId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, actorUserId);
 
-  if (action === 'update') return handleUpdate(body, actorUserId);
-  if (action === 'delete') return handleDelete(body, actorUserId);
-  if (action === 'attach') return handleAttach(body, actorUserId);
-  if (action === 'detach') return handleDetach(body, actorUserId);
-  return handleCreate(body, actorUserId);
+  if (action === 'update') return handleUpdate(normalizedBody, actorUserId);
+  if (action === 'delete') return handleDelete(normalizedBody, actorUserId);
+  if (action === 'attach') return handleAttach(normalizedBody, actorUserId);
+  if (action === 'detach') return handleDetach(normalizedBody, actorUserId);
+  return handleCreate(normalizedBody, actorUserId);
 });
 
 // ---------------------------------------------------------------------------

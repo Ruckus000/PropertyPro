@@ -24,6 +24,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 
@@ -64,7 +65,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Validation failed');
   }
 
-  const { communityId, userId, ttlDays } = parsed.data;
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const { userId, ttlDays } = parsed.data;
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
@@ -135,7 +137,10 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Validation failed');
   }
 
-  const { communityId, token, password } = parsed.data;
+  // Token-authenticated exception: invitation acceptance does not require
+  // an authenticated session user. Middleware allows this endpoint through.
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const { token, password } = parsed.data;
   const scoped = createScopedClient(communityId);
 
   const invitationRows = await scoped.query(invitationsTable);

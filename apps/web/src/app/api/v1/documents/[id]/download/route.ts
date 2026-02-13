@@ -9,6 +9,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 
 const querySchema = z.object({
@@ -42,7 +43,8 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     });
   }
 
-  const { communityId, attachment } = parseResult.data;
+  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  const { attachment } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
 
   // Use access-aware document retrieval (returns null if not accessible)

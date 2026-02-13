@@ -3,31 +3,67 @@
  *
  * Responsibilities:
  * 1. Refresh Supabase auth session without blocking rendering
- * 2. Redirect unauthenticated users away from protected routes to /auth/login?returnTo=<original>
- * 3. Redirect authenticated but unverified users to /auth/verify-email
- * 4. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
+ * 2. Resolve tenant context for protected routes and return 404 on invalid tenants
+ * 3. Redirect unauthenticated users away from protected routes to /auth/login?returnTo=<original>
+ * 4. Redirect authenticated but unverified users to /auth/verify-email
+ * 5. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
+ * 6. Forward server-controlled tenant/user headers and strip spoofed inbound values
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
+import { resolveCommunityContext } from '@propertypro/shared';
 
 /**
  * Routes under (authenticated) that require a valid session.
  * The Next.js route group `(authenticated)` is stripped from the URL,
  * so we match on the actual URL paths that live inside that group.
  */
-const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/maintenance', '/communities', '/api/v1'];
+const PROTECTED_PATH_PREFIXES = [
+  '/dashboard',
+  '/settings',
+  '/documents',
+  '/maintenance',
+  '/communities',
+  '/api/v1',
+];
 const API_PATH_PREFIX = '/api/v1';
+const TOKEN_AUTH_ROUTE = '/api/v1/invitations';
+const TOKEN_AUTH_METHOD = 'PATCH';
 
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
 const VERIFY_EMAIL_PATH = '/auth/verify-email';
 
+const COMMUNITY_ID_HEADER = 'x-community-id';
+const TENANT_SLUG_HEADER = 'x-tenant-slug';
+const TENANT_SOURCE_HEADER = 'x-tenant-source';
+const USER_ID_HEADER = 'x-user-id';
+
+const TENANT_CACHE_MAX_ENTRIES = 256;
+const TENANT_CACHE_TTL_MS = 5 * 60 * 1000;
+const TENANT_NEGATIVE_CACHE_TTL_MS = 30 * 1000;
+
+type TenantCacheEntry = {
+  communityId: number | null;
+  expiresAt: number;
+};
+
+const tenantCache = new Map<string, TenantCacheEntry>();
+
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+function shouldResolveTenant(pathname: string): boolean {
+  return isProtectedPath(pathname);
+}
+
 function isApiPath(pathname: string): boolean {
   return pathname.startsWith(API_PATH_PREFIX);
+}
+
+function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
+  return request.nextUrl.pathname === TOKEN_AUTH_ROUTE && request.method === TOKEN_AUTH_METHOD;
 }
 
 function buildReturnTo(request: NextRequest): string {
@@ -50,6 +86,93 @@ function withTracingAndCookies(
   return target;
 }
 
+function notFoundResponse(
+  request: NextRequest,
+  source: NextResponse,
+  requestId: string,
+): NextResponse {
+  const target = isApiPath(request.nextUrl.pathname)
+    ? NextResponse.json({ error: 'Not Found' }, { status: 404 })
+    : new NextResponse('Not Found', { status: 404 });
+  return withTracingAndCookies(source, target, requestId);
+}
+
+function internalErrorResponse(
+  request: NextRequest,
+  source: NextResponse,
+  requestId: string,
+): NextResponse {
+  const target = isApiPath(request.nextUrl.pathname)
+    ? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    : new NextResponse('Internal Server Error', { status: 500 });
+  return withTracingAndCookies(source, target, requestId);
+}
+
+function readTenantCache(slug: string): number | null | undefined {
+  const entry = tenantCache.get(slug);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    tenantCache.delete(slug);
+    return undefined;
+  }
+  return entry.communityId;
+}
+
+function writeTenantCache(slug: string, communityId: number | null): void {
+  if (tenantCache.size >= TENANT_CACHE_MAX_ENTRIES) {
+    const oldestKey = tenantCache.keys().next().value;
+    if (oldestKey) {
+      tenantCache.delete(oldestKey);
+    }
+  }
+
+  tenantCache.set(slug, {
+    communityId,
+    expiresAt:
+      Date.now() +
+      (communityId == null ? TENANT_NEGATIVE_CACHE_TTL_MS : TENANT_CACHE_TTL_MS),
+  });
+}
+
+async function findCommunityIdBySlug(
+  supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
+  slug: string,
+): Promise<number | null> {
+  const cached = readTenantCache(slug);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const { data, error } = await supabase
+    .from('communities')
+    .select('id')
+    .eq('slug', slug)
+    .is('deleted_at', null)
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const communityId =
+    typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id)
+      ? data[0].id
+      : null;
+
+  writeTenantCache(slug, communityId);
+  return communityId;
+}
+
+function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Headers {
+  const headers = new Headers(request.headers);
+  headers.delete(COMMUNITY_ID_HEADER);
+  headers.delete(TENANT_SLUG_HEADER);
+  headers.delete(TENANT_SOURCE_HEADER);
+  headers.delete(USER_ID_HEADER);
+  headers.set('x-request-id', requestId);
+  return headers;
+}
+
 /**
  * NOTE: pnpm may resolve separate `next` virtual packages for the web app
  * and the db package (due to differing optional peers from @sentry/nextjs).
@@ -63,19 +186,48 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
-
-  // AGENTS #45: Generate a UUID request ID for tracing
-  response.headers.set('X-Request-ID', requestId);
-
+  const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
   const { pathname } = request.nextUrl;
+
+  // Tenant resolution for protected routes occurs before auth checks.
+  // This prevents exposing auth state on invalid tenant requests.
+  if (shouldResolveTenant(pathname)) {
+    const tenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+    });
+
+    if (tenantContext.isReservedSubdomain) {
+      return notFoundResponse(request, response as unknown as NextResponse, requestId);
+    }
+
+    if (tenantContext.tenantSlug) {
+      try {
+        const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+        if (communityId == null) {
+          return notFoundResponse(request, response as unknown as NextResponse, requestId);
+        }
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } catch {
+        return internalErrorResponse(request, response as unknown as NextResponse, requestId);
+      }
+    }
+  }
 
   // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
+    const isTokenAuthRoute = isTokenAuthenticatedApiRoute(request);
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (user) {
+      forwardedHeaders.set(USER_ID_HEADER, user.id);
+    }
+
+    if (!user && !isTokenAuthRoute) {
       if (isApiPath(pathname)) {
         return withTracingAndCookies(
           response as unknown as NextResponse,
@@ -94,7 +246,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
+    if (user && !isTokenAuthRoute && !user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
       if (isApiPath(pathname)) {
         return withTracingAndCookies(
           response as unknown as NextResponse,
@@ -147,7 +299,16 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return response as unknown as NextResponse;
+  const nextResponse = NextResponse.next({
+    request: {
+      headers: forwardedHeaders,
+    },
+  });
+  return withTracingAndCookies(
+    response as unknown as NextResponse,
+    nextResponse,
+    requestId,
+  );
 }
 
 export const config = {
