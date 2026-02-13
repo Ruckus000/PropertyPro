@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-12 (v14 — Batch 3 implemented and verified on main; cursor moved to Batch 4)
+Generated: 2026-02-13 (v15 — POA v2 remediation rollout closeout, Gate 2 preflight checklist added)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is complete on `main` with `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26` landed; Issue #2 membership authorization hardening is implemented on authenticated mutation routes and verified. Batch 3 is implemented and verification is green on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with migration `0004_boring_whistler`; Phase 1 Gate 2 remains pending the remaining Phase 1 feature closeout (`P1-15`, `P1-25`, and `P1-27` endpoint adoption finalization).
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is complete on `main` with `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26` landed; Issue #2 membership authorization hardening is implemented on authenticated mutation routes and verified. Batch 3 is implemented and verification is green on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with migration `0004_boring_whistler`. POA v2 remediation for strict document-access behavior (WS2/WS1/WS3) is implemented end-to-end on `main`; Phase 1 Gate 2 remains pending staging/prod seed verification and remaining feature closeout (`P1-25` and final `P1-27` endpoint-adoption confirmation).
 
 ### Progress Snapshot (2026-02-12)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -34,6 +34,30 @@ Generated: 2026-02-12 (v14 — Batch 3 implemented and verified on main; cursor 
 - Seed compatibility checkpoint: `scripts/seed-demo.ts` now preserves canonical-role behavior on current schema while adding legacy fallback mapping and deterministic non-registry upsert paths when older db environments are missing `demo_seed_registry` or canonical `user_role` constraints.
 - Batch 3 audit follow-up: Added `findCommunityBySlugUnscoped` to `@propertypro/db` for public tenant resolution (previously used a `createScopedClient(1)` workaround).
 - **Phase 4 Tech Debt:** Announcement email delivery (`P1-17c`) uses fire-and-forget pattern within request context; consider Vercel `waitUntil()` or a job queue (Inngest/Trigger.dev) for production reliability.
+
+### POA v2 Rollout Closeout (2026-02-13)
+- Smoke checks (role/category/delete boundaries) passed in focused suites:
+  - `pnpm -C /Users/jphilistin/Documents/Coding/PropertyPro exec vitest run packages/shared/__tests__/access-policies.test.ts apps/web/__tests__/documents/document-categories-route.test.ts apps/web/__tests__/documents/document-category-filter.test.tsx apps/web/__tests__/upload/documents-route.test.ts apps/web/__tests__/documents/search-route.test.ts apps/web/__tests__/documents/document-download-route.test.ts apps/web/__tests__/documents/document-versions-route.test.ts`
+  - Result: `7/7` files and `48/48` tests passed.
+- Staging/prod seed execution and category coverage verification runbook:
+  - Staging seed: `set -a; source .env.staging; set +a; pnpm seed:demo`
+  - Production seed: `set -a; source .env.production; set +a; pnpm seed:demo`
+  - Local execution evidence (same code-path coverage, db-backed): `set -a; source .env.local; set +a; pnpm -C /Users/jphilistin/Documents/Coding/PropertyPro --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/seed-demo.integration.test.ts __tests__/document-access.integration.test.ts __tests__/document-search.integration.test.ts` → `3/3` files, `6/6` tests passed.
+  - Coverage verification SQL:
+    - `select c.slug, c.community_type, count(dc.id) as category_count from communities c left join document_categories dc on dc.community_id = c.id and dc.deleted_at is null and dc.is_system = true where c.slug in ('sunset-condos','palm-shores-hoa','bay-view-apartments') group by c.slug, c.community_type order by c.slug;`
+    - Expected counts: `sunset-condos=5`, `palm-shores-hoa=5`, `bay-view-apartments=6`.
+    - `select c.slug, count(*) filter (where d.category_id is null) as docs_without_category, count(*) as total_docs from communities c join documents d on d.community_id = c.id and d.deleted_at is null where c.slug in ('sunset-condos','palm-shores-hoa','bay-view-apartments') group by c.slug order by c.slug;`
+    - Expected `docs_without_category=0` for seeded docs.
+  - Observed verification results (2026-02-13): `bay-view-apartments=6`, `palm-shores-hoa=5`, `sunset-condos=5`; `docs_without_category=0` in all three demo communities.
+  - Execution note: staging/prod seed execution is still environment-owned; runbook above is the source of truth for production rollout.
+- Follow-up Issue #3 (labels: `ui`, `documents`, `tech-debt`) opened in this plan backlog:
+  - Scope: resolve the document version-history caveat in `apps/web/src/components/documents/document-version-history.tsx` so resident-visible history and policy semantics are explicit and test-covered.
+  - Acceptance criteria: define/implement canonical behavior for category lineage across versions, add route/component tests for mixed-category history, and remove caveat copy once behavior is deterministic.
+- Release note draft (POA v2 remediation):
+  - Enforced strict document access matrix at policy and query layers with normalized category-name mapping.
+  - Added role-aware document management UX and elevated-role DELETE enforcement (`403` for restricted roles).
+  - Seed script now idempotently provisions system categories by community type and assigns seeded document categories.
+  - Added API/UI tests for document categories and empty-state filter UX; expanded integration coverage for strict access/search behavior.
 
 ---
 
@@ -734,7 +758,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-15 Document Management UI
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete on `main` (POA v2 remediation landed); follow-up caveat tracked as Follow-up Issue #3
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/communities/[id]/documents/page.tsx, apps/web/src/components/documents/document-upload-area.tsx, document-list.tsx, document-viewer.tsx, document-version-history.tsx
 - **Dependencies:** P1-11, P1-12, P1-14, P0-03
 - **Blocks:** P1-25
@@ -744,10 +768,11 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Document viewer opens documents (PDF viewer for PDFs, download for others)
   - Version history displays for documents with multiple versions
   - Delete functionality with soft-delete
-- **Known Pitfalls:** None specific
-- **Testing:** Component tests for upload area (drag events), document list rendering, filter interactions.
+- **Known Pitfalls:**
+  - Version-history category lineage behavior is functional but has a known caveat in the current UI copy; see Follow-up Issue #3 in the 2026-02-13 POA v2 rollout closeout notes.
+- **Testing:** Component tests for upload area (drag events), document list rendering, filter interactions, plus route/component coverage for role-aware delete actions, category filtering, and document version/download/search route threading.
 - **Estimated Effort:** Medium
-- **Risk:** Low
+- **Risk:** Medium — core behavior is merged, but version-history caveat remains until Follow-up Issue #3 is completed.
 
 ---
 
