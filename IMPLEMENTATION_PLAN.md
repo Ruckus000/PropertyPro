@@ -1,13 +1,13 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-13 (v15 — POA v2 remediation rollout closeout, Gate 2 preflight checklist added)
+Generated: 2026-02-13 (v16 — Gate 2 hardening closeout and Phase 1 status refresh)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 Batch 1 is merged and verified on `main` (`P1-09`, `P1-11`, `P1-17`, `P1-18`, `P1-21`, `P1-22`, `P1-28`, plus `P1-27a`/`P1-27b`). Batch 1 red-findings remediation is merged on `main` via `18c356d` (auth hardening + middleware JSON auth split + legacy header removal). Batch 2 is complete on `main` with `P1-10`, `P1-12`, `P1-13`, `P1-16`, `P1-19`, `P1-20`, and `P1-26` landed; Issue #2 membership authorization hardening is implemented on authenticated mutation routes and verified. Batch 3 is implemented and verification is green on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with migration `0004_boring_whistler`. POA v2 remediation for strict document-access behavior (WS2/WS1/WS3) is implemented end-to-end on `main`; Phase 1 Gate 2 remains pending staging/prod seed verification and remaining feature closeout (`P1-25` and final `P1-27` endpoint-adoption confirmation).
+- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 implementation is complete on `main`, including Gate 2 hardening closeout (`P1-25` + final `P1-27` endpoint adoption verification) with regression coverage for download-audit ordering. Gate 2 engineering verification is complete; staging/production seed execution remains environment-owned using the documented runbook.
 
-### Progress Snapshot (2026-02-12)
+### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
 - Added Gate 0 schema sign-off integration suite: `packages/db/__tests__/schema-gate0.integration.test.ts` executes migration SQL against a temp schema via `DIRECT_URL` and validates tables, enums, FK `ON DELETE`, and package-root exports.
 - Added P0-04 storage integration suite: `packages/db/__tests__/supabase-storage.integration.test.ts` validates presigned upload/download/delete with the Supabase `documents` bucket prerequisite now satisfied.
@@ -53,6 +53,10 @@ Generated: 2026-02-13 (v15 — POA v2 remediation rollout closeout, Gate 2 prefl
 - Follow-up Issue #3 (labels: `ui`, `documents`, `tech-debt`) opened in this plan backlog:
   - Scope: resolve the document version-history caveat in `apps/web/src/components/documents/document-version-history.tsx` so resident-visible history and policy semantics are explicit and test-covered.
   - Acceptance criteria: define/implement canonical behavior for category lineage across versions, add route/component tests for mixed-category history, and remove caveat copy once behavior is deterministic.
+- Gate 2 hardening closeout (2026-02-13):
+  - Download audit logging now executes only after successful presigned URL generation, preventing false-positive `document_accessed` entries on failed downloads.
+  - Added download-route regression test for presign failure (`500` response and no audit event).
+  - Verification rerun summary: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` (`545/545`), `pnpm --filter @propertypro/db test:integration` (`28/28`), and `pnpm seed:demo`.
 - Release note draft (POA v2 remediation):
   - Enforced strict document access matrix at policy and query layers with normalized category-name mapping.
   - Added role-aware document management UX and elevated-role DELETE enforcement (`403` for restricted roles).
@@ -272,7 +276,9 @@ No `Partial` findings were identified in this closeout pass.
 4. Marked `[eval1]` entries as Codex `node -e` execution artifacts outside Next.js runtime.
 
 **GATE 2: Compliance Core Verification (after all Phase 1 complete)**
+- Status: Complete (2026-02-13 engineering closeout on `main`)
 - All Phase 1 tests pass
+- All db integration tests pass
 - Compliance checklist auto-generates for condo (§718) and HOA (§720)
 - Compliance checklist does NOT generate for apartment
 - Document upload → extraction → search pipeline works end-to-end
@@ -601,9 +607,9 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ---
 
-## Phase 1 Execution Readiness (2026-02-12)
+## Phase 1 Execution Readiness (2026-02-13)
 
-- **Status:** In Progress (Batch 0 through Batch 3 are implemented and verified on `main`; execution has advanced to Batch 4)
+- **Status:** Complete (Phase 1 implementation and Gate 2 engineering verification complete on `main`)
 - **Execution Source of Truth:** `PHASE1_EXECUTION_PLAN.md`
 - **Review Outcome:** Go status after closing planning blockers:
   - Added Batch 0.5 audit foundation (`P1-27a`) so mutation tasks can call `logAuditEvent` from the start
@@ -612,7 +618,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Added platform invariants checklist (scoped client, `withErrorHandler`, audit logging, cross-tenant tests, strict TypeScript)
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
-- **Tracking Note:** `P1-27` remains `In Progress` because infrastructure is merged while broader endpoint adoption continues. Batch 3 feature tasks are implemented and verified on `main` (`P1-14`, `P1-17c`, `P1-23`, `P1-24`, `P1-29`) with additive migration sequencing validated by a no-op generation check; proceed to Batch 4 (`P1-15`) and Batch 5 (`P1-25`) toward Gate 2 completion.
+- **Tracking Note:** `P1-15`, `P1-25`, and final `P1-27` endpoint-adoption closeout are completed on `main`. Next execution focus moves to Phase 2 tasks.
 
 ---
 
@@ -958,7 +964,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-25 Resident Document Library
 - **Phase:** 1
-- **Status:** Not Started
+- **Status:** Complete (implemented, tested, and verified on `main`)
 - **Files to Create/Modify:** packages/shared/src/access-policies.ts, packages/db/src/queries/document-access.ts, apps/web/src/components/documents/document-library.tsx, document-category-filter.tsx
 - **Dependencies:** P1-14, P1-15, P0-06
 - **Blocks:** P4-57
@@ -1004,7 +1010,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-27 Audit Logging
 - **Phase:** 1
-- **Status:** In Progress (core infrastructure merged on `main`; route-level mutation adoption ongoing)
+- **Status:** Complete (infrastructure + endpoint adoption + Gate 2 hardening closeout verified on `main`)
 - **Files to Create/Modify:** packages/db/src/schema/compliance-audit-log.ts, packages/db/src/utils/audit-logger.ts, apps/web/src/lib/middleware/audit-middleware.ts, packages/db/__tests__/audit-logging/
 - **Dependencies:** P0-05, P0-06
 - **Blocks:** P3-53
@@ -1024,8 +1030,9 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Verification gate on `main` is green, including db integration tests.
   - Remaining work is endpoint adoption: ensure each new Batch 1 mutation route calls `logAuditEvent` directly or via `withAuditLog`.
   - Red-findings remediation merged to `main` via `18c356d` and added endpoint adoption/hardening for mutation routes (`upload`, `documents`, `compliance`) by removing trust in client `x-user-id` and enforcing Supabase session identity server-side.
-  - Follow-up Issue #2 (labels: `security`, `multi-tenant`, `backend`) remains open by decision and is deferred from this remediation pass; keep `P1-27` status as `In Progress`, and require authorization-layer implementation/verification before Phase 1 Gate 2 sign-off.
+  - Follow-up Issue #2 (labels: `security`, `multi-tenant`, `backend`) remained open by decision at this checkpoint; authorization-layer implementation/verification was required before Phase 1 Gate 2 sign-off.
   - [2026-02-12] Batch 2 route adoption and Issue #2 hardening landed on `main`: shared community-membership authorization checks were applied across authenticated mutation handlers (`announcements`, `residents`, `documents`, `upload`, `compliance`, `import-residents`, `invitations`, `meetings`, `notification-preferences`) and validated by route-level tests and db integration coverage.
+  - [2026-02-13] Gate 2 hardening follow-up landed: document download audit logging now runs only after successful presigned URL generation, with regression coverage ensuring presign failures return `500` and do not emit `document_accessed` audit events.
 - **Testing:** Append-only test: attempt UPDATE on `compliance_audit_log` → verify rejection. Mutation logging test: create a document → verify audit entry created with correct action and new_values. Update logging test: update a document → verify old_values and new_values captured. Soft-delete exemption test: soft-delete a resource → verify audit log for that resource still visible. Scoping test: verify community A board_president cannot see community B's audit trail.
 - **Estimated Effort:** Medium
 - **Risk:** Medium — Must be wired into every mutation route. Easy to miss one. Consider adding a lint rule or code review checklist.

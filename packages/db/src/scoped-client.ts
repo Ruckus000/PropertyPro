@@ -29,7 +29,7 @@ import {
 } from 'drizzle-orm';
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
-import type { ScopedClient } from './types/scoped-client';
+import type { ScopedClient, ScopedDynamicBuilder, ScopedRow } from './types/scoped-client';
 import { TenantContextMissing } from './errors/TenantContextMissing';
 import { db as defaultDb } from './drizzle';
 
@@ -222,6 +222,38 @@ export function createScopedClient(
     async query(table) {
       const filters = buildScopeFilters(table, ctx.communityId);
       return execSelect(database, table, combineFilters(filters));
+    },
+
+    selectFrom<T extends ScopedRow>(
+      table: PgTable<TableConfig>,
+      columns: Record<string, unknown>,
+      additionalWhere?: SQL,
+    ): ScopedDynamicBuilder<T> {
+      const filters = buildScopeFilters(table, ctx.communityId);
+      if (additionalWhere) {
+        filters.push(additionalWhere);
+      }
+      const combined = combineFilters(filters);
+
+      // Build and return the dynamic query builder.
+      // Cast through unknown to bypass Drizzle's complex generics.
+      // Empty columns object means "select all columns" (like db.select().from())
+      const hasColumns = Object.keys(columns).length > 0;
+      type DbWithSelect = {
+        select(c?: unknown): {
+          from(t: unknown): {
+            where(w: unknown): { $dynamic(): unknown };
+            $dynamic(): unknown;
+          };
+        };
+      };
+      const db = database as unknown as DbWithSelect;
+      const builder = hasColumns
+        ? db.select(columns).from(table)
+        : db.select().from(table);
+
+      const withWhere = combined ? builder.where(combined) : builder;
+      return withWhere.$dynamic() as ScopedDynamicBuilder<T>;
     },
 
     async insert(table, data) {

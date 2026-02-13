@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql as drizzleSql } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
@@ -129,4 +129,78 @@ describeDb('demo seed integration', () => {
       expect(duplicateRegistry).toHaveLength(1);
     }
   }, 120_000);
+
+  it('creates correct system category counts per community type', async () => {
+    const seededCommunities = await db
+      .select()
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+
+    const sunset = seededCommunities.find((row) => row.slug === 'sunset-condos');
+    const palm = seededCommunities.find((row) => row.slug === 'palm-shores-hoa');
+    const bay = seededCommunities.find((row) => row.slug === 'bay-view-apartments');
+
+    // sunset-condos (condo_718): expect exactly 5 system categories
+    const sunsetCategories = await db
+      .select()
+      .from(documentCategories)
+      .where(and(
+        eq(documentCategories.communityId, sunset!.id),
+        eq(documentCategories.isSystem, true),
+      ));
+    expect(sunsetCategories).toHaveLength(5);
+
+    // palm-shores-hoa (hoa_720): expect exactly 5 system categories
+    const palmCategories = await db
+      .select()
+      .from(documentCategories)
+      .where(and(
+        eq(documentCategories.communityId, palm!.id),
+        eq(documentCategories.isSystem, true),
+      ));
+    expect(palmCategories).toHaveLength(5);
+
+    // bay-view-apartments (apartment): expect exactly 6 system categories
+    const bayCategories = await db
+      .select()
+      .from(documentCategories)
+      .where(and(
+        eq(documentCategories.communityId, bay!.id),
+        eq(documentCategories.isSystem, true),
+      ));
+    expect(bayCategories).toHaveLength(6);
+  }, 30_000);
+
+  it('has zero documents without a category', async () => {
+    const seededCommunities = await db
+      .select()
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+
+    const communityIds = seededCommunities.map((c) => c.id);
+
+    const orphaned = await db
+      .select()
+      .from(documents)
+      .where(and(
+        inArray(documents.communityId, communityIds),
+        isNull(documents.categoryId),
+      ));
+    expect(orphaned).toHaveLength(0);
+  }, 30_000);
+
+  it('each demo community has at least 1 document', async () => {
+    const seededCommunities = await db
+      .select()
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+
+    for (const community of seededCommunities) {
+      const docs = await db
+        .select()
+        .from(documents)
+        .where(eq(documents.communityId, community.id));
+      expect(docs.length).toBeGreaterThanOrEqual(1);
+    }
+  }, 30_000);
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { CommunityRole } from '@propertypro/shared';
+import { isElevatedRole, type CommunityRole } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { DocumentList, type DocumentListItem } from './document-list';
 import { DocumentViewer } from './document-viewer';
@@ -17,13 +17,6 @@ interface DocumentLibraryProps {
 
 type ViewMode = 'list' | 'viewer' | 'versions';
 
-const ELEVATED_ROLES: CommunityRole[] = [
-  'owner',
-  'board_member',
-  'board_president',
-  'property_manager_admin',
-];
-
 export function DocumentLibrary({
   communityId,
   userId,
@@ -36,7 +29,7 @@ export function DocumentLibrary({
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(false);
 
-  const canUpload = ELEVATED_ROLES.includes(userRole);
+  const canUpload = isElevatedRole(userRole);
 
   const handleDocumentUploaded = useCallback(() => {
     setRefreshKey((prev) => prev + 1);

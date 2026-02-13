@@ -10,12 +10,40 @@ import type { PgTable, TableConfig } from 'drizzle-orm/pg-core';
 export type ScopedTable = PgTable<TableConfig>;
 export type ScopedRow = Record<string, unknown>;
 
+/**
+ * Dynamic query builder returned by selectFrom.
+ * Supports .orderBy(), .limit(), .offset() chaining before execution.
+ */
+export interface ScopedDynamicBuilder<T> {
+  orderBy: (...columns: unknown[]) => ScopedDynamicBuilder<T>;
+  limit: (n: number) => ScopedDynamicBuilder<T>;
+  offset: (n: number) => ScopedDynamicBuilder<T>;
+  then: <R>(
+    onFulfilled?: ((value: T[]) => R | PromiseLike<R>) | null,
+    onRejected?: ((reason: unknown) => R | PromiseLike<R>) | null,
+  ) => Promise<R>;
+  [Symbol.toStringTag]: string;
+}
+
 export interface ScopedClient {
   /** The community ID this client instance is scoped to. */
   readonly communityId: number;
 
   /** SELECT with tenant + soft-delete scoping applied. */
   query: (table: ScopedTable) => Promise<ScopedRow[]>;
+
+  /**
+   * SELECT with custom column map, tenant + soft-delete scoping applied.
+   * Returns a dynamic query builder that supports .orderBy(), .limit() chaining.
+   *
+   * This is the preferred method for queries needing custom column selection
+   * while maintaining automatic tenant scoping. Use this instead of raw db imports.
+   */
+  selectFrom: <T extends ScopedRow>(
+    table: ScopedTable,
+    columns: Record<string, unknown>,
+    additionalWhere?: SQL,
+  ) => ScopedDynamicBuilder<T>;
 
   /**
    * Build a scoped WHERE clause for advanced read queries.

@@ -1,6 +1,5 @@
 import { and, desc, eq, gte, ilike, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
-import { db } from '../drizzle';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
 import { buildDocumentAccessFilter } from './document-access';
@@ -106,11 +105,10 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
     );
   }
 
-  const scoped = createScopedClient(params.communityId, db);
-  const where = scoped.buildWhere(documents, combineFilters(additionalFilters));
-
-  const base = db
-    .select({
+  const scoped = createScopedClient(params.communityId);
+  const base = scoped.selectFrom(
+    documents,
+    {
       id: documents.id,
       communityId: documents.communityId,
       categoryId: documents.categoryId,
@@ -125,17 +123,16 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
       createdAt: documents.createdAt,
       updatedAt: documents.updatedAt,
       rank: rankExpr,
-    })
-    .from(documents)
-    .where(where)
-    .$dynamic();
+    },
+    combineFilters(additionalFilters),
+  );
 
   const rows = hasTextQuery
     ? await base.orderBy(desc(rankExpr), desc(documents.id)).limit(limit + 1)
     : await base.orderBy(desc(documents.id)).limit(limit + 1);
 
   const hasMore = rows.length > limit;
-  const visibleRows = hasMore ? rows.slice(0, limit) : rows;
+  const visibleRows = (hasMore ? rows.slice(0, limit) : rows) as unknown as DocumentSearchItem[];
   const nextCursor = hasMore ? visibleRows[visibleRows.length - 1]?.id ?? null : null;
 
   return {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   createPresignedDownloadUrl,
   getDocumentWithAccessCheck,
+  logAuditEvent,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
@@ -63,6 +64,22 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
 
   // Generate presigned download URL (valid for 1 hour)
   const signedUrl = await createPresignedDownloadUrl('documents', filePath, 3600);
+
+  // Fire-and-forget: access logging must never block document viewing.
+  // Placed after URL generation so a failed presign doesn't leave a false-positive audit entry.
+  logAuditEvent({
+    userId,
+    action: 'document_accessed',
+    resourceType: 'document',
+    resourceId: String(documentId),
+    communityId,
+    metadata: {
+      accessType: attachment === 'true' ? 'download' : 'preview',
+      fileName,
+    },
+  }).catch(() => {
+    // Swallow audit failures for reads — never block document viewing
+  });
 
   // If attachment=true, redirect directly to download (triggers browser download)
   if (attachment === 'true') {

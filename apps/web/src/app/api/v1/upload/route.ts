@@ -33,6 +33,9 @@ function validateFileSize(mimeType: string, fileSize: number): void {
   }
 }
 
+// Note: This route is intentionally non-audited. It generates presigned URLs
+// for direct upload to Supabase Storage but does not mutate app records.
+// Document record creation (which IS audited) happens in POST /api/v1/documents.
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 

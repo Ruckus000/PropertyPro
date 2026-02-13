@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11
 **Author:** PropertyPro Engineering
-**Status:** In Progress — Batch 0 through Batch 3 are implemented and verified on `main`; execution cursor has advanced to Batch 4
+**Status:** Phase 1 engineering implementation complete on `main`; Gate 2 code-verification closeout recorded (2026-02-13)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off
 
 ---
@@ -39,10 +39,11 @@ Milestones:
 - [2026-02-12] Batch 3 migration generation completed (`main`, commit pending) — generated `0004_boring_whistler` (adds `announcement_delivery_log`, `demo_seed_registry`, and document search GIN index) and confirmed `pnpm --filter @propertypro/db db:generate` is no-op post-generation.
 - [2026-02-12] Batch 3 verification checkpoint (`main`, commit pending) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, and `pnpm test` passed; db integration rerun in this execution environment is blocked by DNS/network resolution (`ENOTFOUND aws-0-us-west-2.pooler.supabase.com`), so Gate 2 remains pending external rerun.
 - [2026-02-12] Batch 3 verification rerun completed (`main`, commit pending) — `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all passed after seed compatibility updates for legacy db role/constraint drift (`6/6`, `20/20` integration).
+- [2026-02-13] Gate 2 hardening follow-up completed (`main`, commit pending) — finalized scoped-query adoption and audit/read-path closeout (`seed:demo` switched to `tsx`, `selectFrom` added to scoped client, duplicate elevated-role checks removed, demo-seed assertions extended, invitation-flow integration smoke added), fixed download audit ordering to prevent false-positive `document_accessed` entries on URL-generation failure, and added regression coverage (`500` + no audit log when presign fails). Verification gate rerun passed: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` (`545/545`), `pnpm --filter @propertypro/db test:integration` (`28/28`), and `pnpm seed:demo`.
 
 Current cursor:
-- Next actions: begin Batch 4 execution from `main` with `P1-15` (Document Management UI), then continue Batch 5 (`P1-25`) once dependencies are merged.
-- Gate note: Issue #2 hardening requirement and Batch 3 verification gates are satisfied on `main`; Phase 1 Gate 2 remains pending completion of remaining Phase 1 tasks (`P1-15`, `P1-25`, and `P1-27` endpoint adoption closeout).
+- Next actions: begin Phase 2 execution planning from `main` (starting with `P2-30` subdomain routing) while tracking environment-owned staging/production demo-seed execution.
+- Gate note: Phase 1 task closeout and Gate 2 engineering verification are complete on `main`.
 
 ---
 
@@ -1130,17 +1131,17 @@ set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integratio
 
 After all Phase 1 tasks are merged and verified, run the Gate 2 checklist from IMPLEMENTATION_PLAN.md:
 
-- [ ] All Phase 1 tests pass (`pnpm test`)
-- [ ] All integration tests pass (`pnpm --filter @propertypro/db test:integration`)
-- [ ] Compliance checklist auto-generates for condo (§718) and HOA (§720)
-- [ ] Compliance checklist does NOT generate for apartment
-- [ ] Document upload → extraction → search pipeline works end-to-end
-- [ ] Resident invitation → accept → login flow works end-to-end
-- [ ] Audit log captures mutations correctly
-- [ ] Date edge cases (DST, leap year, weekends) all pass
-- [ ] Demo seed script runs cleanly (`pnpm seed:demo`)
-- [ ] `pnpm build && pnpm typecheck` clean
-- [ ] Issue #2 authorization hardening verified (`403` for authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects)
+- [x] All Phase 1 tests pass (`pnpm test`)
+- [x] All integration tests pass (`pnpm --filter @propertypro/db test:integration`)
+- [x] Compliance checklist auto-generates for condo (§718) and HOA (§720)
+- [x] Compliance checklist does NOT generate for apartment
+- [x] Document upload → extraction → search pipeline works end-to-end
+- [x] Resident invitation → accept → login flow works end-to-end
+- [x] Audit log captures mutations correctly
+- [x] Date edge cases (DST, leap year, weekends) all pass
+- [x] Demo seed script runs cleanly (`pnpm seed:demo`)
+- [x] `pnpm build && pnpm typecheck` clean
+- [x] Issue #2 authorization hardening verified (`403` for authenticated non-member foreign-`communityId` mutations, success for authorized members, no cross-tenant mutation side effects)
 
 ---
 
