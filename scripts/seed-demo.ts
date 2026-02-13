@@ -6,6 +6,7 @@ import {
   communities,
   complianceChecklistItems,
   demoSeedRegistry,
+  documentCategories,
   documents,
   meetingDocuments,
   meetings,
@@ -34,6 +35,23 @@ interface SeedContext {
 
 interface DemoSeedOptions {
   syncAuthUsers?: boolean;
+}
+
+type DemoDocumentCategoryKey =
+  | 'declaration'
+  | 'rules'
+  | 'inspection_reports'
+  | 'meeting_minutes'
+  | 'announcements'
+  | 'maintenance_records'
+  | 'lease_docs'
+  | 'community_handbook'
+  | 'move_in_out_docs';
+
+interface DemoCategoryDefinition {
+  key: DemoDocumentCategoryKey;
+  name: string;
+  description: string;
 }
 
 const DEFAULT_PASSWORD = process.env.DEMO_DEFAULT_PASSWORD ?? 'DemoPass123!';
@@ -336,12 +354,138 @@ async function upsertRegistryEntry(
     .where(eq(demoSeedRegistry.id, existing[0].id));
 }
 
+function getDemoCategoryDefinitions(
+  communityType: 'condo_718' | 'hoa_720' | 'apartment',
+): DemoCategoryDefinition[] {
+  if (communityType === 'apartment') {
+    return [
+      {
+        key: 'rules',
+        name: 'Rules',
+        description: 'Community rules and policy updates.',
+      },
+      {
+        key: 'announcements',
+        name: 'Announcements',
+        description: 'Building-wide notices and updates.',
+      },
+      {
+        key: 'maintenance_records',
+        name: 'Maintenance Records',
+        description: 'Operational maintenance and work order records.',
+      },
+      {
+        key: 'lease_docs',
+        name: 'Lease Docs',
+        description: 'Lease agreements and related lease forms.',
+      },
+      {
+        key: 'community_handbook',
+        name: 'Community Handbook',
+        description: 'Resident handbook and onboarding materials.',
+      },
+      {
+        key: 'move_in_out_docs',
+        name: 'Move In/Out Docs',
+        description: 'Move-in and move-out instructions and forms.',
+      },
+    ];
+  }
+
+  return [
+    {
+      key: 'declaration',
+      name: 'Declaration',
+      description: 'Governing declaration and related amendments.',
+    },
+    {
+      key: 'rules',
+      name: 'Rules & Regulations',
+      description: 'Rules, regulations, and published policy updates.',
+    },
+    {
+      key: 'inspection_reports',
+      name: 'Inspection Reports',
+      description: 'Safety and statutory inspection documentation.',
+    },
+    {
+      key: 'meeting_minutes',
+      name: 'Meeting Minutes',
+      description: 'Board and owner meeting minutes and packets.',
+    },
+    {
+      key: 'announcements',
+      name: 'Announcements',
+      description: 'Community announcements and notice records.',
+    },
+  ];
+}
+
+async function seedDocumentCategories(
+  communityId: number,
+  communityType: 'condo_718' | 'hoa_720' | 'apartment',
+): Promise<Record<DemoDocumentCategoryKey, number | undefined>> {
+  const definitions = getDemoCategoryDefinitions(communityType);
+  const categoryIds: Record<DemoDocumentCategoryKey, number | undefined> = {
+    declaration: undefined,
+    rules: undefined,
+    inspection_reports: undefined,
+    meeting_minutes: undefined,
+    announcements: undefined,
+    maintenance_records: undefined,
+    lease_docs: undefined,
+    community_handbook: undefined,
+    move_in_out_docs: undefined,
+  };
+
+  for (const definition of definitions) {
+    const existing = await db
+      .select({ id: documentCategories.id })
+      .from(documentCategories)
+      .where(
+        and(
+          eq(documentCategories.communityId, communityId),
+          eq(documentCategories.name, definition.name),
+        ),
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      await db
+        .update(documentCategories)
+        .set({
+          description: definition.description,
+          isSystem: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(documentCategories.id, existing[0].id));
+      categoryIds[definition.key] = existing[0].id;
+      continue;
+    }
+
+    const [created] = await db
+      .insert(documentCategories)
+      .values({
+        communityId,
+        name: definition.name,
+        description: definition.description,
+        isSystem: true,
+      })
+      .returning({ id: documentCategories.id });
+
+    categoryIds[definition.key] = created?.id;
+  }
+
+  return categoryIds;
+}
+
 async function seedRegistryDocument(
   communityId: number,
   seedKey: string,
   title: string,
   fileName: string,
   searchText: string,
+  categoryId: number | null = null,
 ): Promise<number> {
   const registryEntityId = await lookupRegistry('document', seedKey);
   if (registryEntityId) {
@@ -355,6 +499,7 @@ async function seedRegistryDocument(
         mimeType: 'application/pdf',
         fileSize: 1024,
         searchText,
+        categoryId,
         updatedAt: new Date(),
       })
       .where(eq(documents.id, id))
@@ -379,6 +524,7 @@ async function seedRegistryDocument(
           mimeType: 'application/pdf',
           fileSize: 1024,
           searchText,
+          categoryId,
           updatedAt: new Date(),
         })
         .where(eq(documents.id, existing[0].id))
@@ -397,6 +543,7 @@ async function seedRegistryDocument(
       mimeType: 'application/pdf',
       fileSize: 1024,
       searchText,
+      categoryId,
     })
     .returning();
 
@@ -652,12 +799,18 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   }
   debugSeed('notification preferences seeded');
 
+  const sunsetCategories = await seedDocumentCategories(sunsetCommunityId, 'condo_718');
+  const palmCategories = await seedDocumentCategories(palmCommunityId, 'hoa_720');
+  const bayCategories = await seedDocumentCategories(bayCommunityId, 'apartment');
+  debugSeed('document categories seeded');
+
   const sunsetDoc = await seedRegistryDocument(
     sunsetCommunityId,
     'sunset-doc-bylaws',
     'Sunset Bylaws',
     'sunset-bylaws.pdf',
     'association bylaws governing documents',
+    sunsetCategories.declaration ?? null,
   );
   const palmDoc = await seedRegistryDocument(
     palmCommunityId,
@@ -665,6 +818,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     'Palm HOA Budget',
     'palm-budget.pdf',
     'annual budget financial report',
+    palmCategories.rules ?? null,
   );
   const bayDoc = await seedRegistryDocument(
     bayCommunityId,
@@ -672,6 +826,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     'Bay View Resident Rules',
     'bay-rules.pdf',
     'resident handbook lease rules',
+    bayCategories.rules ?? null,
   );
 
   const now = Date.now();

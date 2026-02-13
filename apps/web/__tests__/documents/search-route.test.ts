@@ -9,7 +9,10 @@ const {
 } = vi.hoisted(() => ({
   searchDocumentsMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
+    role: 'owner',
+    communityType: 'condo_718',
+  }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -64,6 +67,8 @@ describe('p1-14 document search route', () => {
         communityId: 42,
         query: 'minutes',
         limit: 10,
+        role: 'owner',
+        communityType: 'condo_718',
       }),
     );
     expect(json.data[0]?.id).toBe(1);

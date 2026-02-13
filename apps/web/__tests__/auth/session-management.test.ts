@@ -216,4 +216,31 @@ describe('p1-22 session middleware', () => {
 
     expect(response.status).toBe(200);
   });
+
+  it('protects /communities routes - redirects unauthenticated users', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/communities/8/documents'),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain('/auth/login');
+    expect(response.headers.get('location')).toContain('returnTo=%2Fcommunities%2F8%2Fdocuments');
+  });
+
+  it('allows authenticated + verified users to access /communities routes', async () => {
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          email_confirmed_at: '2026-02-11T21:00:00.000Z',
+        },
+      },
+    });
+
+    const response = await middleware(
+      request('http://localhost:3000/communities/8/documents'),
+    );
+
+    expect(response.status).toBe(200);
+  });
 });

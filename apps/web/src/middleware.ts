@@ -15,7 +15,7 @@ import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
  * The Next.js route group `(authenticated)` is stripped from the URL,
  * so we match on the actual URL paths that live inside that group.
  */
-const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/maintenance', '/api/v1'];
+const PROTECTED_PATH_PREFIXES = ['/dashboard', '/settings', '/documents', '/maintenance', '/communities', '/api/v1'];
 const API_PATH_PREFIX = '/api/v1';
 
 /** Public auth routes that should never trigger a redirect loop. */

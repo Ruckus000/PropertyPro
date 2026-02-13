@@ -1,18 +1,21 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import {
   createPresignedDownloadUrl,
   createScopedClient,
   documents,
   logAuditEvent,
+  getAccessibleDocuments,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
+import { isElevatedRole } from '@propertypro/shared';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -37,15 +40,34 @@ async function downloadStorageBytes(path: string): Promise<Uint8Array> {
 }
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
+
   const { searchParams } = new URL(req.url);
   const communityId = Number(searchParams.get('communityId'));
+  const categoryIdRaw = searchParams.get('categoryId');
 
   if (!Number.isInteger(communityId) || communityId <= 0) {
     throw new ValidationError('communityId query parameter is required and must be a positive integer');
   }
+  let categoryId: number | null = null;
+  if (categoryIdRaw != null) {
+    const parsedCategoryId = Number(categoryIdRaw);
+    if (!Number.isInteger(parsedCategoryId) || parsedCategoryId <= 0) {
+      throw new ValidationError('categoryId query parameter must be a positive integer');
+    }
+    categoryId = parsedCategoryId;
+  }
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(documents);
+  const membership = await requireCommunityMembership(communityId, userId);
+
+  const rows = await getAccessibleDocuments(
+    {
+      communityId,
+      role: membership.role,
+      communityType: membership.communityType,
+    },
+    categoryId != null ? eq(documents.categoryId, categoryId) : undefined,
+  );
 
   return NextResponse.json({ data: rows });
 });
@@ -129,4 +151,64 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   return NextResponse.json({ data: created }, { status: 201 });
+});
+
+const deleteDocumentSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  communityId: z.coerce.number().int().positive(),
+});
+
+export const DELETE = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
+
+  const { searchParams } = new URL(req.url);
+  const parseResult = deleteDocumentSchema.safeParse({
+    id: searchParams.get('id'),
+    communityId: searchParams.get('communityId'),
+  });
+
+  if (!parseResult.success) {
+    throw new ValidationError('Invalid delete request', {
+      fields: formatZodErrors(parseResult.error),
+    });
+  }
+
+  const { id, communityId } = parseResult.data;
+  const membership = await requireCommunityMembership(communityId, userId);
+  if (!isElevatedRole(membership.role)) {
+    throw new ForbiddenError('Only elevated roles can delete documents');
+  }
+
+  const scoped = createScopedClient(communityId);
+
+  // First, get the document to capture old values for audit
+  const existingDocs = await scoped.query(documents);
+  const docToDelete = existingDocs.find((d) => d['id'] === id);
+
+  if (!docToDelete) {
+    throw new ValidationError('Document not found');
+  }
+
+  // Perform soft delete
+  const deletedRows = await scoped.softDelete(documents, eq(documents.id, id));
+
+  if (deletedRows.length === 0) {
+    throw new ValidationError('Failed to delete document');
+  }
+
+  await logAuditEvent({
+    userId,
+    action: 'delete',
+    resourceType: 'document',
+    resourceId: String(id),
+    communityId,
+    oldValues: {
+      title: docToDelete['title'],
+      categoryId: docToDelete['categoryId'],
+      filePath: docToDelete['filePath'],
+      fileName: docToDelete['fileName'],
+    },
+  });
+
+  return NextResponse.json({ data: { deleted: true, id } });
 });

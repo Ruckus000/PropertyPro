@@ -7,6 +7,8 @@ import {
   announcements,
   communities,
   demoSeedRegistry,
+  documentCategories,
+  documents,
   meetings,
   complianceChecklistItems,
 } from '../src/schema';
@@ -84,6 +86,29 @@ describeDb('demo seed integration', () => {
         ),
       );
     expect(seededMeetings.length).toBeGreaterThanOrEqual(3);
+
+    const seededCategories = await db
+      .select()
+      .from(documentCategories)
+      .where(
+        inArray(
+          documentCategories.communityId,
+          [sunset!.id, palm!.id, bay!.id],
+        ),
+      );
+    expect(seededCategories.length).toBeGreaterThan(0);
+
+    const seededDocuments = await db
+      .select()
+      .from(documents)
+      .where(
+        inArray(
+          documents.communityId,
+          [sunset!.id, palm!.id, bay!.id],
+        ),
+      );
+    expect(seededDocuments.length).toBeGreaterThanOrEqual(3);
+    expect(seededDocuments.every((row) => row.categoryId != null)).toBe(true);
 
     const apartmentChecklist = await db
       .select()

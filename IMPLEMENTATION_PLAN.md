@@ -952,6 +952,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - DB enforcement test: manually construct a query bypassing UI → verify DB-level WHERE clause still filters correctly
   - Cross-role test: user with "tenant" role queries for restricted category docs → verify zero results per ADR-001
   - Scoping test: verify documents from other communities are never visible regardless of role
+  - Gate contract checklist: strict policy tests must assert restricted-role denials for disallowed known categories and unknown/unmapped categories; elevated-role tests must assert allow for unknown/unmapped categories.
 - **Estimated Effort:** Medium
 - **Risk:** High — Access control matrix is complex (role × community_type × document_category). Must be enforced at DB layer, not just UI.
 

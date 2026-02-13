@@ -39,7 +39,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const userId = await requireAuthenticatedUserId();
   const params = parseResult.data;
-  await requireCommunityMembership(params.communityId, userId);
+  const membership = await requireCommunityMembership(params.communityId, userId);
 
   const result = await searchDocuments({
     communityId: params.communityId,
@@ -50,6 +50,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     createdTo: params.to ? new Date(params.to) : null,
     cursor: params.cursor ?? null,
     limit: params.limit,
+    role: membership.role,
+    communityType: membership.communityType,
   });
 
   return NextResponse.json({

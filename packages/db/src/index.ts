@@ -43,3 +43,12 @@ export type {
 } from './queries/document-search';
 
 export { findCommunityBySlugUnscoped } from './queries/community-lookup';
+
+// Document access control
+export {
+  buildDocumentAccessFilter,
+  getAccessibleDocuments,
+  isDocumentAccessible,
+  getDocumentWithAccessCheck,
+} from './queries/document-access';
+export type { DocumentAccessContext } from './queries/document-access';

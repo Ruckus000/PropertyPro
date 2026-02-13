@@ -54,3 +54,4 @@ export const PERMISSION_PROFILE_MAP = {
 } as const;
 
 export * from './compliance/templates';
+export * from './access-policies';

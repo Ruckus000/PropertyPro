@@ -13,5 +13,6 @@ export default defineConfig({
     "next/server",
     "@supabase/ssr",
     "@supabase/supabase-js",
+    "@propertypro/shared",
   ],
 });

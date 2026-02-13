@@ -1103,6 +1103,7 @@ Tests (CRITICAL — access control boundary):
 - DB enforcement: manually bypass UI → DB WHERE clause still filters correctly
 - Tenant queries restricted category → zero results
 - Cross-community: documents from other communities never visible regardless of role
+- Gate contract: tests must explicitly assert restricted-role deny on disallowed known categories and unknown/unmapped categories, and elevated-role allow on unknown/unmapped categories
 - Higher max iterations (12) because access control matrix is complex and easy to get wrong
 
 Run pnpm test for unit/component tests. Skip integration tests (those run post-merge).

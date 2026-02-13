@@ -93,6 +93,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@propertypro/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@supabase/ssr':
         specifier: ^0.8.0
         version: 0.8.0(@supabase/supabase-js@2.95.3)

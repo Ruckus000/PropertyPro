@@ -8,7 +8,7 @@ interface DashboardQuickLinksProps {
 export function DashboardQuickLinks({ communityId }: DashboardQuickLinksProps) {
   const links = [
     {
-      href: `/documents?communityId=${communityId}`,
+      href: `/communities/${communityId}/documents`,
       label: 'Documents',
     },
     {
