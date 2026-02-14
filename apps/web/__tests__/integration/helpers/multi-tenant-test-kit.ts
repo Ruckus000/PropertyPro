@@ -155,19 +155,24 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
 
   try {
     if (communityIds.length > 0) {
-      await state.db
-        .delete(state.dbModule.complianceAuditLog)
-        .where(inArray(state.dbModule.complianceAuditLog.communityId, communityIds));
-
-      await state.db
-        .delete(state.dbModule.communities)
-        .where(inArray(state.dbModule.communities.id, communityIds));
+      try {
+        await state.db
+          .delete(state.dbModule.communities)
+          .where(inArray(state.dbModule.communities.id, communityIds));
+      } catch {
+        // compliance_audit_log is DB-enforced append-only with FK restrict.
+        // If audited mutations ran, teardown cannot delete parent communities.
+      }
     }
 
     if (userIds.length > 0) {
-      await state.db
-        .delete(state.dbModule.users)
-        .where(inArray(state.dbModule.users.id, userIds));
+      try {
+        await state.db
+          .delete(state.dbModule.users)
+          .where(inArray(state.dbModule.users.id, userIds));
+      } catch {
+        // Best-effort cleanup only; users referenced by append-only audit rows cannot be deleted.
+      }
     }
   } finally {
     await state.sqlClient.end();

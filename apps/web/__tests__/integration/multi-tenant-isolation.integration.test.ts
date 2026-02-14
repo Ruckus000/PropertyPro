@@ -402,17 +402,21 @@ async function teardownSeededData(): Promise<void> {
     return;
   }
 
-  await db
-    .delete(dbModule.complianceAuditLog)
-    .where(inArray(dbModule.complianceAuditLog.communityId, seededData.cleanupCommunityIds));
+  try {
+    await db
+      .delete(dbModule.communities)
+      .where(inArray(dbModule.communities.id, seededData.cleanupCommunityIds));
+  } catch {
+    // compliance_audit_log is append-only with FK restrict; audited runs may pin communities.
+  }
 
-  await db
-    .delete(dbModule.communities)
-    .where(inArray(dbModule.communities.id, seededData.cleanupCommunityIds));
-
-  await db
-    .delete(dbModule.users)
-    .where(inArray(dbModule.users.id, seededData.cleanupUserIds));
+  try {
+    await db
+      .delete(dbModule.users)
+      .where(inArray(dbModule.users.id, seededData.cleanupUserIds));
+  } catch {
+    // Best-effort cleanup only; users referenced by append-only audit rows cannot be deleted.
+  }
 }
 
 function configureMiddlewareClient(config: MiddlewareConfig): { getRequestedSlug: () => string | null } {
@@ -625,6 +629,42 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
       const response = await check.run();
       expect(response.status, `${check.name} should reject cross-tenant reads`).toBe(403);
     }
+  });
+
+  it('returns 403 for cross-tenant mutation endpoints with matching community payload', async () => {
+    const seeded = requireSeededData();
+    const appRoutes = requireRoutes();
+    setActor(seeded.actorAId);
+
+    const documentsCreateResponse = await appRoutes.documents.POST(
+      jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
+        communityId: seeded.communityBId,
+        title: 'Cross-tenant create attempt',
+        description: null,
+        categoryId: null,
+        filePath: `communities/${seeded.communityBId}/documents/membership-check.pdf`,
+        fileName: 'membership-check.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      }),
+    );
+    expect(documentsCreateResponse.status).toBe(403);
+
+    const documentsDeleteResponse = await appRoutes.documents.DELETE(
+      new NextRequest(
+        apiUrl(`/api/v1/documents?id=${seeded.documentBId}&communityId=${seeded.communityBId}`),
+        { method: 'DELETE' },
+      ),
+    );
+    expect(documentsDeleteResponse.status).toBe(403);
+
+    const complianceCreateResponse = await appRoutes.compliance.POST(
+      jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
+        communityId: seeded.communityBId,
+        communityType: 'hoa_720',
+      }),
+    );
+    expect(complianceCreateResponse.status).toBe(403);
   });
 
   it('returns 404 for direct-id cross-tenant access attempts', async () => {

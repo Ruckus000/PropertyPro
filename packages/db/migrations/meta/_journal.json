@@ -36,6 +36,13 @@
       "when": 1770924460099,
       "tag": "0004_boring_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771103942260,
+      "tag": "0005_append_only_audit_log",
+      "breakpoints": true
     }
   ]
 }

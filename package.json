@@ -13,6 +13,7 @@
     "test": "vitest run",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
+    "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
     "test:watch": "vitest",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
