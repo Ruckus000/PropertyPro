@@ -14,6 +14,7 @@ import {
   createScopedClient,
   logAuditEvent,
   communities,
+  documents,
   meetings,
   meetingDocuments,
   type Meeting,
@@ -284,6 +285,16 @@ async function handleAttach(body: Record<string, unknown>, actorUserId: string):
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);
 
+  // Verify both the meeting and document belong to this community
+  const meetingRows = await scoped.selectFrom(meetings, {}, eq(meetings.id, meetingId));
+  if (meetingRows.length === 0) {
+    throw new NotFoundError('Meeting not found');
+  }
+  const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, documentId));
+  if (docRows.length === 0) {
+    throw new NotFoundError('Document not found');
+  }
+
   const rows = await scoped.insert(meetingDocuments, {
     meetingId,
     documentId,
@@ -310,6 +321,16 @@ async function handleDetach(body: Record<string, unknown>, actorUserId: string):
   }
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);
+
+  // Verify both the meeting and document belong to this community
+  const meetingRows = await scoped.selectFrom(meetings, {}, eq(meetings.id, meetingId));
+  if (meetingRows.length === 0) {
+    throw new NotFoundError('Meeting not found');
+  }
+  const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, documentId));
+  if (docRows.length === 0) {
+    throw new NotFoundError('Document not found');
+  }
 
   await scoped.hardDelete(
     meetingDocuments,

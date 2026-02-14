@@ -8,6 +8,7 @@ const {
   meetingsTableMock,
   meetingDocumentsTableMock,
   communitiesTableMock,
+  documentsTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const {
   meetingsTableMock: { id: Symbol('meetings.id') },
   meetingDocumentsTableMock: { id: Symbol('meeting_documents.id') },
   communitiesTableMock: { id: Symbol('communities.id') },
+  documentsTableMock: { id: Symbol('documents.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
 }));
@@ -26,6 +28,7 @@ vi.mock('@propertypro/db', () => ({
   meetings: meetingsTableMock,
   meetingDocuments: meetingDocumentsTableMock,
   communities: communitiesTableMock,
+  documents: documentsTableMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -210,8 +213,14 @@ describe('p1-16 meetings route', () => {
 
   it('POST attach creates join record and logs audit', async () => {
     const insert = vi.fn().mockResolvedValue([{ id: 123, meetingId: 1, documentId: 2 }]);
+    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
+      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
+      return Promise.resolve([]);
+    });
     createScopedClientMock.mockReturnValue({
-      query: vi.fn(),
+      query: vi.fn().mockResolvedValue([]),
+      selectFrom,
       insert,
       update: vi.fn(),
       softDelete: vi.fn(),
@@ -237,6 +246,96 @@ describe('p1-16 meetings route', () => {
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ resourceType: 'meeting_document', action: 'update' }),
     );
+  });
+
+  it('POST attach returns 404 when meetingId does not belong to community', async () => {
+    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+      if (table === meetingsTableMock) return Promise.resolve([]); // not found
+      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
+      return Promise.resolve([]);
+    });
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn().mockResolvedValue([]),
+      selectFrom,
+      insert: vi.fn(),
+      update: vi.fn(),
+      softDelete: vi.fn(),
+      hardDelete: vi.fn(),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'attach',
+        communityId: 42,
+        meetingId: 999,
+        documentId: 2,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('POST attach returns 404 when documentId does not belong to community', async () => {
+    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
+      if (table === documentsTableMock) return Promise.resolve([]); // not found
+      return Promise.resolve([]);
+    });
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn().mockResolvedValue([]),
+      selectFrom,
+      insert: vi.fn(),
+      update: vi.fn(),
+      softDelete: vi.fn(),
+      hardDelete: vi.fn(),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'attach',
+        communityId: 42,
+        meetingId: 1,
+        documentId: 999,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('POST detach returns 404 when meetingId does not belong to community', async () => {
+    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+      if (table === meetingsTableMock) return Promise.resolve([]); // not found
+      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
+      return Promise.resolve([]);
+    });
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn().mockResolvedValue([]),
+      selectFrom,
+      insert: vi.fn(),
+      update: vi.fn(),
+      softDelete: vi.fn(),
+      hardDelete: vi.fn(),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'detach',
+        communityId: 42,
+        meetingId: 999,
+        documentId: 2,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
