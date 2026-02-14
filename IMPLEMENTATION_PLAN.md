@@ -1149,6 +1149,43 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ---
 
+### Task: P2-32a Document Extraction Status & pdf-parse Integration
+- **Phase:** 2 (can be implemented independently — no blockers from P2-33/34/35 chain)
+- **Status:** Not Started
+- **Files to Create/Modify:** packages/db/src/schema/documents.ts (add extractionStatus column), packages/db/migrations/ (new migration), apps/web/src/lib/workers/pdf-extraction.ts (update to set status), apps/web/src/app/api/v1/documents/route.ts (set initial status on upload), apps/web/src/components/documents/document-list.tsx (surface extraction status), apps/web/package.json (add pdf-parse dependency)
+- **Dependencies:** P1-11, P1-14 (both complete)
+- **Blocks:** None (enhances existing functionality)
+- **Rationale:** The current fire-and-forget extraction pipeline (`queuePdfExtraction`) silently swallows failures. A board president who uploads their declaration and can't find it via search will assume the product is broken. This task adds visible extraction status tracking and installs `pdf-parse` as a real dependency (the dynamic import path in `extract-pdf-text.ts` already supports it).
+- **Schema Change:**
+  - Add `extractionStatus` enum to `packages/db/src/schema/enums.ts`: `pending`, `completed`, `failed`, `not_applicable`, `skipped`
+  - Add `extractionStatus` column to `documents` table (default: `not_applicable`)
+  - Add `extractionError` text column (nullable, stores error message on failure)
+  - Add `extractedAt` timestamp column (nullable, set on successful extraction)
+- **Worker Changes:**
+  - POST handler sets `extractionStatus = 'pending'` for PDFs, `'not_applicable'` for non-PDFs
+  - Worker sets `extractionStatus = 'completed'` + `extractedAt = now()` on success
+  - Worker sets `extractionStatus = 'failed'` + `extractionError = err.message` on failure
+  - Worker sets `extractionStatus = 'skipped'` when `pdf-parse` returns empty text (scanned PDF with no extractable text layer)
+- **UI Changes:**
+  - Document list shows extraction status badge: "Searchable" (green, completed), "Processing" (yellow, pending), "Not searchable" (gray, failed/skipped)
+  - Admin document detail view shows extraction error message if failed
+  - No blocking UX — document is fully usable regardless of extraction status
+- **Acceptance Criteria:**
+  - [ ] PDF upload sets extractionStatus to `pending`, extraction worker updates to `completed` on success
+  - [ ] Failed extraction sets status to `failed` with error message preserved in `extractionError`
+  - [ ] Empty extraction (scanned PDF) sets status to `skipped`
+  - [ ] Non-PDF uploads set status to `not_applicable`
+  - [ ] Document list UI shows extraction status badge
+  - [ ] `pdf-parse` installed as dependency and used as primary extraction path (fallback parser remains for environments where pdf-parse is unavailable)
+  - [ ] Existing documents with null extractionStatus treated as `not_applicable` in UI (backward compatible)
+  - [ ] pnpm test passes
+- **Testing:** Unit test: mock pdf-parse success → verify status = completed. Unit test: mock pdf-parse failure → verify status = failed with error. Unit test: mock pdf-parse empty result → verify status = skipped. Integration test: upload PDF → verify extractionStatus column updated. Component test: verify status badges render correctly for each state.
+- **Estimated Effort:** Small-Medium (1-2 days)
+- **Risk:** Low — additive change, backward compatible, no breaking changes to existing queries. The `pdf-parse` library is well-maintained and handles most digital PDFs reliably.
+- **Future Enhancement (Phase 4):** Add retry queue for `failed` extractions (Vercel Cron or Inngest). Add cloud OCR fallback (AWS Textract) for `skipped` extractions (scanned PDFs). See Phase 4 tech debt note in Progress Snapshot.
+
+---
+
 ### Task: P2-33 Self-Service Signup
 - **Phase:** 2
 - **Status:** Not Started
@@ -1193,8 +1230,68 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Out-of-order test: send invoice.paid before checkout.session.completed → verify both processed correctly regardless of order
   - Subscription lifecycle test: create → upgrade → cancel → verify each state transition recorded correctly
   - Failed payment test: send invoice.payment_failed → verify subscription status updated to past_due
+  - Graceful degradation test: subscription canceled → public site still accessible, admin routes return 403 with upgrade prompt
+  - Email alert test: payment failure → verify email sent to all community_admin roles (board_president, cam, site_manager per community type)
 - **Estimated Effort:** Large
 - **Risk:** High — Stripe integration has 4 specific pitfalls in AGENTS.md. Payment processing must be bulletproof. Use Stripe CLI for local testing with `stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe`.
+
+#### P2-34a: Payment Failure Email Alerts & Graceful Degradation
+
+This sub-task defines the customer-facing behavior when Stripe payments fail or subscriptions lapse. This is critical because a dark public website makes the association non-compliant with Florida statute, which is the exact problem they're paying us to solve.
+
+**Subscription Status Lifecycle:**
+```
+active → past_due → canceled → expired
+         │                      │
+         └── payment succeeds ──┘ (reactivates to active)
+```
+
+**Graceful Degradation Rules by Status:**
+
+| Status | Public Website | Owner Portal (Read) | Admin Dashboard (Write) | Document Upload | Email Alerts |
+|--------|---------------|--------------------|-----------------------|----------------|-------------|
+| `active` | Full access | Full access | Full access | Enabled | None |
+| `trialing` | Full access | Full access | Full access | Enabled | None |
+| `past_due` | Full access | Full access | Full access + banner warning | Enabled | Payment failure email to community admins (board_president, cam, or site_manager per community type) |
+| `canceled` | **Read-only (public pages + documents remain visible)** | Read-only (documents viewable, no new submissions) | **Locked** — all mutation routes return 403 with `subscription_required` error code | Disabled | Cancellation confirmation email + "your public site remains live for 30 days" |
+| `expired` (30 days post-cancel) | **Offline** — returns branded "This community's portal is temporarily unavailable" page | Locked | Locked | Disabled | Final warning email 7 days before expiry |
+
+**Design rationale for `canceled` status:** The public website MUST stay readable during the canceled grace period. Taking it offline immediately would make the association non-compliant with §718.111(12)(g), which exposes them to $50/day damages and potential lawsuits from unit owners. This is the strongest re-activation incentive we have — "your site is still live, but you can't update it." Board members will reactivate when they realize they can't post meeting notices.
+
+**Email Alert Sequence (on `invoice.payment_failed`):**
+1. **Immediate (Day 0):** "Payment failed for [Association Name]" — sent to all users with community_admin permission profile (board_president, cam, site_manager depending on community type). Include: last 4 digits of card, amount, direct link to Stripe Customer Portal for card update. Subject: `Action Required: Payment failed for [Association Name]`
+2. **Day 3 (if still past_due):** Follow-up reminder. Subject: `Reminder: Update payment method for [Association Name]`
+3. **Day 7 (if still past_due):** Escalation warning with consequences. Subject: `Warning: [Association Name] subscription will be canceled in [X] days`
+4. **On cancellation:** Confirmation with grace period timeline. Subject: `[Association Name] subscription canceled — your site remains live for 30 days`
+5. **Day 23 post-cancel (7 days before expiry):** Final warning. Subject: `Final Notice: [Association Name] portal goes offline in 7 days`
+
+**Implementation Notes:**
+- Email sequence scheduling: Use Vercel Cron or Inngest for follow-up emails (Day 3, Day 7). Do NOT rely on webhook timing for follow-ups — Stripe may not send additional events on a predictable schedule.
+- Community admin resolution: Use the existing `requireCommunityMembership` + permission profile logic to identify recipients. For condo_718/hoa_720 → board_president + cam. For apartment → site_manager + property_manager_admin.
+- Stripe Customer Portal: Use `stripe.billingPortal.sessions.create()` to generate a direct link for card updates. Embed this link in every payment failure email.
+- Subscription status column: Add `subscriptionStatus` enum to `communities` table (trialing, active, past_due, canceled, expired). Webhook handler updates this on every subscription event. Middleware reads this to enforce degradation rules.
+- Admin route enforcement: Add `requireActiveSubscription` middleware check on all admin mutation endpoints. Returns `{ error: { code: 'subscription_required', message: '...', upgradeUrl: '...' } }` for non-active subscriptions.
+- Public site enforcement: The public route handler checks `subscriptionStatus` — if `expired`, renders the branded unavailable page. All other statuses render normally.
+
+**Files to Create/Modify (in addition to P2-34 base):**
+- `apps/web/src/lib/middleware/subscription-guard.ts` — middleware for mutation route enforcement
+- `packages/email/src/templates/payment-failed.tsx` — payment failure email template
+- `packages/email/src/templates/subscription-canceled.tsx` — cancellation email template
+- `packages/email/src/templates/subscription-expiry-warning.tsx` — final warning email template
+- `apps/web/src/app/(public)/[slug]/unavailable/page.tsx` — branded unavailable page for expired communities
+- `apps/web/src/lib/services/payment-alert-scheduler.ts` — schedules follow-up emails on Day 3/7/23
+
+**Acceptance Criteria (P2-34a specific):**
+- [ ] `invoice.payment_failed` webhook updates community status to `past_due` and sends immediate email to community admins
+- [ ] `customer.subscription.deleted` webhook updates community status to `canceled`, sends cancellation email with grace period notice
+- [ ] Admin mutation routes return 403 with `subscription_required` code when subscription is `canceled` or `expired`
+- [ ] Public website remains fully accessible when subscription is `past_due` or `canceled`
+- [ ] Public website renders branded unavailable page when subscription is `expired`
+- [ ] Owner portal documents remain viewable (read-only) when subscription is `canceled`
+- [ ] Payment failure email includes Stripe Customer Portal link for card update
+- [ ] Follow-up emails sent on Day 3 and Day 7 if status remains `past_due`
+- [ ] Final warning email sent 7 days before expiry (Day 23 post-cancel)
+- [ ] `invoice.payment_succeeded` after `past_due` resets community status to `active` and cancels pending follow-up emails
 
 ---
 

@@ -42,6 +42,7 @@ export interface TestKitState {
   runSuffix: string;
   communities: Map<MultiTenantCommunityKey, SeededCommunity>;
   users: Map<MultiTenantUserKey, SeededUser>;
+  runtimeCleanupUserIds: Set<string>;
   currentActorUserId: string | null;
 }
 
@@ -70,6 +71,7 @@ export async function initTestKit(): Promise<TestKitState> {
     runSuffix: randomUUID().slice(0, 8),
     communities: new Map(),
     users: new Map(),
+    runtimeCleanupUserIds: new Set(),
     currentActorUserId: null,
   };
 }
@@ -147,7 +149,9 @@ export async function seedUsers(
  */
 export async function teardownTestKit(state: TestKitState): Promise<void> {
   const communityIds = [...state.communities.values()].map((c) => c.id);
-  const userIds = [...state.users.values()].map((u) => u.id);
+  const seededUserIds = [...state.users.values()].map((u) => u.id);
+  const runtimeUserIds = [...state.runtimeCleanupUserIds];
+  const userIds = [...new Set([...seededUserIds, ...runtimeUserIds])];
 
   try {
     if (communityIds.length > 0) {
@@ -168,6 +172,10 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
   } finally {
     await state.sqlClient.end();
   }
+}
+
+export function trackUserForCleanup(state: TestKitState, userId: string): void {
+  state.runtimeCleanupUserIds.add(userId);
 }
 
 // ---------------------------------------------------------------------------

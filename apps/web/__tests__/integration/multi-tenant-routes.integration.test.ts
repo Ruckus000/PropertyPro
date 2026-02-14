@@ -22,6 +22,7 @@ import {
   seedCommunities,
   seedUsers,
   teardownTestKit,
+  trackUserForCleanup,
   requireCommunity,
   requireUser,
   setActor,
@@ -470,34 +471,39 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const json = await parseJson<{ data: { importedCount: number } }>(response);
     expect(json.data.importedCount).toBe(1);
 
-    // Verify user_roles exist in communityA
-    const scopedA = kit.dbModule.createScopedClient(communityA.id);
-    const rolesA = await scopedA.query(kit.dbModule.userRoles);
-    const importedInA = rolesA.find((r) => {
-      const userId = r['userId'] as string;
-      // Look up user by finding them in users table
-      return userId != null;
-    });
-    expect(importedInA).toBeDefined();
+    // Resolve imported identity deterministically by normalized email.
+    const importedUsers = await kit.db
+      .select({ id: kit.dbModule.users.id })
+      .from(kit.dbModule.users)
+      .where(eq(kit.dbModule.users.email, importEmail.toLowerCase()));
+    expect(importedUsers).toHaveLength(1);
 
-    // Verify user_roles do NOT exist in communityB for the imported user
-    const scopedB = kit.dbModule.createScopedClient(communityB.id);
-    const rolesB = await scopedB.query(kit.dbModule.userRoles);
-    const importedUserRoleA = rolesA.find((r) => r['role'] === 'board_member');
-    if (importedUserRoleA) {
-      const importedUserId = importedUserRoleA['userId'] as string;
-      const existsInB = rolesB.some((r) => r['userId'] === importedUserId);
-      expect(existsInB).toBe(false);
-
-      // Track for cleanup
-      kit.users.set('actorA' as never, {
-        ...kit.users.get('actorA')!,
-      });
-      // Add the imported user to cleanup by deleting directly
-      await kit.db
-        .delete(kit.dbModule.users)
-        .where(eq(kit.dbModule.users.id, importedUserId));
+    const importedUserId = importedUsers[0]?.id;
+    if (!importedUserId) {
+      throw new Error('Imported user id missing after email lookup');
     }
+
+    // Runtime-created users are tracked for teardown cleanup.
+    trackUserForCleanup(kit, importedUserId);
+
+    // Isolation is asserted by exact imported user id, not generic role matches.
+    const scopedA = kit.dbModule.createScopedClient(communityA.id);
+    const rolesA = await scopedA.selectFrom(
+      kit.dbModule.userRoles,
+      {},
+      eq(kit.dbModule.userRoles.userId, importedUserId),
+    );
+    expect(rolesA).toHaveLength(1);
+    expect(rolesA[0]?.['role']).toBe('board_member');
+
+    // Verify imported user has no roles in communityB.
+    const scopedB = kit.dbModule.createScopedClient(communityB.id);
+    const rolesB = await scopedB.selectFrom(
+      kit.dbModule.userRoles,
+      {},
+      eq(kit.dbModule.userRoles.userId, importedUserId),
+    );
+    expect(rolesB).toHaveLength(0);
   });
 
   // =========================================================================
