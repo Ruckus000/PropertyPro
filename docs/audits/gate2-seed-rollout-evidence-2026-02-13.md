@@ -75,6 +75,28 @@ For each environment run, capture:
 - `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`: pass (`4/4`)
 - `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`: pass (`28/28`)
 
+## Schema Drift Elimination Addendum (2026-02-14)
+- Scope: post-remediation verification after reset + replay to eliminate pre-existing DB schema drift.
+- Operator: `local workspace (Codex session)`
+- Supabase fingerprint (sanitized): `aws-0-us-west-2.pooler.supabase.com`
+
+### Verification Matrix
+| Check | Result |
+| --- | --- |
+| Migrations applied (`drizzle.__drizzle_migrations`) | `5/5` |
+| `user_role` enum labels | canonical 7 values only (`owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`) |
+| `user_roles.unit_id` | present |
+| Migration `0004` tables | `announcement_delivery_log`, `demo_seed_registry` present |
+| Legacy role rows (`admin`, `manager`, `resident`, `auditor`) | `0` |
+| `pnpm seed:verify` | PASS |
+| `pnpm --filter @propertypro/db test:integration` | PASS (`28/28`) |
+| `pnpm exec vitest run --config apps/web/vitest.integration.config.ts` | PASS (`46/46`) |
+
+### Operational Guardrails (Adopted)
+- Run `pnpm --filter @propertypro/db db:migrate` before shared-environment integration runs.
+- Do not patch schema directly via SQL; route schema changes through Drizzle migrations.
+- If emergency SQL is unavoidable, schedule same-day migration reconciliation.
+
 ## Notes
 - Staging and production seed evidence was captured using `.env.local` (single Supabase instance `vbqobyagjzvlfpfozvmx`) as a pre-production demo stand-in. `.env.staging` and `.env.production` were not provisioned in this workspace.
 - Both runs targeted the same database; the second (production) run confirmed idempotent seed stability — identical SQL verification results.

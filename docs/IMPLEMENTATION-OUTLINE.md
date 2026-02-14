@@ -2,7 +2,7 @@
 
 **Version:** 1.2 (Gap Review Update)
 **Date:** February 2026
-**Status:** Pre-Development Planning
+**Status:** Active Development (Schema Drift Remediation Verified 2026-02-14)
 **Classification:** Internal / Confidential
 
 ---
@@ -11,7 +11,27 @@
 
 This document outlines the implementation plan for PropertyPro Florida, a compliance and community management platform for Florida condominium associations, HOAs, and apartment communities. It captures all architectural decisions made during the planning phase, identifies the features to be built, specifies the tools and technologies required, and flags common development pitfalls to avoid.
 
-This is a planning document. No code has been written yet. The design system (58 TSX component files, design tokens, and CSS) has been fully specified and will be ported into the production codebase.
+This started as a planning document and now includes in-flight execution progress updates. The design system (58 TSX component files, design tokens, and CSS) has been fully specified and is being ported into the production codebase.
+
+### 1.1 Progress Update (2026-02-14): Schema Drift Eliminated
+
+Schema drift between Drizzle schema/migrations and the shared demo Supabase database has been remediated via reset + migration replay. Verification completed in-session:
+
+| Check | Result |
+|----------|--------|
+| Migrations applied | `5/5` |
+| `user_role` enum | `7` canonical values, `0` legacy |
+| `unit_id` on `user_roles` | Present |
+| Migration `0004` tables (`announcement_delivery_log`, `demo_seed_registry`) | Both present |
+| Legacy role rows (`admin`, `manager`, `resident`, `auditor`) | `0` |
+| `pnpm seed:verify` | PASS |
+| `pnpm --filter @propertypro/db test:integration` | PASS (`28/28`) |
+| `pnpm exec vitest run --config apps/web/vitest.integration.config.ts` | PASS (`46/46`) |
+
+Operational guardrails now in effect for shared environments:
+- Run `pnpm --filter @propertypro/db db:migrate` before shared-env integration runs.
+- Do not patch schema directly via ad-hoc SQL; use Drizzle migrations.
+- If emergency SQL is unavoidable, perform same-day migration reconciliation.
 
 ### Key Decisions Summary
 
