@@ -46,6 +46,7 @@ Generated: 2026-02-13 (v17 — Gate 2 fully closed with operational seed evidenc
   - `pnpm -C /Users/jphilistin/Documents/Coding/PropertyPro exec vitest run packages/shared/__tests__/access-policies.test.ts apps/web/__tests__/documents/document-categories-route.test.ts apps/web/__tests__/documents/document-category-filter.test.tsx apps/web/__tests__/upload/documents-route.test.ts apps/web/__tests__/documents/search-route.test.ts apps/web/__tests__/documents/document-download-route.test.ts apps/web/__tests__/documents/document-versions-route.test.ts`
   - Result: `7/7` files and `48/48` tests passed.
 - Staging/prod seed execution and category coverage verification runbook:
+  - Canonical re-capture commands live in `docs/audits/gate2-seed-rollout-evidence-2026-02-13.md` under `Required Runbook Commands`.
   - Staging seed: `set -a; source .env.staging; set +a; pnpm seed:demo`
   - Production seed: `set -a; source .env.production; set +a; pnpm seed:demo`
   - Local execution evidence (same code-path coverage, db-backed): `set -a; source .env.local; set +a; pnpm -C /Users/jphilistin/Documents/Coding/PropertyPro --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/seed-demo.integration.test.ts __tests__/document-access.integration.test.ts __tests__/document-search.integration.test.ts` → `3/3` files, `6/6` tests passed.

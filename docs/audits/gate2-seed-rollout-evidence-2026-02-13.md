@@ -13,12 +13,18 @@
 ## Required Runbook Commands
 - Staging seed:
   - `set -a; source .env.staging; set +a; pnpm seed:demo`
+- Staging verification (canonical):
+  - `set -a; source .env.staging; set +a; pnpm seed:verify`
 - Production seed:
   - `set -a; source .env.production; set +a; pnpm seed:demo`
+- Production verification (canonical):
+  - `set -a; source .env.production; set +a; pnpm seed:verify`
+- Optional manual SQL checks (via `psql` or any SQL client):
 - Category coverage SQL:
   - `select c.slug, c.community_type, count(dc.id) as category_count from communities c left join document_categories dc on dc.community_id = c.id and dc.deleted_at is null and dc.is_system = true where c.slug in ('sunset-condos','palm-shores-hoa','bay-view-apartments') group by c.slug, c.community_type order by c.slug;`
 - Document-category null check SQL:
   - `select c.slug, count(*) filter (where d.category_id is null) as docs_without_category, count(*) as total_docs from communities c join documents d on d.community_id = c.id and d.deleted_at is null where c.slug in ('sunset-condos','palm-shores-hoa','bay-view-apartments') group by c.slug order by c.slug;`
+- `psql` is optional and non-blocking for this evidence capture. If `psql` cannot connect due client/pooler compatibility in a given environment, use `pnpm seed:verify`.
 
 ## Evidence Template
 For each environment run, capture:
