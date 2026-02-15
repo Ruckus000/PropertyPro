@@ -5,7 +5,7 @@ Generated: 2026-02-14 (v18 — Phase 2 parallel batch: 7 tasks gate-passed)
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). Phase 2 parallel batch of 7 tasks completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). All branches passed build, typecheck, lint, and tests. Ready for post-batch merge to `main`. Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-43 (Multi-Tenant Isolation Tests), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-43 (Multi-Tenant Isolation Tests, in progress), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -44,7 +44,7 @@ Generated: 2026-02-14 (v18 — Phase 2 parallel batch: 7 tasks gate-passed)
     - `feat/p2-41-email-notifications`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
     - `feat/p2-42-rate-limiting`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
   - Note: Initial parallel run had branch contention (all agents sharing the same working tree). P2-31, P2-32, and P2-32a were re-run sequentially after clearing stale `.next` cache. All confirmed passing.
-  - Ready for post-batch merge to `main`.
+  - Post-batch merge to `main` completed; follow-up stabilization fixes were applied on `main`.
 - Phase 2 kickoff implementation (2026-02-13):
   - Implemented `P2-30` middleware hardening: protected-path tenant resolution, reserved/unknown tenant `404`, forwarded tenant/user anti-spoof headers, token-route carve-out for unauthenticated invitation acceptance, and bounded tenant cache.
   - Extracted tenant resolver + reserved-subdomain logic into `@propertypro/shared` with app-level compatibility shims and shared package exports wired through `src/index.ts`.
@@ -339,8 +339,8 @@ No `Partial` findings were identified in this closeout pass.
 ### Not Yet Implemented (Phase-Scoped Work)
 | Component | Status |
 |-----------|--------|
-| Phase 1 feature APIs and UX flows | NOT STARTED |
-| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | NOT STARTED |
+| Phase 1 feature APIs and UX flows | IMPLEMENTED (Gate 2 complete) |
+| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (8 complete, 1 in progress, 7 not started) |
 | Phase 3 PM/mobile vertical features | NOT STARTED |
 | Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | NOT STARTED |
 
@@ -1106,7 +1106,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-30 Subdomain Routing Middleware
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (implemented on `main` in Phase 2 kickoff hardening, 2026-02-13)
 - **Files to Create/Modify:** apps/web/src/middleware.ts (update), packages/shared/src/middleware/subdomain-router.ts, packages/shared/src/middleware/reserved-subdomains.ts
 - **Dependencies:** P0-04, P0-06
 - **Blocks:** P2-43
@@ -1467,7 +1467,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-43 Multi-Tenant Isolation Tests
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** In Progress (initial integration slice landed 2026-02-13; endpoint coverage expansion pending)
 - **Files to Create/Modify:** apps/web/__tests__/integration/multi-tenant-isolation.test.ts, apps/web/__tests__/fixtures/multi-tenant-communities.ts, multi-tenant-users.ts
 - **Dependencies:** P0-06, P2-30
 - **Blocks:** P4-55
