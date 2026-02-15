@@ -8,10 +8,16 @@
  * 4. Redirect authenticated but unverified users to /auth/verify-email
  * 5. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
  * 6. Forward server-controlled tenant/user headers and strip spoofed inbound values
+ * 7. Rate limit API requests to prevent abuse [P2-42]
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { resolveCommunityContext } from '@propertypro/shared';
+import {
+  checkRateLimit,
+  rateLimitedResponse,
+  classifyRoute,
+} from './lib/middleware/rate-limit-config';
 
 /**
  * Routes under (authenticated) that require a valid session.
@@ -189,6 +195,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
   const { pathname } = request.nextUrl;
 
+  // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
+  // For auth and public routes, check rate limit by IP before doing heavier work.
+  const routeCategory = classifyRoute(pathname, request.method);
+  if (routeCategory === 'auth' || routeCategory === 'public') {
+    const rateLimitResult = checkRateLimit(request, null);
+    if (rateLimitResult && !rateLimitResult.allowed) {
+      console.warn(
+        `[rate-limit] 429 for ${routeCategory} route ${pathname} from IP (key omitted)`,
+      );
+      return rateLimitedResponse(rateLimitResult, requestId) as unknown as NextResponse;
+    }
+  }
+
   // Tenant resolution for protected routes occurs before auth checks.
   // This prevents exposing auth state on invalid tenant requests.
   if (shouldResolveTenant(pathname)) {
@@ -225,6 +244,21 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
     if (user) {
       forwardedHeaders.set(USER_ID_HEADER, user.id);
+    }
+
+    // --- Rate limiting (Phase 2: authenticated API routes) [P2-42] ---
+    // For read/write API routes, check rate limit by user ID (or IP fallback).
+    if (
+      isApiPath(pathname) &&
+      (routeCategory === 'read' || routeCategory === 'write')
+    ) {
+      const rateLimitResult = checkRateLimit(request, user?.id ?? null);
+      if (rateLimitResult && !rateLimitResult.allowed) {
+        console.warn(
+          `[rate-limit] 429 for ${routeCategory} route ${pathname} (user: ${user?.id ?? 'anonymous'})`,
+        );
+        return rateLimitedResponse(rateLimitResult, requestId) as unknown as NextResponse;
+      }
     }
 
     if (!user && !isTokenAuthRoute) {
