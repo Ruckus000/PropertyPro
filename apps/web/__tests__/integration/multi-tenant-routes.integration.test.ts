@@ -9,13 +9,15 @@
  * - documents/search (GET)
  * - notification-preferences (GET, PATCH)
  * - document-categories (GET)
+ * - leases (GET, POST, PATCH, DELETE — apartment-only)
+ * - upload (POST — presigned URL generation)
  */
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
-import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
+import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
   type TestKitState,
   initTestKit,
@@ -48,10 +50,16 @@ const {
   requireAuthenticatedUserIdMock,
   sendEmailMock,
   createAdminClientMock,
+  createPresignedUploadUrlMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'mock-email-id' }),
   createAdminClientMock: vi.fn(),
+  createPresignedUploadUrlMock: vi.fn().mockResolvedValue({
+    signedUrl: 'https://mock-storage.example.com/upload',
+    token: 'mock-upload-token',
+    path: 'mock-upload-path',
+  }),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -67,6 +75,14 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 
+vi.mock('@propertypro/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@propertypro/db')>();
+  return {
+    ...actual,
+    createPresignedUploadUrl: createPresignedUploadUrlMock,
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Route types
 // ---------------------------------------------------------------------------
@@ -78,6 +94,8 @@ type MeetingsRouteModule = typeof import('../../src/app/api/v1/meetings/route');
 type DocumentSearchRouteModule = typeof import('../../src/app/api/v1/documents/search/route');
 type NotificationPreferencesRouteModule = typeof import('../../src/app/api/v1/notification-preferences/route');
 type DocumentCategoriesRouteModule = typeof import('../../src/app/api/v1/document-categories/route');
+type LeasesRouteModule = typeof import('../../src/app/api/v1/leases/route');
+type UploadRouteModule = typeof import('../../src/app/api/v1/upload/route');
 
 interface RouteModules {
   invitations: InvitationsRouteModule;
@@ -86,6 +104,8 @@ interface RouteModules {
   documentSearch: DocumentSearchRouteModule;
   notificationPreferences: NotificationPreferencesRouteModule;
   documentCategories: DocumentCategoriesRouteModule;
+  leases: LeasesRouteModule;
+  upload: UploadRouteModule;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +123,14 @@ interface SeededRouteData {
   documentBId: number;
   meetingAId: number;
   meetingBId: number;
+  /** Unit in communityC (apartment) for lease tests */
+  unitCId: number;
+  /** Active lease in communityC */
+  leaseC1Id: number;
+  /** Lease in communityC for delete test */
+  leaseCDeleteId: number;
+  /** Soft-deleted lease in communityC */
+  leaseCSoftDeletedId: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,16 +160,20 @@ function requireSeeded(): SeededRouteData {
 // Seed helpers
 // ---------------------------------------------------------------------------
 
-async function seedExtendedData(kit: TestKitState): Promise<SeededRouteData> {
+async function seedExtendedData(kit: TestKitState, unitCId: number): Promise<SeededRouteData> {
   const communityA = requireCommunity(kit, 'communityA');
   const communityB = requireCommunity(kit, 'communityB');
+  const communityC = requireCommunity(kit, 'communityC');
   const actorA = requireUser(kit, 'actorA');
   const actorB = requireUser(kit, 'actorB');
   const residentA = requireUser(kit, 'residentA');
   const residentB = requireUser(kit, 'residentB');
+  const actorC = requireUser(kit, 'actorC');
+  const tenantC = requireUser(kit, 'tenantC');
 
   const scopedA = kit.dbModule.createScopedClient(communityA.id);
   const scopedB = kit.dbModule.createScopedClient(communityB.id);
+  const scopedC = kit.dbModule.createScopedClient(communityC.id);
 
   // Seed documents
   const [docA] = await scopedA.insert(kit.dbModule.documents, {
@@ -214,6 +246,49 @@ async function seedExtendedData(kit: TestKitState): Promise<SeededRouteData> {
     expiresAt,
   });
 
+  // Seed leases in communityC (apartment — only community type with hasLeaseTracking)
+  const [leaseC1] = await scopedC.insert(kit.dbModule.leases, {
+    unitId: unitCId,
+    residentId: tenantC.id,
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+    rentAmount: '1500.00',
+    status: 'active',
+    notes: `P2-43 active lease C1 ${kit.runSuffix}`,
+  });
+  const leaseC1Id = readNumberField(requireInsertedRow(leaseC1, 'leaseC1'), 'id');
+
+  const [leaseCDelete] = await scopedC.insert(kit.dbModule.leases, {
+    unitId: unitCId,
+    residentId: tenantC.id,
+    startDate: '2025-01-01',
+    endDate: '2025-12-31',
+    rentAmount: '1400.00',
+    status: 'expired',
+    notes: `P2-43 delete-target lease ${kit.runSuffix}`,
+  });
+  const leaseCDeleteId = readNumberField(requireInsertedRow(leaseCDelete, 'leaseCDelete'), 'id');
+
+  const [leaseCSoftDeleted] = await scopedC.insert(kit.dbModule.leases, {
+    unitId: unitCId,
+    residentId: tenantC.id,
+    startDate: '2024-01-01',
+    endDate: '2024-12-31',
+    rentAmount: '1300.00',
+    status: 'terminated',
+    notes: `P2-43 soft-deleted lease ${kit.runSuffix}`,
+  });
+  const leaseCSoftDeletedId = readNumberField(
+    requireInsertedRow(leaseCSoftDeleted, 'leaseCSoftDeleted'),
+    'id',
+  );
+
+  // Soft-delete one lease for filtering tests
+  await scopedC.softDelete(
+    kit.dbModule.leases,
+    eq(kit.dbModule.leases.id, leaseCSoftDeletedId),
+  );
+
   return {
     invitationTokenA1: tokenA1,
     invitationTokenA2: tokenA2,
@@ -223,6 +298,10 @@ async function seedExtendedData(kit: TestKitState): Promise<SeededRouteData> {
     documentBId,
     meetingAId,
     meetingBId,
+    unitCId,
+    leaseC1Id,
+    leaseCDeleteId,
+    leaseCSoftDeletedId,
   };
 }
 
@@ -236,21 +315,36 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
 
     state = await initTestKit();
 
-    // Seed only communities A + B (no apartment needed for route isolation tests)
-    const abFixtures = MULTI_TENANT_COMMUNITIES.filter(
-      (c) => c.key === 'communityA' || c.key === 'communityB',
-    );
-    await seedCommunities(state, abFixtures);
+    // Seed all 3 communities (A: condo, B: HOA, C: apartment for leases)
+    await seedCommunities(state, MULTI_TENANT_COMMUNITIES);
 
-    // Seed only A/B users (elevated roles)
+    // Seed A/B users (elevated roles for invitations/meetings/docs tests)
     const abUsers = MULTI_TENANT_USERS.filter(
-      (u) => u.communityKey === 'communityA' || u.communityKey === 'communityB',
-    ).filter(
-      (u) => u.key === 'actorA' || u.key === 'actorB' || u.key === 'residentA' || u.key === 'residentB',
+      (u) =>
+        u.key === 'actorA' ||
+        u.key === 'actorB' ||
+        u.key === 'residentA' ||
+        u.key === 'residentB',
     );
     await seedUsers(state, abUsers);
 
-    seededRouteData = await seedExtendedData(state);
+    // Seed community C users: actorC (property_manager_admin) + tenantC (needs unit)
+    const communityC = requireCommunity(state, 'communityC');
+    const scopedC = state.dbModule.createScopedClient(communityC.id);
+    const [unitCRow] = await scopedC.insert(state.dbModule.units, {
+      unitNumber: `P243R-C-${state.runSuffix}`,
+      building: null,
+      floor: null,
+    });
+    const unitCId = readNumberField(requireInsertedRow(unitCRow, 'unitC'), 'id');
+
+    const cUsers = MULTI_TENANT_USERS.filter(
+      (u) => u.key === 'actorC' || u.key === 'tenantC',
+    );
+    const unitMap = new Map<MultiTenantUserKey, number>([['tenantC', unitCId]]);
+    await seedUsers(state, cUsers, unitMap);
+
+    seededRouteData = await seedExtendedData(state, unitCId);
 
     routes = {
       invitations: await import('../../src/app/api/v1/invitations/route'),
@@ -259,6 +353,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       documentSearch: await import('../../src/app/api/v1/documents/search/route'),
       notificationPreferences: await import('../../src/app/api/v1/notification-preferences/route'),
       documentCategories: await import('../../src/app/api/v1/document-categories/route'),
+      leases: await import('../../src/app/api/v1/leases/route'),
+      upload: await import('../../src/app/api/v1/upload/route'),
     };
   });
 
@@ -275,6 +371,13 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
           createUser: vi.fn().mockResolvedValue({ error: null }),
         },
       },
+    });
+
+    // Default presigned upload mock
+    createPresignedUploadUrlMock.mockResolvedValue({
+      signedUrl: 'https://mock-storage.example.com/upload',
+      token: 'mock-upload-token',
+      path: 'mock-upload-path',
     });
   });
 
@@ -806,5 +909,362 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/document-categories?communityId=${communityB.id}`)),
     );
     expect(response.status).toBe(403);
+  });
+
+  // =========================================================================
+  // Leases GET (apartment-only feature gate)
+  // =========================================================================
+
+  it('leases GET: actorC reads communityC (apartment) → 200 with same-tenant data only', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.GET(
+      new NextRequest(apiUrl(`/api/v1/leases?communityId=${communityC.id}`)),
+    );
+    expect(response.status).toBe(200);
+    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+    const leaseIds = json.data.map((row) => row['id'] as number);
+    expect(leaseIds).toContain(seeded.leaseC1Id);
+    expect(leaseIds).toContain(seeded.leaseCDeleteId);
+    // Soft-deleted lease should be excluded
+    expect(leaseIds).not.toContain(seeded.leaseCSoftDeletedId);
+    // All leases belong to communityC
+    for (const row of json.data) {
+      expect(row['communityId']).toBe(communityC.id);
+    }
+  });
+
+  it('leases GET: actorA (condo) reads leases → 403 (apartment-only gate)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    const response = await appRoutes.leases.GET(
+      new NextRequest(apiUrl(`/api/v1/leases?communityId=${communityA.id}`)),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('leases GET: actorA (non-member) reads communityC → 403', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+
+    const response = await appRoutes.leases.GET(
+      new NextRequest(apiUrl(`/api/v1/leases?communityId=${communityC.id}`)),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  // =========================================================================
+  // Leases POST (create)
+  // =========================================================================
+
+  it('leases POST: actorC creates lease in communityC → 201', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const tenantC = requireUser(kit, 'tenantC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.POST(
+      jsonRequest(apiUrl('/api/v1/leases'), 'POST', {
+        communityId: communityC.id,
+        unitId: seeded.unitCId,
+        residentId: tenantC.id,
+        startDate: '2027-01-01',
+        endDate: '2027-12-31',
+        rentAmount: '1600.00',
+        notes: `P2-43 new lease ${kit.runSuffix}`,
+      }),
+    );
+    expect(response.status).toBe(201);
+    const json = await parseJson<{ data: Record<string, unknown> }>(response);
+    expect(json.data['communityId']).toBe(communityC.id);
+  });
+
+  it('leases POST: actorA creates lease in communityC → 403 (non-member)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const tenantC = requireUser(kit, 'tenantC');
+    const seeded = requireSeeded();
+
+    const response = await appRoutes.leases.POST(
+      jsonRequest(apiUrl('/api/v1/leases'), 'POST', {
+        communityId: communityC.id,
+        unitId: seeded.unitCId,
+        residentId: tenantC.id,
+        startDate: '2027-06-01',
+        endDate: '2028-05-31',
+        rentAmount: '1700.00',
+      }),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('leases POST: header/body community mismatch → 404', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityC = requireCommunity(kit, 'communityC');
+    const tenantC = requireUser(kit, 'tenantC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.POST(
+      jsonRequest(
+        apiUrl('/api/v1/leases'),
+        'POST',
+        {
+          communityId: communityC.id,
+          unitId: seeded.unitCId,
+          residentId: tenantC.id,
+          startDate: '2027-01-01',
+          endDate: '2027-12-31',
+          rentAmount: '1600.00',
+        },
+        { 'x-community-id': String(communityA.id) },
+      ),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('leases POST: no cross-tenant mutation side effects', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityC = requireCommunity(kit, 'communityC');
+    const tenantC = requireUser(kit, 'tenantC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    // Create a lease in communityC
+    const createResponse = await appRoutes.leases.POST(
+      jsonRequest(apiUrl('/api/v1/leases'), 'POST', {
+        communityId: communityC.id,
+        unitId: seeded.unitCId,
+        residentId: tenantC.id,
+        startDate: '2028-01-01',
+        endDate: '2028-12-31',
+        rentAmount: '1800.00',
+        notes: `P2-43 side-effect check ${kit.runSuffix}`,
+      }),
+    );
+    expect(createResponse.status).toBe(201);
+
+    // Verify communityA has no leases (not apartment, but check DB directly)
+    const scopedA = kit.dbModule.createScopedClient(communityA.id);
+    const leasesInA = await scopedA.query(kit.dbModule.leases);
+    expect(leasesInA).toHaveLength(0);
+  });
+
+  // =========================================================================
+  // Leases PATCH (update)
+  // =========================================================================
+
+  it('leases PATCH: actorC updates lease in communityC → 200', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.PATCH(
+      jsonRequest(apiUrl('/api/v1/leases'), 'PATCH', {
+        id: seeded.leaseC1Id,
+        communityId: communityC.id,
+        rentAmount: '1550.00',
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('leases PATCH: actorA updates lease in communityC → 403 (non-member)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+
+    const response = await appRoutes.leases.PATCH(
+      jsonRequest(apiUrl('/api/v1/leases'), 'PATCH', {
+        id: seeded.leaseC1Id,
+        communityId: communityC.id,
+        rentAmount: '9999.00',
+      }),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('leases PATCH: direct-ID cross-tenant probe → 404', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const seeded = requireSeeded();
+
+    // actorA tries to PATCH a communityC lease by referencing communityA
+    const response = await appRoutes.leases.PATCH(
+      jsonRequest(apiUrl('/api/v1/leases'), 'PATCH', {
+        id: seeded.leaseC1Id,
+        communityId: communityA.id,
+        rentAmount: '9999.00',
+      }),
+    );
+    // Fails at apartment gate (communityA is condo) → 403
+    expect(response.status).toBe(403);
+  });
+
+  it('leases PATCH: header/body community mismatch → 404', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.PATCH(
+      jsonRequest(
+        apiUrl('/api/v1/leases'),
+        'PATCH',
+        {
+          id: seeded.leaseC1Id,
+          communityId: communityC.id,
+          rentAmount: '1550.00',
+        },
+        { 'x-community-id': String(communityA.id) },
+      ),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  // =========================================================================
+  // Leases DELETE (soft-delete)
+  // =========================================================================
+
+  it('leases DELETE: actorC deletes lease in communityC → 200', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.leases.DELETE(
+      new NextRequest(
+        apiUrl(`/api/v1/leases?id=${seeded.leaseCDeleteId}&communityId=${communityC.id}`),
+        { method: 'DELETE' },
+      ),
+    );
+    expect(response.status).toBe(200);
+    const json = await parseJson<{ data: { deleted: boolean; id: number } }>(response);
+    expect(json.data.deleted).toBe(true);
+    expect(json.data.id).toBe(seeded.leaseCDeleteId);
+  });
+
+  it('leases DELETE: actorA deletes lease in communityC → 403 (non-member)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+
+    const response = await appRoutes.leases.DELETE(
+      new NextRequest(
+        apiUrl(`/api/v1/leases?id=${seeded.leaseC1Id}&communityId=${communityC.id}`),
+        { method: 'DELETE' },
+      ),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  // =========================================================================
+  // Upload POST (presigned URL generation)
+  // =========================================================================
+
+  it('upload POST: actorA generates presigned URL in communityA → 200', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    const response = await appRoutes.upload.POST(
+      jsonRequest(apiUrl('/api/v1/upload'), 'POST', {
+        communityId: communityA.id,
+        fileName: `upload-test-${kit.runSuffix}.pdf`,
+        mimeType: 'application/pdf',
+        fileSize: 2048,
+      }),
+    );
+    expect(response.status).toBe(200);
+    const json = await parseJson<{ data: Record<string, unknown> }>(response);
+    expect(json.data['uploadUrl']).toBeDefined();
+    // Storage path must reference the correct community
+    const storagePath = json.data['path'] as string;
+    expect(storagePath).toContain(`communities/${communityA.id}/`);
+  });
+
+  it('upload POST: actorA uploads to communityB → 403 (non-member)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityB = requireCommunity(kit, 'communityB');
+
+    const response = await appRoutes.upload.POST(
+      jsonRequest(apiUrl('/api/v1/upload'), 'POST', {
+        communityId: communityB.id,
+        fileName: `cross-tenant-${kit.runSuffix}.pdf`,
+        mimeType: 'application/pdf',
+        fileSize: 2048,
+      }),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('upload POST: header/body community mismatch → 404', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityB = requireCommunity(kit, 'communityB');
+
+    const response = await appRoutes.upload.POST(
+      jsonRequest(
+        apiUrl('/api/v1/upload'),
+        'POST',
+        {
+          communityId: communityB.id,
+          fileName: `mismatch-${kit.runSuffix}.pdf`,
+          mimeType: 'application/pdf',
+          fileSize: 2048,
+        },
+        { 'x-community-id': String(communityA.id) },
+      ),
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('upload POST: presigned path isolates to correct community (no cross-tenant storage)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    setActor(kit, 'actorC');
+
+    const response = await appRoutes.upload.POST(
+      jsonRequest(apiUrl('/api/v1/upload'), 'POST', {
+        communityId: communityC.id,
+        fileName: `upload-c-${kit.runSuffix}.pdf`,
+        mimeType: 'application/pdf',
+        fileSize: 4096,
+      }),
+    );
+    expect(response.status).toBe(200);
+    const json = await parseJson<{ data: Record<string, unknown> }>(response);
+    const storagePath = json.data['path'] as string;
+    expect(storagePath).toContain(`communities/${communityC.id}/`);
+    // Must NOT contain other community IDs
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityB = requireCommunity(kit, 'communityB');
+    expect(storagePath).not.toContain(`communities/${communityA.id}/`);
+    expect(storagePath).not.toContain(`communities/${communityB.id}/`);
   });
 });
