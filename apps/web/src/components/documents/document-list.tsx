@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect, useCallback } from 'react';
+import React, { useState, useTransition, useEffect, useCallback } from 'react';
 
 export type ExtractionStatus = 'pending' | 'completed' | 'failed' | 'not_applicable' | 'skipped';
 
