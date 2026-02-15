@@ -431,7 +431,7 @@ P0-00 Monorepo Scaffold (includes Vitest setup)
   - [AGENTS #24] Map spacing grid to Tailwind classes: space-1=4px, space-2=8px, etc.
 - **Testing:** Unit tests verifying TypeScript token constants match CSS variable names. Snapshot test for Tailwind config output.
 - **Estimated Effort:** Small
-- **Risk:** Low — Design tokens already fully designed in PropertyProRedesign.jsx and docs/design-system/tokens/. This is a porting exercise.
+- **Risk:** Low — Design tokens already fully designed in `mockup/PropertyProRedesign.jsx` and `docs/design-system/tokens/`. This is a porting exercise.
 - **Progress Update (2026-02-11):** Token implementation exists under `packages/ui/src/tokens/*` and CSS vars under `packages/ui/src/styles/tokens.css`. `packages/ui/__tests__/tokens/tokens.test.ts` validates TS↔CSS parity and passes in workspace test runs.
 
 ---

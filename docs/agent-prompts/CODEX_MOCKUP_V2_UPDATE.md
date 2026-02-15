@@ -1,8 +1,8 @@
-# Codex Task: Align PropertyProRedesign.jsx to V2 Design System + Delete Deprecated File
+# Codex Task: Align mockup/PropertyProRedesign.jsx to V2 Design System + Delete Deprecated File
 
 ## Overview
 
-`PropertyProRedesign.jsx` is a ~3,100-line single-file React mockup/demo that contains its own copy of design tokens (lines 26–251) and embedded CSS (lines 344–597). These tokens are **stale V1 values** and must be updated to match the authoritative V2 design system at `docs/design-system/tokens/index.ts`.
+`mockup/PropertyProRedesign.jsx` is a ~3,100-line single-file React mockup/demo that contains its own copy of design tokens (lines 26–251) and embedded CSS (lines 344–597). These tokens are **stale V1 values** and must be updated to match the authoritative V2 design system at `docs/design-system/tokens/index.ts`.
 
 Also delete the deprecated file `PropertyProElevated.jsx`.
 
@@ -16,7 +16,7 @@ Delete `PropertyProElevated.jsx` from the project root. It is marked deprecated 
 
 ## STEP 1: Update Primitive Token Values
 
-All changes are in `PropertyProRedesign.jsx`. The V2 authoritative values come from `docs/design-system/tokens/index.ts`.
+All changes are in `mockup/PropertyProRedesign.jsx`. The V2 authoritative values come from `docs/design-system/tokens/index.ts`.
 
 ### 1.1 Typography — Update font size scale (line 49)
 

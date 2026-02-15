@@ -4,7 +4,7 @@
  * Maps domain statuses (e.g. "overdue") to semantic variants (e.g. "danger")
  * plus label/icon/priority metadata.
  *
- * This is extracted from the canonical mockup `PropertyProRedesign.jsx`.
+ * This is extracted from the canonical mockup `mockup/PropertyProRedesign.jsx`.
  */
 
 import { StatusVariant } from "../tokens";

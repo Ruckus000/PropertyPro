@@ -1,7 +1,7 @@
 /**
  * MetricCard - Compact metric display card
  *
- * Extracted from the canonical mockup `PropertyProRedesign.jsx`.
+ * Extracted from the canonical mockup `mockup/PropertyProRedesign.jsx`.
  */
 
 import React, { forwardRef } from "react";
@@ -72,4 +72,3 @@ export const MetricCard = forwardRef<HTMLDivElement, MetricCardProps>(
 MetricCard.displayName = "MetricCard";
 
 export default MetricCard;
-

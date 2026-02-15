@@ -1,6 +1,8 @@
 # OS files
 .DS_Store
 Thumbs.db
+_tmp_*
+*.textClipping
 
 # IDE
 .idea/
@@ -27,4 +29,5 @@ coverage/
 
 # Lock files (macOS)
 docs/.~lock.*
+docs/*.tmp
 .vercel
