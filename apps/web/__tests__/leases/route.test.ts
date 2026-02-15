@@ -57,7 +57,7 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
       return [{ id: 10, communityId: 42, unitNumber: '101' }];
     }
     if (table === userRolesTableMock) {
-      return [{ userId: 'tenant-uuid-1', role: 'tenant', communityId: 42 }];
+      return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'tenant', communityId: 42 }];
     }
     if (table === leasesTableMock) {
       return [];
@@ -72,7 +72,7 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
         id: 1,
         communityId: 42,
         unitId: 10,
-        residentId: 'tenant-uuid-1',
+        residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         startDate: '2026-01-01',
         endDate: '2026-12-31',
         rentAmount: '1500.00',
@@ -151,7 +151,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
         }),
         headers: { 'content-type': 'application/json' },
@@ -217,7 +217,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '01/01/2026', // wrong format
         }),
         headers: { 'content-type': 'application/json' },
@@ -318,7 +318,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
           endDate: '2026-12-31',
           rentAmount: '1500.00',
@@ -344,7 +344,7 @@ describe('p2-37 leases route', () => {
               id: 1,
               communityId: 42,
               unitId: 10,
-              residentId: 'tenant-uuid-1',
+              residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
               startDate: '2026-01-01',
               endDate: '2026-12-31',
               rentAmount: '1500.00',
@@ -419,7 +419,7 @@ describe('p2-37 leases route', () => {
           id: 99,
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
           endDate: '2026-12-31',
           rentAmount: '1500.00',
@@ -435,7 +435,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
           endDate: '2026-12-31',
           rentAmount: '1500.00',
@@ -452,7 +452,7 @@ describe('p2-37 leases route', () => {
         leasesTableMock,
         expect.objectContaining({
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
         }),
       );
@@ -469,7 +469,7 @@ describe('p2-37 leases route', () => {
     it('rejects when unit does not belong to community', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return []; // no units found
-        if (table === userRolesTableMock) return [{ userId: 'tenant-uuid-1', role: 'tenant' }];
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'tenant' }];
         return [];
       });
       createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
@@ -479,7 +479,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 999,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
         }),
         headers: { 'content-type': 'application/json' },
@@ -494,7 +494,7 @@ describe('p2-37 leases route', () => {
     it('rejects when resident does not have tenant role', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
-        if (table === userRolesTableMock) return [{ userId: 'tenant-uuid-1', role: 'site_manager' }]; // not tenant
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'site_manager' }]; // not tenant
         return [];
       });
       createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
@@ -504,7 +504,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2026-01-01',
         }),
         headers: { 'content-type': 'application/json' },
@@ -519,7 +519,7 @@ describe('p2-37 leases route', () => {
     it('handles renewal: marks previous lease as renewed and links', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
-        if (table === userRolesTableMock) return [{ userId: 'tenant-uuid-1', role: 'tenant', communityId: 42 }];
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'tenant', communityId: 42 }];
         if (table === leasesTableMock) return [{ id: 50, communityId: 42, status: 'active' }];
         return [];
       });
@@ -529,7 +529,7 @@ describe('p2-37 leases route', () => {
           id: 51,
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2027-01-01',
           endDate: '2027-12-31',
           status: 'active',
@@ -543,7 +543,7 @@ describe('p2-37 leases route', () => {
         body: JSON.stringify({
           communityId: 42,
           unitId: 10,
-          residentId: 'tenant-uuid-1',
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
           startDate: '2027-01-01',
           endDate: '2027-12-31',
           isRenewal: true,
@@ -658,7 +658,7 @@ describe('p2-37 leases route', () => {
     it('soft-deletes a lease and logs audit', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === leasesTableMock) {
-          return [{ id: 1, communityId: 42, unitId: 10, residentId: 'tenant-uuid-1', status: 'active' }];
+          return [{ id: 1, communityId: 42, unitId: 10, residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', status: 'active' }];
         }
         return [];
       });

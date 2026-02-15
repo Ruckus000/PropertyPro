@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-13 (v17 — Gate 2 fully closed with operational seed evidence)
+Generated: 2026-02-14 (v18 — Phase 2 parallel batch: 7 tasks gate-passed)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 is fully complete and Gate 1 is signed off. Phase 1 implementation is complete on `main` with Gate 2 fully closed — engineering verification and operational seed evidence are both recorded. Gate 2 seed rollout used `.env.local` (single-instance demo, Supabase `vbqobyagjzvlfpfozvmx`); staging + production runs passed with SQL verification (`554/554` unit tests, `28/28` integration). Phase 2 kickoff implementation (`P2-30` + early `P2-43` slice) is now in progress on `main`.
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). Phase 2 parallel batch of 7 tasks completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). All branches passed build, typecheck, lint, and tests. Ready for post-batch merge to `main`. Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-43 (Multi-Tenant Isolation Tests), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -34,6 +34,17 @@ Generated: 2026-02-13 (v17 — Gate 2 fully closed with operational seed evidenc
 - Seed compatibility checkpoint: `scripts/seed-demo.ts` now preserves canonical-role behavior on current schema while adding legacy fallback mapping and deterministic non-registry upsert paths when older db environments are missing `demo_seed_registry` or canonical `user_role` constraints.
 - Batch 3 audit follow-up: Added `findCommunityBySlugUnscoped` to `@propertypro/db` for public tenant resolution (previously used a `createScopedClient(1)` workaround).
 - **Phase 4 Tech Debt:** Announcement email delivery (`P1-17c`) uses fire-and-forget pattern within request context; consider Vercel `waitUntil()` or a job queue (Inngest/Trigger.dev) for production reliability.
+- Phase 2 parallel batch completion (2026-02-14):
+  - All 7 acceptance gates PASSED. Branch verification matrix:
+    - `feat/p2-40-community-features-config`: Build PASS, Typecheck PASS, Lint PASS, 593 tests PASS
+    - `feat/p2-31-marketing-landing-page`: Build PASS, Typecheck PASS, Lint PASS, 587 tests PASS
+    - `feat/p2-32-legal-pages`: Build PASS, Typecheck PASS, Lint PASS, 587 tests PASS
+    - `feat/p2-32a-extraction-status`: Build PASS, Typecheck PASS, Lint PASS, 570 tests PASS (badge fix committed — missing React import in document-list.tsx, 6 failing tests resolved)
+    - `feat/p2-37-lease-tracking`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
+    - `feat/p2-41-email-notifications`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
+    - `feat/p2-42-rate-limiting`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
+  - Note: Initial parallel run had branch contention (all agents sharing the same working tree). P2-31, P2-32, and P2-32a were re-run sequentially after clearing stale `.next` cache. All confirmed passing.
+  - Ready for post-batch merge to `main`.
 - Phase 2 kickoff implementation (2026-02-13):
   - Implemented `P2-30` middleware hardening: protected-path tenant resolution, reserved/unknown tenant `404`, forwarded tenant/user anti-spoof headers, token-route carve-out for unauthenticated invitation acceptance, and bounded tenant cache.
   - Extracted tenant resolver + reserved-subdomain logic into `@propertypro/shared` with app-level compatibility shims and shared package exports wired through `src/index.ts`.
@@ -1116,7 +1127,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-31 Marketing Landing Page
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (587 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** apps/web/src/app/(marketing)/page.tsx, apps/web/src/components/marketing/hero.tsx, pricing.tsx, features.tsx, footer.tsx
 - **Dependencies:** P0-03
 - **Blocks:** P2-33
@@ -1134,7 +1145,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-32 Legal Pages
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (587 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** apps/web/src/app/legal/terms/page.tsx, apps/web/src/app/legal/privacy/page.tsx, apps/web/src/content/legal/terms.md, privacy.md
 - **Dependencies:** P0-00
 - **Blocks:** None
@@ -1151,7 +1162,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-32a Document Extraction Status & pdf-parse Integration
 - **Phase:** 2 (can be implemented independently — no blockers from P2-33/34/35 chain)
-- **Status:** Not Started
+- **Status:** Complete (570 tests, gate passed 2026-02-14; badge fix committed for missing React import in document-list.tsx)
 - **Files to Create/Modify:** packages/db/src/schema/documents.ts (add extractionStatus column), packages/db/migrations/ (new migration), apps/web/src/lib/workers/pdf-extraction.ts (update to set status), apps/web/src/app/api/v1/documents/route.ts (set initial status on upload), apps/web/src/components/documents/document-list.tsx (surface extraction status), apps/web/package.json (add pdf-parse dependency)
 - **Dependencies:** P1-11, P1-14 (both complete)
 - **Blocks:** None (enhances existing functionality)
@@ -1337,7 +1348,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-37 Lease Tracking
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (557 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** packages/db/src/schema/leases.ts, apps/web/src/app/api/v1/leases/route.ts, apps/web/src/lib/services/lease-expiration-service.ts, apps/web/src/lib/actions/leases.ts
 - **Dependencies:** P0-05, P0-06
 - **Blocks:** P2-38, P2-44
@@ -1392,7 +1403,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-40 Community Features Config
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (593 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** packages/shared/src/features/community-features.ts, packages/shared/src/features/types.ts, packages/shared/src/features/get-features.ts
 - **Dependencies:** P0-05
 - **Blocks:** P3-45, P3-48
@@ -1416,7 +1427,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-41 Email Notifications
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (557 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** packages/email/src/templates/meeting-notice.tsx, compliance-alert.tsx, announcement-blast.tsx, maintenance-update.tsx, apps/web/src/lib/services/email-service.ts
 - **Dependencies:** P1-28, P1-26
 - **Blocks:** None
@@ -1437,7 +1448,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-42 Rate Limiting
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (557 tests, gate passed 2026-02-14)
 - **Files to Create/Modify:** apps/web/src/lib/middleware/rate-limit.ts, apps/web/src/lib/rate-limiter.ts, apps/web/src/lib/services/upstash-service.ts
 - **Dependencies:** P0-07
 - **Blocks:** None

@@ -118,7 +118,9 @@ describe('pdf-extraction worker', () => {
       mimeType: 'application/pdf',
     });
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Allow extra time for the async chain (dynamic import attempt of pdf-parse
+    // when fallback parser returns empty text triggers the slower code path)
+    await new Promise((r) => setTimeout(r, 200));
 
     expect(updateMock).toHaveBeenCalledWith(
       documentsTable,

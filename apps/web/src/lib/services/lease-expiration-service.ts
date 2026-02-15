@@ -7,11 +7,13 @@
  * Key design decisions:
  * - Month-to-month leases (endDate = null) never expire
  * - All date comparisons use UTC (AGENTS #16: dates stored UTC)
- * - DST transitions are handled by date-fns addDays (not manual ms arithmetic)
+ * - DST transitions are handled by UTC-only arithmetic (no local-time pitfalls)
  * - Date-only strings (YYYY-MM-DD) are parsed as UTC midnight to avoid
  *   timezone shift issues with date-fns parseISO (which returns local time)
  */
-import { addDays, differenceInCalendarDays } from 'date-fns';
+// Note: date-fns addDays/differenceInCalendarDays use local time internally,
+// which causes off-by-one errors when UTC midnight dates fall on the previous
+// local day. We use manual UTC arithmetic instead for correctness.
 
 export interface LeaseRecord {
   id: number;
@@ -71,8 +73,8 @@ function toUTCMidnight(date: Date): Date {
  * Edge cases handled:
  * - null endDate (month-to-month) => never expires => false
  * - endDate in the past => already expired => true (within any window)
- * - DST transitions => date-fns addDays handles correctly
- * - Leap year boundaries => date-fns handles correctly
+ * - DST transitions => UTC-only arithmetic avoids local-time shift
+ * - Leap year boundaries => Date.UTC handles correctly
  */
 export function isLeaseExpiringWithinDays(
   endDate: string | null,
@@ -90,7 +92,12 @@ export function isLeaseExpiringWithinDays(
   }
 
   const refMidnight = toUTCMidnight(referenceDate);
-  const windowEnd = addDays(refMidnight, daysWindow);
+  // Compute window end in UTC to avoid local-timezone off-by-one from addDays
+  const windowEnd = new Date(Date.UTC(
+    refMidnight.getUTCFullYear(),
+    refMidnight.getUTCMonth(),
+    refMidnight.getUTCDate() + daysWindow,
+  ));
   // Lease expires within window if endDate <= windowEnd (inclusive)
   return parsedEnd.getTime() <= windowEnd.getTime();
 }
@@ -117,7 +124,9 @@ export function daysUntilExpiration(
   }
 
   const refMidnight = toUTCMidnight(referenceDate);
-  return differenceInCalendarDays(parsedEnd, refMidnight);
+  // Use UTC ms diff for timezone-safe calendar day calculation
+  const diffMs = parsedEnd.getTime() - refMidnight.getTime();
+  return Math.round(diffMs / (24 * 60 * 60 * 1000));
 }
 
 /**
