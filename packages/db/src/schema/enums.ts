@@ -36,3 +36,11 @@ export const userRoleEnum = pgEnum('user_role', [
   'site_manager',
   'property_manager_admin',
 ]);
+
+/** Lease lifecycle status for apartment lease tracking (P2-37). */
+export const leaseStatusEnum = pgEnum('lease_status', [
+  'active',
+  'expired',
+  'renewed',
+  'terminated',
+]);

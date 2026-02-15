@@ -16,6 +16,7 @@ export * from './compliance-checklist-items';
 export * from './invitations';
 export * from './meetings';
 export * from './meeting-documents';
+export * from './leases';
 export * from './demo-seed-registry';
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,7 @@ import type { complianceChecklistItems } from './compliance-checklist-items';
 import type { invitations } from './invitations';
 import type { meetings } from './meetings';
 import type { meetingDocuments } from './meeting-documents';
+import type { leases } from './leases';
 import type { demoSeedRegistry } from './demo-seed-registry';
 
 // Communities
@@ -91,6 +93,10 @@ export type NewMeeting = typeof meetings.$inferInsert;
 // Meeting Documents
 export type MeetingDocument = typeof meetingDocuments.$inferSelect;
 export type NewMeetingDocument = typeof meetingDocuments.$inferInsert;
+
+// Leases
+export type Lease = typeof leases.$inferSelect;
+export type NewLease = typeof leases.$inferInsert;
 
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;
