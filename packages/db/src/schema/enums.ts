@@ -44,3 +44,12 @@ export const leaseStatusEnum = pgEnum('lease_status', [
   'renewed',
   'terminated',
 ]);
+
+/** PDF text extraction status for document records. */
+export const extractionStatusEnum = pgEnum('extraction_status', [
+  'pending',
+  'completed',
+  'failed',
+  'not_applicable',
+  'skipped',
+]);
