@@ -43,6 +43,13 @@
       "when": 1771103942260,
       "tag": "0005_append_only_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771168242695,
+      "tag": "0006_bouncy_grandmaster",
+      "breakpoints": true
     }
   ]
 }
