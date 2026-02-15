@@ -1,10 +1,32 @@
+import type { Metadata } from 'next';
+import fs from 'node:fs';
+import path from 'node:path';
+import { renderMarkdown } from '@/lib/markdown';
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy',
+  description:
+    'Privacy Policy for PropertyPro Florida — how we collect, use, and protect your personal information.',
+};
+
+function getPrivacyContent(): string {
+  const filePath = path.join(process.cwd(), 'src', 'content', 'legal', 'privacy.md');
+  const markdown = fs.readFileSync(filePath, 'utf-8');
+  return renderMarkdown(markdown);
+}
+
 export default function PrivacyPage() {
+  const html = getPrivacyContent();
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-semibold text-gray-900">Privacy Policy</h1>
-      <p className="mt-4 text-sm text-gray-700">
-        This page describes how PropertyPro Florida handles resident and community data.
-      </p>
-    </main>
+    <article>
+      <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+        <p className="text-sm font-medium text-amber-800">
+          DRAFT DOCUMENT — This document is a placeholder and will be reviewed by legal counsel
+          before launch. It does not constitute legal advice.
+        </p>
+      </div>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </article>
   );
 }
