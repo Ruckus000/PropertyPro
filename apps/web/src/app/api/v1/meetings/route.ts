@@ -32,6 +32,7 @@ import {
   calculateOwnerVoteDocsDeadline,
   type MeetingType,
 } from '@/lib/utils/meeting-calculator';
+import { queueNotification } from '@/lib/services/notification-service';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -200,6 +201,36 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       location: data.location,
     },
   });
+
+  // Fire-and-forget: send meeting notice emails to community members (P2-41)
+  const startsAtDate = new Date(data.startsAt);
+  const meetingTypeForEmail = data.meetingType === 'board' || data.meetingType === 'committee'
+    ? 'board' as const
+    : data.meetingType === 'special'
+      ? 'special' as const
+      : 'owner' as const;
+
+  queueNotification(
+    communityId,
+    {
+      type: 'meeting_notice',
+      meetingTitle: data.title,
+      meetingDate: startsAtDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+      meetingTime: startsAtDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      }),
+      location: data.location,
+      meetingType: meetingTypeForEmail,
+    },
+    'all',
+    actorUserId,
+  );
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

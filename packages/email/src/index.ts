@@ -26,6 +26,12 @@ export type { ComplianceAlertEmailProps } from "./templates/compliance-alert-ema
 export { AnnouncementEmail } from "./templates/announcement-email";
 export type { AnnouncementEmailProps } from "./templates/announcement-email";
 
+export { MaintenanceUpdateEmail } from "./templates/maintenance-update-email";
+export type { MaintenanceUpdateEmailProps } from "./templates/maintenance-update-email";
+
+export { DocumentPostedEmail } from "./templates/document-posted-email";
+export type { DocumentPostedEmailProps } from "./templates/document-posted-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

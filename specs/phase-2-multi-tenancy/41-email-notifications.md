@@ -41,4 +41,4 @@ P1
 - apps/api/src/lib/notification-preferences.ts
 
 ## Attempts
-0
+1

@@ -17,6 +17,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
 import { isElevatedRole } from '@propertypro/shared';
+import { queueNotification } from '@/lib/services/notification-service';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -102,6 +103,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(effectiveCommunityId);
 
+  const isPdf = validation.type.mime.toLowerCase().includes('pdf');
+
   const insertedRows = await scoped.insert(documents, {
     title: payload.title,
     description: payload.description ?? null,
@@ -111,6 +114,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     fileSize: storageBytes.byteLength,
     mimeType: validation.type.mime,
     uploadedBy: userId,
+    extractionStatus: isPdf ? 'pending' : 'not_applicable',
   });
 
   const created = insertedRows[0];
@@ -136,7 +140,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Fire-and-forget: trigger PDF text extraction without delaying the response
   try {
-    if (validation.type.mime.toLowerCase().includes('pdf')) {
+    if (isPdf) {
       const docId = Number((created as Record<string, unknown>)['id']);
       const communityId = Number((created as Record<string, unknown>)['communityId'] ?? effectiveCommunityId);
       if (Number.isFinite(docId) && Number.isFinite(communityId)) {
@@ -152,6 +156,19 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   } catch (_) {
     // Swallow extraction scheduling errors — never block document creation
   }
+
+  // Fire-and-forget: send document-posted notifications (P2-41)
+  queueNotification(
+    effectiveCommunityId,
+    {
+      type: 'document_posted',
+      documentTitle: payload.title,
+      uploadedByName: 'Community Team', // resolved from context; simplified for now
+      documentId: String(created['id']),
+    },
+    'all',
+    userId,
+  );
 
   return NextResponse.json({ data: created }, { status: 201 });
 });
