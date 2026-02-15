@@ -6,6 +6,8 @@ import {
   MeetingNoticeEmail,
   ComplianceAlertEmail,
   AnnouncementEmail,
+  MaintenanceUpdateEmail,
+  DocumentPostedEmail,
 } from "../src/index";
 import type { CommunityBranding } from "../src/index";
 
@@ -595,5 +597,250 @@ describe("AnnouncementEmail", () => {
       />,
     );
     expect(html).toContain("New Announcement");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MaintenanceUpdateEmail
+// ---------------------------------------------------------------------------
+
+describe("MaintenanceUpdateEmail", () => {
+  it("renders without errors", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet in Unit 201"
+        previousStatus="open"
+        newStatus="in_progress"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toBeTruthy();
+  });
+
+  it("contains request title", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet in Unit 201"
+        previousStatus="open"
+        newStatus="in_progress"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("Leaky Faucet in Unit 201");
+  });
+
+  it("contains status change", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet in Unit 201"
+        previousStatus="open"
+        newStatus="in_progress"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("open");
+    expect(html).toContain("in_progress");
+  });
+
+  it("contains notes when provided", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet"
+        previousStatus="open"
+        newStatus="in_progress"
+        notes="Plumber scheduled for Thursday"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("Plumber scheduled for Thursday");
+  });
+
+  it("omits notes section when not provided", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet"
+        previousStatus="open"
+        newStatus="in_progress"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).not.toContain("Notes:");
+  });
+
+  it("contains recipient name", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet"
+        previousStatus="open"
+        newStatus="completed"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("Jane Doe");
+  });
+
+  it("contains community name from branding", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet"
+        previousStatus="open"
+        newStatus="completed"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("Palm Gardens Condominium");
+  });
+
+  it("contains portal URL", async () => {
+    const html = await render(
+      <MaintenanceUpdateEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        requestTitle="Leaky Faucet"
+        previousStatus="open"
+        newStatus="completed"
+        portalUrl="https://example.com/maintenance/42"
+      />,
+    );
+    expect(html).toContain("https://example.com/maintenance/42");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DocumentPostedEmail
+// ---------------------------------------------------------------------------
+
+describe("DocumentPostedEmail", () => {
+  it("renders without errors", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toBeTruthy();
+  });
+
+  it("contains document title", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("Q4 2025 Financial Report");
+  });
+
+  it("contains document category when provided", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        documentCategory="Financial Reports"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("Financial Reports");
+  });
+
+  it("omits category when not provided", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).not.toContain("Category:");
+  });
+
+  it("contains uploader name", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("Board Treasurer");
+  });
+
+  it("contains community name from branding", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("Palm Gardens Condominium");
+  });
+
+  it("contains portal URL", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("https://example.com/documents/99");
+  });
+
+  it("contains Florida Statute reference", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("718.111(12)(g)");
+  });
+
+  it("renders without logo when not provided", async () => {
+    const html = await render(
+      <DocumentPostedEmail
+        branding={brandingMinimal}
+        recipientName="Jane Doe"
+        documentTitle="Q4 2025 Financial Report"
+        uploadedByName="Board Treasurer"
+        portalUrl="https://example.com/documents/99"
+      />,
+    );
+    expect(html).toContain("Sunset Condos");
+    expect(html).not.toContain("logo.png");
   });
 });
