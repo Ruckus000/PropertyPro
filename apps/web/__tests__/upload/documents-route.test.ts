@@ -52,6 +52,10 @@ vi.mock('@/lib/workers/pdf-extraction', () => ({
   queuePdfExtraction: queuePdfExtractionMock,
 }));
 
+vi.mock('@/lib/services/notification-service', () => ({
+  queueNotification: vi.fn(),
+}));
+
 import { GET, POST, DELETE } from '../../src/app/api/v1/documents/route';
 
 describe('p1-11 documents route', () => {

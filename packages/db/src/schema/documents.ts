@@ -5,6 +5,7 @@
 import { bigint, bigserial, customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documentCategories } from './document-categories';
+import { extractionStatusEnum } from './enums';
 import { users } from './users';
 
 /**
@@ -42,6 +43,12 @@ export const documents = pgTable(
     searchText: text('search_text'),
     /** PostgreSQL full-text search vector */
     searchVector: tsvector('search_vector'),
+    /** PDF text extraction status */
+    extractionStatus: extractionStatusEnum('extraction_status').notNull().default('not_applicable'),
+    /** Error message when extraction fails */
+    extractionError: text('extraction_error'),
+    /** Timestamp when text extraction completed */
+    extractedAt: timestamp('extracted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

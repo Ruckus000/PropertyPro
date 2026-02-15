@@ -13,6 +13,11 @@ type QueueParams = {
 /**
  * Queue a background PDF text extraction and DB update.
  *
+ * Updates extraction status:
+ * - 'completed' on success with text
+ * - 'skipped' when pdf-parse returns empty text (likely a scanned PDF)
+ * - 'failed' on error with error message
+ *
  * Fire-and-forget: errors are caught and logged without affecting callers.
  */
 export function queuePdfExtraction(params: QueueParams): void {
@@ -31,18 +36,60 @@ export function queuePdfExtraction(params: QueueParams): void {
       // Extract text (uses pdf-parse when available, otherwise fallback)
       const text = (await extractPdfText(arrayBuffer)).trim();
 
-      // Update document with search_text and search_vector
       const scoped = createScopedClient(params.communityId);
+
+      if (text.length === 0) {
+        // Empty text likely means scanned PDF or image-only PDF
+        await scoped.update(
+          documents,
+          {
+            searchText: text,
+            searchVector: sql`to_tsvector('english', ${text})`,
+            extractionStatus: 'skipped' as const,
+            extractionError: null,
+            extractedAt: new Date(),
+          },
+          eq(documents.id, params.documentId),
+        );
+        return;
+      }
+
+      // Update document with search_text, search_vector, and extraction status
       await scoped.update(
         documents,
         {
           searchText: text,
           // Use to_tsvector to build the search vector inside Postgres
           searchVector: sql`to_tsvector('english', ${text})`,
+          extractionStatus: 'completed' as const,
+          extractionError: null,
+          extractedAt: new Date(),
         },
         eq(documents.id, params.documentId),
       );
     } catch (err) {
+      // Update extraction status to failed with error message
+      try {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const scoped = createScopedClient(params.communityId);
+        await scoped.update(
+          documents,
+          {
+            extractionStatus: 'failed' as const,
+            extractionError: errorMessage,
+          },
+          eq(documents.id, params.documentId),
+        );
+      } catch (updateErr) {
+        // If even the status update fails, just log it
+        // eslint-disable-next-line no-console
+        console.error('[pdf-extraction] Failed to update extraction status', {
+          documentId: params.documentId,
+          communityId: params.communityId,
+          error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+        });
+      }
+
       // eslint-disable-next-line no-console
       console.error('[pdf-extraction] Failed to process document', {
         documentId: params.documentId,
@@ -52,4 +99,3 @@ export function queuePdfExtraction(params: QueueParams): void {
     }
   })();
 }
-

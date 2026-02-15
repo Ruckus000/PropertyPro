@@ -102,6 +102,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(effectiveCommunityId);
 
+  const isPdf = validation.type.mime.toLowerCase().includes('pdf');
+
   const insertedRows = await scoped.insert(documents, {
     title: payload.title,
     description: payload.description ?? null,
@@ -111,6 +113,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     fileSize: storageBytes.byteLength,
     mimeType: validation.type.mime,
     uploadedBy: userId,
+    extractionStatus: isPdf ? 'pending' : 'not_applicable',
   });
 
   const created = insertedRows[0];
@@ -136,7 +139,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Fire-and-forget: trigger PDF text extraction without delaying the response
   try {
-    if (validation.type.mime.toLowerCase().includes('pdf')) {
+    if (isPdf) {
       const docId = Number((created as Record<string, unknown>)['id']);
       const communityId = Number((created as Record<string, unknown>)['communityId'] ?? effectiveCommunityId);
       if (Number.isFinite(docId) && Number.isFinite(communityId)) {

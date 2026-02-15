@@ -36,3 +36,12 @@ export const userRoleEnum = pgEnum('user_role', [
   'site_manager',
   'property_manager_admin',
 ]);
+
+/** PDF text extraction status for document records. */
+export const extractionStatusEnum = pgEnum('extraction_status', [
+  'pending',
+  'completed',
+  'failed',
+  'not_applicable',
+  'skipped',
+]);

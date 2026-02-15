@@ -2,6 +2,8 @@
 
 import { useState, useTransition, useEffect, useCallback } from 'react';
 
+export type ExtractionStatus = 'pending' | 'completed' | 'failed' | 'not_applicable' | 'skipped';
+
 export interface DocumentListItem {
   id: number;
   title: string;
@@ -12,6 +14,7 @@ export interface DocumentListItem {
   categoryId: number | null;
   createdAt: string;
   uploadedBy: string | null;
+  extractionStatus?: ExtractionStatus | null;
 }
 
 interface DocumentListResponse {
@@ -47,6 +50,44 @@ function getMimeIcon(mimeType: string): string {
   if (mimeType.includes('word') || mimeType.includes('document')) return 'DOC';
   if (mimeType.includes('image')) return 'IMG';
   return 'FILE';
+}
+
+const EXTRACTION_BADGE_CONFIG: Record<string, { label: string; className: string } | null> = {
+  completed: {
+    label: 'Searchable',
+    className: 'bg-green-100 text-green-700',
+  },
+  pending: {
+    label: 'Processing',
+    className: 'bg-yellow-100 text-yellow-700',
+  },
+  failed: {
+    label: 'Search unavailable',
+    className: 'bg-red-100 text-red-700',
+  },
+  skipped: {
+    label: 'Not searchable',
+    className: 'bg-gray-100 text-gray-600',
+  },
+  not_applicable: null,
+};
+
+export function ExtractionStatusBadge({ status }: { status?: ExtractionStatus | null }) {
+  // Backward compatible: null/undefined extractionStatus treated as not_applicable
+  if (status == null || status === 'not_applicable') return null;
+
+  const config = EXTRACTION_BADGE_CONFIG[status];
+  if (!config) return null;
+
+  return (
+    <span
+      data-testid="extraction-badge"
+      data-extraction-status={status}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}
+    >
+      {config.label}
+    </span>
+  );
 }
 
 export function DocumentList({
@@ -184,7 +225,10 @@ export function DocumentList({
               {getMimeIcon(doc.mimeType)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-gray-900">{doc.title}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium text-gray-900">{doc.title}</p>
+                <ExtractionStatusBadge status={doc.extractionStatus} />
+              </div>
               <p className="text-sm text-gray-500">
                 {doc.fileName} &middot; {formatFileSize(doc.fileSize)} &middot;{' '}
                 {formatDate(doc.createdAt)}
