@@ -53,3 +53,11 @@ export const extractionStatusEnum = pgEnum('extraction_status', [
   'not_applicable',
   'skipped',
 ]);
+
+/** Notification email delivery cadence. */
+export const emailFrequencyEnum = pgEnum('email_frequency', [
+  'immediate',
+  'daily_digest',
+  'weekly_digest',
+  'never',
+]);

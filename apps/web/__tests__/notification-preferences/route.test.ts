@@ -62,12 +62,13 @@ describe('p1-26 notification-preferences route', () => {
         emailDocuments: true,
         emailMeetings: true,
         emailMaintenance: true,
+        emailFrequency: 'immediate',
       }),
     );
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-123');
   });
 
-  it('PATCH upserts preferences and writes audit log', async () => {
+  it('PATCH upserts preferences with legacy payload and writes audit log', async () => {
     const stored: Record<string, unknown>[] = [];
     const query = vi.fn().mockImplementation(async () => stored);
     const insert = vi
@@ -108,6 +109,7 @@ describe('p1-26 notification-preferences route', () => {
         emailDocuments: true,
         emailMeetings: true,
         emailMaintenance: false,
+        emailFrequency: 'immediate',
       }),
     );
 
@@ -119,6 +121,43 @@ describe('p1-26 notification-preferences route', () => {
         userId: 'user-123',
       }),
     );
+  });
+
+  it('PATCH accepts explicit emailFrequency and returns it in response payload', async () => {
+    const stored: Record<string, unknown>[] = [];
+    const query = vi.fn().mockImplementation(async () => stored);
+    const insert = vi
+      .fn()
+      .mockImplementation(async (_table, data: Record<string, unknown>) => {
+        stored.push({ id: 1, communityId: 42, ...data });
+        return [stored[stored.length - 1]];
+      });
+
+    createScopedClientMock.mockReturnValue({
+      query,
+      insert,
+      update: vi.fn().mockResolvedValue([]),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        emailAnnouncements: true,
+        emailDocuments: true,
+        emailMeetings: true,
+        emailMaintenance: true,
+        emailFrequency: 'weekly_digest',
+      }),
+    });
+
+    const res = await PATCH(req);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(stored[0]?.['emailFrequency']).toBe('weekly_digest');
+    expect(json.data['emailFrequency']).toBe('weekly_digest');
   });
 
   it('PATCH rejects unauthenticated requests', async () => {

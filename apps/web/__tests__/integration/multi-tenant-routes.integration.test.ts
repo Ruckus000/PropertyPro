@@ -845,6 +845,26 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     expect(response.status).toBe(200);
   });
 
+  it('notification-preferences PATCH: expanded payload with emailFrequency → 200', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    const response = await appRoutes.notificationPreferences.PATCH(
+      jsonRequest(apiUrl('/api/v1/notification-preferences'), 'PATCH', {
+        communityId: communityA.id,
+        emailAnnouncements: true,
+        emailDocuments: true,
+        emailMeetings: true,
+        emailMaintenance: true,
+        emailFrequency: 'weekly_digest',
+      }),
+    );
+    expect(response.status).toBe(200);
+    const json = await parseJson<{ data: Record<string, unknown> }>(response);
+    expect(json.data['emailFrequency']).toBe('weekly_digest');
+  });
+
   it('notification-preferences PATCH: actorA patches communityB → 403', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();

@@ -6,6 +6,7 @@ interface PreferencesState {
   emailDocuments: boolean;
   emailMeetings: boolean;
   emailMaintenance: boolean;
+  emailFrequency: 'immediate' | 'daily_digest' | 'weekly_digest' | 'never';
 }
 
 interface Props {
@@ -18,6 +19,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
     emailDocuments: true,
     emailMeetings: true,
     emailMaintenance: true,
+    emailFrequency: 'immediate',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,6 +39,9 @@ export function NotificationPreferencesForm({ communityId }: Props) {
             emailDocuments: Boolean(json.data.emailDocuments),
             emailMeetings: Boolean(json.data.emailMeetings),
             emailMaintenance: Boolean(json.data.emailMaintenance),
+            emailFrequency: (
+              json.data as Partial<PreferencesState>
+            ).emailFrequency ?? 'immediate',
           });
         }
       } catch {
@@ -85,6 +90,28 @@ export function NotificationPreferencesForm({ communityId }: Props) {
           Preferences saved.
         </div>
       )}
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700" htmlFor="emailFrequency">
+          Email frequency
+        </label>
+        <select
+          id="emailFrequency"
+          value={values.emailFrequency}
+          onChange={(e) =>
+            setValues((v) => ({
+              ...v,
+              emailFrequency: e.target.value as PreferencesState['emailFrequency'],
+            }))
+          }
+          className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        >
+          <option value="immediate">Immediate</option>
+          <option value="daily_digest">Daily digest</option>
+          <option value="weekly_digest">Weekly digest</option>
+          <option value="never">Never</option>
+        </select>
+      </div>
 
       <div className="space-y-2">
         <label className="flex items-center gap-2">

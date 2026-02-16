@@ -22,13 +22,13 @@ Milestones:
 - [2026-02-16] Spec path normalization completed across active Phase 2 specs under `specs/phase-2-multi-tenancy/` (removed legacy `apps/api` references).
 
 Current cursor:
-- Execute mandatory pre-batch hardening first: `P2-33.5`, `P2-PRE-03`.
+- Execute mandatory pre-batch hardening now: `P2-PRE-03`.
 - Then run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
 - Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
 
 ---
 
-## Mandatory Pre-Batch Hardening (Do Before New Feature Coding)
+## Mandatory Hardening and Prerequisites
 
 ### P2-33.5 - Billing and Provisioning Schema Migration (Required before P2-34)
 - **Status:** Not Started
@@ -41,16 +41,23 @@ Current cursor:
 - `subscription_status TEXT`
 - Add table `stripe_webhook_events`:
 - `event_id TEXT PRIMARY KEY`
+- `received_at TIMESTAMPTZ DEFAULT now()`
 - `processed_at TIMESTAMPTZ`
 - Add table `provisioning_jobs`:
 - `id BIGSERIAL PRIMARY KEY`
-- `community_id BIGINT REFERENCES communities(id)`
+- `community_id BIGINT NULL REFERENCES communities(id)`
 - `stripe_event_id TEXT UNIQUE`
 - `status TEXT CHECK (status IN ('initiated','community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed','failed'))`
+- `last_successful_status TEXT CHECK (last_successful_status IS NULL OR last_successful_status IN ('community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed'))`
 - `started_at TIMESTAMPTZ`
 - `completed_at TIMESTAMPTZ`
 - `error_message TEXT`
 - `retry_count INT DEFAULT 0`
+- **Contract notes:**
+- `status` is the operational state (`initiated`...`completed`, `failed`).
+- `last_successful_status` stores only successful step checkpoints and never stores `initiated` or `failed`.
+- Initial row at `initiated` must have `last_successful_status IS NULL`.
+- `community_id` is intentionally nullable until `community_created` succeeds.
 - **Exit gate:**
 - `pnpm --filter @propertypro/db db:generate`
 - `pnpm --filter @propertypro/db db:migrate`
@@ -139,14 +146,21 @@ Remaining mandatory hardening tasks:
 - Day 14: lock admin write features and send lockout notification.
 - Day 30: final delinquency notice with reactivation + export guidance.
 
+### Enforcement mechanism (server authoritative)
+- Subscription degradation is enforced at API layer first; UI restrictions are secondary UX only.
+- Admin mutation routes must call `requireActiveSubscriptionForMutation` (or equivalent shared guard) and return `403` with `subscription_required` on locked statuses.
+- Public notices and owner document read access remain available per degradation policy.
+- Webhook routes are explicitly exempt from subscription guard (`/api/v1/webhooks/*`) so billing recovery events can always process.
+
 ---
 
 ## P2-35 Provisioning State Machine Contract
 
-Provisioning must be implemented as resumable state transitions backed by `provisioning_jobs.status`.
+Provisioning must be implemented as resumable state transitions backed by `provisioning_jobs.status` and `provisioning_jobs.last_successful_status`.
 
-### Status order
+### Operational statuses
 - `initiated`
+- `failed`
 - `community_created`
 - `user_linked`
 - `checklist_generated`
@@ -154,26 +168,71 @@ Provisioning must be implemented as resumable state transitions backed by `provi
 - `preferences_set`
 - `email_sent`
 - `completed`
-- `failed`
+
+### Step order (ordinal map for progression only)
+- Use ordinal comparison for successful steps only:
+- `community_created` = 0
+- `user_linked` = 1
+- `checklist_generated` = 2
+- `categories_created` = 3
+- `preferences_set` = 4
+- `email_sent` = 5
+- `completed` = 6
+- `failed` is never part of the ordinal map.
+- `initiated` is not a successful step checkpoint.
 
 ### Execution semantics
-- Each provisioning step checks current status before acting.
-- Each successful step persists the next status atomically.
-- Retry never restarts from the beginning; it resumes from first incomplete step.
+- Each provisioning step checks progression using `last_successful_status` ordinals, not lexical string comparison.
+- Each successful step persists `status=<step>` and `last_successful_status=<step>` atomically.
+- Retry never restarts from the beginning; it resumes from `last_successful_status`.
 - Failure writes `status='failed'`, increments `retry_count`, and stores `error_message`.
+- Failure does not overwrite `last_successful_status`.
 - Retry action invokes the same provision function against existing job row.
+- If `last_successful_status IS NULL`, retry resumes from `community_created`.
+- If `last_successful_status = <step>`, retry resumes from the next ordered step after `<step>`.
+- `status='failed'` is an error state, not a step index.
 
 ### Reference flow (pseudocode contract)
 ```ts
-async function provision(job) {
-  if (job.status < 'community_created') await stepCreateCommunity(job);
-  if (job.status < 'user_linked') await stepLinkUser(job);
-  if (job.status < 'checklist_generated') await stepGenerateChecklist(job);
-  if (job.status < 'categories_created') await stepCreateCategories(job);
-  if (job.status < 'preferences_set') await stepSetPreferences(job);
-  if (job.status < 'email_sent') await stepSendWelcomeEmail(job);
-  await stepComplete(job);
+const STEP_SEQUENCE: ProvisioningStepSuccess[] = [
+  'community_created',
+  'user_linked',
+  'checklist_generated',
+  'categories_created',
+  'preferences_set',
+  'email_sent',
+  'completed',
+];
+
+function nextStep(lastSuccessfulStatus: ProvisioningStepSuccess | null): ProvisioningStepSuccess {
+  if (lastSuccessfulStatus == null) return STEP_SEQUENCE[0];
+  const idx = STEP_SEQUENCE.indexOf(lastSuccessfulStatus);
+  const nextIdx = Math.min(idx + 1, STEP_SEQUENCE.length - 1);
+  return STEP_SEQUENCE[nextIdx];
 }
+
+async function provision(job: ProvisioningJob): Promise<void> {
+  let step = nextStep(job.lastSuccessfulStatus);
+  while (true) {
+    await runStep(step, job); // updates status + last_successful_status on success
+    if (step === 'completed') break;
+    step = nextStep(step);
+  }
+}
+```
+
+### Public types and contracts
+```ts
+type ProvisioningStepSuccess =
+  | 'community_created'
+  | 'user_linked'
+  | 'checklist_generated'
+  | 'categories_created'
+  | 'preferences_set'
+  | 'email_sent'
+  | 'completed';
+
+type ProvisioningStatus = 'initiated' | ProvisioningStepSuccess | 'failed';
 ```
 
 ---
@@ -221,6 +280,8 @@ Exit gate (generic):
 Exit gate (batch-specific):
 - Stripe webhook integration test sends `checkout.session.completed` with valid signature and verifies `communities.stripe_customer_id` updated.
 - Same Stripe event sent twice verifies no duplicate side effects and confirms dedup via `stripe_webhook_events`.
+- Webhook POST remains processable even while subscription is degraded/locked.
+- Direct admin mutation API call in locked state returns `403` with `subscription_required`.
 - Billing degradation tests confirm Day 14 admin-write lock while public notices + owner read access remain available.
 
 ### Batch C - Provisioning
@@ -240,7 +301,8 @@ Exit gate (generic):
 
 Exit gate (batch-specific):
 - Provisioning test for `condo_718` verifies all expected resources are created.
-- Failure injection at step 3 verifies retry resumes from step 3 (not step 1) via persisted `provisioning_jobs.status`.
+- Failure injection at step 3 verifies retry resumes from persisted `last_successful_status` (not step 1).
+- Failure before first successful step (`last_successful_status IS NULL`) verifies retry starts at `community_created`.
 
 ### Batch D - Onboarding Completion
 Tasks:
@@ -274,6 +336,8 @@ Every remaining Phase 2 task must satisfy:
 - [ ] Cross-tenant isolation tests are added/updated for changed endpoints.
 - [ ] Stripe webhook handlers are idempotent and signature-verified before processing.
 - [ ] Webhook handlers fetch fresh Stripe state and tolerate out-of-order delivery.
+- [ ] Subscription enforcement is API-authoritative (not UI-only) on admin mutation routes.
+- [ ] Subscription enforcement explicitly exempts `/api/v1/webhooks/*`.
 - [ ] Non-transactional email paths include `List-Unsubscribe`.
 - [ ] Specs for active tasks must use corrected `apps/web` route/service paths (no `apps/api` paths).
 
@@ -331,3 +395,12 @@ When remaining tasks introduce schema changes:
 - Prefer one migration generation pass on `main` after merging a batch with schema edits.
 - Keep Drizzle journal/snapshot metadata in lockstep with migration files.
 - Do not patch production schema manually outside Drizzle migrations.
+
+---
+
+## Assumptions and Defaults
+
+- `failed` is not ordered in progression logic and is never used in ordinal comparisons.
+- Resume source of truth is `last_successful_status`; `status` communicates current operational state.
+- Webhook routes are always exempt from subscription guard to preserve billing recovery flows.
+- This correction pass updates planning and implementation contracts; it does not alter completed Phase 2 status reporting.

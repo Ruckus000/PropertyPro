@@ -10,6 +10,7 @@ export * from './document-categories';
 export * from './documents';
 export * from './announcements';
 export * from './announcement-delivery-log';
+export * from './notification-digest-queue';
 export * from './notification-preferences';
 export * from './compliance-audit-log';
 export * from './compliance-checklist-items';
@@ -30,6 +31,7 @@ import type { documentCategories } from './document-categories';
 import type { documents } from './documents';
 import type { announcements } from './announcements';
 import type { announcementDeliveryLog } from './announcement-delivery-log';
+import type { notificationDigestQueue } from './notification-digest-queue';
 import type { notificationPreferences } from './notification-preferences';
 import type { complianceAuditLog } from './compliance-audit-log';
 import type { complianceChecklistItems } from './compliance-checklist-items';
@@ -70,6 +72,10 @@ export type NewAnnouncement = typeof announcements.$inferInsert;
 // Announcement Delivery Log
 export type AnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferSelect;
 export type NewAnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferInsert;
+
+// Notification Digest Queue
+export type NotificationDigestQueue = typeof notificationDigestQueue.$inferSelect;
+export type NewNotificationDigestQueue = typeof notificationDigestQueue.$inferInsert;
 
 // Notification Preferences
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;

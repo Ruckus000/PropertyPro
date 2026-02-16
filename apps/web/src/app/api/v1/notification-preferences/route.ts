@@ -14,6 +14,12 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { getDefaultPreferences } from '@/lib/utils/email-preferences';
 
 const communityIdSchema = z.coerce.number().int().positive();
+const emailFrequencySchema = z.enum([
+  'immediate',
+  'daily_digest',
+  'weekly_digest',
+  'never',
+]);
 
 const patchSchema = z.object({
   communityId: z.number().int().positive(),
@@ -21,6 +27,7 @@ const patchSchema = z.object({
   emailDocuments: z.boolean(),
   emailMeetings: z.boolean(),
   emailMaintenance: z.boolean(),
+  emailFrequency: emailFrequencySchema.default('immediate'),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -47,6 +54,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         emailDocuments: (row['emailDocuments'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
         emailMaintenance: (row['emailMaintenance'] as boolean | undefined) ?? true,
+        emailFrequency:
+          (row['emailFrequency'] as 'immediate' | 'daily_digest' | 'weekly_digest' | 'never' | undefined)
+          ?? 'immediate',
       }
     : { userId, communityId, ...defaults };
 
@@ -66,6 +76,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     emailDocuments,
     emailMeetings,
     emailMaintenance,
+    emailFrequency,
   } = result.data;
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
@@ -80,6 +91,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     emailDocuments,
     emailMeetings,
     emailMaintenance,
+    emailFrequency,
   } as const;
 
   if (!existing) {
