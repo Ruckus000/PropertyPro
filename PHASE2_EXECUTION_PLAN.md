@@ -20,7 +20,7 @@ Milestones:
 - [2026-02-14] Parallel Phase 2 batch merged and gate-passed on `main` - `P2-31`, `P2-32`, `P2-32a`, `P2-37`, `P2-40`, `P2-41`, `P2-42`.
 - [2026-02-15] `P2-43` merged (`feat/p2-43-multi-tenant-isolation` -> `main`, merge `bbaade5`) with expanded route isolation coverage (`aac4bbb`).
 - [2026-02-16] Spec path normalization completed across active Phase 2 specs under `specs/phase-2-multi-tenancy/` (removed legacy `apps/api` references).
-- [2026-02-16] `P2-PRE-03` scoped-only DB enforcement completed on `main` (unsafe namespace, runtime import guard, and CI workflow).
+- [2026-02-16] `P2-PRE-03` scoped-only DB enforcement completed on `main` (`main`, commit `226b4861ff2a4c67a654979bd1235ec9770efd58`; unsafe namespace, runtime import guard, and CI workflow).
 
 Current cursor:
 - Run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
