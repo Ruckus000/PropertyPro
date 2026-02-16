@@ -1,5 +1,8 @@
-import { eq, sql } from 'drizzle-orm';
-import { createPresignedDownloadUrl, createScopedClient, documents } from '@propertypro/db';
+import {
+  createPresignedDownloadUrl,
+  updateDocumentExtractionFailure,
+  updateDocumentExtractionSuccess,
+} from '@propertypro/db';
 import { extractPdfText } from '@/lib/utils/extract-pdf-text';
 
 type QueueParams = {
@@ -36,50 +39,33 @@ export function queuePdfExtraction(params: QueueParams): void {
       // Extract text (uses pdf-parse when available, otherwise fallback)
       const text = (await extractPdfText(arrayBuffer)).trim();
 
-      const scoped = createScopedClient(params.communityId);
-
       if (text.length === 0) {
         // Empty text likely means scanned PDF or image-only PDF
-        await scoped.update(
-          documents,
-          {
-            searchText: text,
-            searchVector: sql`to_tsvector('english', ${text})`,
-            extractionStatus: 'skipped' as const,
-            extractionError: null,
-            extractedAt: new Date(),
-          },
-          eq(documents.id, params.documentId),
-        );
+        await updateDocumentExtractionSuccess({
+          communityId: params.communityId,
+          documentId: params.documentId,
+          text,
+          status: 'skipped',
+        });
         return;
       }
 
       // Update document with search_text, search_vector, and extraction status
-      await scoped.update(
-        documents,
-        {
-          searchText: text,
-          // Use to_tsvector to build the search vector inside Postgres
-          searchVector: sql`to_tsvector('english', ${text})`,
-          extractionStatus: 'completed' as const,
-          extractionError: null,
-          extractedAt: new Date(),
-        },
-        eq(documents.id, params.documentId),
-      );
+      await updateDocumentExtractionSuccess({
+        communityId: params.communityId,
+        documentId: params.documentId,
+        text,
+        status: 'completed',
+      });
     } catch (err) {
       // Update extraction status to failed with error message
       try {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        const scoped = createScopedClient(params.communityId);
-        await scoped.update(
-          documents,
-          {
-            extractionStatus: 'failed' as const,
-            extractionError: errorMessage,
-          },
-          eq(documents.id, params.documentId),
-        );
+        await updateDocumentExtractionFailure({
+          communityId: params.communityId,
+          documentId: params.documentId,
+          errorMessage,
+        });
       } catch (updateErr) {
         // If even the status update fails, just log it
         // eslint-disable-next-line no-console

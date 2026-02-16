@@ -7,8 +7,8 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+import { and, eq } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
-import { and, eq } from 'drizzle-orm';
 import {
   isDigestFrequency,
   isNeverFrequency,

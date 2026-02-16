@@ -2,20 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createPresignedDownloadUrlMock,
-  createScopedClientMock,
-  updateMock,
-  documentsTable,
+  updateDocumentExtractionFailureMock,
+  updateDocumentExtractionSuccessMock,
 } = vi.hoisted(() => ({
   createPresignedDownloadUrlMock: vi.fn(),
-  createScopedClientMock: vi.fn(),
-  updateMock: vi.fn(),
-  documentsTable: Symbol('documents'),
+  updateDocumentExtractionFailureMock: vi.fn(),
+  updateDocumentExtractionSuccessMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
-  createScopedClient: createScopedClientMock,
-  documents: documentsTable,
+  updateDocumentExtractionFailure: updateDocumentExtractionFailureMock,
+  updateDocumentExtractionSuccess: updateDocumentExtractionSuccessMock,
 }));
 
 import { queuePdfExtraction } from '../../src/lib/workers/pdf-extraction';
@@ -28,11 +26,10 @@ function makeSimplePdf(text: string): Uint8Array {
 describe('pdf-extraction worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock scoped client update
-    createScopedClientMock.mockReturnValue({ update: updateMock });
     // Mock storage URL + fetch
     createPresignedDownloadUrlMock.mockResolvedValue('http://example.test/signed');
-    updateMock.mockResolvedValue([]);
+    updateDocumentExtractionFailureMock.mockResolvedValue(undefined);
+    updateDocumentExtractionSuccessMock.mockResolvedValue(undefined);
   });
 
   it('downloads, extracts, and updates document text', async () => {
@@ -50,11 +47,13 @@ describe('pdf-extraction worker', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith('documents', 'communities/42/documents/abc/file.pdf', 300);
-    expect(createScopedClientMock).toHaveBeenCalledWith(42);
-    expect(updateMock).toHaveBeenCalledWith(
-      documentsTable,
-      expect.objectContaining({ searchText: 'Hello Worker' }),
-      expect.anything(),
+    expect(updateDocumentExtractionSuccessMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 42,
+        documentId: 99,
+        text: 'Hello Worker',
+        status: 'completed',
+      }),
     );
   });
 
@@ -71,14 +70,12 @@ describe('pdf-extraction worker', () => {
 
     await new Promise((r) => setTimeout(r, 10));
 
-    expect(updateMock).toHaveBeenCalledWith(
-      documentsTable,
+    expect(updateDocumentExtractionSuccessMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        extractionStatus: 'completed',
-        extractionError: null,
-        extractedAt: expect.any(Date),
+        communityId: 42,
+        documentId: 99,
+        status: 'completed',
       }),
-      expect.anything(),
     );
   });
 
@@ -94,15 +91,12 @@ describe('pdf-extraction worker', () => {
 
     await new Promise((r) => setTimeout(r, 10));
 
-    // The first createScopedClient call is in the catch block for updating failed status
-    expect(createScopedClientMock).toHaveBeenCalledWith(1);
-    expect(updateMock).toHaveBeenCalledWith(
-      documentsTable,
+    expect(updateDocumentExtractionFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        extractionStatus: 'failed',
-        extractionError: expect.stringContaining('Failed to download pdf'),
+        communityId: 1,
+        documentId: 2,
+        errorMessage: expect.stringContaining('Failed to download pdf'),
       }),
-      expect.anything(),
     );
   });
 
@@ -122,14 +116,12 @@ describe('pdf-extraction worker', () => {
     // when fallback parser returns empty text triggers the slower code path)
     await new Promise((r) => setTimeout(r, 200));
 
-    expect(updateMock).toHaveBeenCalledWith(
-      documentsTable,
+    expect(updateDocumentExtractionSuccessMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        extractionStatus: 'skipped',
-        extractionError: null,
-        extractedAt: expect.any(Date),
+        communityId: 10,
+        documentId: 20,
+        status: 'skipped',
       }),
-      expect.anything(),
     );
   });
 
@@ -149,7 +141,7 @@ describe('pdf-extraction worker', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     // Should have been called — either for skipped (empty text) or completed
-    expect(updateMock).toHaveBeenCalled();
+    expect(updateDocumentExtractionSuccessMock).toHaveBeenCalled();
   });
 
   it('skips extraction for non-PDF mime types', async () => {
@@ -163,6 +155,7 @@ describe('pdf-extraction worker', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(updateDocumentExtractionSuccessMock).not.toHaveBeenCalled();
+    expect(updateDocumentExtractionFailureMock).not.toHaveBeenCalled();
   });
 });

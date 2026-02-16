@@ -14,7 +14,6 @@
  * - ADR-001 role constraints via role-validator
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   communities,
@@ -24,6 +23,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { COMMUNITY_ROLES, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';

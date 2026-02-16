@@ -1,16 +1,19 @@
 import { createElement } from 'react';
-import { eq } from 'drizzle-orm';
+import { eq } from '@propertypro/db/filters';
 import {
-  claimDigestQueueRows,
   communities,
   createScopedClient,
-  findCandidateDigestCommunityIds,
-  hasMoreDigestRows,
   notificationDigestQueue,
   notificationPreferences,
   users,
-  type DigestFrequency,
 } from '@propertypro/db';
+// Unsafe escape hatch: digest queue claiming scans cross-community rows by design.
+import {
+  claimDigestQueueRows,
+  findCandidateDigestCommunityIds,
+  hasMoreDigestRows,
+  type DigestFrequency,
+} from '@propertypro/db/unsafe';
 import { NotificationDigestEmail, sendEmail } from '@propertypro/email';
 import {
   getDefaultPreferences,

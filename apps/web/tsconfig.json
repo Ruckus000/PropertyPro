@@ -22,8 +22,23 @@
       "@propertypro/db": [
         "../../packages/db/src"
       ],
-      "@propertypro/db/*": [
-        "../../packages/db/src/*"
+      "@propertypro/db/supabase/client": [
+        "../../packages/db/src/supabase/client.ts"
+      ],
+      "@propertypro/db/supabase/server": [
+        "../../packages/db/src/supabase/server.ts"
+      ],
+      "@propertypro/db/supabase/admin": [
+        "../../packages/db/src/supabase/admin.ts"
+      ],
+      "@propertypro/db/supabase/middleware": [
+        "../../packages/db/src/supabase/middleware.ts"
+      ],
+      "@propertypro/db/filters": [
+        "../../packages/db/src/filters.ts"
+      ],
+      "@propertypro/db/unsafe": [
+        "../../packages/db/src/unsafe.ts"
       ],
       "@propertypro/shared": [
         "../../packages/shared/src"

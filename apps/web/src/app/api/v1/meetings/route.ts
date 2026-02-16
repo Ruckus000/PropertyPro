@@ -9,7 +9,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { and, eq } from 'drizzle-orm';
 import {
   createScopedClient,
   logAuditEvent,
@@ -19,6 +18,7 @@ import {
   meetingDocuments,
   type Meeting,
 } from '@propertypro/db';
+import { and, eq } from '@propertypro/db/filters';
 import { type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';

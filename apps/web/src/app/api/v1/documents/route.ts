@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
 import {
   createPresignedDownloadUrl,
   createScopedClient,
@@ -8,6 +7,7 @@ import {
   logAuditEvent,
   getAccessibleDocuments,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

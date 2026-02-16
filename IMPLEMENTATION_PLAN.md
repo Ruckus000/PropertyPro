@@ -682,6 +682,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Status:** In Progress (canonical Phase 2 base-task counts are maintained in `PHASE2_EXECUTION_PLAN.md`; `P2-43` merged on 2026-02-15)
 - **Execution Source of Truth:** `PHASE2_EXECUTION_PLAN.md`
 - **Tracking Note:** Active sequencing, milestone logging, and Gate 3 closeout evidence for remaining baseline Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) should be maintained in `PHASE2_EXECUTION_PLAN.md`.
+- **Hardening Note (2026-02-16):** `P2-PRE-03` scoped-only DB access enforcement is complete (`@propertypro/db/unsafe`, `@propertypro/db/filters`, runtime import guard, and CI workflow); remaining mandatory hardening item is `P2-33.5`.
 - **Checkpoint Note (2026-02-16):** Digest notification rollout (preference contract extension + digest queue + processor + internal cron route + middleware carve-out + scheduler fallback) is implemented in local workspace and validated by targeted suites; merge + shared-env preflight evidence remains outstanding.
 
 ---

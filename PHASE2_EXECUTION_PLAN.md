@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-16  
 **Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening progress is 1/3 complete)  
+**Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening progress is 2/3 complete)  
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -20,10 +20,10 @@ Milestones:
 - [2026-02-14] Parallel Phase 2 batch merged and gate-passed on `main` - `P2-31`, `P2-32`, `P2-32a`, `P2-37`, `P2-40`, `P2-41`, `P2-42`.
 - [2026-02-15] `P2-43` merged (`feat/p2-43-multi-tenant-isolation` -> `main`, merge `bbaade5`) with expanded route isolation coverage (`aac4bbb`).
 - [2026-02-16] Spec path normalization completed across active Phase 2 specs under `specs/phase-2-multi-tenancy/` (removed legacy `apps/api` references).
+- [2026-02-16] `P2-PRE-03` scoped-only DB enforcement completed on `main` (unsafe namespace, runtime import guard, and CI workflow).
 
 Current cursor:
-- Execute mandatory pre-batch hardening now: `P2-PRE-03`.
-- Then run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
+- Run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
 - Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
 
 ---
@@ -90,21 +90,21 @@ Current cursor:
 ```
 
 ### P2-PRE-03 - Scoped-Only DB Access Enforcement
-- **Status:** In Progress (root `@propertypro/db` export is already scoped-only; unsafe namespace + CI enforcement still pending)
+- **Status:** Complete (2026-02-16)
 - **Objective:** Turn DB-scoping process guidance into a hard constraint.
 - **Required implementation:**
 - Keep root export (`@propertypro/db`) scoped-only for application access.
 - Add explicit unsafe export path (example: `@propertypro/db/unsafe`) for deliberate unscoped access in rare cases (migration tooling, seed internals).
 - Unsafe API naming should be explicit (`createUnscopedClient`) and code-reviewed as an exception.
 - Add CI guard to block direct raw ORM usage in app runtime code.
-- **CI guard (minimum baseline):**
+- **CI guard (authoritative):**
 ```bash
-! grep -r "from.*drizzle" apps/web/src --include="*.ts" | grep -v "scoped-client"
+pnpm guard:db-access
 ```
 - **Exit gate:**
 - `pnpm lint`
 - `pnpm typecheck`
-- CI grep rule green on `main`.
+- Scoped DB access guard green on `main`.
 
 ---
 
@@ -135,7 +135,6 @@ Open non-denominator subtask scope: `P2-34a`.
 
 Remaining mandatory hardening tasks:
 - `P2-33.5` Billing and provisioning schema migration
-- `P2-PRE-03` Scoped-only DB access enforcement
 
 ---
 

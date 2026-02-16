@@ -1,4 +1,5 @@
-import { findCommunityBySlugUnscoped } from '@propertypro/db';
+// Unsafe escape hatch: tenant slug resolution must happen before tenant context exists.
+import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveCommunityContext } from './resolve-community-context';
 

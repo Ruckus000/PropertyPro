@@ -13,11 +13,13 @@ import {
   notificationPreferences,
   units,
   users,
-} from '../packages/db/src/schema/index';
-import { db } from '../packages/db/src/drizzle';
-import { createAdminClient } from '../packages/db/src/supabase/admin';
+} from '@propertypro/db';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getComplianceTemplate } from '../packages/shared/src/compliance/templates';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+
+const db = createUnscopedClient();
 
 type CanonicalRole =
   | 'owner'

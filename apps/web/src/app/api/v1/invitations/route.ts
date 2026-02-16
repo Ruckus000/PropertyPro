@@ -11,7 +11,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
 import {
   communities,
   createScopedClient,
@@ -20,6 +19,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

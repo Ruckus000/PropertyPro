@@ -10,7 +10,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
 import {
   createScopedClient,
   logAuditEvent,
@@ -18,6 +17,7 @@ import {
   units,
   userRoles,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';

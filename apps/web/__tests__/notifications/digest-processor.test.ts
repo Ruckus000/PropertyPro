@@ -32,14 +32,17 @@ const {
 }));
 
 vi.mock('@propertypro/db', () => ({
-  findCandidateDigestCommunityIds: findCandidateDigestCommunityIdsMock,
-  claimDigestQueueRows: claimDigestQueueRowsMock,
-  hasMoreDigestRows: hasMoreDigestRowsMock,
   createScopedClient: createScopedClientMock,
   communities: tables.communities,
   users: tables.users,
   notificationPreferences: tables.notificationPreferences,
   notificationDigestQueue: tables.notificationDigestQueue,
+}));
+
+vi.mock('@propertypro/db/unsafe', () => ({
+  findCandidateDigestCommunityIds: findCandidateDigestCommunityIdsMock,
+  claimDigestQueueRows: claimDigestQueueRowsMock,
+  hasMoreDigestRows: hasMoreDigestRowsMock,
 }));
 
 vi.mock('@propertypro/email', () => ({

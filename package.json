@@ -16,7 +16,8 @@
     "plan:verify:phase2": "tsx scripts/verify-phase2-plan-status.ts",
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
     "test:watch": "vitest",
-    "lint": "turbo run lint",
+    "guard:db-access": "node --import tsx scripts/verify-scoped-db-access.ts",
+    "lint": "turbo run lint && pnpm guard:db-access",
     "clean": "turbo run clean"
   },
   "pnpm": {

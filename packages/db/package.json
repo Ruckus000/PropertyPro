@@ -23,6 +23,14 @@
     "./supabase/middleware": {
       "types": "./src/supabase/middleware.ts",
       "import": "./src/supabase/middleware.ts"
+    },
+    "./filters": {
+      "types": "./src/filters.ts",
+      "import": "./src/filters.ts"
+    },
+    "./unsafe": {
+      "types": "./src/unsafe.ts",
+      "import": "./src/unsafe.ts"
     }
   },
   "main": "./dist/index.js",
