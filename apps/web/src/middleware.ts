@@ -33,8 +33,10 @@ const PROTECTED_PATH_PREFIXES = [
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';
-const TOKEN_AUTH_ROUTE = '/api/v1/invitations';
-const TOKEN_AUTH_METHOD = 'PATCH';
+const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
+  { path: '/api/v1/invitations', method: 'PATCH' },
+  { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
+];
 
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
@@ -69,7 +71,11 @@ function isApiPath(pathname: string): boolean {
 }
 
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
-  return request.nextUrl.pathname === TOKEN_AUTH_ROUTE && request.method === TOKEN_AUTH_METHOD;
+  return TOKEN_AUTH_ROUTES.some(
+    (route) =>
+      request.nextUrl.pathname === route.path &&
+      request.method.toUpperCase() === route.method,
+  );
 }
 
 function buildReturnTo(request: NextRequest): string {

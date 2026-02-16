@@ -135,6 +135,8 @@ describe('meeting creation triggers notification', () => {
         type: 'meeting_notice',
         meetingTitle: 'Annual Budget Meeting',
         location: 'Clubhouse',
+        sourceType: 'meeting',
+        sourceId: '1',
       }),
       'all',
       'user-1',

@@ -157,18 +157,28 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     // Swallow extraction scheduling errors — never block document creation
   }
 
-  // Fire-and-forget: send document-posted notifications (P2-41)
-  queueNotification(
-    effectiveCommunityId,
-    {
-      type: 'document_posted',
-      documentTitle: payload.title,
-      uploadedByName: 'Community Team', // resolved from context; simplified for now
+  try {
+    await queueNotification(
+      effectiveCommunityId,
+      {
+        type: 'document_posted',
+        documentTitle: payload.title,
+        uploadedByName: 'Community Team', // resolved from context; simplified for now
+        documentId: String(created['id']),
+        sourceType: 'document',
+        sourceId: String(created['id']),
+      },
+      'all',
+      userId,
+    );
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[documents] notification dispatch failed', {
+      communityId: effectiveCommunityId,
       documentId: String(created['id']),
-    },
-    'all',
-    userId,
-  );
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return NextResponse.json({ data: created }, { status: 201 });
 });

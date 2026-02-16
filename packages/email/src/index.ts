@@ -32,6 +32,12 @@ export type { MaintenanceUpdateEmailProps } from "./templates/maintenance-update
 export { DocumentPostedEmail } from "./templates/document-posted-email";
 export type { DocumentPostedEmailProps } from "./templates/document-posted-email";
 
+export { NotificationDigestEmail } from "./templates/notification-digest-email";
+export type {
+  NotificationDigestEmailProps,
+  NotificationDigestItem,
+} from "./templates/notification-digest-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

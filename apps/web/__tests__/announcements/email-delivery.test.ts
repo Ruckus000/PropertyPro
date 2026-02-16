@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   createScopedClientMock,
   sendEmailMock,
+  enqueueDigestItemsMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
+  enqueueDigestItemsMock: vi.fn().mockResolvedValue({ enqueued: 0, duplicates: 0 }),
   tables: {
     userRoles: Symbol('user_roles'),
     users: Symbol('users'),
@@ -30,20 +32,25 @@ vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
 }));
 
+vi.mock('@/lib/services/notification-digest-queue', () => ({
+  enqueueDigestItems: enqueueDigestItemsMock,
+}));
+
 import { queueAnnouncementDelivery } from '../../src/lib/services/announcement-delivery';
 
 describe('announcement email delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
+    enqueueDigestItemsMock.mockResolvedValue({ enqueued: 0, duplicates: 0 });
   });
 
-  it('filters recipients by audience and announcement preference', async () => {
+  it('splits immediate and digest recipients by email frequency', async () => {
     const deliveryRows: Array<Record<string, unknown>> = [];
     const query = vi.fn(async (table: unknown) => {
       if (table === tables.userRoles) {
         return [
-          { userId: 'u-owner', role: 'owner' },
+          { userId: 'u-owner', role: 'board_member' },
           { userId: 'u-board', role: 'board_member' },
           { userId: 'u-tenant', role: 'tenant' },
         ];
@@ -57,8 +64,8 @@ describe('announcement email delivery', () => {
       }
       if (table === tables.notificationPreferences) {
         return [
-          { userId: 'u-owner', emailAnnouncements: true },
-          { userId: 'u-board', emailAnnouncements: true },
+          { userId: 'u-owner', emailAnnouncements: true, emailFrequency: 'immediate' },
+          { userId: 'u-board', emailAnnouncements: true, emailFrequency: 'daily_digest' },
           { userId: 'u-tenant', emailAnnouncements: false },
         ];
       }
@@ -98,18 +105,34 @@ describe('announcement email delivery', () => {
       authorName: 'Admin',
     });
 
-    expect(count).toBe(1);
+    expect(count).toBe(2);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(sendEmailMock).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'board@example.com' }),
+      expect.objectContaining({ to: 'owner@example.com' }),
     );
-    expect(insert).toHaveBeenCalledWith(
-      tables.announcementDeliveryLog,
-      expect.objectContaining({
-        announcementId: 10,
-        userId: 'u-board',
-        status: 'pending',
-      }),
+    expect(deliveryRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          announcementId: 10,
+          userId: 'u-owner',
+          status: 'pending',
+        }),
+        expect.objectContaining({
+          announcementId: 10,
+          userId: 'u-board',
+          status: 'queued_digest',
+        }),
+      ]),
+    );
+    expect(enqueueDigestItemsMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'u-board',
+          frequency: 'daily_digest',
+          sourceType: 'announcement',
+          sourceId: '10',
+        }),
+      ]),
     );
     expect(update).toHaveBeenCalled();
   });
@@ -166,5 +189,6 @@ describe('announcement email delivery', () => {
 
     expect(count).toBe(recipientCount);
     expect(sendEmailMock).toHaveBeenCalledTimes(recipientCount);
+    expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
   });
 });

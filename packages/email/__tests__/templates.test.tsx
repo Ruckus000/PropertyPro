@@ -8,6 +8,7 @@ import {
   AnnouncementEmail,
   MaintenanceUpdateEmail,
   DocumentPostedEmail,
+  NotificationDigestEmail,
 } from "../src/index";
 import type { CommunityBranding } from "../src/index";
 
@@ -842,5 +843,56 @@ describe("DocumentPostedEmail", () => {
     );
     expect(html).toContain("Sunset Condos");
     expect(html).not.toContain("logo.png");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// NotificationDigestEmail
+// ---------------------------------------------------------------------------
+
+describe("NotificationDigestEmail", () => {
+  it("renders digest items with links", async () => {
+    const html = await render(
+      <NotificationDigestEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        frequency="daily_digest"
+        portalUrl="https://example.com/dashboard"
+        items={[
+          {
+            title: "Board Meeting",
+            summary: "Tomorrow at 7:00 PM in the clubhouse",
+            actionUrl: "https://example.com/meetings/7",
+          },
+          {
+            title: "New Financial Report",
+            summary: "Q4 report has been posted",
+            actionUrl: "https://example.com/documents/99",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Daily");
+    expect(html).toContain("Notification Digest");
+    expect(html).toContain("Board Meeting");
+    expect(html).toContain("New Financial Report");
+    expect(html).toContain("https://example.com/meetings/7");
+    expect(html).toContain("https://example.com/documents/99");
+  });
+
+  it("renders weekly label for weekly frequency", async () => {
+    const html = await render(
+      <NotificationDigestEmail
+        branding={branding}
+        recipientName="Jane Doe"
+        frequency="weekly_digest"
+        portalUrl="https://example.com/dashboard"
+        items={[{ title: "Weekly Summary" }]}
+      />,
+    );
+
+    expect(html).toContain("Weekly");
+    expect(html).toContain("Notification Digest");
   });
 });

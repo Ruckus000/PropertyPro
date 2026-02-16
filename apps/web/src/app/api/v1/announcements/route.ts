@@ -196,36 +196,36 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
       ? (author['fullName'] as string)
       : 'Community Team';
 
-  void queueAnnouncementDelivery({
-    communityId,
-    announcementId: created.id,
-    audience: data.audience as AnnouncementAudience,
-    title: data.title,
-    body: data.body,
-    isPinned: data.isPinned,
-    authorName,
-  })
-    .then(async (recipientCount) => {
-      await logAuditEvent({
-        userId: audit.userId,
-        action: 'announcement_email_sent',
-        resourceType: 'announcement',
-        resourceId: String(created.id),
-        communityId,
-        metadata: {
-          recipientCount,
-          audience: data.audience,
-        },
-      });
-    })
-    .catch((error) => {
-      // eslint-disable-next-line no-console
-      console.error('[announcements] asynchronous delivery failed', {
-        communityId,
-        announcementId: created.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  try {
+    const recipientCount = await queueAnnouncementDelivery({
+      communityId,
+      announcementId: created.id,
+      audience: data.audience as AnnouncementAudience,
+      title: data.title,
+      body: data.body,
+      isPinned: data.isPinned,
+      authorName,
     });
+
+    await logAuditEvent({
+      userId: audit.userId,
+      action: 'announcement_email_sent',
+      resourceType: 'announcement',
+      resourceId: String(created.id),
+      communityId,
+      metadata: {
+        recipientCount,
+        audience: data.audience,
+      },
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[announcements] delivery failed', {
+      communityId,
+      announcementId: created.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

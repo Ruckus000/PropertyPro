@@ -15,11 +15,13 @@ const {
   createScopedClientMock,
   sendEmailMock,
   logAuditEventMock,
+  enqueueDigestItemsMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
   logAuditEventMock: vi.fn(),
+  enqueueDigestItemsMock: vi.fn().mockResolvedValue({ enqueued: 0, duplicates: 0 }),
   tables: {
     userRoles: Symbol('user_roles'),
     users: Symbol('users'),
@@ -43,6 +45,10 @@ vi.mock('@propertypro/email', () => ({
   ComplianceAlertEmail: (props: unknown) => ({ type: 'ComplianceAlertEmail', props }),
   DocumentPostedEmail: (props: unknown) => ({ type: 'DocumentPostedEmail', props }),
   sendEmail: sendEmailMock,
+}));
+
+vi.mock('@/lib/services/notification-digest-queue', () => ({
+  enqueueDigestItems: enqueueDigestItemsMock,
 }));
 
 import {
@@ -109,6 +115,7 @@ describe('notification-service', () => {
     vi.clearAllMocks();
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
     logAuditEventMock.mockResolvedValue(undefined);
+    enqueueDigestItemsMock.mockResolvedValue({ enqueued: 0, duplicates: 0 });
   });
 
   // -------------------------------------------------------------------------
@@ -348,6 +355,108 @@ describe('notification-service', () => {
       const count = await sendNotification(COMMUNITY_ID, event, 'all', 'actor-1');
       expect(count).toBe(0);
       expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('queues digest rows instead of sending immediate emails for digest frequency', async () => {
+      setupMock(
+        [{ userId: 'u-owner', role: 'owner' }],
+        [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+        [
+          {
+            userId: 'u-owner',
+            emailAnnouncements: true,
+            emailDocuments: true,
+            emailMeetings: true,
+            emailMaintenance: true,
+            emailFrequency: 'daily_digest',
+          },
+        ],
+      );
+
+      enqueueDigestItemsMock.mockResolvedValueOnce({ enqueued: 1, duplicates: 0 });
+
+      const event: DocumentPostedEvent = {
+        type: 'document_posted',
+        documentTitle: 'Q4 2025 Financial Report',
+        uploadedByName: 'Board Treasurer',
+        documentId: '99',
+      };
+
+      const count = await sendNotification(COMMUNITY_ID, event, 'all', 'actor-1');
+      expect(count).toBe(1);
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(enqueueDigestItemsMock).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            userId: 'u-owner',
+            frequency: 'daily_digest',
+            sourceType: 'document',
+            sourceId: '99',
+          }),
+        ]),
+      );
+    });
+
+    it('suppresses non-critical notifications for frequency=never', async () => {
+      setupMock(
+        [{ userId: 'u-owner', role: 'owner' }],
+        [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+        [
+          {
+            userId: 'u-owner',
+            emailAnnouncements: true,
+            emailDocuments: true,
+            emailMeetings: true,
+            emailMaintenance: true,
+            emailFrequency: 'never',
+          },
+        ],
+      );
+
+      const event: MeetingNoticeEvent = {
+        type: 'meeting_notice',
+        meetingTitle: 'Board Meeting',
+        meetingDate: 'March 15, 2026',
+        meetingTime: '7:00 PM EST',
+        location: 'Clubhouse',
+        meetingType: 'board',
+        sourceType: 'meeting',
+        sourceId: 'meeting-1',
+      };
+
+      const count = await sendNotification(COMMUNITY_ID, event, 'all', 'actor-1');
+      expect(count).toBe(0);
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to immediate when digest preference exists but event has no sourceId', async () => {
+      setupMock(
+        [{ userId: 'u-cam', role: 'cam' }],
+        [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
+        [
+          {
+            userId: 'u-cam',
+            emailAnnouncements: true,
+            emailDocuments: true,
+            emailMeetings: true,
+            emailMaintenance: true,
+            emailFrequency: 'daily_digest',
+          },
+        ],
+      );
+
+      const event: ComplianceAlertEvent = {
+        type: 'compliance_alert',
+        alertTitle: 'Missing Financial Report',
+        alertDescription: 'Q4 report not posted.',
+        severity: 'critical',
+      };
+
+      const count = await sendNotification(COMMUNITY_ID, event, 'community_admins', 'actor-1');
+      expect(count).toBe(1);
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
     });
 
     it('logs audit event with notification_sent action after sending', async () => {

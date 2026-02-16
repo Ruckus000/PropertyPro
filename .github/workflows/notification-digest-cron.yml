@@ -1,0 +1,31 @@
+name: Notification Digest Processor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-digest-processor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke digest processor route
+        env:
+          DIGEST_CRON_BASE_URL: ${{ secrets.DIGEST_CRON_BASE_URL }}
+          NOTIFICATION_DIGEST_CRON_SECRET: ${{ secrets.NOTIFICATION_DIGEST_CRON_SECRET }}
+        run: |
+          if [ -z "$DIGEST_CRON_BASE_URL" ]; then
+            echo "Missing DIGEST_CRON_BASE_URL secret"
+            exit 1
+          fi
+
+          if [ -z "$NOTIFICATION_DIGEST_CRON_SECRET" ]; then
+            echo "Missing NOTIFICATION_DIGEST_CRON_SECRET secret"
+            exit 1
+          fi
+
+          curl -fsS \
+            -X POST \
+            "$DIGEST_CRON_BASE_URL/api/v1/internal/notification-digests/process" \
+            -H "Authorization: Bearer $NOTIFICATION_DIGEST_CRON_SECRET" \
+            -H "Content-Type: application/json"

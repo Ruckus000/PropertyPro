@@ -202,7 +202,7 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
     },
   });
 
-  // Fire-and-forget: send meeting notice emails to community members (P2-41)
+  // Await notification dispatch so digest enqueue writes are durable in-request.
   const startsAtDate = new Date(data.startsAt);
   const meetingTypeForEmail = data.meetingType === 'board' || data.meetingType === 'committee'
     ? 'board' as const
@@ -210,27 +210,38 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       ? 'special' as const
       : 'owner' as const;
 
-  queueNotification(
-    communityId,
-    {
-      type: 'meeting_notice',
-      meetingTitle: data.title,
-      meetingDate: startsAtDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }),
-      meetingTime: startsAtDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZoneName: 'short',
-      }),
-      location: data.location,
-      meetingType: meetingTypeForEmail,
-    },
-    'all',
-    actorUserId,
-  );
+  try {
+    await queueNotification(
+      communityId,
+      {
+        type: 'meeting_notice',
+        meetingTitle: data.title,
+        meetingDate: startsAtDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        meetingTime: startsAtDate.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        }),
+        location: data.location,
+        meetingType: meetingTypeForEmail,
+        sourceType: 'meeting',
+        sourceId: createdId,
+      },
+      'all',
+      actorUserId,
+    );
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[meetings] notification dispatch failed', {
+      communityId,
+      meetingId: createdId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

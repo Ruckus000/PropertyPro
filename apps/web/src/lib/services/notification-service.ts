@@ -1,17 +1,9 @@
 /**
- * Notification dispatch service — P2-41.
+ * Notification dispatch service.
  *
- * Central service that sends email notifications for key events,
- * respecting user notification preferences per AGENTS Email #3.
- *
- * Patterns:
- * - Checks notification_preferences before every non-critical send
- * - Includes List-Unsubscribe header on all non-transactional emails (AGENTS Email #4)
- * - Fire-and-forget pattern (callers use `void sendNotification(...)`)
- * - Logs email sends via logAuditEvent with action='notification_sent'
- * - Never sends to users who haven't verified their email (deletedAt !== null)
+ * Sends immediate emails or enqueues digest items based on user preferences.
  */
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import {
   communities,
   createScopedClient,
@@ -29,11 +21,17 @@ import {
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import {
+  classifyDeliveryMode,
   getDefaultPreferences,
-  shouldSendEmailNow,
+  isDigestFrequency,
   type NotificationKind,
   type UserNotificationPreferences,
 } from '@/lib/utils/email-preferences';
+import {
+  enqueueDigestItems,
+  type EnqueueDigestItemInput,
+  type DigestSourceType,
+} from '@/lib/services/notification-digest-queue';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +53,8 @@ export interface MeetingNoticeEvent {
   location: string;
   meetingType: 'board' | 'owner' | 'special';
   agendaUrl?: string;
+  sourceType?: 'meeting';
+  sourceId?: string;
 }
 
 export interface MaintenanceUpdateEvent {
@@ -64,6 +64,8 @@ export interface MaintenanceUpdateEvent {
   newStatus: string;
   notes?: string;
   requestId: string;
+  sourceType?: 'maintenance';
+  sourceId?: string;
 }
 
 export interface ComplianceAlertEvent {
@@ -73,6 +75,8 @@ export interface ComplianceAlertEvent {
   dueDate?: string;
   severity: 'info' | 'warning' | 'critical';
   statuteReference?: string;
+  sourceType?: 'compliance';
+  sourceId?: string;
 }
 
 export interface DocumentPostedEvent {
@@ -81,12 +85,19 @@ export interface DocumentPostedEvent {
   documentCategory?: string;
   uploadedByName: string;
   documentId: string;
+  sourceType?: 'document';
+  sourceId?: string;
 }
 
 interface Recipient {
   userId: string;
   email: string;
   fullName: string;
+}
+
+interface RecipientDelivery extends Recipient {
+  preferences: UserNotificationPreferences;
+  mode: 'immediate' | 'digest';
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +110,7 @@ const ADMIN_ROLES = new Set(['board_member', 'board_president', 'cam', 'site_man
 const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   meeting_notice: 'meeting',
   maintenance_update: 'maintenance',
-  compliance_alert: 'meeting', // compliance alerts always go to admins; use 'meeting' kind check as a fallback
+  compliance_alert: 'meeting',
   document_posted: 'document',
 };
 
@@ -129,15 +140,105 @@ function chunk<T>(items: T[], size: number): T[][] {
   return groups;
 }
 
-// ---------------------------------------------------------------------------
-// Recipient resolution with preference checking
-// ---------------------------------------------------------------------------
+function resolveDigestSource(event: NotificationEvent): {
+  sourceType: DigestSourceType;
+  sourceId: string;
+} | null {
+  if (event.type === 'meeting_notice') {
+    if (!event.sourceId) return null;
+    return {
+      sourceType: event.sourceType ?? 'meeting',
+      sourceId: event.sourceId,
+    };
+  }
 
-export async function resolveRecipients(
+  if (event.type === 'maintenance_update') {
+    return {
+      sourceType: event.sourceType ?? 'maintenance',
+      sourceId: event.sourceId ?? event.requestId,
+    };
+  }
+
+  if (event.type === 'document_posted') {
+    return {
+      sourceType: event.sourceType ?? 'document',
+      sourceId: event.sourceId ?? event.documentId,
+    };
+  }
+
+  if (event.type === 'compliance_alert') {
+    if (!event.sourceId) return null;
+    return {
+      sourceType: event.sourceType ?? 'compliance',
+      sourceId: event.sourceId,
+    };
+  }
+
+  return null;
+}
+
+function buildDigestPayload(
+  event: NotificationEvent,
+  communityId: number,
+): {
+  sourceType: DigestSourceType;
+  sourceId: string;
+  eventType: string;
+  eventTitle: string;
+  eventSummary?: string;
+  actionUrl?: string;
+} | null {
+  const source = resolveDigestSource(event);
+  if (!source) return null;
+
+  const baseUrl = getBaseUrl();
+  if (event.type === 'meeting_notice') {
+    return {
+      ...source,
+      eventType: event.type,
+      eventTitle: event.meetingTitle,
+      eventSummary: `${event.meetingDate} at ${event.meetingTime} · ${event.location}`,
+      actionUrl: event.agendaUrl ?? `${baseUrl}/meetings?communityId=${communityId}`,
+    };
+  }
+
+  if (event.type === 'maintenance_update') {
+    return {
+      ...source,
+      eventType: event.type,
+      eventTitle: event.requestTitle,
+      eventSummary: `${event.previousStatus} -> ${event.newStatus}`,
+      actionUrl: `${baseUrl}/maintenance/${event.requestId}?communityId=${communityId}`,
+    };
+  }
+
+  if (event.type === 'document_posted') {
+    return {
+      ...source,
+      eventType: event.type,
+      eventTitle: event.documentTitle,
+      eventSummary: event.documentCategory
+        ? `${event.documentCategory} · Uploaded by ${event.uploadedByName}`
+        : `Uploaded by ${event.uploadedByName}`,
+      actionUrl: `${baseUrl}/documents/${event.documentId}?communityId=${communityId}`,
+    };
+  }
+
+  return {
+    ...source,
+    eventType: event.type,
+    eventTitle: event.alertTitle,
+    eventSummary: event.alertDescription,
+    actionUrl: `${baseUrl}/compliance?communityId=${communityId}`,
+  };
+}
+
+async function resolveRecipientDeliveries(
   communityId: number,
   filter: RecipientFilter,
   notificationKind: NotificationKind,
-): Promise<Recipient[]> {
+  supportsDigest: boolean,
+): Promise<RecipientDelivery[]> {
   const scoped = createScopedClient(communityId);
 
   const [roleRows, userRows, preferenceRows] = await Promise.all([
@@ -150,7 +251,6 @@ export async function resolveRecipients(
   for (const row of userRows) {
     const userId = row['id'];
     if (typeof userId === 'string') {
-      // Skip users with deletedAt set (unverified or deactivated)
       if (row['deletedAt'] != null) continue;
       usersById.set(userId, row);
     }
@@ -160,25 +260,33 @@ export async function resolveRecipients(
   for (const row of preferenceRows) {
     const userId = row['userId'];
     if (typeof userId === 'string') {
+      const rawFrequency = row['emailFrequency'];
       preferencesByUserId.set(userId, {
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailDocuments: (row['emailDocuments'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
         emailMaintenance: (row['emailMaintenance'] as boolean | undefined) ?? true,
+        emailFrequency:
+          rawFrequency === 'immediate' ||
+          rawFrequency === 'daily_digest' ||
+          rawFrequency === 'weekly_digest' ||
+          rawFrequency === 'never'
+            ? rawFrequency
+            : 'immediate',
       });
     }
   }
 
-  const recipients: Recipient[] = [];
+  const recipients: RecipientDelivery[] = [];
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
     if (!isRoleMatch(role, filter)) continue;
 
-    // Check notification preferences (AGENTS Email #3)
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
-    if (!shouldSendEmailNow(notificationKind, prefs)) continue;
+    const mode = classifyDeliveryMode(notificationKind, prefs, { supportsDigest });
+    if (mode === 'skip') continue;
 
     const user = usersById.get(userId);
     if (!user) continue;
@@ -187,10 +295,31 @@ export async function resolveRecipients(
     const fullName = user['fullName'];
     if (typeof email !== 'string' || typeof fullName !== 'string') continue;
 
-    recipients.push({ userId, email, fullName });
+    recipients.push({ userId, email, fullName, preferences: prefs, mode });
   }
 
   return recipients;
+}
+
+// ---------------------------------------------------------------------------
+// Public recipient resolver (immediate-only)
+// ---------------------------------------------------------------------------
+
+export async function resolveRecipients(
+  communityId: number,
+  filter: RecipientFilter,
+  notificationKind: NotificationKind,
+): Promise<Recipient[]> {
+  const deliveries = await resolveRecipientDeliveries(
+    communityId,
+    filter,
+    notificationKind,
+    false,
+  );
+
+  return deliveries
+    .filter((delivery) => delivery.mode === 'immediate')
+    .map(({ userId, email, fullName }) => ({ userId, email, fullName }));
 }
 
 async function loadBranding(communityId: number): Promise<CommunityBranding> {
@@ -212,7 +341,7 @@ function renderEmailForEvent(
   recipient: Recipient,
   branding: CommunityBranding,
   communityId: number,
-): { subject: string; react: React.ReactElement } {
+): { subject: string; react: ReactElement } {
   const baseUrl = getBaseUrl();
 
   switch (event.type) {
@@ -282,12 +411,10 @@ function renderEmailForEvent(
 /**
  * Send a notification to eligible recipients in a community.
  *
- * - Resolves recipients by role filter
- * - Checks notification preferences before sending (AGENTS Email #3)
- * - Includes List-Unsubscribe header (AGENTS Email #4)
- * - Logs audit event on completion
+ * Immediate recipients receive an email now.
+ * Digest recipients receive a queued digest item when source identity is available.
  *
- * @returns Number of emails sent
+ * @returns Number of recipients processed (immediate sends + newly queued digest rows)
  */
 export async function sendNotification(
   communityId: number,
@@ -296,45 +423,81 @@ export async function sendNotification(
   actorUserId?: string,
 ): Promise<number> {
   const notificationKind = EVENT_TO_KIND[event.type];
-  const recipients = await resolveRecipients(communityId, recipientFilter, notificationKind);
+  const digestPayload = buildDigestPayload(event, communityId);
+  const deliveries = await resolveRecipientDeliveries(
+    communityId,
+    recipientFilter,
+    notificationKind,
+    digestPayload != null,
+  );
 
-  if (recipients.length === 0) return 0;
+  if (deliveries.length === 0) return 0;
 
-  const branding = await loadBranding(communityId);
-  const baseUrl = getBaseUrl();
-  const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
+  const immediateRecipients = deliveries.filter((delivery) => delivery.mode === 'immediate');
+  const digestRecipients =
+    digestPayload == null
+      ? []
+      : deliveries.filter((delivery) => delivery.mode === 'digest');
 
-  let sentCount = 0;
+  let queuedCount = 0;
+  if (digestPayload && digestRecipients.length > 0) {
+    const queueItems: EnqueueDigestItemInput[] = [];
+    for (const delivery of digestRecipients) {
+      if (!isDigestFrequency(delivery.preferences.emailFrequency)) continue;
+      queueItems.push({
+        communityId,
+        userId: delivery.userId,
+        frequency: delivery.preferences.emailFrequency,
+        sourceType: digestPayload.sourceType,
+        sourceId: digestPayload.sourceId,
+        eventType: digestPayload.eventType,
+        eventTitle: digestPayload.eventTitle,
+        eventSummary: digestPayload.eventSummary,
+        actionUrl: digestPayload.actionUrl,
+      });
+    }
 
-  for (const batch of chunk(recipients, 100)) {
-    await Promise.all(
-      batch.map(async (recipient) => {
-        try {
-          const { subject, react } = renderEmailForEvent(event, recipient, branding, communityId);
-
-          await sendEmail({
-            to: recipient.email,
-            subject,
-            category: 'non-transactional',
-            unsubscribeUrl,
-            react,
-          });
-
-          sentCount += 1;
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('[notification-service] email send failed', {
-            communityId,
-            userId: recipient.userId,
-            eventType: event.type,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }),
-    );
+    if (queueItems.length > 0) {
+      const queueResult = await enqueueDigestItems(queueItems);
+      queuedCount = queueResult.enqueued;
+    }
   }
 
-  // Log audit event for the notification batch
+  let sentCount = 0;
+  if (immediateRecipients.length > 0) {
+    const branding = await loadBranding(communityId);
+    const baseUrl = getBaseUrl();
+    const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
+
+    for (const batch of chunk(immediateRecipients, 100)) {
+      await Promise.all(
+        batch.map(async (recipient) => {
+          try {
+            const { subject, react } = renderEmailForEvent(event, recipient, branding, communityId);
+
+            await sendEmail({
+              to: recipient.email,
+              subject,
+              category: 'non-transactional',
+              unsubscribeUrl,
+              react,
+            });
+
+            sentCount += 1;
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('[notification-service] email send failed', {
+              communityId,
+              userId: recipient.userId,
+              eventType: event.type,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }),
+      );
+    }
+  }
+
   if (actorUserId) {
     await logAuditEvent({
       userId: actorUserId,
@@ -345,31 +508,29 @@ export async function sendNotification(
       metadata: {
         eventType: event.type,
         recipientFilter,
-        recipientCount: recipients.length,
+        recipientCount: deliveries.length,
+        immediateRecipientCount: immediateRecipients.length,
+        digestRecipientCount: digestRecipients.length,
         sentCount,
+        queuedCount,
       },
     });
   }
 
-  return sentCount;
+  return sentCount + queuedCount;
 }
 
 /**
- * Fire-and-forget wrapper. Swallows exceptions so callers do not need
- * to await the result.
+ * Queue-style wrapper retained for API call sites.
+ *
+ * Unlike the previous fire-and-forget behavior, this function is async so
+ * route handlers can await digest enqueue durability.
  */
-export function queueNotification(
+export async function queueNotification(
   communityId: number,
   event: NotificationEvent,
   recipientFilter: RecipientFilter,
   actorUserId?: string,
-): void {
-  void sendNotification(communityId, event, recipientFilter, actorUserId).catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[notification-service] queue failed', {
-      communityId,
-      eventType: event.type,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  });
+): Promise<number> {
+  return sendNotification(communityId, event, recipientFilter, actorUserId);
 }

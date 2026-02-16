@@ -8,7 +8,16 @@ import {
   users,
 } from '@propertypro/db';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import {
+  isDigestFrequency,
+  isNeverFrequency,
+  type EmailFrequency,
+} from '@/lib/utils/email-preferences';
+import {
+  enqueueDigestItems,
+  type EnqueueDigestItemInput,
+} from '@/lib/services/notification-digest-queue';
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
@@ -26,6 +35,8 @@ interface Recipient {
   userId: string;
   email: string;
   fullName: string;
+  mode: 'immediate' | 'digest';
+  frequency?: Extract<EmailFrequency, 'daily_digest' | 'weekly_digest'>;
 }
 
 const BOARD_ROLES = new Set(['board_member', 'board_president']);
@@ -71,12 +82,26 @@ async function resolveRecipients(
     }
   }
 
-  const preferencesByUserId = new Map<string, boolean>();
+  const preferencesByUserId = new Map<
+    string,
+    { emailAnnouncements: boolean; emailFrequency: EmailFrequency }
+  >();
   for (const row of preferenceRows) {
     const userId = row['userId'];
-    const emailAnnouncements = row['emailAnnouncements'];
-    if (typeof userId === 'string' && typeof emailAnnouncements === 'boolean') {
-      preferencesByUserId.set(userId, emailAnnouncements);
+    if (typeof userId === 'string') {
+      const rawFrequency = row['emailFrequency'];
+      const emailFrequency: EmailFrequency =
+        rawFrequency === 'immediate' ||
+        rawFrequency === 'daily_digest' ||
+        rawFrequency === 'weekly_digest' ||
+        rawFrequency === 'never'
+          ? rawFrequency
+          : 'immediate';
+
+      preferencesByUserId.set(userId, {
+        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
+        emailFrequency,
+      });
     }
   }
 
@@ -87,8 +112,13 @@ async function resolveRecipients(
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
     if (!isAudienceMatch(role, audience)) continue;
 
-    const allowAnnouncements = preferencesByUserId.get(userId);
-    if (allowAnnouncements === false) continue;
+    const prefs = preferencesByUserId.get(userId) ?? {
+      emailAnnouncements: true,
+      emailFrequency: 'immediate' as const,
+    };
+
+    if (!prefs.emailAnnouncements) continue;
+    if (isNeverFrequency(prefs.emailFrequency)) continue;
 
     const user = usersById.get(userId);
     if (!user) continue;
@@ -97,10 +127,22 @@ async function resolveRecipients(
     const fullName = user['fullName'];
     if (typeof email !== 'string' || typeof fullName !== 'string') continue;
 
+    if (isDigestFrequency(prefs.emailFrequency)) {
+      recipients.push({
+        userId,
+        email,
+        fullName,
+        mode: 'digest',
+        frequency: prefs.emailFrequency,
+      });
+      continue;
+    }
+
     recipients.push({
       userId,
       email,
       fullName,
+      mode: 'immediate',
     });
   }
 
@@ -151,20 +193,57 @@ async function markStatus(
   );
 }
 
-async function deliverAnnouncementEmails(params: QueueAnnouncementDeliveryParams): Promise<number> {
-  const scoped = createScopedClient(params.communityId);
-  const recipients = await resolveRecipients(params.communityId, params.audience);
-  const branding = await loadBranding(params.communityId);
+async function createAnnouncementLogRows(
+  communityId: number,
+  announcementId: number,
+  recipients: Recipient[],
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
 
   for (const recipient of recipients) {
     await scoped.insert(announcementDeliveryLog, {
-      announcementId: params.announcementId,
+      announcementId,
       userId: recipient.userId,
       email: recipient.email,
-      status: 'pending',
+      status: recipient.mode === 'digest' ? 'queued_digest' : 'pending',
+    });
+  }
+}
+
+async function enqueueDigestRecipients(
+  params: QueueAnnouncementDeliveryParams,
+  digestRecipients: Recipient[],
+): Promise<void> {
+  if (digestRecipients.length === 0) return;
+
+  const portalUrl = `${getBaseUrl()}/dashboard?communityId=${params.communityId}`;
+  const queueItems: EnqueueDigestItemInput[] = [];
+  for (const recipient of digestRecipients) {
+    if (!recipient.frequency) continue;
+    queueItems.push({
+      communityId: params.communityId,
+      userId: recipient.userId,
+      frequency: recipient.frequency,
+      sourceType: 'announcement' as const,
+      sourceId: String(params.announcementId),
+      eventType: 'announcement',
+      eventTitle: params.title,
+      eventSummary: params.body.slice(0, 280),
+      actionUrl: portalUrl,
     });
   }
 
+  if (queueItems.length === 0) return;
+  await enqueueDigestItems(queueItems);
+}
+
+async function deliverImmediateAnnouncementEmails(
+  params: QueueAnnouncementDeliveryParams,
+  recipients: Recipient[],
+): Promise<number> {
+  if (recipients.length === 0) return 0;
+
+  const branding = await loadBranding(params.communityId);
   const portalUrl = `${getBaseUrl()}/dashboard?communityId=${params.communityId}`;
   const unsubscribeUrl = `${getBaseUrl()}/settings?communityId=${params.communityId}`;
 
@@ -205,8 +284,49 @@ async function deliverAnnouncementEmails(params: QueueAnnouncementDeliveryParams
   return recipients.length;
 }
 
+async function deliverAnnouncementEmails(params: QueueAnnouncementDeliveryParams): Promise<number> {
+  const recipients = await resolveRecipients(params.communityId, params.audience);
+
+  await createAnnouncementLogRows(params.communityId, params.announcementId, recipients);
+
+  const immediateRecipients = recipients.filter((recipient) => recipient.mode === 'immediate');
+  const digestRecipients = recipients.filter((recipient) => recipient.mode === 'digest');
+
+  await enqueueDigestRecipients(params, digestRecipients);
+  await deliverImmediateAnnouncementEmails(params, immediateRecipients);
+
+  return recipients.length;
+}
+
 export function queueAnnouncementDelivery(
   params: QueueAnnouncementDeliveryParams,
 ): Promise<number> {
   return deliverAnnouncementEmails(params);
+}
+
+export async function updateQueuedDigestAnnouncementStatus(
+  communityId: number,
+  announcementId: number,
+  userId: string,
+  values: {
+    status: 'sent' | 'failed' | 'discarded';
+    providerMessageId?: string;
+    errorMessage?: string;
+  },
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.update(
+    announcementDeliveryLog,
+    {
+      status: values.status,
+      providerMessageId: values.providerMessageId ?? null,
+      errorMessage: values.errorMessage ?? null,
+      attemptedAt: new Date(),
+    },
+    and(
+      eq(announcementDeliveryLog.announcementId, announcementId),
+      eq(announcementDeliveryLog.userId, userId),
+      eq(announcementDeliveryLog.status, 'queued_digest'),
+    ),
+  );
 }

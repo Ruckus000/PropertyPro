@@ -43,6 +43,12 @@ export type {
 } from './queries/document-search';
 
 export { findCommunityBySlugUnscoped } from './queries/community-lookup';
+export {
+  claimDigestQueueRows,
+  findCandidateDigestCommunityIds,
+  hasMoreDigestRows,
+} from './queries/notification-digest';
+export type { DigestFrequency } from './queries/notification-digest';
 
 // Document access control
 export {

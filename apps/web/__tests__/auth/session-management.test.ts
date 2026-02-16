@@ -106,6 +106,24 @@ describe('p1-22 session middleware', () => {
     expect(json.error).toBe('Unauthorized');
   });
 
+  it('allows unauthenticated POST /api/v1/internal/notification-digests/process', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/internal/notification-digests/process', {}, 'POST'),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('keeps unauthenticated GET /api/v1/internal/notification-digests/process protected', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/internal/notification-digests/process', {}, 'GET'),
+    );
+    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(401);
+    expect(json.error).toBe('Unauthorized');
+  });
+
   it('returns 404 for reserved tenant subdomains before auth checks', async () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents', {

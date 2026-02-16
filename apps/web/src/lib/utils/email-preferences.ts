@@ -40,11 +40,15 @@ export function isImmediateFrequency(frequency: EmailFrequency): boolean {
   return frequency === 'immediate';
 }
 
-export function isDigestFrequency(frequency: EmailFrequency): boolean {
+export function isDigestFrequency(
+  frequency: EmailFrequency,
+): frequency is Extract<EmailFrequency, 'daily_digest' | 'weekly_digest'> {
   return frequency === 'daily_digest' || frequency === 'weekly_digest';
 }
 
-export function isNeverFrequency(frequency: EmailFrequency): boolean {
+export function isNeverFrequency(
+  frequency: EmailFrequency,
+): frequency is Extract<EmailFrequency, 'never'> {
   return frequency === 'never';
 }
 
