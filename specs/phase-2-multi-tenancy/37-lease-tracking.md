@@ -33,9 +33,9 @@ P1
 - Use CommunityFeatures config to hide from condo/HOA
 
 ## Files Expected
-- packages/shared/src/schema/leases.ts
-- apps/api/src/routes/leases.ts
-- apps/api/src/services/lease-expiration-service.ts
+- packages/db/src/schema/leases.ts
+- apps/web/src/app/api/v1/leases/route.ts
+- apps/web/src/lib/services/lease-expiration-service.ts
 - apps/web/src/lib/actions/leases.ts
 
 ## Attempts

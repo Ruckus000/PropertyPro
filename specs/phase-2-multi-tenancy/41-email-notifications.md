@@ -37,8 +37,8 @@ P1
 - packages/email/src/templates/compliance-alert.tsx
 - packages/email/src/templates/announcement-blast.tsx
 - packages/email/src/templates/maintenance-update.tsx
-- apps/api/src/services/email-service.ts
-- apps/api/src/lib/notification-preferences.ts
+- apps/web/src/lib/services/email-service.ts
+- apps/web/src/lib/notification-preferences.ts
 
 ## Attempts
 1

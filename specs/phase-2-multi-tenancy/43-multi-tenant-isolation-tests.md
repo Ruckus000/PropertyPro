@@ -32,9 +32,9 @@ P0
 - Cross-tenant data leaks are the highest-severity security issue
 
 ## Files Expected
-- apps/api/tests/integration/multi-tenant-isolation.test.ts
-- apps/api/tests/fixtures/multi-tenant-communities.ts
-- apps/api/tests/fixtures/multi-tenant-users.ts
+- apps/web/__tests__/integration/multi-tenant-isolation.integration.test.ts
+- apps/web/__tests__/fixtures/multi-tenant-communities.ts
+- apps/web/__tests__/fixtures/multi-tenant-users.ts
 
 ## Attempts
 0

@@ -31,9 +31,9 @@ P1
 - Add x-ratelimit-* headers to responses
 
 ## Files Expected
-- apps/api/src/middleware/rate-limit.ts
-- apps/api/src/lib/rate-limiter.ts
-- apps/api/src/services/upstash-service.ts
+- apps/web/src/lib/middleware/rate-limit.ts
+- apps/web/src/lib/rate-limiter.ts
+- apps/web/src/lib/services/upstash-service.ts
 
 ## Attempts
 0

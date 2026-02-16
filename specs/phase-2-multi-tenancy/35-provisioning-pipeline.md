@@ -41,10 +41,10 @@ P0
 - Consider queueing for async operations (Bull/Turso)
 
 ## Files Expected
-- apps/api/src/services/provisioning-service.ts
-- apps/api/src/lib/provisioning-idempotency.ts
+- apps/web/src/lib/services/provisioning-service.ts
+- apps/web/src/lib/provisioning-idempotency.ts
 - packages/email/src/templates/welcome.tsx
-- packages/shared/src/schema/provisioning.ts
+- packages/db/src/schema/provisioning-events.ts
 
 ## Attempts
 0

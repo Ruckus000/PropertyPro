@@ -36,9 +36,9 @@ P1
 - Spread lease dates realistically across next 6 months
 
 ## Files Expected
-- packages/db/src/seed-demo.ts (extended)
-- packages/db/src/fixtures/apartment-demo-data.ts
-- apps/api/scripts/seed-apartment-demo.ts
+- scripts/seed-demo.ts (extended)
+- scripts/fixtures/apartment-demo-data.ts
+- scripts/seed-apartment-demo.ts
 
 ## Attempts
 0

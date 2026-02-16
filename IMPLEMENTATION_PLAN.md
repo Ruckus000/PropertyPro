@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-14 (v18 — Phase 2 parallel batch: 7 tasks gate-passed)
+Generated: 2026-02-16 (v19 — P2-43 merged on `main`; Phase 2 completion snapshot refreshed)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-43 (Multi-Tenant Isolation Tests, in progress), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -45,6 +45,13 @@ Generated: 2026-02-14 (v18 — Phase 2 parallel batch: 7 tasks gate-passed)
     - `feat/p2-42-rate-limiting`: Build PASS, Typecheck PASS, Lint PASS, 557 tests PASS
   - Note: Initial parallel run had branch contention (all agents sharing the same working tree). P2-31, P2-32, and P2-32a were re-run sequentially after clearing stale `.next` cache. All confirmed passing.
   - Post-batch merge to `main` completed; follow-up stabilization fixes were applied on `main`.
+- Phase 2 isolation completion (2026-02-15):
+  - `P2-43` merged to `main` via `bbaade5` after expansion commit `aac4bbb`.
+  - Integration coverage now includes dedicated multi-tenant isolation/access-policy/routes suites:
+    - `apps/web/__tests__/integration/multi-tenant-isolation.integration.test.ts`
+    - `apps/web/__tests__/integration/multi-tenant-access-policy.integration.test.ts`
+    - `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts`
+  - Scope includes cross-tenant route protections for leases and upload flows; commit notes report 64 integration tests across these suites and 800 total tests at merge checkpoint.
 - Phase 2 kickoff implementation (2026-02-13):
   - Implemented `P2-30` middleware hardening: protected-path tenant resolution, reserved/unknown tenant `404`, forwarded tenant/user anti-spoof headers, token-route carve-out for unauthenticated invitation acceptance, and bounded tenant cache.
   - Extracted tenant resolver + reserved-subdomain logic into `@propertypro/shared` with app-level compatibility shims and shared package exports wired through `src/index.ts`.
@@ -340,7 +347,7 @@ No `Partial` findings were identified in this closeout pass.
 | Component | Status |
 |-----------|--------|
 | Phase 1 feature APIs and UX flows | IMPLEMENTED (Gate 2 complete) |
-| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (8 complete, 1 in progress, 7 not started) |
+| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (9 complete, 0 in progress, 7 not started) |
 | Phase 3 PM/mobile vertical features | NOT STARTED |
 | Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | NOT STARTED |
 
@@ -638,6 +645,14 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - Standardized migration commands to direct DB connection; app/test queries remain on pooled connection
   - Added `pnpm lint` to per-batch verification gates and clarified integration-test execution post-merge
 - **Tracking Note:** `P1-15`, `P1-25`, and final `P1-27` endpoint-adoption closeout are completed on `main`. Next execution focus moves to Phase 2 tasks.
+
+---
+
+## Phase 2 Execution Readiness (2026-02-16)
+
+- **Status:** In Progress (`9/16` Phase 2 tasks complete on `main`; `P2-43` merged on 2026-02-15)
+- **Execution Source of Truth:** `PHASE2_EXECUTION_PLAN.md`
+- **Tracking Note:** Active sequencing, milestone logging, and Gate 3 closeout evidence for remaining Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) should be maintained in `PHASE2_EXECUTION_PLAN.md`.
 
 ---
 
@@ -1467,8 +1482,8 @@ active → past_due → canceled → expired
 
 ### Task: P2-43 Multi-Tenant Isolation Tests
 - **Phase:** 2
-- **Status:** In Progress (initial integration slice landed 2026-02-13; endpoint coverage expansion pending)
-- **Files to Create/Modify:** apps/web/__tests__/integration/multi-tenant-isolation.test.ts, apps/web/__tests__/fixtures/multi-tenant-communities.ts, multi-tenant-users.ts
+- **Status:** Complete (merged to `main` via `bbaade5` on 2026-02-15 after expanded coverage in `aac4bbb`; merge checkpoint recorded 800 total tests)
+- **Files to Create/Modify:** apps/web/__tests__/integration/multi-tenant-isolation.integration.test.ts, apps/web/__tests__/integration/multi-tenant-access-policy.integration.test.ts, apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts, apps/web/__tests__/fixtures/multi-tenant-communities.ts, apps/web/__tests__/fixtures/multi-tenant-users.ts
 - **Dependencies:** P0-06, P2-30
 - **Blocks:** P4-55
 - **Acceptance Criteria:**

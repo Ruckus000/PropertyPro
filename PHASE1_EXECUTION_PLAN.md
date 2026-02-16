@@ -45,10 +45,11 @@ Milestones:
 - [2026-02-13] Gate 2 DB integration evidence rerun (`main`, commit pending) — `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` passed again (`28/28`, exit `0`, UTC `2026-02-13T19:22:07Z` to `2026-02-13T19:23:01Z`). Staging/production seed evidence remains pending owner environments where `.env.staging` and `.env.production` are available.
 - [2026-02-13] Gate 2 operational seed evidence completed (`main`) — staging seed (`2026-02-13T19:49:06Z`, exit `0`) and production seed (`2026-02-13T19:58:03Z`, exit `0`) executed using `.env.local` (single-instance demo, Supabase `vbqobyagjzvlfpfozvmx`). SQL verification passed for both runs: category counts `bay-view-apartments=6`, `palm-shores-hoa=5`, `sunset-condos=5`; `docs_without_category=0` for all. `pnpm test` confirmed `554/554`. All PENDING fields in `docs/audits/gate2-seed-rollout-evidence-2026-02-13.md` replaced with concrete values.
 - [2026-02-14] Phase 2 parallel batch verification checkpoint completed (`main`) — `P2-31`, `P2-32`, `P2-32a`, `P2-37`, `P2-40`, `P2-41`, and `P2-42` all gate-passed (build/typecheck/lint/tests green per batch evidence).
+- [2026-02-15] `P2-43` completion merged (`feat/p2-43-multi-tenant-isolation` → `main`, merge commit `bbaade5`) — expanded isolation coverage (`aac4bbb`) added lease and upload route protections in integration suites; merge checkpoint recorded 800 total tests.
 
 Current cursor:
-- Next actions: continue expanding `P2-43` endpoint isolation coverage and execute remaining Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`).
-- Phase 2 status note: `P2-30` is implemented on `main`; seven additional Phase 2 tasks are gate-passed as of 2026-02-14.
+- Next actions: execute remaining Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) and prepare Gate 3 verification sequencing.
+- Phase 2 status note: `P2-30` is implemented and eight additional Phase 2 tasks (`P2-31`, `P2-32`, `P2-32a`, `P2-37`, `P2-40`, `P2-41`, `P2-42`, `P2-43`) are complete on `main` as of 2026-02-15.
 - Gate note: Phase 1 task closeout, Gate 2 engineering verification, and Gate 2 operational rollout evidence are all complete on `main`.
 
 ---

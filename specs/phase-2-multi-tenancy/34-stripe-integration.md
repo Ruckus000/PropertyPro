@@ -14,7 +14,7 @@ P0
 ## Functional Requirements
 - Create Stripe products and prices for each plan tier
 - Create Checkout Session after signup form + email verification
-- Webhook endpoint at /api/webhooks/stripe
+- Webhook endpoint at /api/v1/webhooks/stripe
 - Handle checkout.session.completed event
 - Verify webhook signatures
 - Make handlers idempotent (use Stripe event ID to deduplicate)
@@ -38,10 +38,10 @@ P0
 - Fetch latest state from Stripe API
 
 ## Files Expected
-- apps/api/src/routes/webhooks/stripe.ts
+- apps/web/src/app/api/v1/webhooks/stripe/route.ts
 - apps/web/src/lib/actions/checkout.ts
-- apps/api/src/services/stripe-service.ts
-- packages/shared/src/schema/stripe.ts
+- apps/web/src/lib/services/stripe-service.ts
+- packages/db/src/schema/subscriptions.ts
 
 ## Attempts
 0
