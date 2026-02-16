@@ -24,6 +24,7 @@ cd /path/to/PropertyPro
 git checkout main && git pull
 pnpm install --frozen-lockfile
 pnpm build && pnpm typecheck && pnpm lint && pnpm test
+pnpm plan:verify:phase2
 set -a; source .env.local; set +a; pnpm test:integration:preflight
 ```
 
@@ -250,6 +251,7 @@ pnpm build && pnpm typecheck && pnpm lint && pnpm test
 2. Run full verification on `main`:
 ```bash
 pnpm build && pnpm typecheck && pnpm lint && pnpm test
+pnpm plan:verify:phase2
 set -a; source .env.local; set +a; pnpm test:integration:preflight
 ```
 3. Update IMPLEMENTATION_PLAN.md — mark P2-33 and P2-36 as complete. ALSO update all Batch 2A tasks that are still showing "Not Started" (P2-30, P2-40, P2-31, P2-32, P2-32a, P2-37, P2-41, P2-42).

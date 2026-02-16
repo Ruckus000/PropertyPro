@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-16  
 **Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening defined with 1 complete and 2 remaining)  
+**Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening progress is 1/3 complete)  
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -25,6 +25,15 @@ Current cursor:
 - Execute mandatory pre-batch hardening now: `P2-PRE-03`.
 - Then run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
 - Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
+
+---
+
+## Phase 2 Tracking Model (Canonical)
+
+- Base tasks counted in denominator (`16` total): `P2-30`, `P2-31`, `P2-32`, `P2-32a`, `P2-33`, `P2-34`, `P2-35`, `P2-36`, `P2-37`, `P2-38`, `P2-39`, `P2-40`, `P2-41`, `P2-42`, `P2-43`, `P2-44`.
+- Subtasks not counted in denominator: `P2-34a`.
+- Hardening tasks not counted in denominator: `P2-33.5`, `P2-PRE-02`, `P2-PRE-03`.
+- Canonical source for base-task ratio math is this file. `IMPLEMENTATION_PLAN.md` references this status but does not maintain a separate base-task ratio.
 
 ---
 
@@ -114,13 +123,15 @@ Completed base Phase 2 tasks on `main`:
 
 Remaining base implementation tasks:
 - `P2-33` Self-Service Signup
-- `P2-34` Stripe Integration
-- `P2-34a` Payment Failure Alerts and Graceful Degradation
+- `P2-34/P2-34a` Stripe Integration + Payment Failure Handling
 - `P2-35` Provisioning Pipeline
 - `P2-36` Apartment Operational Dashboard
 - `P2-38` Apartment Onboarding Wizard
 - `P2-39` Condo Onboarding Wizard
 - `P2-44` Apartment Demo Seed
+
+Count check: 9 completed + 7 remaining = 16 base tasks.  
+Open non-denominator subtask scope: `P2-34a`.
 
 Remaining mandatory hardening tasks:
 - `P2-33.5` Billing and provisioning schema migration
@@ -362,6 +373,7 @@ Run after all Phase 2 tasks and hardening tasks are complete:
 - [ ] Rate limiting returns `429` correctly.
 - [ ] `pnpm build && pnpm typecheck` clean.
 - [ ] `pnpm lint` clean.
+- [ ] `pnpm plan:verify:phase2` clean.
 - [ ] `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` passes.
 
 Evidence commands:
@@ -369,6 +381,7 @@ Evidence commands:
 pnpm build
 pnpm typecheck
 pnpm lint
+pnpm plan:verify:phase2
 pnpm test
 set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration
 ```

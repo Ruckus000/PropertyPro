@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-16 (v19 — P2-43 merged on `main`; Phase 2 completion snapshot refreshed)
+Generated: 2026-02-16 (v20 — digest notifications rollout checkpoint added; Phase 2 snapshot refreshed)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Remaining Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Digest notifications rollout implementation (PR1→PR3 scope) is now completed in the local workspace checkpoint (2026-02-16) with migrations, processor, internal route, middleware exemption, scheduler fallback, and tests; merge/deploy evidence is pending. Remaining baseline Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -33,7 +33,7 @@ Generated: 2026-02-16 (v19 — P2-43 merged on `main`; Phase 2 completion snapsh
 - Post-Batch-3 verification checkpoint: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration` all pass; `pnpm --filter @propertypro/db db:generate` remains no-op.
 - Seed compatibility checkpoint: `scripts/seed-demo.ts` now preserves canonical-role behavior on current schema while adding legacy fallback mapping and deterministic non-registry upsert paths when older db environments are missing `demo_seed_registry` or canonical `user_role` constraints.
 - Batch 3 audit follow-up: Added `findCommunityBySlugUnscoped` to `@propertypro/db` for public tenant resolution (previously used a `createScopedClient(1)` workaround).
-- **Phase 4 Tech Debt:** Announcement email delivery (`P1-17c`) uses fire-and-forget pattern within request context; consider Vercel `waitUntil()` or a job queue (Inngest/Trigger.dev) for production reliability.
+- **Tech Debt Update (2026-02-16):** Announcement delivery fire-and-forget behavior from `P1-17c` is now removed in the digest rollout checkpoint; announcement and notification dispatch paths are awaited for durable queue writes. Remaining async best-effort path is PDF extraction queue scheduling, which remains intentionally non-blocking.
 - Phase 2 parallel batch completion (2026-02-14):
   - All 7 acceptance gates PASSED. Branch verification matrix:
     - `feat/p2-40-community-features-config`: Build PASS, Typecheck PASS, Lint PASS, 593 tests PASS
@@ -58,6 +58,35 @@ Generated: 2026-02-16 (v19 — P2-43 merged on `main`; Phase 2 completion snapsh
   - Added `resolveEffectiveCommunityId` and enforced tenant-context checks across all current `/api/v1` handlers, including GET read-path membership enforcement for announcements/meetings/residents/compliance.
   - Added first `P2-43` integration slice (`apps/web/__tests__/integration/multi-tenant-isolation.integration.test.ts`) and dedicated Node integration config (`apps/web/vitest.integration.config.ts`), with unit-runner exclusion of `*.integration.test.ts`.
   - Added Gate 2 operational evidence artifact template: `docs/audits/gate2-seed-rollout-evidence-2026-02-13.md`.
+
+### Progress Snapshot (2026-02-16 — Digest Notifications Rollout Checkpoint)
+- Implemented non-breaking notification preference contract extension:
+  - Added `email_frequency` enum and `notification_preferences.email_frequency` defaulting to `immediate`.
+  - Updated `/api/v1/notification-preferences` `PATCH` to accept optional `emailFrequency` with server-side default.
+  - Updated settings UI and tests for `emailFrequency` behavior.
+- Implemented digest queue and routing:
+  - Added `notification_digest_queue` schema, indexes, and migration (`0007_sudden_sphinx.sql`).
+  - Added `apps/web/src/lib/services/notification-digest-queue.ts` with idempotent enqueue behavior.
+  - Updated notification and announcement services to branch immediate vs digest and to enforce stable source identity before digest enqueue.
+  - Added explicit `queued_digest` handling for `announcement_delivery_log` rows.
+- Implemented processor and internal cron endpoint:
+  - Added `apps/web/src/lib/services/notification-digest-processor.ts` (timezone-aware 8 AM windowing, retry/backoff, stale processing recovery, caps, `hasMore`).
+  - Added internal route `POST /api/v1/internal/notification-digests/process` with bearer auth via `NOTIFICATION_DIGEST_CRON_SECRET`.
+  - Updated middleware token-auth carve-outs to allow cron endpoint (`POST` only).
+- Gate 0 scheduler decision (fallback path) implemented:
+  - Added GitHub Actions scheduler fallback at `.github/workflows/notification-digest-cron.yml` with `*/15` cadence.
+  - Added `.env.example` wiring for `NOTIFICATION_DIGEST_CRON_SECRET`.
+- Added digest email template/export:
+  - `packages/email/src/templates/notification-digest-email.tsx`
+  - `packages/email/src/index.ts` export and template tests.
+- Verification evidence (2026-02-16):
+  - Pass: `pnpm --filter @propertypro/db db:generate`
+  - Pass: `pnpm --filter @propertypro/db build`
+  - Pass: `pnpm --filter @propertypro/email build`
+  - Pass: `pnpm --filter @propertypro/web typecheck`
+  - Pass: targeted web notification/auth/announcement suites (`71/71`)
+  - Pass: email template suite (`59/59`)
+  - Note: `pnpm test:integration:preflight` did not complete in this environment due DNS resolution failure to Supabase host (`ENOTFOUND`), so shared-env integration evidence is still pending.
 
 ### POA v2 Rollout Closeout (2026-02-13)
 - Smoke checks (role/category/delete boundaries) passed in focused suites:
@@ -650,9 +679,10 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 2 Execution Readiness (2026-02-16)
 
-- **Status:** In Progress (`9/16` Phase 2 tasks complete on `main`; `P2-43` merged on 2026-02-15)
+- **Status:** In Progress (canonical Phase 2 base-task counts are maintained in `PHASE2_EXECUTION_PLAN.md`; `P2-43` merged on 2026-02-15)
 - **Execution Source of Truth:** `PHASE2_EXECUTION_PLAN.md`
-- **Tracking Note:** Active sequencing, milestone logging, and Gate 3 closeout evidence for remaining Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) should be maintained in `PHASE2_EXECUTION_PLAN.md`.
+- **Tracking Note:** Active sequencing, milestone logging, and Gate 3 closeout evidence for remaining baseline Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) should be maintained in `PHASE2_EXECUTION_PLAN.md`.
+- **Checkpoint Note (2026-02-16):** Digest notification rollout (preference contract extension + digest queue + processor + internal cron route + middleware carve-out + scheduler fallback) is implemented in local workspace and validated by targeted suites; merge + shared-env preflight evidence remains outstanding.
 
 ---
 
@@ -1025,15 +1055,21 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P1-26 Notification Preferences
 - **Phase:** 1
-- **Status:** Complete (implemented, tested, merged on `main`)
+- **Status:** Complete (implemented/tested on `main`; digest-frequency extension checkpoint implemented 2026-02-16 in workspace)
 - **Files to Create/Modify:** packages/db/src/schema/notification-preferences.ts (verify table exists from P0-05), apps/web/src/app/(authenticated)/settings/page.tsx, apps/web/src/components/settings/notification-preferences.tsx, apps/web/src/lib/utils/email-preferences.ts, apps/web/__tests__/notification-preferences/
 - **Dependencies:** P0-05, P1-18
 - **Blocks:** P2-41
 - **Acceptance Criteria:**
   - Preferences saved: email_announcements (boolean), email_documents (boolean), email_meetings (boolean), email_maintenance (boolean)
+  - Backward-compatible extension: optional `emailFrequency` accepted on PATCH and defaulted to `immediate` when omitted
+  - GET returns `emailFrequency` for both existing and defaulted preference records
   - Email sending respects per-notification-type toggles
   - Settings page renders current preferences and saves changes
   - Default preference for new users: email_announcements=true + email_documents=true + email_meetings=true + email_maintenance=true
+- **Progress Update (2026-02-16):**
+  - Added `email_frequency` enum and `notification_preferences.email_frequency` column default `immediate`.
+  - Updated settings form and route tests to cover legacy payload compatibility and expanded payload behavior.
+  - Added form-level component test for GET hydration + PATCH payload shape with and without explicit `emailFrequency`.
 - **Known Pitfalls:**
   - [AGENTS #32] Verify notification preferences before sending any non-critical email. Critical emails (password reset, invitation) always send regardless of preference.
 - **Testing:** Preference CRUD test. Default-values test. Update persistence test. Critical email test: disable all non-critical toggles and trigger password reset → verify email IS sent. Non-critical announcement-email suppression is validated in P1-17c integration tests (`email_announcements=false` case).
@@ -1442,7 +1478,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-41 Email Notifications
 - **Phase:** 2
-- **Status:** Complete (557 tests, gate passed 2026-02-14)
+- **Status:** Complete (557 tests gate-passed 2026-02-14; digest routing extension checkpoint implemented 2026-02-16 in workspace)
 - **Files to Create/Modify:** packages/email/src/templates/meeting-notice.tsx, compliance-alert.tsx, announcement-blast.tsx, maintenance-update.tsx, apps/web/src/lib/services/email-service.ts
 - **Dependencies:** P1-28, P1-26
 - **Blocks:** None
@@ -1450,12 +1486,18 @@ active → past_due → canceled → expired
   - Meeting notice, compliance alert, announcement blast, and maintenance update emails send correctly
   - HTML renders properly across email clients (tested in React Email preview)
   - Notification preferences respected (never send to users with frequency=never for non-critical emails)
+  - Digest-capable users route to queue-backed digest delivery when stable source identity exists
+  - Immediate users continue current send path; announcement digest recipients write `announcement_delivery_log.status='queued_digest'`
   - Bulk sending works without rate limit issues (use Resend batch API)
   - List-Unsubscribe header on all non-transactional emails
 - **Known Pitfalls:**
   - [AGENTS #32] Verify notification preferences before sending non-critical email
   - [AGENTS #33] List-Unsubscribe header required
-- **Testing:** Preference gate test: user with frequency=never → no email sent. Bulk test: 100 recipients → all emails sent. Template render test for each template type.
+- **Testing:** Preference gate test: user with frequency=never → no email sent. Digest-branch test: digest frequency users enqueue instead of immediate send. Source-ID guard test: events missing stable source identity stay immediate. Announcement branch test: `queued_digest` status asserted for digest recipients. Bulk test: 100 recipients → all emails sent. Template render test for each template type.
+- **Progress Update (2026-02-16):**
+  - Added `notification_digest_queue` table + indexes and `notification-digest-queue` service with idempotent enqueue behavior.
+  - Updated `notification-service` and `announcement-delivery` for immediate/digest branching and stable source-ID gating.
+  - Added `NotificationDigestEmail` template/export plus tests.
 - **Estimated Effort:** Medium
 - **Risk:** Low
 
