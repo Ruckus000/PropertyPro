@@ -258,7 +258,7 @@ Tasks:
 - `P2-36` Apartment Operational Dashboard
 
 Why:
-- `P2-33` unblocks Stripe and provisioning chain.
+- `P2-33` defines the signup intent + verification boundary and unblocks Stripe/provisioning without duplicating tenant creation logic.
 - `P2-36` unblocks apartment onboarding and demo chain.
 
 Exit gate (generic):
@@ -268,7 +268,13 @@ Exit gate (generic):
 - `pnpm test`
 
 Exit gate (batch-specific):
-- Signup integration verifies reserved subdomains rejected (`admin`, `api`, `www`, `mobile`, `pm`, `app`, `dashboard`, `login`, `signup`, `legal`).
+- Signup route contract verified: `/signup` renders and marketing CTAs resolve to `/signup`.
+- Signup validation verified: Terms acceptance is required and invalid email/password/unit-count inputs are rejected.
+- Community-type selection verified: plan/pricing options update by selected community type.
+- Subdomain guard verified with server-authoritative submit check: reserved (`admin`, `api`, `www`, `mobile`, `pm`, `app`, `dashboard`, `login`, `signup`, `legal`) and already-taken slugs are rejected.
+- Signup idempotency verified: duplicate submit for same identity/request does not create duplicate pending signup state.
+- Lifecycle boundary verified: signup completion does not create `communities` or `user_roles` before payment/provisioning.
+- Verification handoff verified: confirmed user can start checkout with preserved signup payload (`community_type`, `plan`, `slug`, `signupRequestId`).
 - Apartment dashboard feature gating verified through `CommunityFeatures` flags (no direct community-type checks in component code).
 
 ### Batch B - Billing and Apartment Demo
@@ -288,8 +294,10 @@ Exit gate (generic):
 - `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`
 
 Exit gate (batch-specific):
-- Stripe webhook integration test sends `checkout.session.completed` with valid signature and verifies `communities.stripe_customer_id` updated.
+- Stripe webhook integration test sends `checkout.session.completed` with valid signature and explicit `metadata.signupRequestId`; verifies metadata is read and provisioning handoff executes for that request.
+- Stripe webhook metadata-guard test sends `checkout.session.completed` without `metadata.signupRequestId`; verifies safe rejection/no-op and zero provisioning side effects.
 - Same Stripe event sent twice verifies no duplicate side effects and confirms dedup via `stripe_webhook_events`.
+- Two distinct Stripe events carrying the same `metadata.signupRequestId` verify business-level idempotency (single logical provisioning outcome, no duplicate tenant resources).
 - Webhook POST remains processable even while subscription is degraded/locked.
 - Direct admin mutation API call in locked state returns `403` with `subscription_required`.
 - Billing degradation tests confirm Day 14 admin-write lock while public notices + owner read access remain available.
@@ -310,7 +318,8 @@ Exit gate (generic):
 - `set -a; source .env.local; set +a; pnpm --filter @propertypro/db test:integration`
 
 Exit gate (batch-specific):
-- Provisioning test for `condo_718` verifies all expected resources are created.
+- Provisioning test for `condo_718` verifies all expected resources are created and asserts job context is tied to `signupRequestId`.
+- Re-trigger provisioning for the same `signupRequestId` (new webhook delivery) verifies idempotent resume/no duplicate community or initial role records.
 - Failure injection at step 3 verifies retry resumes from persisted `last_successful_status` (not step 1).
 - Failure before first successful step (`last_successful_status IS NULL`) verifies retry starts at `community_created`.
 

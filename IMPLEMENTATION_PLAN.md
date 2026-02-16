@@ -1252,21 +1252,28 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 ### Task: P2-33 Self-Service Signup
 - **Phase:** 2
 - **Status:** Not Started
-- **Files to Create/Modify:** apps/web/src/app/(auth)/signup/page.tsx, apps/web/src/components/signup/signup-form.tsx, community-type-selector.tsx, subdomain-checker.tsx, apps/web/src/lib/actions/signup.ts
+- **Files to Create/Modify:** apps/web/src/app/(auth)/signup/page.tsx, apps/web/src/components/signup/signup-form.tsx, apps/web/src/components/signup/community-type-selector.tsx, apps/web/src/components/signup/subdomain-checker.tsx, apps/web/src/lib/auth/signup.ts, apps/web/src/lib/auth/signup-schema.ts, apps/web/src/app/api/v1/auth/signup/route.ts
 - **Dependencies:** P2-31, P0-04
 - **Blocks:** P2-34
 - **Acceptance Criteria:**
-  - Signup form collects: email, password, community name, community type (apartment/condo/HOA)
-  - Subdomain auto-suggested from community name (lowercase, hyphenated)
-  - Subdomain availability checked in real-time (debounced)
-  - Reserved subdomains rejected with clear message
-  - Email verification sent via Resend
-  - Initial community-admin user and community record created (board_president for condo_718/hoa_720, site_manager for apartment)
+  - Canonical signup route is `/signup` (marketing CTAs and tests target `/signup`, not `/auth/signup`)
+  - Signup form collects required fields from spec: primary contact name, email, password, community name, address, county, unit count, community type (`condo_718` / `hoa_720` / `apartment`), plan selection, Terms acceptance checkbox
+  - Community type selection updates visible plan/pricing options
+  - Subdomain is auto-suggested from community name (normalized lowercase + hyphenated)
+  - Subdomain availability is checked in real time (debounced) for UX, and re-validated server-side on submit as the authoritative check
+  - Reserved subdomains are rejected with clear validation errors
+  - Email uniqueness validation is enforced with non-enumerating error behavior
+  - Signup creates/verifies Supabase Auth account and stores pending signup payload (including `signupRequestId`) for checkout/provisioning handoff
+  - Email verification is required before checkout initiation
+  - **Lifecycle boundary:** `P2-33` does **not** create `communities` or `user_roles`; tenant provisioning remains in `P2-35`
 - **Known Pitfalls:**
   - [AGENTS #22] Reserved subdomains must be blocked during signup
-- **Testing:** Signup flow integration test. Subdomain availability test: taken subdomain → unavailable, free subdomain → available. Reserved subdomain test: "admin" → rejected. Validation test: weak password, invalid email → rejected with clear messages.
+  - Route drift between `/signup` and `/auth/signup` can silently break rate-limit coverage and CTA flow
+  - Client-only availability checks are insufficient (server submit check must be authoritative to close race windows)
+  - Premature `communities` inserts in signup conflict with the provisioning state-machine contract
+- **Testing:** Signup integration test: complete `/signup` happy path through verification-required state. Validation test: missing Terms, weak password, invalid email, invalid unit count. Pricing test: changing community type updates plan options. Subdomain tests: reserved slug rejected, taken slug rejected, free slug accepted. Race/idempotency test: duplicate submission (same email/request) does not create duplicate pending signup records. Boundary test: after signup, assert no `communities` or `user_roles` row exists pre-payment.
 - **Estimated Effort:** Medium
-- **Risk:** Medium
+- **Risk:** High — critical path handoff between auth, billing, and provisioning.
 
 ---
 
@@ -1278,6 +1285,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 - **Blocks:** P2-35
 - **Acceptance Criteria:**
   - Checkout session created with correct plan and pricing
+  - Checkout session includes `metadata.signupRequestId` from `P2-33` pending signup state
   - Webhook handler processes events: checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.updated, customer.subscription.deleted
   - Subscription record created/updated in DB after successful payment
   - Invoice generated and accessible
@@ -1288,7 +1296,9 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
   - [AGENTS #28] Inside webhook handlers, fetch latest state from Stripe API (`stripe.subscriptions.retrieve()`). Do NOT rely solely on webhook payload — it may be stale.
   - [AGENTS #29] Events can arrive out of order (e.g., invoice.paid before checkout.session.completed). Design handlers to be order-independent.
 - **Testing (CRITICAL — payment processing must be correct):**
+  - Metadata contract test: checkout session contains `metadata.signupRequestId`; webhook request missing `signupRequestId` is rejected or no-op with no provisioning side effects
   - Idempotency test: send same webhook event twice → verify only one subscription record created
+  - Business idempotency test: send two distinct paid webhook events with the same `signupRequestId` → verify one logical provisioning outcome (no duplicate tenant resources)
   - Signature test: send event with invalid signature → verify 400 rejection, no processing
   - Out-of-order test: send invoice.paid before checkout.session.completed → verify both processed correctly regardless of order
   - Subscription lifecycle test: create → upgrade → cancel → verify each state transition recorded correctly
@@ -1369,11 +1379,11 @@ active → past_due → canceled → expired
   - Each step is idempotent (can be safely retried)
   - Provisioning events table tracks each step's status (pending → completed → failed)
   - Partial failure: if step 3 fails, steps 1-2 are not rolled back but step 3 can be retried
-  - Idempotency key (based on signup request ID) prevents duplicate provisioning
+  - Idempotency key (`signupRequestId`) prevents duplicate provisioning across retries and repeated webhook deliveries
   - Welcome email sent after successful provisioning
 - **Known Pitfalls:**
   - Idempotency is critical — retry safety must be guaranteed for every external service call
-- **Testing:** Happy path test: full provisioning → verify all resources created. Idempotency test: run provisioning twice with same idempotency key → verify no duplicates. Partial failure test: mock Stripe failure at step 4 → verify steps 1-3 completed → retry → verify step 4 completes without re-running 1-3. Event tracking test: verify provisioning_events table records all step statuses.
+- **Testing:** Happy path test: full provisioning → verify all resources created and linked to the incoming `signupRequestId`. Idempotency test: run provisioning twice with same `signupRequestId` → verify no duplicates. Re-delivery test: invoke provisioning from a second webhook delivery carrying the same `signupRequestId` → verify no duplicate community/user_role side effects. Partial failure test: mock Stripe failure at step 4 → verify steps 1-3 completed → retry → verify step 4 completes without re-running 1-3. Event tracking test: verify provisioning_events table records all step statuses.
 - **Estimated Effort:** Large
 - **Risk:** High — Multi-step provisioning with external services (Supabase, Stripe, Resend). Failure at any step must be recoverable.
 
