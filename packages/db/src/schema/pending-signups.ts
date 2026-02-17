@@ -23,7 +23,7 @@ import { communityTypeEnum } from './enums';
 export const pendingSignups = pgTable(
   'pending_signups',
   {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
     signupRequestId: text('signup_request_id').notNull(),
     authUserId: uuid('auth_user_id'),
     primaryContactName: text('primary_contact_name').notNull(),

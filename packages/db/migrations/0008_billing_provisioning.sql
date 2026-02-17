@@ -54,9 +54,14 @@ ALTER TABLE "communities" ADD COLUMN "stripe_subscription_id" text;--> statement
 ALTER TABLE "communities" ADD COLUMN "subscription_plan" text;--> statement-breakpoint
 ALTER TABLE "communities" ADD COLUMN "subscription_status" text;--> statement-breakpoint
 ALTER TABLE "provisioning_jobs" ADD CONSTRAINT "provisioning_jobs_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "provisioning_jobs" ADD CONSTRAINT "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk" FOREIGN KEY ("signup_request_id") REFERENCES "public"."pending_signups"("signup_request_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "pending_signups_signup_request_unique" ON "pending_signups" USING btree ("signup_request_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "pending_signups_email_normalized_unique" ON "pending_signups" USING btree ("email_normalized");--> statement-breakpoint
 CREATE UNIQUE INDEX "pending_signups_candidate_slug_active_unique" ON "pending_signups" USING btree ("candidate_slug") WHERE "pending_signups"."status" NOT IN ('expired', 'completed');--> statement-breakpoint
 CREATE INDEX "pending_signups_status_idx" ON "pending_signups" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "pending_signups_auth_user_id_idx" ON "pending_signups" USING btree ("auth_user_id");--> statement-breakpoint
+CREATE INDEX "provisioning_jobs_signup_request_id_idx" ON "provisioning_jobs" USING btree ("signup_request_id");--> statement-breakpoint
+CREATE INDEX "provisioning_jobs_community_status_idx" ON "provisioning_jobs" USING btree ("community_id","status");--> statement-breakpoint
+CREATE INDEX "stripe_webhook_events_received_at_idx" ON "stripe_webhook_events" USING btree ("received_at");--> statement-breakpoint
+ALTER TABLE "communities" ADD CONSTRAINT "communities_stripe_customer_id_unique" UNIQUE("stripe_customer_id");--> statement-breakpoint
 ALTER TABLE "communities" ADD CONSTRAINT "communities_stripe_subscription_id_unique" UNIQUE("stripe_subscription_id");

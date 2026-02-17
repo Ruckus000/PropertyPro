@@ -17,7 +17,7 @@ export const communities = pgTable('communities', {
   city: text('city'),
   state: text('state'),
   zipCode: text('zip_code'),
-  stripeCustomerId: text('stripe_customer_id'),
+  stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),
   subscriptionStatus: text('subscription_status'),

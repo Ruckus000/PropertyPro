@@ -1,6 +1,6 @@
 {
-  "id": "68255b41-199c-40eb-b11a-ddce5d8cc24e",
-  "prevId": "19650483-c841-4d1f-a73c-4dfda45436e3",
+  "id": "f1c1dde3-ebf0-4940-bf8c-3c837b9cfdf8",
+  "prevId": "68255b41-199c-40eb-b11a-ddce5d8cc24e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -124,6 +124,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "slug"
+          ]
+        },
+        "communities_stripe_customer_id_unique": {
+          "name": "communities_stripe_customer_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "stripe_customer_id"
           ]
         },
         "communities_stripe_subscription_id_unique": {
@@ -1563,7 +1570,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "stripe_webhook_events_received_at_idx": {
+          "name": "stripe_webhook_events_received_at_idx",
+          "columns": [
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -1637,7 +1660,44 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "provisioning_jobs_signup_request_id_idx": {
+          "name": "provisioning_jobs_signup_request_id_idx",
+          "columns": [
+            {
+              "expression": "signup_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "provisioning_jobs_community_status_idx": {
+          "name": "provisioning_jobs_community_status_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "provisioning_jobs_community_id_communities_id_fk": {
           "name": "provisioning_jobs_community_id_communities_id_fk",
@@ -1648,6 +1708,19 @@
           ],
           "columnsTo": [
             "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk": {
+          "name": "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk",
+          "tableFrom": "provisioning_jobs",
+          "tableTo": "pending_signups",
+          "columnsFrom": [
+            "signup_request_id"
+          ],
+          "columnsTo": [
+            "signup_request_id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"

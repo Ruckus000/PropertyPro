@@ -17,6 +17,8 @@ import {
 const SIGNUP_SUCCESS_MESSAGE =
   'Thanks for signing up. Check your email for a verification link before checkout.';
 const MIN_SIGNUP_RESPONSE_MS = 250;
+const SIGNUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 
 export interface SubdomainAvailabilityResult {
   normalizedSubdomain: string;
@@ -107,9 +109,10 @@ export async function checkSignupSubdomainAvailability(
 }
 
 interface PersistedSignupRow {
-  id: number;
+  id: bigint;
   signupRequestId: string;
   candidateSlug: string;
+  verificationEmailSentAt: Date | null;
 }
 
 interface AuthVerificationLinkResult {
@@ -135,6 +138,13 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
   const input = parsed.data;
   const signupRequestId = input.signupRequestId ?? crypto.randomUUID();
   const normalizedEmail = input.email.trim().toLowerCase();
+
+  console.info(JSON.stringify({
+    event: 'signup.submitted',
+    signupRequestId,
+    communityType: input.communityType,
+    slug: input.candidateSlug,
+  }));
   const authoritativeSubdomain = await checkSignupSubdomainAvailability(
     input.candidateSlug,
     { excludeSignupRequestId: signupRequestId },
@@ -154,6 +164,22 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
     candidateSlug: authoritativeSubdomain.normalizedSubdomain,
   });
 
+  // Skip re-sending verification email if one was sent recently (anti-email-bombing).
+  const emailRecentlySent =
+    pendingRow.verificationEmailSentAt != null
+    && Date.now() - pendingRow.verificationEmailSentAt.getTime() < VERIFICATION_EMAIL_COOLDOWN_MS;
+
+  if (emailRecentlySent) {
+    await enforceMinSignupResponseTime(startMs);
+    return {
+      signupRequestId: pendingRow.signupRequestId,
+      subdomain: pendingRow.candidateSlug,
+      verificationRequired: true,
+      checkoutEligible: false,
+      message: SIGNUP_SUCCESS_MESSAGE,
+    };
+  }
+
   const verificationRedirectUrl = buildVerificationRedirectUrl(
     pendingRow.signupRequestId,
   );
@@ -171,16 +197,35 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
     authResult.verificationLink,
   );
 
-  const db = createUnscopedClient();
-  await db
-    .update(pendingSignups)
-    .set({
+  // Guard: if linking auth user to pending signup fails, log the orphan for
+  // manual cleanup. The auth user remains valid and the "already registered"
+  // fallback (magiclink path) will handle retries.
+  try {
+    const db = createUnscopedClient();
+    await db
+      .update(pendingSignups)
+      .set({
+        authUserId: authResult.authUserId,
+        verificationEmailSentAt: new Date(),
+        verificationEmailId: messageId,
+        updatedAt: new Date(),
+      })
+      .where(eq(pendingSignups.id, pendingRow.id));
+  } catch (linkError) {
+    console.error(JSON.stringify({
+      event: 'signup.auth_link_failed',
+      signupRequestId: pendingRow.signupRequestId,
       authUserId: authResult.authUserId,
-      verificationEmailSentAt: new Date(),
-      verificationEmailId: messageId,
-      updatedAt: new Date(),
-    })
-    .where(eq(pendingSignups.id, pendingRow.id));
+      error: linkError instanceof Error ? linkError.message : String(linkError),
+    }));
+    throw linkError;
+  }
+
+  console.info(JSON.stringify({
+    event: 'signup.completed',
+    signupRequestId: pendingRow.signupRequestId,
+    slug: pendingRow.candidateSlug,
+  }));
 
   await enforceMinSignupResponseTime(startMs);
 
@@ -196,6 +241,7 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
 async function upsertPendingSignup(input: SignupPersistenceInput): Promise<PersistedSignupRow> {
   const db = createUnscopedClient();
   const timestamp = new Date();
+  const expiresAt = new Date(timestamp.getTime() + SIGNUP_EXPIRY_MS);
   const payload = buildPendingSignupPayload(input);
 
   try {
@@ -218,6 +264,7 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
         status: 'pending_verification',
         payload,
         updatedAt: timestamp,
+        expiresAt,
       })
       // Intentionally does NOT update signupRequestId on conflict — the original
       // ID is preserved so the first-submission identity wins. The caller reads
@@ -237,12 +284,14 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
           status: 'pending_verification',
           payload,
           updatedAt: timestamp,
+          expiresAt,
         },
       })
       .returning({
         id: pendingSignups.id,
         signupRequestId: pendingSignups.signupRequestId,
         candidateSlug: pendingSignups.candidateSlug,
+        verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
       });
 
     const row = rows[0];
@@ -258,6 +307,8 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
     }
 
     if (isUniqueConstraintError(error, 'pending_signups_signup_request_unique')) {
+      // Guard: also match emailNormalized to prevent cross-user hijacking
+      // when an attacker provides another user's signupRequestId.
       const rows = await db
         .update(pendingSignups)
         .set({
@@ -275,18 +326,28 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
           status: 'pending_verification',
           payload,
           updatedAt: timestamp,
+          expiresAt,
         })
-        .where(eq(pendingSignups.signupRequestId, input.signupRequestId))
+        .where(
+          and(
+            eq(pendingSignups.signupRequestId, input.signupRequestId),
+            eq(pendingSignups.emailNormalized, input.email),
+          ),
+        )
         .returning({
           id: pendingSignups.id,
           signupRequestId: pendingSignups.signupRequestId,
           candidateSlug: pendingSignups.candidateSlug,
+          verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
         });
 
       const row = rows[0];
       if (row) {
         return row;
       }
+
+      // Email mismatch — the signupRequestId belongs to a different user.
+      throw new ValidationError('Unable to process signup request.');
     }
 
     throw error;
@@ -430,7 +491,6 @@ function isUniqueConstraintError(error: unknown, constraintName: string): boolea
   return (
     candidate.constraint === constraintName
     || candidate.constraint_name === constraintName
-    || candidate.message?.includes(constraintName) === true
   );
 }
 
@@ -442,4 +502,10 @@ async function enforceMinSignupResponseTime(startMs: number): Promise<void> {
   }
 }
 
-export const _testInternals = { MIN_SIGNUP_RESPONSE_MS, enforceMinSignupResponseTime, getBaseUrl } as const;
+export const _testInternals = {
+  MIN_SIGNUP_RESPONSE_MS,
+  SIGNUP_EXPIRY_MS,
+  VERIFICATION_EMAIL_COOLDOWN_MS,
+  enforceMinSignupResponseTime,
+  getBaseUrl,
+} as const;

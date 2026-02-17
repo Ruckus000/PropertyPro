@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { signupSchema } from '../../src/lib/auth/signup-schema';
+import {
+  normalizeSignupSubdomain,
+  signupSchema,
+} from '../../src/lib/auth/signup-schema';
 
 const validPayload = {
   primaryContactName: 'Jordan Admin',
@@ -65,5 +68,20 @@ describe('signup schema validation', () => {
       unitCount: 0,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('normalizeSignupSubdomain', () => {
+  it('collapses consecutive hyphens', () => {
+    expect(normalizeSignupSubdomain('foo--bar')).toBe('foo-bar');
+    expect(normalizeSignupSubdomain('a---b---c')).toBe('a-b-c');
+  });
+
+  it('strips leading and trailing hyphens', () => {
+    expect(normalizeSignupSubdomain('-hello-world-')).toBe('hello-world');
+  });
+
+  it('lowercases and replaces non-alphanumeric characters', () => {
+    expect(normalizeSignupSubdomain('My Community!')).toBe('my-community');
   });
 });

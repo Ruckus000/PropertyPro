@@ -88,6 +88,7 @@ interface PendingSignupRow {
   expiresAt: Date | null;
   authUserId: string | null;
   verificationEmailId: string | null;
+  verificationEmailSentAt: Date | null;
 }
 
 interface MockDbState {
@@ -143,9 +144,10 @@ function createMockDb(state: MockDbState): {
               existing.candidateSlug = candidateSlug;
               return [
                 {
-                  id: existing.id,
+                  id: BigInt(existing.id),
                   signupRequestId: existing.signupRequestId,
                   candidateSlug: existing.candidateSlug,
+                  verificationEmailSentAt: existing.verificationEmailSentAt,
                 },
               ];
             }
@@ -168,13 +170,15 @@ function createMockDb(state: MockDbState): {
               expiresAt: null,
               authUserId: null,
               verificationEmailId: null,
+              verificationEmailSentAt: null,
             };
             state.pendingSignups.push(inserted);
             return [
               {
-                id: inserted.id,
+                id: BigInt(inserted.id),
                 signupRequestId: inserted.signupRequestId,
                 candidateSlug: inserted.candidateSlug,
+                verificationEmailSentAt: inserted.verificationEmailSentAt,
               },
             ];
           },
@@ -183,6 +187,43 @@ function createMockDb(state: MockDbState): {
     };
   });
 
+  // Resolve a condition (plain eq or compound and) to find a matching row.
+  function findRowByCondition(
+    condition: Record<string, unknown>,
+  ): PendingSignupRow | undefined {
+    // Plain eq condition: { _type: 'eq', col, value }
+    if (condition._type === 'eq') {
+      return state.pendingSignups.find((entry) => {
+        if (condition.col === pendingSignupsTable.id) {
+          return entry.id === Number(condition.value);
+        }
+        if (condition.col === pendingSignupsTable.signupRequestId) {
+          return entry.signupRequestId === String(condition.value);
+        }
+        return false;
+      });
+    }
+    // Compound and() condition: { _type: 'and', conditions: [...] }
+    if (condition._type === 'and' && Array.isArray(condition.conditions)) {
+      return state.pendingSignups.find((entry) => {
+        return (condition.conditions as Record<string, unknown>[]).every((c) => {
+          if (c._type !== 'eq') return true;
+          if (c.col === pendingSignupsTable.signupRequestId) {
+            return entry.signupRequestId === String(c.value);
+          }
+          if (c.col === pendingSignupsTable.emailNormalized) {
+            return entry.emailNormalized === String(c.value);
+          }
+          if (c.col === pendingSignupsTable.id) {
+            return entry.id === Number(c.value);
+          }
+          return true;
+        });
+      });
+    }
+    return undefined;
+  }
+
   const updateSpy = vi.fn((table: unknown) => {
     if (table !== pendingSignupsTable) {
       throw new Error('Unexpected update target');
@@ -190,17 +231,9 @@ function createMockDb(state: MockDbState): {
 
     return {
       set: (changes: Record<string, unknown>) => ({
-        where: (condition: { col: unknown; value: unknown }) => {
+        where: (condition: Record<string, unknown>) => {
           const execute = async () => {
-            const row = state.pendingSignups.find((entry) => {
-              if (condition.col === pendingSignupsTable.id) {
-                return entry.id === Number(condition.value);
-              }
-              if (condition.col === pendingSignupsTable.signupRequestId) {
-                return entry.signupRequestId === String(condition.value);
-              }
-              return false;
-            });
+            const row = findRowByCondition(condition);
 
             if (!row) {
               return [];
@@ -232,12 +265,16 @@ function createMockDb(state: MockDbState): {
             ) {
               row.verificationEmailId = changes.verificationEmailId;
             }
+            if (changes.verificationEmailSentAt instanceof Date) {
+              row.verificationEmailSentAt = changes.verificationEmailSentAt;
+            }
 
             return [
               {
-                id: row.id,
+                id: BigInt(row.id),
                 signupRequestId: row.signupRequestId,
                 candidateSlug: row.candidateSlug,
+                verificationEmailSentAt: row.verificationEmailSentAt,
               },
             ];
           };
@@ -424,6 +461,7 @@ describe('signup service', () => {
       expiresAt: new Date('2020-01-01'),
       authUserId: null,
       verificationEmailId: null,
+      verificationEmailSentAt: null,
     });
 
     // The slug should show as available since the holding signup is expired.
@@ -453,5 +491,43 @@ describe('signup service', () => {
     expect(result.message).toContain('Check your email');
     expect(result.verificationRequired).toBe(true);
     expect(generateLinkMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects signupRequestId reuse from a different email (cross-user hijacking)', async () => {
+    // First user creates a pending signup.
+    await submitSignup(validSignupPayload);
+    expect(state.pendingSignups).toHaveLength(1);
+
+    // Attacker tries to reuse the same signupRequestId with a different email.
+    const hijackPayload = {
+      ...validSignupPayload,
+      email: 'attacker@example.com',
+      candidateSlug: 'attacker-community',
+    };
+
+    await expect(submitSignup(hijackPayload)).rejects.toThrow(
+      'Unable to process signup request.',
+    );
+
+    // Original signup should be untouched.
+    expect(state.pendingSignups[0]?.emailNormalized).toBe('jordan@example.com');
+    expect(state.pendingSignups[0]?.candidateSlug).toBe('seaside-villas');
+  });
+
+  it('skips re-sending verification email within cooldown period', async () => {
+    // First submission sends the email.
+    const first = await submitSignup(validSignupPayload);
+    expect(first.signupRequestId).toBe(validSignupPayload.signupRequestId);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+
+    // Simulate the pending signup having a recent verificationEmailSentAt.
+    state.pendingSignups[0]!.verificationEmailSentAt = new Date();
+
+    sendEmailMock.mockClear();
+
+    // Second submission within cooldown should NOT re-send.
+    const second = await submitSignup(validSignupPayload);
+    expect(second.signupRequestId).toBe(validSignupPayload.signupRequestId);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });
