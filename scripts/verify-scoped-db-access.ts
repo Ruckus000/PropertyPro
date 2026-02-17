@@ -29,6 +29,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
 const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

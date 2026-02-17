@@ -35,6 +35,8 @@ const PROTECTED_PATH_PREFIXES = [
 const API_PATH_PREFIX = '/api/v1';
 const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/invitations', method: 'PATCH' },
+  { path: '/api/v1/auth/signup', method: 'GET' },
+  { path: '/api/v1/auth/signup', method: 'POST' },
   { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
 ];
 
