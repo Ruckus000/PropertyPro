@@ -160,6 +160,123 @@ describe('p1-26 notification-preferences route', () => {
     expect(json.data['emailFrequency']).toBe('weekly_digest');
   });
 
+  it('PATCH updates existing rows without dropping legacy preference fields', async () => {
+    const stored: Record<string, unknown>[] = [{
+      id: 1,
+      userId: 'user-123',
+      communityId: 42,
+      emailAnnouncements: true,
+      emailDocuments: false,
+      emailMeetings: true,
+      emailMaintenance: true,
+      emailFrequency: 'daily_digest',
+    }];
+    const query = vi.fn().mockImplementation(async () => stored);
+    const update = vi
+      .fn()
+      .mockImplementation(async (_table, data: Record<string, unknown>) => {
+        stored[0] = { ...stored[0], ...data };
+        return [stored[0]];
+      });
+
+    createScopedClientMock.mockReturnValue({
+      query,
+      insert: vi.fn().mockResolvedValue([]),
+      update,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        emailAnnouncements: false,
+        emailDocuments: true,
+        emailMeetings: false,
+        emailMaintenance: false,
+        emailFrequency: 'never',
+      }),
+    });
+
+    const res = await PATCH(req);
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      notificationPreferencesTable,
+      expect.objectContaining({
+        emailAnnouncements: false,
+        emailDocuments: true,
+        emailMeetings: false,
+        emailMaintenance: false,
+        emailFrequency: 'never',
+      }),
+      expect.any(Object),
+    );
+    expect(stored[0]).toEqual(
+      expect.objectContaining({
+        emailDocuments: true,
+        emailMaintenance: false,
+      }),
+    );
+  });
+
+  it('PATCH rejects invalid emailFrequency enum values', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        emailAnnouncements: true,
+        emailDocuments: true,
+        emailMeetings: true,
+        emailMaintenance: true,
+        emailFrequency: 'monthly',
+      }),
+    });
+
+    const res = await PATCH(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH returns 404 when x-community-id header conflicts with body communityId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-community-id': '99',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        emailAnnouncements: true,
+        emailDocuments: true,
+        emailMeetings: true,
+        emailMaintenance: true,
+      }),
+    });
+
+    const res = await PATCH(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('GET rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/notification-preferences?communityId=42',
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('GET returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/notification-preferences?communityId=42',
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(403);
+  });
+
   it('PATCH rejects unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
