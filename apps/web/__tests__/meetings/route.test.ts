@@ -396,6 +396,16 @@ describe('p1-16 meetings route', () => {
     expect(res.status).toBe(401);
   });
 
+  it('GET returns 404 when x-community-id header conflicts with query communityId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42', {
+      headers: {
+        'x-community-id': '99',
+      },
+    });
+    const res = await GET(req);
+    expect(res.status).toBe(404);
+  });
+
   it('GET returns 403 for authenticated non-member', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
     const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
@@ -428,6 +438,24 @@ describe('p1-16 meetings route', () => {
     });
     const postRes = await POST(postReq);
     expect(postRes.status).toBe(403);
+  });
+
+  it('POST rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Annual Meeting',
+        meetingType: 'annual',
+        startsAt: '2026-03-01T00:00:00.000Z',
+        location: 'Hall',
+        communityId: 77,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
