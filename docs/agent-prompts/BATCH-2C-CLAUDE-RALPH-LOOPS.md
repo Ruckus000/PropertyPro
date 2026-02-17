@@ -34,6 +34,15 @@ scripts/claude-ralph-loop.sh <prompt-file> <max-iterations> "<success-marker>"
 ```
 
 The runner uses direct `claude "..."` prompt invocation (no `claude -p`) to align with AGENTS.md learnings.
+Default permission mode is `acceptEdits` for non-interactive loop runs.
+
+Optional runner env vars:
+
+```bash
+export CLAUDE_PERMISSION_MODE=acceptEdits
+export CLAUDE_DANGEROUS_SKIP_PERMISSIONS=false
+export CLAUDE_EXTRA_ARGS="--model sonnet --effort high"
+```
 
 ## Run P2-33 Loop
 

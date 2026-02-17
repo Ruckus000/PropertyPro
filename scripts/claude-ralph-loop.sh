@@ -13,6 +13,10 @@ Examples:
 Notes:
   - Uses direct "claude <prompt>" invocation (no "-p") per AGENTS.md loop learnings.
   - Stores each iteration log under .claude-ralph-runs/<prompt-name>/<timestamp>/.
+  - Optional env vars:
+      CLAUDE_PERMISSION_MODE=acceptEdits|bypassPermissions|default|delegate|dontAsk|plan
+      CLAUDE_DANGEROUS_SKIP_PERMISSIONS=true|false
+      CLAUDE_EXTRA_ARGS="--model sonnet --effort high"
 EOF
 }
 
@@ -55,23 +59,48 @@ mkdir -p "$run_dir"
 
 prompt="$(cat "$prompt_file")"
 
+permission_mode="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
+dangerous_skip="${CLAUDE_DANGEROUS_SKIP_PERMISSIONS:-false}"
+extra_args="${CLAUDE_EXTRA_ARGS:-}"
+
+declare -a claude_cmd
+claude_cmd=(claude --permission-mode "$permission_mode")
+
+if [[ "$dangerous_skip" == "true" ]]; then
+  claude_cmd+=(--dangerously-skip-permissions)
+fi
+
+if [[ -n "$extra_args" ]]; then
+  # shellcheck disable=SC2206
+  extra_argv=($extra_args)
+  claude_cmd+=("${extra_argv[@]}")
+fi
+
 echo "Prompt file: $prompt_file" | tee -a "$summary_log"
 echo "Iterations: $max_iterations" | tee -a "$summary_log"
 echo "Success marker: $success_marker" | tee -a "$summary_log"
 echo "Run directory: $run_dir" | tee -a "$summary_log"
+echo "Permission mode: $permission_mode" | tee -a "$summary_log"
+echo "Dangerous skip permissions: $dangerous_skip" | tee -a "$summary_log"
+echo "Claude command: ${claude_cmd[*]}" | tee -a "$summary_log"
 
 for ((iteration = 1; iteration <= max_iterations; iteration++)); do
   iter_log="$run_dir/iteration-$iteration.log"
   echo "=== Iteration $iteration/$max_iterations ===" | tee -a "$summary_log"
 
   set +e
-  claude "$prompt" | tee "$iter_log"
+  "${claude_cmd[@]}" "$prompt" 2>&1 | tee "$iter_log"
   claude_exit="${PIPESTATUS[0]}"
   set -e
 
   if grep -Fq "$success_marker" "$iter_log"; then
     echo "Success marker found at iteration $iteration." | tee -a "$summary_log"
     exit 0
+  fi
+
+  if grep -Eiq "write permissions|grant write permission|hit your limit|resets .*America/New_York" "$iter_log"; then
+    echo "Stopping early due to permission or rate-limit blocker detected in iteration $iteration." | tee -a "$summary_log"
+    exit 2
   fi
 
   if [[ "$claude_exit" -ne 0 ]]; then
