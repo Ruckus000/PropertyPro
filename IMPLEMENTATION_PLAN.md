@@ -88,6 +88,26 @@ Generated: 2026-02-16 (v20 — digest notifications rollout checkpoint added; Ph
   - Pass: email template suite (`59/59`)
   - Note: `pnpm test:integration:preflight` did not complete in this environment due DNS resolution failure to Supabase host (`ENOTFOUND`), so shared-env integration evidence is still pending.
 
+### Stop-the-Line Incident (2026-02-17 — P1 Recovery Branches)
+- Incident scope: `p1-12`, `p1-16`, `p1-26` stale worktrees built on `ae517d4` while `main` was at `5a9d449` (50 commits behind at audit time).
+- Verified findings (8/8 confirmed):
+  - P0: `p1-16` had missing auth/membership controls (including GET read-path exposure and client-actor trust risks).
+  - P0: `p1-26` missed tenant-resolution/membership protections.
+  - P1: `p1-12` accepted ZIP-based masquerades as DOCX.
+  - P1: `p1-16` attach/detach scoped existence checks regressed.
+  - P1: `p1-26` schema/API contract drift risked preference-field loss on PATCH.
+  - P1: authz boundary tests were removed/simplified in stale branches.
+  - P1: `main` still missed P1-12 acceptance closure for `422` + storage cleanup + validation-failure audit logging.
+- Containment actions completed:
+  - WIP checkpoints created to preserve branch deltas: `p1-12`=`ce5af77`, `p1-16`=`e6d6084`, `p1-26`=`848f1bd`.
+  - Merge freeze declared for stale branches; no direct merge from those branches is allowed.
+- Merge gate (mandatory before merge):
+  - Branch rebuilt from current `main` only.
+  - Route-level auth + membership + tenant-resolution checks preserved.
+  - Schema contract and API payload keys preserved unless migration-backed change is approved.
+  - Targeted authz/tenant-isolation/file-validation tests pass.
+  - `pnpm --filter @propertypro/web typecheck` passes.
+
 ### POA v2 Rollout Closeout (2026-02-13)
 - Smoke checks (role/category/delete boundaries) passed in focused suites:
   - `pnpm -C /Users/jphilistin/Documents/Coding/PropertyPro exec vitest run packages/shared/__tests__/access-policies.test.ts apps/web/__tests__/documents/document-categories-route.test.ts apps/web/__tests__/documents/document-category-filter.test.tsx apps/web/__tests__/upload/documents-route.test.ts apps/web/__tests__/documents/search-route.test.ts apps/web/__tests__/documents/document-download-route.test.ts apps/web/__tests__/documents/document-versions-route.test.ts`

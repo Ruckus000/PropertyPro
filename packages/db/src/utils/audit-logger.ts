@@ -14,7 +14,7 @@ export type AuditAction =
   | 'user_invited' | 'settings_changed'                        // User lifecycle
   | 'meeting_notice_posted' | 'meeting_minutes_approved'       // Meeting events
   | 'announcement_email_sent' | 'document_deleted'             // Domain events
-  | 'document_accessed'                                        // Read-path audit
+  | 'document_accessed' | 'validation_failed'                  // Read-path + validation audit
   | 'notification_sent';                                       // Email notification dispatch (P2-41)
 
 export interface AuditEventParams {

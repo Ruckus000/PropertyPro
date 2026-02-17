@@ -21,10 +21,14 @@ Milestones:
 - [2026-02-15] `P2-43` merged (`feat/p2-43-multi-tenant-isolation` -> `main`, merge `bbaade5`) with expanded route isolation coverage (`aac4bbb`).
 - [2026-02-16] Spec path normalization completed across active Phase 2 specs under `specs/phase-2-multi-tenancy/` (removed legacy `apps/api` references).
 - [2026-02-16] `P2-PRE-03` scoped-only DB enforcement completed on `main` (`main`, commit `226b4861ff2a4c67a654979bd1235ec9770efd58`; unsafe namespace, runtime import guard, and CI workflow).
+- [2026-02-17] Stop-the-line quality incident recorded for stale Phase 1 worktrees (`p1-12`, `p1-16`, `p1-26`) after verified authz/tenant/contract regressions; branches frozen and recovery branches rebuilt from `main`.
 
 Current cursor:
 - Run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
 - Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
+
+Cross-phase merge guard:
+- Any feature branch more than 20 commits behind `origin/main` is non-mergeable until rebased/recreated.
 
 ---
 

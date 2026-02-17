@@ -6,6 +6,7 @@ import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 const {
   createScopedClientMock,
   createPresignedDownloadUrlMock,
+  deleteStorageObjectMock,
   logAuditEventMock,
   scopedInsertMock,
   scopedQueryMock,
@@ -18,6 +19,7 @@ const {
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
+  deleteStorageObjectMock: vi.fn().mockResolvedValue(undefined),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
@@ -35,6 +37,7 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
+  deleteStorageObject: deleteStorageObjectMock,
   documents: documentsTable,
   logAuditEvent: logAuditEventMock,
   getAccessibleDocuments: getAccessibleDocumentsMock,
@@ -221,7 +224,7 @@ describe('p1-11 documents route', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST rejects size mismatch between payload and stored object', async () => {
+  it('POST returns 422, deletes object, and audits when file size does not match', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
       method: 'POST',
       headers: {
@@ -237,7 +240,60 @@ describe('p1-11 documents route', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
+    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
+      'documents',
+      'communities/42/documents/abc/minutes.pdf',
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'validation_failed',
+        resourceType: 'document_upload',
+        communityId: 42,
+      }),
+    );
+  });
+
+  it('POST returns 422, deletes object, and audits when magic bytes validation fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const bytes = new Uint8Array([0x4d, 0x5a]); // EXE signature, not an allowed upload type
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => bytes.buffer,
+        } as Response;
+      }),
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Fake PDF',
+        filePath: 'communities/42/documents/abc/fake.pdf',
+        fileName: 'fake.pdf',
+        fileSize: 2,
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(422);
+    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
+      'documents',
+      'communities/42/documents/abc/fake.pdf',
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'validation_failed',
+        resourceType: 'document_upload',
+        communityId: 42,
+      }),
+    );
   });
 
   it('GET requires authentication', async () => {
