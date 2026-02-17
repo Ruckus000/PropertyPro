@@ -12,6 +12,7 @@ export * from './announcements';
 export * from './announcement-delivery-log';
 export * from './notification-digest-queue';
 export * from './notification-preferences';
+export * from './pending-signups';
 export * from './compliance-audit-log';
 export * from './compliance-checklist-items';
 export * from './invitations';
@@ -33,6 +34,7 @@ import type { announcements } from './announcements';
 import type { announcementDeliveryLog } from './announcement-delivery-log';
 import type { notificationDigestQueue } from './notification-digest-queue';
 import type { notificationPreferences } from './notification-preferences';
+import type { pendingSignups } from './pending-signups';
 import type { complianceAuditLog } from './compliance-audit-log';
 import type { complianceChecklistItems } from './compliance-checklist-items';
 import type { invitations } from './invitations';
@@ -80,6 +82,10 @@ export type NewNotificationDigestQueue = typeof notificationDigestQueue.$inferIn
 // Notification Preferences
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+// Pending Signups
+export type PendingSignup = typeof pendingSignups.$inferSelect;
+export type NewPendingSignup = typeof pendingSignups.$inferInsert;
 
 // Compliance Audit Log (append-only — no Insert type needed, use logAuditEvent())
 export type ComplianceAuditLogRecord = typeof complianceAuditLog.$inferSelect;
