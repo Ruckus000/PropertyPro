@@ -6,6 +6,7 @@ export const provisioningJobs = pgTable('provisioning_jobs', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   communityId: bigint('community_id', { mode: 'number' }).references(() => communities.id),
   stripeEventId: text('stripe_event_id').unique(),
+  signupRequestId: text('signup_request_id'),
   status: text('status').notNull(),
   lastSuccessfulStatus: text('last_successful_status'),
   startedAt: timestamp('started_at', { withTimezone: true }),

@@ -4,7 +4,8 @@ import { communities, pendingSignups } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
-import { createElement, type ReactElement } from 'react';
+import { createElement } from 'react';
+import { SignupVerificationEmail } from '@propertypro/email';
 import { ValidationError } from '@/lib/api/errors';
 import { isReservedSubdomain } from '@/lib/tenant/reserved-subdomains';
 import {
@@ -343,57 +344,15 @@ async function sendSignupVerificationEmail(
     to: email,
     subject: 'Verify your email to continue your PropertyPro signup',
     category: 'transactional',
-    react: buildSignupVerificationEmailElement(
+    react: createElement(SignupVerificationEmail, {
+      branding: { communityName: 'PropertyPro Florida' },
       primaryContactName,
       communityName,
       verificationLink,
-    ),
+    }),
   });
 
   return result.id;
-}
-
-function buildSignupVerificationEmailElement(
-  primaryContactName: string,
-  communityName: string,
-  verificationLink: string,
-): ReactElement {
-  return createElement(
-    'div',
-    { style: { fontFamily: 'Arial, sans-serif', color: '#111827', lineHeight: '1.5' } },
-    createElement('h1', null, 'Verify your email'),
-    createElement('p', null, `Hi ${primaryContactName},`),
-    createElement(
-      'p',
-      null,
-      `Thanks for starting signup for ${communityName}. Verify your email to continue to checkout.`,
-    ),
-    createElement(
-      'p',
-      null,
-      createElement(
-        'a',
-        {
-          href: verificationLink,
-          style: {
-            display: 'inline-block',
-            backgroundColor: '#2563eb',
-            color: '#ffffff',
-            textDecoration: 'none',
-            padding: '10px 16px',
-            borderRadius: '6px',
-            fontWeight: 600,
-          },
-        },
-        'Verify Email',
-      ),
-    ),
-    createElement(
-      'p',
-      { style: { fontSize: '14px', color: '#4b5563' } },
-      'For security, checkout stays locked until verification is complete.',
-    ),
-  );
 }
 
 function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string, unknown> {

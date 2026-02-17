@@ -38,6 +38,9 @@ export type {
   NotificationDigestItem,
 } from "./templates/notification-digest-email";
 
+export { SignupVerificationEmail } from "./templates/signup-verification-email";
+export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

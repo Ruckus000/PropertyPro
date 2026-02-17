@@ -39,6 +39,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
+  SignupVerificationEmail: () => null,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({

@@ -7,6 +7,7 @@
  */
 import {
   bigserial,
+  check,
   index,
   integer,
   jsonb,
@@ -16,6 +17,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { communityTypeEnum } from './enums';
 
 export const pendingSignups = pgTable(
@@ -41,11 +43,14 @@ export const pendingSignups = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('pending_signups_signup_request_unique').on(table.signupRequestId),
     uniqueIndex('pending_signups_email_normalized_unique').on(table.emailNormalized),
     uniqueIndex('pending_signups_candidate_slug_unique').on(table.candidateSlug),
     index('pending_signups_status_idx').on(table.status, table.createdAt),
+    index('pending_signups_auth_user_id_idx').on(table.authUserId),
+    check('pending_signups_status_check', sql`${table.status} IN ('pending_verification','email_verified','checkout_started','payment_completed','provisioning','completed','expired')`),
   ],
 );
