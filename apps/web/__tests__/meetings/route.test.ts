@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
   createScopedClientMock,
   logAuditEventMock,
   meetingsTableMock,
   meetingDocumentsTableMock,
-  communitiesTableMock,
   documentsTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
@@ -16,10 +16,14 @@ const {
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   meetingsTableMock: { id: Symbol('meetings.id') },
   meetingDocumentsTableMock: { id: Symbol('meeting_documents.id') },
-  communitiesTableMock: { id: Symbol('communities.id') },
   documentsTableMock: { id: Symbol('documents.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
+    userId: 'session-user-1',
+    communityId: 42,
+    role: 'owner',
+    communityType: 'condo_718',
+  }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -27,7 +31,6 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
   meetings: meetingsTableMock,
   meetingDocuments: meetingDocumentsTableMock,
-  communities: communitiesTableMock,
   documents: documentsTableMock,
 }));
 
@@ -39,27 +42,24 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/services/notification-service', () => ({
+  queueNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { GET, POST } from '../../src/app/api/v1/meetings/route';
 
 describe('p1-16 meetings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
-
-    // Default mock: query returns empty arrays and a condo community
-    const query = vi.fn().mockImplementation(async (table) => {
-      if (table === communitiesTableMock) {
-        return [
-          {
-            id: 42,
-            name: 'Test Condo',
-            communityType: 'condo_718',
-            timezone: 'America/New_York',
-          },
-        ];
-      }
-      return [];
+    requireCommunityMembershipMock.mockResolvedValue({
+      userId: 'session-user-1',
+      communityId: 42,
+      role: 'owner',
+      communityType: 'condo_718',
     });
+
+    const query = vi.fn().mockResolvedValue([]);
 
     createScopedClientMock.mockReturnValue({
       query,
@@ -72,11 +72,6 @@ describe('p1-16 meetings route', () => {
 
   it('GET lists meetings for a community and computes deadlines', async () => {
     const query = vi.fn().mockImplementation(async (table) => {
-      if (table === communitiesTableMock) {
-        return [
-          { id: 42, communityType: 'condo_718', timezone: 'America/New_York' },
-        ];
-      }
       if (table === meetingsTableMock) {
         return [
           {
@@ -129,6 +124,7 @@ describe('p1-16 meetings route', () => {
         startsAt: '2026-03-01T00:00:00.000Z',
         location: 'Hall',
         communityId: 77,
+        userId: 'spoofed-user',
       }),
       headers: { 'content-type': 'application/json' },
     });
@@ -143,7 +139,12 @@ describe('p1-16 meetings route', () => {
       expect.objectContaining({ title: 'Annual Meeting', meetingType: 'annual' }),
     );
     expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'create', resourceType: 'meeting', resourceId: '99' }),
+      expect.objectContaining({
+        action: 'create',
+        resourceType: 'meeting',
+        resourceId: '99',
+        userId: 'session-user-1',
+      }),
     );
     expect(json.data.id).toBe(99);
   });
@@ -336,6 +337,97 @@ describe('p1-16 meetings route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(404);
+  });
+
+  it('POST detach returns 404 when documentId does not belong to community', async () => {
+    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
+      if (table === documentsTableMock) return Promise.resolve([]); // not found
+      return Promise.resolve([]);
+    });
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn().mockResolvedValue([]),
+      selectFrom,
+      insert: vi.fn(),
+      update: vi.fn(),
+      softDelete: vi.fn(),
+      hardDelete: vi.fn(),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'detach',
+        communityId: 42,
+        meetingId: 1,
+        documentId: 999,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('POST returns 404 when x-community-id header conflicts with body communityId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Annual Meeting',
+        meetingType: 'annual',
+        startsAt: '2026-03-01T00:00:00.000Z',
+        location: 'Hall',
+        communityId: 77,
+      }),
+      headers: {
+        'content-type': 'application/json',
+        'x-community-id': '88',
+      },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('GET rejects unauthenticated requests', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('GET returns 403 for authenticated non-member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
+    const res = await GET(req);
+    expect(res.status).toBe(403);
+  });
+
+  it('GET and POST block apartment communities', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      userId: 'session-user-1',
+      communityId: 42,
+      role: 'site_manager',
+      communityType: 'apartment',
+    });
+
+    const getReq = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
+    const getRes = await GET(getReq);
+    expect(getRes.status).toBe(403);
+
+    const postReq = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Leasing Standup',
+        meetingType: 'committee',
+        startsAt: '2026-03-01T00:00:00.000Z',
+        location: 'Leasing Office',
+        communityId: 42,
+      }),
+      headers: { 'content-type': 'application/json' },
+    });
+    const postRes = await POST(postReq);
+    expect(postRes.status).toBe(403);
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
