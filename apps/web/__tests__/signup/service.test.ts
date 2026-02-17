@@ -6,6 +6,11 @@ const {
   createAdminClientMock,
   sendEmailMock,
   eqMock,
+  andMock,
+  notInArrayMock,
+  orMock,
+  isNullMock,
+  gtMock,
   communitiesTable,
   pendingSignupsTable,
   userRolesTable,
@@ -13,7 +18,12 @@ const {
   createUnscopedClientMock: vi.fn(),
   createAdminClientMock: vi.fn(),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_1' }),
-  eqMock: vi.fn((col: unknown, value: unknown) => ({ col, value })),
+  eqMock: vi.fn((col: unknown, value: unknown) => ({ _type: 'eq', col, value })),
+  andMock: vi.fn((...conditions: unknown[]) => ({ _type: 'and', conditions })),
+  notInArrayMock: vi.fn((col: unknown, values: unknown) => ({ _type: 'notInArray', col, values })),
+  orMock: vi.fn((...conditions: unknown[]) => ({ _type: 'or', conditions })),
+  isNullMock: vi.fn((col: unknown) => ({ _type: 'isNull', col })),
+  gtMock: vi.fn((col: unknown, value: unknown) => ({ _type: 'gt', col, value })),
   communitiesTable: {
     id: 'communities.id',
     slug: 'communities.slug',
@@ -23,6 +33,8 @@ const {
     signupRequestId: 'pending_signups.signup_request_id',
     candidateSlug: 'pending_signups.candidate_slug',
     emailNormalized: 'pending_signups.email_normalized',
+    status: 'pending_signups.status',
+    expiresAt: 'pending_signups.expires_at',
   },
   userRolesTable: {
     id: 'user_roles.id',
@@ -43,7 +55,12 @@ vi.mock('@propertypro/email', () => ({
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
+  and: andMock,
   eq: eqMock,
+  notInArray: notInArrayMock,
+  or: orMock,
+  isNull: isNullMock,
+  gt: gtMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -67,6 +84,8 @@ interface PendingSignupRow {
   signupRequestId: string;
   emailNormalized: string;
   candidateSlug: string;
+  status: string;
+  expiresAt: Date | null;
   authUserId: string | null;
   verificationEmailId: string | null;
 }
@@ -112,7 +131,7 @@ function createMockDb(state: MockDbState): {
             );
             if (slugOwner) {
               throw createUniqueConstraintError(
-                'pending_signups_candidate_slug_unique',
+                'pending_signups_candidate_slug_active_unique',
               );
             }
 
@@ -145,6 +164,8 @@ function createMockDb(state: MockDbState): {
               signupRequestId,
               emailNormalized: email,
               candidateSlug,
+              status: 'pending_verification',
+              expiresAt: null,
               authUserId: null,
               verificationEmailId: null,
             };
@@ -193,7 +214,7 @@ function createMockDb(state: MockDbState): {
               );
               if (slugConflict) {
                 throw createUniqueConstraintError(
-                  'pending_signups_candidate_slug_unique',
+                  'pending_signups_candidate_slug_active_unique',
                 );
               }
               row.candidateSlug = nextSlug;
@@ -240,19 +261,45 @@ function createMockDb(state: MockDbState): {
     };
   });
 
+  // Extract the eq slug value from either a plain eq condition or an and() wrapper.
+  function extractSlugValue(condition: unknown): string | null {
+    const cond = condition as Record<string, unknown>;
+    // Plain eq condition: { _type: 'eq', col, value }
+    if (cond._type === 'eq') return String(cond.value);
+    // Compound and() condition: { _type: 'and', conditions: [...] }
+    if (cond._type === 'and' && Array.isArray(cond.conditions)) {
+      const eqCond = (cond.conditions as Record<string, unknown>[]).find(
+        (c) => c._type === 'eq',
+      );
+      if (eqCond) return String(eqCond.value);
+    }
+    return null;
+  }
+
+  const TERMINAL_STATUSES = ['expired', 'completed'];
+
   const selectSpy = vi.fn(() => ({
     from: (table: unknown) => ({
-      where: (condition: { col: unknown; value: unknown }) => ({
+      where: (condition: unknown) => ({
         limit: async () => {
+          const slugValue = extractSlugValue(condition);
+          if (!slugValue) return [];
+
           if (table === communitiesTable) {
             return state.communities
-              .filter((row) => row.slug === String(condition.value))
+              .filter((row) => row.slug === slugValue)
               .map((row) => ({ id: row.id }));
           }
 
           if (table === pendingSignupsTable) {
             return state.pendingSignups
-              .filter((row) => row.candidateSlug === String(condition.value))
+              .filter((row) => {
+                if (row.candidateSlug !== slugValue) return false;
+                // Mirror the availability check: exclude terminal and expired rows.
+                if (TERMINAL_STATUSES.includes(row.status)) return false;
+                if (row.expiresAt && row.expiresAt < new Date()) return false;
+                return true;
+              })
               .map((row) => ({
                 id: row.id,
                 signupRequestId: row.signupRequestId,
@@ -365,6 +412,24 @@ describe('signup service', () => {
     expect(insertedTables).toEqual([pendingSignupsTable, pendingSignupsTable]);
     expect(insertedTables).not.toContain(communitiesTable);
     expect(insertedTables).not.toContain(userRolesTable);
+  });
+
+  it('allows reclaiming slugs from expired pending signups', async () => {
+    state.pendingSignups.push({
+      id: 99,
+      signupRequestId: 'old-request',
+      emailNormalized: 'old-user@example.com',
+      candidateSlug: 'seaside-villas',
+      status: 'expired',
+      expiresAt: new Date('2020-01-01'),
+      authUserId: null,
+      verificationEmailId: null,
+    });
+
+    // The slug should show as available since the holding signup is expired.
+    const availability = await checkSignupSubdomainAvailability('seaside-villas');
+    expect(availability.available).toBe(true);
+    expect(availability.reason).toBe('available');
   });
 
   it('keeps email uniqueness handling non-enumerating for already-registered users', async () => {

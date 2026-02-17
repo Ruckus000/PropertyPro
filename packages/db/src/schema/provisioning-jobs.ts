@@ -4,7 +4,8 @@ import { communities } from './communities';
 
 export const provisioningJobs = pgTable('provisioning_jobs', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
-  communityId: bigint('community_id', { mode: 'number' }).references(() => communities.id),
+  // Restrict: prevent community deletion while provisioning jobs reference it.
+  communityId: bigint('community_id', { mode: 'number' }).references(() => communities.id, { onDelete: 'restrict' }),
   stripeEventId: text('stripe_event_id').unique(),
   signupRequestId: text('signup_request_id'),
   status: text('status').notNull(),

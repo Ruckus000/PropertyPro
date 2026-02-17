@@ -1,7 +1,7 @@
 // Unsafe DB access is intentional here: signup intent is pre-tenant state.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, eq, gt, isNull, notInArray, or } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
@@ -70,7 +70,18 @@ export async function checkSignupSubdomainAvailability(
         signupRequestId: pendingSignups.signupRequestId,
       })
       .from(pendingSignups)
-      .where(eq(pendingSignups.candidateSlug, normalizedSubdomain))
+      .where(
+        and(
+          eq(pendingSignups.candidateSlug, normalizedSubdomain),
+          // Exclude terminal signups — their slugs are reclaimable.
+          notInArray(pendingSignups.status, ['expired', 'completed']),
+          // Exclude implicitly expired rows (cleanup job hasn't run yet).
+          or(
+            isNull(pendingSignups.expiresAt),
+            gt(pendingSignups.expiresAt, new Date()),
+          ),
+        ),
+      )
       .limit(5),
   ]);
 
@@ -208,6 +219,9 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
         payload,
         updatedAt: timestamp,
       })
+      // Intentionally does NOT update signupRequestId on conflict — the original
+      // ID is preserved so the first-submission identity wins. The caller reads
+      // the actual ID from .returning() to stay in sync.
       .onConflictDoUpdate({
         target: pendingSignups.emailNormalized,
         set: {
@@ -237,7 +251,7 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
     }
     return row;
   } catch (error) {
-    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_unique')) {
+    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
       throw new ValidationError('That subdomain is no longer available.', {
         field: 'candidateSlug',
       });
@@ -292,6 +306,9 @@ async function createOrLinkAuthAccount(
     signup_plan: input.planKey,
   };
 
+  // Uses generateLink (admin API) instead of supabase.auth.signUp so that
+  // Supabase does NOT send its default confirmation email. This lets us
+  // control email delivery via our Resend-backed pipeline with branded templates.
   const signupLink = await admin.auth.admin.generateLink({
     type: 'signup',
     email: input.email,
@@ -424,3 +441,5 @@ async function enforceMinSignupResponseTime(startMs: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 }
+
+export const _testInternals = { MIN_SIGNUP_RESPONSE_MS, enforceMinSignupResponseTime, getBaseUrl } as const;

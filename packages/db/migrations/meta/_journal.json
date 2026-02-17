@@ -78,6 +78,13 @@
       "when": 1771351986122,
       "tag": "0010_bent_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1771365430023,
+      "tag": "0011_perfect_falcon",
+      "breakpoints": true
     }
   ]
 }

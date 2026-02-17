@@ -35,6 +35,6 @@ describe('db export boundaries', () => {
 
   it('exposes only approved runtime filter helpers', () => {
     const exportedNames = Object.keys(filtersExports).sort();
-    expect(exportedNames).toEqual(['and', 'eq']);
+    expect(exportedNames).toEqual(['and', 'eq', 'gt', 'isNull', 'notInArray', 'or', 'sql']);
   });
 });
