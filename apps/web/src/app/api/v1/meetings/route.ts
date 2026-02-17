@@ -96,6 +96,9 @@ function requireMeetingsEnabled(communityType: CommunityType): void {
 }
 
 function coerceMeeting(row: Record<string, unknown>): Meeting {
+  // coerceMeeting is a typed cast workaround because createScopedClient returns
+  // generic Record<string,unknown> rows. Once the scoped client is updated to
+  // return typed rows this cast can be removed.
   return row as unknown as Meeting;
 }
 
