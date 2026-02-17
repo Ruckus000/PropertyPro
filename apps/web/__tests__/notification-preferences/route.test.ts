@@ -58,17 +58,16 @@ describe('p1-26 notification-preferences route', () => {
       expect.objectContaining({
         userId: 'user-123',
         communityId: 42,
-        emailAnnouncements: true,
-        emailDocuments: true,
-        emailMeetings: true,
-        emailMaintenance: true,
         emailFrequency: 'immediate',
+        emailAnnouncements: true,
+        emailMeetings: true,
+        inAppEnabled: true,
       }),
     );
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-123');
   });
 
-  it('PATCH upserts preferences with legacy payload and writes audit log', async () => {
+  it('PATCH upserts preferences and writes audit log', async () => {
     const stored: Record<string, unknown>[] = [];
     const query = vi.fn().mockImplementation(async () => stored);
     const insert = vi
@@ -92,10 +91,10 @@ describe('p1-26 notification-preferences route', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
+        emailFrequency: 'never',
         emailAnnouncements: false,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: false,
+        inAppEnabled: true,
       }),
     });
 
@@ -105,11 +104,10 @@ describe('p1-26 notification-preferences route', () => {
     expect(stored[0]).toEqual(
       expect.objectContaining({
         userId: 'user-123',
+        emailFrequency: 'never',
         emailAnnouncements: false,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: false,
-        emailFrequency: 'immediate',
+        inAppEnabled: true,
       }),
     );
 
@@ -123,113 +121,16 @@ describe('p1-26 notification-preferences route', () => {
     );
   });
 
-  it('PATCH accepts explicit emailFrequency and returns it in response payload', async () => {
-    const stored: Record<string, unknown>[] = [];
-    const query = vi.fn().mockImplementation(async () => stored);
-    const insert = vi
-      .fn()
-      .mockImplementation(async (_table, data: Record<string, unknown>) => {
-        stored.push({ id: 1, communityId: 42, ...data });
-        return [stored[stored.length - 1]];
-      });
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      insert,
-      update: vi.fn().mockResolvedValue([]),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        emailAnnouncements: true,
-        emailDocuments: true,
-        emailMeetings: true,
-        emailMaintenance: true,
-        emailFrequency: 'weekly_digest',
-      }),
-    });
-
-    const res = await PATCH(req);
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as { data: Record<string, unknown> };
-
-    expect(stored[0]?.['emailFrequency']).toBe('weekly_digest');
-    expect(json.data['emailFrequency']).toBe('weekly_digest');
-  });
-
-  it('PATCH updates existing rows without dropping legacy preference fields', async () => {
-    const stored: Record<string, unknown>[] = [{
-      id: 1,
-      userId: 'user-123',
-      communityId: 42,
-      emailAnnouncements: true,
-      emailDocuments: false,
-      emailMeetings: true,
-      emailMaintenance: true,
-      emailFrequency: 'daily_digest',
-    }];
-    const query = vi.fn().mockImplementation(async () => stored);
-    const update = vi
-      .fn()
-      .mockImplementation(async (_table, data: Record<string, unknown>) => {
-        stored[0] = { ...stored[0], ...data };
-        return [stored[0]];
-      });
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      insert: vi.fn().mockResolvedValue([]),
-      update,
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        emailAnnouncements: false,
-        emailDocuments: true,
-        emailMeetings: false,
-        emailMaintenance: false,
-        emailFrequency: 'never',
-      }),
-    });
-
-    const res = await PATCH(req);
-    expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(
-      notificationPreferencesTable,
-      expect.objectContaining({
-        emailAnnouncements: false,
-        emailDocuments: true,
-        emailMeetings: false,
-        emailMaintenance: false,
-        emailFrequency: 'never',
-      }),
-      expect.any(Object),
-    );
-    expect(stored[0]).toEqual(
-      expect.objectContaining({
-        emailDocuments: true,
-        emailMaintenance: false,
-      }),
-    );
-  });
-
   it('PATCH rejects invalid emailFrequency enum values', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
-        emailAnnouncements: true,
-        emailDocuments: true,
-        emailMeetings: true,
-        emailMaintenance: true,
         emailFrequency: 'monthly',
+        emailAnnouncements: true,
+        emailMeetings: true,
+        inAppEnabled: true,
       }),
     });
 
@@ -246,10 +147,10 @@ describe('p1-26 notification-preferences route', () => {
       },
       body: JSON.stringify({
         communityId: 42,
+        emailFrequency: 'immediate',
         emailAnnouncements: true,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: true,
+        inAppEnabled: true,
       }),
     });
 
@@ -285,10 +186,10 @@ describe('p1-26 notification-preferences route', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
+        emailFrequency: 'immediate',
         emailAnnouncements: true,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: true,
+        inAppEnabled: true,
       }),
     });
 
@@ -304,10 +205,10 @@ describe('p1-26 notification-preferences route', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
+        emailFrequency: 'immediate',
         emailAnnouncements: true,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: true,
+        inAppEnabled: true,
       }),
     });
 
