@@ -1,6 +1,6 @@
 # Phase 2 Execution Plan - Multi-Tenancy, Billing, and Onboarding
 
-**Date:** 2026-02-16  
+**Date:** 2026-02-17  
 **Author:** PropertyPro Engineering  
 **Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening progress is 2/3 complete)  
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
@@ -22,6 +22,8 @@ Milestones:
 - [2026-02-16] Spec path normalization completed across active Phase 2 specs under `specs/phase-2-multi-tenancy/` (removed legacy `apps/api` references).
 - [2026-02-16] `P2-PRE-03` scoped-only DB enforcement completed on `main` (`main`, commit `226b4861ff2a4c67a654979bd1235ec9770efd58`; unsafe namespace, runtime import guard, and CI workflow).
 - [2026-02-17] Stop-the-line quality incident recorded for stale Phase 1 worktrees (`p1-12`, `p1-16`, `p1-26`) after verified authz/tenant/contract regressions; branches frozen and recovery branches rebuilt from `main`.
+- [2026-02-17] P1 recovery branches merged to `main` in planned order: `codex/recover-p1-16-meetings` (`5a37de7`) -> `codex/recover-p1-26-notification-preferences` (`6d43950`) -> `codex/recover-p1-12-validation` (`01b92af`).
+- [2026-02-17] Networked multi-tenant route integration gate rerun passed (`45/45`) after shared-env schema reconciliation via `pnpm --filter @propertypro/db db:migrate`; `main` pushed to `origin/main` at `01b92af`.
 
 Current cursor:
 - Run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
@@ -29,6 +31,7 @@ Current cursor:
 
 Cross-phase merge guard:
 - Any feature branch more than 20 commits behind `origin/main` is non-mergeable until rebased/recreated.
+- CI enforcement is active via `.github/workflows/branch-freshness-guard.yml` (fails PRs more than 20 commits behind base).
 
 ---
 

@@ -32,3 +32,12 @@
 ## Policy
 - Hard fail in CI when branch is more than 20 commits behind `origin/main`.
 - No merges from salvaged stale branches (`p1-12`, `p1-16`, `p1-26`); only from fresh recovery branches rebased from current `main`.
+
+## Closeout Update (2026-02-17)
+- Recovery merges from fresh branches completed on `main` in planned order:
+  - `codex/recover-p1-16-meetings` -> merge `5a37de7`
+  - `codex/recover-p1-26-notification-preferences` -> merge `6d43950`
+  - `codex/recover-p1-12-validation` -> merge `01b92af`
+- Post-merge targeted verification passed (`16 + 10 + 24` tests, plus web typecheck and db build).
+- Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` passed (`45/45`) after shared-env migration reconciliation (`pnpm --filter @propertypro/db db:migrate`).
+- `main` was pushed and is aligned with `origin/main` at `01b92af`.

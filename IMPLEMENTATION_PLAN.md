@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-16 (v20 — digest notifications rollout checkpoint added; Phase 2 snapshot refreshed)
+Generated: 2026-02-17 (v21 — P1 recovery incident closeout merged and integration gate evidence captured)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Digest notifications rollout implementation (PR1→PR3 scope) is now completed in the local workspace checkpoint (2026-02-16) with migrations, processor, internal route, middleware exemption, scheduler fallback, and tests; merge/deploy evidence is pending. Remaining baseline Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications rollout implementation (PR1→PR3 scope) is now completed in the local workspace checkpoint (2026-02-16) with migrations, processor, internal route, middleware exemption, scheduler fallback, and tests; merge/deploy evidence is pending. Remaining baseline Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -107,6 +107,21 @@ Generated: 2026-02-16 (v20 — digest notifications rollout checkpoint added; Ph
   - Schema contract and API payload keys preserved unless migration-backed change is approved.
   - Targeted authz/tenant-isolation/file-validation tests pass.
   - `pnpm --filter @propertypro/web typecheck` passes.
+- Recovery execution closeout (completed on `main` and pushed):
+  - Merge sequence executed on `main` exactly as planned: `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`.
+  - Targeted verification rerun after merge passed:
+    - `pnpm exec vitest run apps/web/__tests__/meetings/route.test.ts` (`16/16`)
+    - `pnpm exec vitest run apps/web/__tests__/notification-preferences/route.test.ts` (`10/10`)
+    - `pnpm exec vitest run apps/web/__tests__/file-validation/validation.test.ts apps/web/__tests__/upload/documents-route.test.ts` (`24/24`)
+    - `pnpm --filter @propertypro/web typecheck`
+    - `pnpm --filter @propertypro/db build`
+  - Networked merge-gate rerun status:
+    - First networked run reached DB and exposed shared-env schema drift (`notification_preferences.email_frequency` missing), causing four `500` integration failures.
+    - Applied canonical reconciliation path: `set -a; source .env.local; set +a; pnpm --filter @propertypro/db db:migrate`.
+    - Re-ran networked suite: `set -a; source .env.local; set +a; pnpm exec vitest run --config apps/web/vitest.integration.config.ts apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` -> pass (`45/45`).
+  - Push/evidence:
+    - `git push origin main` completed (`5a9d449..01b92af`).
+    - Local and remote are aligned at `01b92af`.
 
 ### POA v2 Rollout Closeout (2026-02-13)
 - Smoke checks (role/category/delete boundaries) passed in focused suites:
