@@ -1,0 +1,34 @@
+name: Branch Freshness Guard
+
+on:
+  pull_request:
+
+jobs:
+  branch-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if branch is too far behind base
+        run: |
+          set -euo pipefail
+
+          base_ref="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          counts="$(git rev-list --left-right --count HEAD...${base_ref})"
+          ahead="$(echo "${counts}" | awk '{print $1}')"
+          behind="$(echo "${counts}" | awk '{print $2}')"
+          max_behind=20
+
+          echo "branch_ahead=${ahead}"
+          echo "branch_behind=${behind}"
+          echo "max_behind=${max_behind}"
+
+          if [ "${behind}" -gt "${max_behind}" ]; then
+            echo "::error::Branch is ${behind} commits behind ${base_ref}. Rebase or recreate branch before merge."
+            exit 1
+          fi
