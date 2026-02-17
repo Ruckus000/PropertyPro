@@ -102,4 +102,19 @@ describe('p1-12 magic bytes validation', () => {
     const result = await validateFile(docxBytes, 4096);
     expect(result.ok).toBe(true);
   });
+
+  it('rejects generic ZIP containers that are not DOCX', async () => {
+    const zipLocalHeader = bytesFromHex(
+      '504B03041400000000000000000000000000000000000000000013000000',
+    );
+    const genericZip = concatBytes(
+      zipLocalHeader,
+      new TextEncoder().encode('META-INF/MANIFEST.MF'),
+    );
+    const detected = await detectFileTypeFromBytes(genericZip);
+    expect(detected).toBeNull();
+
+    const result = await validateFile(genericZip, 4096);
+    expect(result.ok).toBe(false);
+  });
 });

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   createPresignedDownloadUrl,
+  deleteStorageObject,
   createScopedClient,
   documents,
   logAuditEvent,
@@ -9,7 +10,7 @@ import {
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -39,6 +40,61 @@ async function downloadStorageBytes(path: string): Promise<Uint8Array> {
 
   const buffer = await res.arrayBuffer();
   return new Uint8Array(buffer);
+}
+
+interface InvalidUploadContext {
+  userId: string;
+  communityId: number;
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  reason: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+function stringifyUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never> {
+  let cleanupSucceeded = true;
+  let cleanupError: string | undefined;
+
+  try {
+    await deleteStorageObject('documents', context.filePath);
+  } catch (error) {
+    cleanupSucceeded = false;
+    cleanupError = stringifyUnknownError(error);
+    // eslint-disable-next-line no-console
+    console.error('[documents] failed to clean up invalid upload', {
+      communityId: context.communityId,
+      filePath: context.filePath,
+      error: cleanupError,
+    });
+  }
+
+  await logAuditEvent({
+    userId: context.userId,
+    action: 'validation_failed',
+    resourceType: 'document_upload',
+    resourceId: context.filePath,
+    communityId: context.communityId,
+    metadata: {
+      reason: context.reason,
+      filePath: context.filePath,
+      fileName: context.fileName,
+      fileSize: context.fileSize,
+      cleanupAttempted: true,
+      cleanupSucceeded,
+      ...(cleanupError ? { cleanupError } : {}),
+      ...(context.details ?? {}),
+    },
+  });
+
+  throw new UnprocessableEntityError(context.message, {
+    reason: context.reason,
+  });
 }
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -93,17 +149,46 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const storageBytes = await downloadStorageBytes(payload.filePath);
   if (storageBytes.byteLength !== payload.fileSize) {
-    throw new ValidationError('Uploaded file size does not match storage object size');
+    await rejectInvalidUpload({
+      userId,
+      communityId: effectiveCommunityId,
+      filePath: payload.filePath,
+      fileName: payload.fileName,
+      fileSize: payload.fileSize,
+      reason: 'file_size_mismatch',
+      message: 'Uploaded file failed validation. Please retry your upload.',
+      details: {
+        expectedFileSize: payload.fileSize,
+        actualFileSize: storageBytes.byteLength,
+      },
+    });
   }
 
   const validation = await validateFile(storageBytes, storageBytes.byteLength);
   if (!validation.ok || !validation.type) {
-    throw new ValidationError(validation.error ?? 'Unsupported file type');
+    await rejectInvalidUpload({
+      userId,
+      communityId: effectiveCommunityId,
+      filePath: payload.filePath,
+      fileName: payload.fileName,
+      fileSize: payload.fileSize,
+      reason: 'magic_bytes_validation_failed',
+      message:
+        validation.error
+        ?? 'Uploaded file failed validation. Upload a supported PDF, DOCX, PNG, or JPG file.',
+      details: {
+        validationError: validation.error ?? null,
+      },
+    });
+  }
+  const detectedType = validation.type;
+  if (!detectedType) {
+    throw new ValidationError('Failed to detect uploaded file type');
   }
 
   const scoped = createScopedClient(effectiveCommunityId);
 
-  const isPdf = validation.type.mime.toLowerCase().includes('pdf');
+  const isPdf = detectedType.mime.toLowerCase().includes('pdf');
 
   const insertedRows = await scoped.insert(documents, {
     title: payload.title,
@@ -112,7 +197,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     filePath: payload.filePath,
     fileName: payload.fileName,
     fileSize: storageBytes.byteLength,
-    mimeType: validation.type.mime,
+    mimeType: detectedType.mime,
     uploadedBy: userId,
     extractionStatus: isPdf ? 'pending' : 'not_applicable',
   });
@@ -134,7 +219,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       filePath: payload.filePath,
       fileName: payload.fileName,
       fileSize: storageBytes.byteLength,
-      mimeType: validation.type.mime,
+      mimeType: detectedType.mime,
     },
   });
 
@@ -148,7 +233,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           communityId,
           documentId: docId,
           path: payload.filePath,
-          mimeType: validation.type.mime,
+          mimeType: detectedType.mime,
           bucket: 'documents',
         });
       }
