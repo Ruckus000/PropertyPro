@@ -12,7 +12,6 @@ import { z } from 'zod';
 import {
   createScopedClient,
   logAuditEvent,
-  communities,
   documents,
   meetings,
   meetingDocuments,
@@ -21,7 +20,7 @@ import {
 import { and, eq } from '@propertypro/db/filters';
 import { type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError, NotFoundError } from '@/lib/api/errors';
+import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -90,12 +89,10 @@ const detachDocSchema = z.object({
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function getCommunityType(communityId: number): Promise<CommunityType> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row['id'] === communityId);
-  if (!community) throw new NotFoundError('Community not found');
-  return community['communityType'] as CommunityType;
+function requireMeetingsEnabled(communityType: CommunityType): void {
+  if (communityType === 'apartment') {
+    throw new ForbiddenError('Meeting management is only available for condo and HOA communities');
+  }
 }
 
 function coerceMeeting(row: Record<string, unknown>): Meeting {
@@ -119,10 +116,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('communityId must be a positive integer');
   }
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  await requireCommunityMembership(communityId, actorUserId);
+  const membership = await requireCommunityMembership(communityId, actorUserId);
+  requireMeetingsEnabled(membership.communityType);
 
   const scoped = createScopedClient(communityId);
-  const communityType = await getCommunityType(communityId);
 
   const rows = await scoped.query(meetings);
   const data = rows
@@ -133,7 +130,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       return {
         ...m,
         deadlines: {
-          noticePostBy: calculateNoticePostBy(startsAt, m.meetingType as MeetingType, communityType),
+          noticePostBy: calculateNoticePostBy(
+            startsAt,
+            m.meetingType as MeetingType,
+            membership.communityType,
+          ),
           ownerVoteDocsBy: calculateOwnerVoteDocsDeadline(startsAt),
           minutesPostBy: calculateMinutesPostingDeadline(startsAt),
         },
@@ -159,7 +160,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const normalizedBody = { ...body, communityId };
 
   const actorUserId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, actorUserId);
+  const membership = await requireCommunityMembership(communityId, actorUserId);
+  requireMeetingsEnabled(membership.communityType);
 
   if (action === 'update') return handleUpdate(normalizedBody, actorUserId);
   if (action === 'delete') return handleDelete(normalizedBody, actorUserId);
