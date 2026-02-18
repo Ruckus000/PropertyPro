@@ -123,13 +123,13 @@ describe('notification digest processor', () => {
       communityId: 101,
       timezone: 'America/New_York',
       users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
-      preferences: [{ userId: 'u-1', emailDocuments: true, emailFrequency: 'daily_digest' }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true }],
     });
     seedCommunityState({
       communityId: 202,
       timezone: 'America/Chicago',
       users: [{ id: 'u-2', email: 'tenant@example.com', fullName: 'Tenant', deletedAt: null }],
-      preferences: [{ userId: 'u-2', emailDocuments: true, emailFrequency: 'daily_digest' }],
+      preferences: [{ userId: 'u-2', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true }],
     });
 
     const summary = await processNotificationDigests({
@@ -174,7 +174,7 @@ describe('notification digest processor', () => {
       communityId: 101,
       timezone: 'America/New_York',
       users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
-      preferences: [{ userId: 'u-1', emailDocuments: true, emailFrequency: 'daily_digest' }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true }],
     });
 
     claimDigestQueueRowsMock.mockResolvedValueOnce([
@@ -264,8 +264,8 @@ describe('notification digest processor', () => {
         { id: 'u-2', email: 'owner2@example.com', fullName: 'Owner 2', deletedAt: null },
       ],
       preferences: [
-        { userId: 'u-1', emailDocuments: true, emailFrequency: 'daily_digest' },
-        { userId: 'u-2', emailDocuments: true, emailFrequency: 'daily_digest' },
+        { userId: 'u-1', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
+        { userId: 'u-2', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
       ],
     });
     claimDigestQueueRowsMock.mockResolvedValue([

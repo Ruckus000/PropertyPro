@@ -166,8 +166,8 @@ describe('notification-service', () => {
   describe('preference opt-out', () => {
     it('excludes users who opted out of meeting notifications', async () => {
       setupMock(baseRoleRows, baseUserRows, [
-        { userId: 'u-owner', emailMeetings: false, emailAnnouncements: true, emailDocuments: true, emailMaintenance: true },
-        { userId: 'u-board', emailMeetings: true, emailAnnouncements: true, emailDocuments: true, emailMaintenance: true },
+        { userId: 'u-owner', emailFrequency: 'immediate', emailAnnouncements: true, emailMeetings: false, inAppEnabled: true },
+        { userId: 'u-board', emailFrequency: 'immediate', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
       ]);
 
       const recipients = await resolveRecipients(COMMUNITY_ID, 'all', 'meeting');
@@ -176,9 +176,19 @@ describe('notification-service', () => {
       expect(emails).toContain('board@example.com');
     });
 
-    it('excludes users who opted out of document notifications', async () => {
+    it('sends document notifications regardless of per-type toggles (no individual toggle)', async () => {
       setupMock(baseRoleRows, baseUserRows, [
-        { userId: 'u-owner', emailDocuments: false, emailAnnouncements: true, emailMeetings: true, emailMaintenance: true },
+        { userId: 'u-owner', emailFrequency: 'immediate', emailAnnouncements: false, emailMeetings: false, inAppEnabled: true },
+      ]);
+
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'all', 'document');
+      const emails = recipients.map((r) => r.email);
+      expect(emails).toContain('owner@example.com');
+    });
+
+    it('suppresses document notifications when frequency is never', async () => {
+      setupMock(baseRoleRows, baseUserRows, [
+        { userId: 'u-owner', emailFrequency: 'never', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
       ]);
 
       const recipients = await resolveRecipients(COMMUNITY_ID, 'all', 'document');
@@ -186,14 +196,14 @@ describe('notification-service', () => {
       expect(emails).not.toContain('owner@example.com');
     });
 
-    it('excludes users who opted out of maintenance notifications', async () => {
+    it('sends maintenance notifications regardless of per-type toggles (no individual toggle)', async () => {
       setupMock(baseRoleRows, baseUserRows, [
-        { userId: 'u-tenant', emailMaintenance: false, emailAnnouncements: true, emailDocuments: true, emailMeetings: true },
+        { userId: 'u-tenant', emailFrequency: 'immediate', emailAnnouncements: false, emailMeetings: false, inAppEnabled: true },
       ]);
 
       const recipients = await resolveRecipients(COMMUNITY_ID, 'all', 'maintenance');
       const emails = recipients.map((r) => r.email);
-      expect(emails).not.toContain('tenant@example.com');
+      expect(emails).toContain('tenant@example.com');
     });
   });
 
@@ -340,7 +350,7 @@ describe('notification-service', () => {
       setupMock(
         [{ userId: 'u-owner', role: 'owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
-        [{ userId: 'u-owner', emailMeetings: false, emailAnnouncements: true, emailDocuments: true, emailMaintenance: true }],
+        [{ userId: 'u-owner', emailFrequency: 'immediate', emailAnnouncements: true, emailMeetings: false, inAppEnabled: true }],
       );
 
       const event: MeetingNoticeEvent = {
@@ -364,11 +374,10 @@ describe('notification-service', () => {
         [
           {
             userId: 'u-owner',
-            emailAnnouncements: true,
-            emailDocuments: true,
-            emailMeetings: true,
-            emailMaintenance: true,
             emailFrequency: 'daily_digest',
+            emailAnnouncements: true,
+            emailMeetings: true,
+            inAppEnabled: true,
           },
         ],
       );
@@ -404,11 +413,10 @@ describe('notification-service', () => {
         [
           {
             userId: 'u-owner',
-            emailAnnouncements: true,
-            emailDocuments: true,
-            emailMeetings: true,
-            emailMaintenance: true,
             emailFrequency: 'never',
+            emailAnnouncements: true,
+            emailMeetings: true,
+            inAppEnabled: true,
           },
         ],
       );
@@ -437,11 +445,10 @@ describe('notification-service', () => {
         [
           {
             userId: 'u-cam',
-            emailAnnouncements: true,
-            emailDocuments: true,
-            emailMeetings: true,
-            emailMaintenance: true,
             emailFrequency: 'daily_digest',
+            emailAnnouncements: true,
+            emailMeetings: true,
+            inAppEnabled: true,
           },
         ],
       );

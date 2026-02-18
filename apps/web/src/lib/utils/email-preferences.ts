@@ -8,8 +8,6 @@ export type NotificationKind =
   | 'document'
   | 'maintenance';
 
-export type DeliveryMode = 'immediate' | 'digest' | 'skip';
-
 export interface UserNotificationPreferences {
   emailFrequency: EmailFrequency;
   emailAnnouncements: boolean;
@@ -32,6 +30,37 @@ export function isCriticalNotification(kind: NotificationKind): boolean {
   return kind === 'password_reset' || kind === 'invitation';
 }
 
+/** True if frequency represents a digest cadence. */
+export function isDigestFrequency(
+  freq: EmailFrequency,
+): freq is 'daily_digest' | 'weekly_digest' {
+  return freq === 'daily_digest' || freq === 'weekly_digest';
+}
+
+/** True if frequency disables all email. */
+export function isNeverFrequency(freq: EmailFrequency): freq is 'never' {
+  return freq === 'never';
+}
+
+/**
+ * Check whether a notification kind is enabled for a user.
+ *
+ * With the P1-26 simplification, only announcements and meetings have
+ * per-type toggles. Document and maintenance notifications follow the
+ * global emailFrequency setting (they send if frequency is not 'never').
+ */
+export function isNotificationTypeEnabled(
+  kind: NotificationKind,
+  prefs: UserNotificationPreferences,
+): boolean {
+  if (isCriticalNotification(kind)) return true;
+  if (kind === 'announcement') return prefs.emailAnnouncements;
+  if (kind === 'meeting') return prefs.emailMeetings;
+  // document + maintenance: no per-type toggle in simplified model;
+  // they are allowed unless the user set frequency to 'never'.
+  return prefs.emailFrequency !== 'never';
+}
+
 /**
  * Decide if an email of a given kind should be sent immediately,
  * respecting user preferences and always allowing critical emails.
@@ -49,11 +78,7 @@ export function shouldSendEmailNow(
     return false;
   }
 
-  if (kind === 'announcement') return !!prefs.emailAnnouncements;
-  if (kind === 'meeting') return !!prefs.emailMeetings;
-
-  // Unknown kinds are treated conservatively (do not send)
-  return false;
+  return isNotificationTypeEnabled(kind, prefs);
 }
 
 /** Classify delivery mode from frequency. Useful for scheduling. */
