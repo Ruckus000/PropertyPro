@@ -54,7 +54,13 @@ export const extractionStatusEnum = pgEnum('extraction_status', [
   'skipped',
 ]);
 
-/** Notification email delivery cadence. */
+/**
+ * Notification email delivery cadence.
+ *
+ * NOTE: notification_preferences.email_frequency was migrated to TEXT in 0008
+ * (P1-26), but notification_digest_queue.frequency still uses this enum.
+ * Do NOT drop this enum until the digest queue column is also migrated.
+ */
 export const emailFrequencyEnum = pgEnum('email_frequency', [
   'immediate',
   'daily_digest',

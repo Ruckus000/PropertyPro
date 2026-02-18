@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  classifyDeliveryMode,
+  classifyDelivery,
   getDefaultPreferences,
-  isDigestFrequency,
-  isImmediateFrequency,
-  isNeverFrequency,
   isCriticalNotification,
+  isDigestFrequency,
+  isNeverFrequency,
+  isNotificationTypeEnabled,
   shouldSendEmailNow,
 } from '../../src/lib/utils/email-preferences';
 
@@ -13,62 +13,92 @@ describe('email-preferences util (p1-26)', () => {
   it('returns default preferences for new users', () => {
     const prefs = getDefaultPreferences();
     expect(prefs).toEqual({
-      emailAnnouncements: true,
-      emailDocuments: true,
-      emailMeetings: true,
-      emailMaintenance: true,
       emailFrequency: 'immediate',
+      emailAnnouncements: true,
+      emailMeetings: true,
+      inAppEnabled: true,
     });
   });
 
+  it('classifies delivery correctly', () => {
+    expect(classifyDelivery('immediate')).toBe('immediate');
+    expect(classifyDelivery('daily_digest')).toBe('digest_daily');
+    expect(classifyDelivery('weekly_digest')).toBe('digest_weekly');
+    expect(classifyDelivery('never')).toBe('never');
+  });
+
   it('always sends critical emails regardless of user preference', () => {
-    const prefs = {
-      emailAnnouncements: false,
-      emailDocuments: false,
-      emailMeetings: false,
-      emailMaintenance: false,
+    const neverPrefs = {
       emailFrequency: 'never' as const,
+      emailAnnouncements: false,
+      emailMeetings: false,
+      inAppEnabled: true,
     };
 
     expect(isCriticalNotification('password_reset')).toBe(true);
-    expect(shouldSendEmailNow('password_reset', prefs)).toBe(true);
-    expect(shouldSendEmailNow('invitation', prefs)).toBe(true);
+    expect(shouldSendEmailNow('password_reset', neverPrefs)).toBe(true);
+    expect(shouldSendEmailNow('invitation', neverPrefs)).toBe(true);
   });
 
-  it('respects announcement/document/meeting/maintenance toggles', () => {
+  it('respects per-type toggles and immediate frequency', () => {
     const prefs = {
-      emailAnnouncements: true,
-      emailDocuments: false,
-      emailMeetings: true,
-      emailMaintenance: false,
       emailFrequency: 'immediate' as const,
+      emailAnnouncements: true,
+      emailMeetings: false,
+      inAppEnabled: true,
     };
 
     expect(shouldSendEmailNow('announcement', prefs)).toBe(true);
-    expect(shouldSendEmailNow('document', prefs)).toBe(false);
-    expect(shouldSendEmailNow('meeting', prefs)).toBe(true);
-    expect(shouldSendEmailNow('maintenance', prefs)).toBe(false);
+    expect(shouldSendEmailNow('meeting', prefs)).toBe(false);
   });
 
-  it('treats digest frequencies as queueable and not immediate', () => {
-    expect(isImmediateFrequency('immediate')).toBe(true);
+  it('defers non-critical emails when frequency is a digest', () => {
+    const prefs = {
+      emailFrequency: 'daily_digest' as const,
+      emailAnnouncements: true,
+      emailMeetings: true,
+      inAppEnabled: true,
+    };
+    expect(shouldSendEmailNow('announcement', prefs)).toBe(false);
+    expect(shouldSendEmailNow('meeting', prefs)).toBe(false);
+  });
+
+  it('isDigestFrequency identifies digest cadences', () => {
     expect(isDigestFrequency('daily_digest')).toBe(true);
     expect(isDigestFrequency('weekly_digest')).toBe(true);
-    expect(isNeverFrequency('never')).toBe(true);
+    expect(isDigestFrequency('immediate')).toBe(false);
+    expect(isDigestFrequency('never')).toBe(false);
   });
 
-  it('classifies delivery mode with digest fallback support flag', () => {
-    const digestPrefs = {
-      emailAnnouncements: true,
-      emailDocuments: true,
-      emailMeetings: true,
-      emailMaintenance: true,
-      emailFrequency: 'daily_digest' as const,
-    };
+  it('isNeverFrequency identifies never', () => {
+    expect(isNeverFrequency('never')).toBe(true);
+    expect(isNeverFrequency('immediate')).toBe(false);
+    expect(isNeverFrequency('daily_digest')).toBe(false);
+  });
 
-    expect(classifyDeliveryMode('announcement', digestPrefs)).toBe('digest');
-    expect(
-      classifyDeliveryMode('announcement', digestPrefs, { supportsDigest: false }),
-    ).toBe('immediate');
+  it('isNotificationTypeEnabled respects per-type toggles', () => {
+    const prefs = { ...getDefaultPreferences(), emailAnnouncements: false };
+    expect(isNotificationTypeEnabled('announcement', prefs)).toBe(false);
+    expect(isNotificationTypeEnabled('meeting', prefs)).toBe(true);
+  });
+
+  it('isNotificationTypeEnabled allows document/maintenance when not never', () => {
+    const prefs = getDefaultPreferences();
+    expect(isNotificationTypeEnabled('document', prefs)).toBe(true);
+    expect(isNotificationTypeEnabled('maintenance', prefs)).toBe(true);
+
+    const neverPrefs = { ...getDefaultPreferences(), emailFrequency: 'never' as const };
+    expect(isNotificationTypeEnabled('document', neverPrefs)).toBe(false);
+    expect(isNotificationTypeEnabled('maintenance', neverPrefs)).toBe(false);
+  });
+
+  it('shouldSendEmailNow handles document and maintenance kinds', () => {
+    const immediatePrefs = getDefaultPreferences();
+    expect(shouldSendEmailNow('document', immediatePrefs)).toBe(true);
+    expect(shouldSendEmailNow('maintenance', immediatePrefs)).toBe(true);
+
+    const neverPrefs = { ...getDefaultPreferences(), emailFrequency: 'never' as const };
+    expect(shouldSendEmailNow('document', neverPrefs)).toBe(false);
+    expect(shouldSendEmailNow('maintenance', neverPrefs)).toBe(false);
   });
 });

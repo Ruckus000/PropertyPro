@@ -21,9 +21,9 @@ import {
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import {
-  classifyDeliveryMode,
   getDefaultPreferences,
   isDigestFrequency,
+  isNotificationTypeEnabled,
   type NotificationKind,
   type UserNotificationPreferences,
 } from '@/lib/utils/email-preferences';
@@ -262,10 +262,6 @@ async function resolveRecipientDeliveries(
     if (typeof userId === 'string') {
       const rawFrequency = row['emailFrequency'];
       preferencesByUserId.set(userId, {
-        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-        emailDocuments: (row['emailDocuments'] as boolean | undefined) ?? true,
-        emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-        emailMaintenance: (row['emailMaintenance'] as boolean | undefined) ?? true,
         emailFrequency:
           rawFrequency === 'immediate' ||
           rawFrequency === 'daily_digest' ||
@@ -273,6 +269,9 @@ async function resolveRecipientDeliveries(
           rawFrequency === 'never'
             ? rawFrequency
             : 'immediate',
+        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
+        emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
+        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
       });
     }
   }
@@ -285,7 +284,17 @@ async function resolveRecipientDeliveries(
     if (!isRoleMatch(role, filter)) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
-    const mode = classifyDeliveryMode(notificationKind, prefs, { supportsDigest });
+
+    let mode: 'immediate' | 'digest' | 'skip';
+    if (!isNotificationTypeEnabled(notificationKind, prefs)) {
+      mode = 'skip';
+    } else if (prefs.emailFrequency === 'never') {
+      mode = 'skip';
+    } else if (supportsDigest && isDigestFrequency(prefs.emailFrequency)) {
+      mode = 'digest';
+    } else {
+      mode = 'immediate';
+    }
     if (mode === 'skip') continue;
 
     const user = usersById.get(userId);

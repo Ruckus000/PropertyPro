@@ -64,6 +64,20 @@
       "when": 1771295335886,
       "tag": "0008_billing_provisioning",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771374643935,
+      "tag": "0009_absent_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771415383058,
+      "tag": "0010_drop_legacy_notification_columns",
+      "breakpoints": true
     }
   ]
 }

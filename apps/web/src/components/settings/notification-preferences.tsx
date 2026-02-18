@@ -1,12 +1,12 @@
 "use client";
 import React, { useEffect, useState, type FormEvent } from 'react';
+import { type EmailFrequency } from '@/lib/utils/email-preferences';
 
 interface PreferencesState {
+  emailFrequency: EmailFrequency;
   emailAnnouncements: boolean;
-  emailDocuments: boolean;
   emailMeetings: boolean;
-  emailMaintenance: boolean;
-  emailFrequency: 'immediate' | 'daily_digest' | 'weekly_digest' | 'never';
+  inAppEnabled: boolean;
 }
 
 interface Props {
@@ -15,11 +15,10 @@ interface Props {
 
 export function NotificationPreferencesForm({ communityId }: Props) {
   const [values, setValues] = useState<PreferencesState>({
-    emailAnnouncements: true,
-    emailDocuments: true,
-    emailMeetings: true,
-    emailMaintenance: true,
     emailFrequency: 'immediate',
+    emailAnnouncements: true,
+    emailMeetings: true,
+    inAppEnabled: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,15 +33,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
         const res = await fetch(`/api/v1/notification-preferences?communityId=${communityId}`);
         const json = (await res.json()) as { data: PreferencesState };
         if (!cancelled) {
-          setValues({
-            emailAnnouncements: Boolean(json.data.emailAnnouncements),
-            emailDocuments: Boolean(json.data.emailDocuments),
-            emailMeetings: Boolean(json.data.emailMeetings),
-            emailMaintenance: Boolean(json.data.emailMaintenance),
-            emailFrequency: (
-              json.data as Partial<PreferencesState>
-            ).emailFrequency ?? 'immediate',
-          });
+          setValues(json.data);
         }
       } catch {
         if (!cancelled) setError('Failed to load preferences');
@@ -101,7 +92,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
           onChange={(e) =>
             setValues((v) => ({
               ...v,
-              emailFrequency: e.target.value as PreferencesState['emailFrequency'],
+              emailFrequency: e.target.value as EmailFrequency,
             }))
           }
           className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
@@ -127,32 +118,18 @@ export function NotificationPreferencesForm({ communityId }: Props) {
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
-            checked={values.emailDocuments}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, emailDocuments: e.target.checked }))
-            }
-          />
-          <span>Documents</span>
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
             checked={values.emailMeetings}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, emailMeetings: e.target.checked }))
-            }
+            onChange={(e) => setValues((v) => ({ ...v, emailMeetings: e.target.checked }))}
           />
           <span>Meeting notices</span>
         </label>
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
-            checked={values.emailMaintenance}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, emailMaintenance: e.target.checked }))
-            }
+            checked={values.inAppEnabled}
+            onChange={(e) => setValues((v) => ({ ...v, inAppEnabled: e.target.checked }))}
           />
-          <span>Maintenance updates</span>
+          <span>In-app notifications</span>
         </label>
       </div>
 

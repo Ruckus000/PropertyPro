@@ -35,11 +35,10 @@ describe('notification preferences form', () => {
         ok: true,
         json: async () => ({
           data: {
-            emailAnnouncements: true,
-            emailDocuments: true,
-            emailMeetings: false,
-            emailMaintenance: true,
             emailFrequency: 'daily_digest',
+            emailAnnouncements: true,
+            emailMeetings: false,
+            inAppEnabled: true,
           },
         }),
       })
@@ -87,26 +86,25 @@ describe('notification preferences form', () => {
     expect(patchBody).toEqual(
       expect.objectContaining({
         communityId: 42,
-        emailAnnouncements: true,
-        emailDocuments: true,
-        emailMeetings: false,
-        emailMaintenance: true,
         emailFrequency: 'weekly_digest',
+        emailAnnouncements: true,
+        emailMeetings: false,
+        inAppEnabled: true,
       }),
     );
   });
 
-  it('defaults missing GET frequency to immediate and includes it in PATCH body', async () => {
+  it('includes emailFrequency from GET response in PATCH body', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           data: {
+            emailFrequency: 'immediate',
             emailAnnouncements: true,
-            emailDocuments: true,
             emailMeetings: true,
-            emailMaintenance: true,
+            inAppEnabled: true,
           },
         }),
       })

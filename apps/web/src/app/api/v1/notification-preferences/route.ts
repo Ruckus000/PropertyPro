@@ -1,3 +1,15 @@
+/**
+ * Notification Preferences API (P1-26)
+ *
+ * GET    /api/v1/notification-preferences?communityId=N  — read preferences for current user
+ * PATCH  /api/v1/notification-preferences                 — update preferences for current user
+ *
+ * Invariants:
+ * - withErrorHandler wrapper (structured errors, request ID)
+ * - Tenant isolation via createScopedClient(communityId)
+ * - Auth via requireAuthenticatedUserId + requireCommunityMembership
+ * - Audit log on updates with action 'settings_changed'
+ */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
@@ -11,7 +23,10 @@ import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { getDefaultPreferences } from '@/lib/utils/email-preferences';
+import {
+  getDefaultPreferences,
+  type EmailFrequency,
+} from '@/lib/utils/email-preferences';
 
 const communityIdSchema = z.coerce.number().int().positive();
 const emailFrequencySchema = z.enum([
@@ -19,15 +34,14 @@ const emailFrequencySchema = z.enum([
   'daily_digest',
   'weekly_digest',
   'never',
-]);
+]) as z.ZodType<EmailFrequency>;
 
 const patchSchema = z.object({
   communityId: z.number().int().positive(),
-  emailAnnouncements: z.boolean(),
-  emailDocuments: z.boolean(),
-  emailMeetings: z.boolean(),
-  emailMaintenance: z.boolean(),
   emailFrequency: emailFrequencySchema.default('immediate'),
+  emailAnnouncements: z.boolean(),
+  emailMeetings: z.boolean(),
+  inAppEnabled: z.boolean(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -44,19 +58,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(notificationPreferences);
   const row = rows.find((r) => r['userId'] === userId);
+
   const defaults = getDefaultPreferences();
 
   const data = row
     ? {
         userId,
         communityId,
+        emailFrequency: (row['emailFrequency'] as EmailFrequency | undefined) ?? 'immediate',
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-        emailDocuments: (row['emailDocuments'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-        emailMaintenance: (row['emailMaintenance'] as boolean | undefined) ?? true,
-        emailFrequency:
-          (row['emailFrequency'] as 'immediate' | 'daily_digest' | 'weekly_digest' | 'never' | undefined)
-          ?? 'immediate',
+        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
       }
     : { userId, communityId, ...defaults };
 
@@ -71,27 +83,22 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
-  const {
-    emailAnnouncements,
-    emailDocuments,
-    emailMeetings,
-    emailMaintenance,
-    emailFrequency,
-  } = result.data;
+  const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled } = result.data;
+
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
   const scoped = createScopedClient(communityId);
+
   const existing = (await scoped.query(notificationPreferences)).find(
     (r) => r['userId'] === userId,
   );
 
   const updateValues = {
-    emailAnnouncements,
-    emailDocuments,
-    emailMeetings,
-    emailMaintenance,
     emailFrequency,
+    emailAnnouncements,
+    emailMeetings,
+    inAppEnabled,
   } as const;
 
   if (!existing) {

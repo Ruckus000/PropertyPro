@@ -154,13 +154,12 @@ async function runWithConcurrency<T>(
 function coercePreferences(row: Record<string, unknown> | undefined): UserNotificationPreferences {
   if (!row) return getDefaultPreferences();
   return {
-    emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-    emailDocuments: (row['emailDocuments'] as boolean | undefined) ?? true,
-    emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-    emailMaintenance: (row['emailMaintenance'] as boolean | undefined) ?? true,
     emailFrequency:
       (row['emailFrequency'] as 'immediate' | 'daily_digest' | 'weekly_digest' | 'never' | undefined)
       ?? 'immediate',
+    emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
+    emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
+    inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
   };
 }
 

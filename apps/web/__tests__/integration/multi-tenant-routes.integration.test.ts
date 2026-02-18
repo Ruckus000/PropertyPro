@@ -837,9 +837,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/notification-preferences'), 'PATCH', {
         communityId: communityA.id,
         emailAnnouncements: false,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: false,
+        inAppEnabled: true,
       }),
     );
     expect(response.status).toBe(200);
@@ -854,9 +853,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/notification-preferences'), 'PATCH', {
         communityId: communityA.id,
         emailAnnouncements: true,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: true,
+        inAppEnabled: true,
         emailFrequency: 'weekly_digest',
       }),
     );
@@ -874,9 +872,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/notification-preferences'), 'PATCH', {
         communityId: communityB.id,
         emailAnnouncements: false,
-        emailDocuments: true,
         emailMeetings: true,
-        emailMaintenance: false,
+        inAppEnabled: true,
       }),
     );
     expect(response.status).toBe(403);
@@ -895,9 +892,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         {
           communityId: communityB.id,
           emailAnnouncements: false,
-          emailDocuments: true,
           emailMeetings: true,
-          emailMaintenance: false,
+          inAppEnabled: true,
         },
         { 'x-community-id': String(communityA.id) },
       ),
