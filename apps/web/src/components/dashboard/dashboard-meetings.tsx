@@ -2,19 +2,22 @@ import type { DashboardMeeting } from '@/lib/dashboard/dashboard-selectors';
 
 interface DashboardMeetingsProps {
   items: DashboardMeeting[];
+  timezone: string;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, timezone: string): string {
   return new Date(value).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError
+    timeZone: timezone || 'America/New_York',
   });
 }
 
-export function DashboardMeetings({ items }: DashboardMeetingsProps) {
+export function DashboardMeetings({ items, timezone }: DashboardMeetingsProps) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-5">
       <h2 className="text-lg font-semibold text-gray-900">Upcoming Meetings</h2>
@@ -26,7 +29,7 @@ export function DashboardMeetings({ items }: DashboardMeetingsProps) {
             <article key={item.id} className="rounded-md border border-gray-100 p-3">
               <h3 className="font-medium text-gray-900">{item.title}</h3>
               <p className="mt-1 text-sm text-gray-600">
-                {item.meetingType} • {formatDate(item.startsAt)}
+                {item.meetingType} • {formatDate(item.startsAt, timezone)}
               </p>
               <p className="text-sm text-gray-600">{item.location}</p>
             </article>

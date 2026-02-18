@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   createScopedClient,
   logAuditEvent,
+  communities,
   documents,
   meetings,
   meetingDocuments,
@@ -212,6 +213,15 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       ? 'special' as const
       : 'owner' as const;
 
+  // Fetch community timezone so email displays the correct local time.
+  // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError.
+  const communityRows = await scoped.query(communities);
+  const communityRow = communityRows.find((r) => r['id'] === communityId);
+  const communityTimezone =
+    (typeof communityRow?.['timezone'] === 'string' && communityRow['timezone'])
+      ? (communityRow['timezone'] as string)
+      : 'America/New_York';
+
   try {
     await queueNotification(
       communityId,
@@ -222,11 +232,13 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
           year: 'numeric',
           month: 'long',
           day: 'numeric',
+          timeZone: communityTimezone,
         }),
         meetingTime: startsAtDate.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
           timeZoneName: 'short',
+          timeZone: communityTimezone,
         }),
         location: data.location,
         meetingType: meetingTypeForEmail,

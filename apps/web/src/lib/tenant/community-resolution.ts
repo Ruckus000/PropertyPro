@@ -8,6 +8,7 @@ export interface ResolvedCommunityRecord {
   slug: string;
   name: string;
   communityType: CommunityType;
+  timezone: string;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -43,6 +44,8 @@ export async function findCommunityBySlug(
     slug: row.slug,
     name: row.name,
     communityType: row.communityType as CommunityType,
+    // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError
+    timezone: (typeof row.timezone === 'string' && row.timezone) ? row.timezone : 'America/New_York',
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,
     city: row.city,
