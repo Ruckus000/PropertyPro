@@ -1,4 +1,5 @@
 import type { DashboardMeeting } from '@/lib/dashboard/dashboard-selectors';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 interface DashboardMeetingsProps {
   items: DashboardMeeting[];
@@ -12,8 +13,7 @@ function formatDate(value: string, timezone: string): string {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError
-    timeZone: timezone || 'America/New_York',
+    timeZone: resolveTimezone(timezone),
   });
 }
 

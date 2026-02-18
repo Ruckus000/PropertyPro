@@ -33,6 +33,7 @@ import {
   type MeetingType,
 } from '@/lib/utils/meeting-calculator';
 import { queueNotification } from '@/lib/services/notification-service';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -217,13 +218,8 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       : 'owner' as const;
 
   // Fetch community timezone so email displays the correct local time.
-  // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError.
-  const communityRows = await scoped.query(communities);
-  const communityRow = communityRows.find((r) => r['id'] === communityId);
-  const communityTimezone =
-    (typeof communityRow?.['timezone'] === 'string' && communityRow['timezone'])
-      ? (communityRow['timezone'] as string)
-      : 'America/New_York';
+  const communityRows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
+  const communityTimezone = resolveTimezone(communityRows[0]?.['timezone'] as string | undefined);
 
   try {
     await queueNotification(

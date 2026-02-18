@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface MeetingListItem {
   id: number;
@@ -6,7 +7,6 @@ export interface MeetingListItem {
   meetingType: string;
   startsAt: string; // ISO (UTC)
   location: string;
-  timezone: string;
 }
 
 interface Props {
@@ -22,8 +22,7 @@ export function MeetingList({ items, timezone }: Props) {
         <div key={m.id} className="border rounded p-3">
           <div className="text-sm text-gray-500">
             {new Date(m.startsAt).toLocaleString('en-US', {
-              // Use || not ?? — empty string bypasses ?? and causes RangeError
-              timeZone: timezone || 'America/New_York',
+              timeZone: resolveTimezone(timezone),
               year: 'numeric',
               month: 'long',
               day: 'numeric',

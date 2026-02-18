@@ -1,4 +1,5 @@
 import React from 'react';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface PublicNoticeItem {
   id: number;
@@ -22,8 +23,7 @@ function formatDate(value: string, timezone: string): string {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError
-    timeZone: timezone || 'America/New_York',
+    timeZone: resolveTimezone(timezone),
   });
 }
 
