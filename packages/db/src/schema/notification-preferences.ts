@@ -21,9 +21,6 @@ export const notificationPreferences = pgTable(
     emailAnnouncements: boolean('email_announcements').notNull().default(true),
     emailMeetings: boolean('email_meetings').notNull().default(true),
     inAppEnabled: boolean('in_app_enabled').notNull().default(true),
-    // Legacy columns retained for backward compatibility
-    emailDocuments: boolean('email_documents').notNull().default(true),
-    emailMaintenance: boolean('email_maintenance').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

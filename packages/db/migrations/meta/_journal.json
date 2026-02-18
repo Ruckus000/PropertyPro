@@ -64,6 +64,13 @@
       "when": 1771374643935,
       "tag": "0008_absent_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771415383058,
+      "tag": "0009_drop_legacy_notification_columns",
+      "breakpoints": true
     }
   ]
 }

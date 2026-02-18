@@ -308,9 +308,7 @@ async function ensureNotificationPreference(communityId: number, userId: string)
     .update(notificationPreferences)
     .set({
       emailAnnouncements: true,
-      emailDocuments: true,
       emailMeetings: true,
-      emailMaintenance: true,
       updatedAt: new Date(),
     })
     .where(eq(notificationPreferences.id, existing[0].id));
