@@ -11,9 +11,10 @@ export interface PublicNoticeItem {
 interface PublicNoticesProps {
   communityName: string;
   notices: PublicNoticeItem[];
+  timezone: string;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, timezone: string): string {
   const date = new Date(value);
   return date.toLocaleString('en-US', {
     month: 'short',
@@ -21,10 +22,12 @@ function formatDate(value: string): string {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    // Use || not ?? — empty string bypasses ?? and causes toLocaleString to throw RangeError
+    timeZone: timezone || 'America/New_York',
   });
 }
 
-export function PublicNotices({ communityName, notices }: PublicNoticesProps) {
+export function PublicNotices({ communityName, notices, timezone }: PublicNoticesProps) {
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <header className="space-y-2">
@@ -45,7 +48,7 @@ export function PublicNotices({ communityName, notices }: PublicNoticesProps) {
             <article key={notice.id} className="rounded-lg border border-gray-200 bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{notice.meetingType}</p>
               <h2 className="mt-1 text-lg font-medium text-gray-900">{notice.title}</h2>
-              <p className="mt-2 text-sm text-gray-700">{formatDate(notice.startsAt)}</p>
+              <p className="mt-2 text-sm text-gray-700">{formatDate(notice.startsAt, timezone)}</p>
               <p className="text-sm text-gray-600">{notice.location}</p>
             </article>
           ))
