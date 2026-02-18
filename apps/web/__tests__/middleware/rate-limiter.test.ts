@@ -157,6 +157,7 @@ describe('SlidingWindowRateLimiter', () => {
 describe('classifyRoute', () => {
   it('classifies auth login route', () => {
     expect(classifyRoute('/auth/login', 'POST')).toBe('auth');
+    expect(classifyRoute('/signup', 'POST')).toBe('auth');
     expect(classifyRoute('/auth/signup', 'POST')).toBe('auth');
     expect(classifyRoute('/auth/password-reset', 'POST')).toBe('auth');
     expect(classifyRoute('/auth/forgot-password', 'POST')).toBe('auth');

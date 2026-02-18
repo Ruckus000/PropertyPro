@@ -1,6 +1,6 @@
 {
-  "id": "7b9e2173-eabb-4054-8bb7-047915664fcd",
-  "prevId": "19650483-c841-4d1f-a73c-4dfda45436e3",
+  "id": "f1c1dde3-ebf0-4940-bf8c-3c837b9cfdf8",
+  "prevId": "68255b41-199c-40eb-b11a-ddce5d8cc24e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -70,6 +70,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stripe_subscription_id": {
+          "name": "stripe_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subscription_plan": {
+          "name": "subscription_plan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subscription_status": {
+          "name": "subscription_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -100,6 +124,20 @@
           "nullsNotDistinct": false,
           "columns": [
             "slug"
+          ]
+        },
+        "communities_stripe_customer_id_unique": {
+          "name": "communities_stripe_customer_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "stripe_customer_id"
+          ]
+        },
+        "communities_stripe_subscription_id_unique": {
+          "name": "communities_stripe_subscription_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "stripe_subscription_id"
           ]
         }
       },
@@ -1182,29 +1220,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "email_frequency": {
-          "name": "email_frequency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'immediate'"
-        },
         "email_announcements": {
           "name": "email_announcements",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "email_meetings": {
-          "name": "email_meetings",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "in_app_enabled": {
-          "name": "in_app_enabled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -1217,12 +1234,27 @@
           "notNull": true,
           "default": true
         },
+        "email_meetings": {
+          "name": "email_meetings",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "email_maintenance": {
           "name": "email_maintenance",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "email_frequency": {
+          "name": "email_frequency",
+          "type": "email_frequency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'immediate'"
         },
         "created_at": {
           "name": "created_at",
@@ -1281,6 +1313,440 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pending_signups": {
+      "name": "pending_signups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "signup_request_id": {
+          "name": "signup_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auth_user_id": {
+          "name": "auth_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primary_contact_name": {
+          "name": "primary_contact_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_normalized": {
+          "name": "email_normalized",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "community_name": {
+          "name": "community_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "county": {
+          "name": "county",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_count": {
+          "name": "unit_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "community_type": {
+          "name": "community_type",
+          "type": "community_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plan_key": {
+          "name": "plan_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_slug": {
+          "name": "candidate_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terms_accepted_at": {
+          "name": "terms_accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verification_email_sent_at": {
+          "name": "verification_email_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verification_email_id": {
+          "name": "verification_email_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending_verification'"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "pending_signups_signup_request_unique": {
+          "name": "pending_signups_signup_request_unique",
+          "columns": [
+            {
+              "expression": "signup_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pending_signups_email_normalized_unique": {
+          "name": "pending_signups_email_normalized_unique",
+          "columns": [
+            {
+              "expression": "email_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pending_signups_candidate_slug_active_unique": {
+          "name": "pending_signups_candidate_slug_active_unique",
+          "columns": [
+            {
+              "expression": "candidate_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"pending_signups\".\"status\" NOT IN ('expired', 'completed')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pending_signups_status_idx": {
+          "name": "pending_signups_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pending_signups_auth_user_id_idx": {
+          "name": "pending_signups_auth_user_id_idx",
+          "columns": [
+            {
+              "expression": "auth_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "pending_signups_status_check": {
+          "name": "pending_signups_status_check",
+          "value": "\"pending_signups\".\"status\" IN ('pending_verification','email_verified','checkout_started','payment_completed','provisioning','completed','expired')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.stripe_webhook_events": {
+      "name": "stripe_webhook_events",
+      "schema": "",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "stripe_webhook_events_received_at_idx": {
+          "name": "stripe_webhook_events_received_at_idx",
+          "columns": [
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.provisioning_jobs": {
+      "name": "provisioning_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "community_id": {
+          "name": "community_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stripe_event_id": {
+          "name": "stripe_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signup_request_id": {
+          "name": "signup_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_successful_status": {
+          "name": "last_successful_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retry_count": {
+          "name": "retry_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "provisioning_jobs_signup_request_id_idx": {
+          "name": "provisioning_jobs_signup_request_id_idx",
+          "columns": [
+            {
+              "expression": "signup_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "provisioning_jobs_community_status_idx": {
+          "name": "provisioning_jobs_community_status_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "provisioning_jobs_community_id_communities_id_fk": {
+          "name": "provisioning_jobs_community_id_communities_id_fk",
+          "tableFrom": "provisioning_jobs",
+          "tableTo": "communities",
+          "columnsFrom": [
+            "community_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk": {
+          "name": "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk",
+          "tableFrom": "provisioning_jobs",
+          "tableTo": "pending_signups",
+          "columnsFrom": [
+            "signup_request_id"
+          ],
+          "columnsTo": [
+            "signup_request_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "provisioning_jobs_stripe_event_id_unique": {
+          "name": "provisioning_jobs_stripe_event_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "stripe_event_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "status_check": {
+          "name": "status_check",
+          "value": "\"provisioning_jobs\".\"status\" IN ('initiated','community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed','failed')"
+        },
+        "last_successful_status_check": {
+          "name": "last_successful_status_check",
+          "value": "\"provisioning_jobs\".\"last_successful_status\" IS NULL OR \"provisioning_jobs\".\"last_successful_status\" IN ('community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.compliance_audit_log": {

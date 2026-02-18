@@ -50,6 +50,7 @@ const AUTH_RATE_LIMIT_PATHS = [
   '/api/v1/auth/password-reset',
   '/api/v1/auth/forgot-password',
   '/auth/login',
+  '/signup',
   '/auth/signup',
   '/auth/register',
   '/auth/password-reset',

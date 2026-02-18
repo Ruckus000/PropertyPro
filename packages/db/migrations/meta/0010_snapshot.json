@@ -1,6 +1,6 @@
 {
-  "id": "7b9e2173-eabb-4054-8bb7-047915664fcd",
-  "prevId": "f1c1dde3-ebf0-4940-bf8c-3c837b9cfdf8",
+  "id": "eb32f3d0-121f-49c4-bbdc-5e139d17b9e0",
+  "prevId": "7b9e2173-eabb-4054-8bb7-047915664fcd",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1205,20 +1205,6 @@
         },
         "in_app_enabled": {
           "name": "in_app_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "email_documents": {
-          "name": "email_documents",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "email_maintenance": {
-          "name": "email_maintenance",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
