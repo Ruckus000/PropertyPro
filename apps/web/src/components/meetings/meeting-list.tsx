@@ -16,13 +16,14 @@ interface Props {
 }
 
 export function MeetingList({ items, timezone }: Props) {
+  const tz = resolveTimezone(timezone);
   return (
     <div className="space-y-2">
       {items.map((m) => (
         <div key={m.id} className="border rounded p-3">
           <div className="text-sm text-gray-500">
             {new Date(m.startsAt).toLocaleString('en-US', {
-              timeZone: resolveTimezone(timezone),
+              timeZone: tz,
               year: 'numeric',
               month: 'long',
               day: 'numeric',
