@@ -38,6 +38,9 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
   resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
+  // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
+  resolve(repoRoot, 'apps/web/src/lib/services/provisioning-service.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/provision/route.ts'),
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

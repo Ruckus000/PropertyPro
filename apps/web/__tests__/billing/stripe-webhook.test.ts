@@ -957,7 +957,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const invoice = {
         id: 'inv_001',
         customer: 'cus_pay_fail',
-        subscription: 'sub_pay_fail',
+        parent: { subscription_details: { subscription: 'sub_pay_fail' }, type: 'subscription_details' },
         amount_due: 4900,
       };
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_fail_001');
@@ -1035,7 +1035,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const originalReminderAt = new Date('2026-02-04T00:00:00Z');
       const invoice = {
         id: 'inv_retry_001',
-        subscription: 'sub_retry',
+        parent: { subscription_details: { subscription: 'sub_retry' }, type: 'subscription_details' },
         amount_due: 2900,
       };
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_retry_001');
@@ -1090,7 +1090,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     });
 
     it('skips processing when invoice has no subscription', async () => {
-      const invoice = { id: 'inv_002', subscription: null };
+      const invoice = { id: 'inv_002', parent: null };
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_no_cus');
       constructEventMock.mockReturnValue(event);
 
@@ -1101,7 +1101,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     });
 
     it('skips email when no community matches the subscription id', async () => {
-      const invoice = { id: 'inv_003', subscription: 'sub_unknown' };
+      const invoice = { id: 'inv_003', parent: { subscription_details: { subscription: 'sub_unknown' }, type: 'subscription_details' } };
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_no_comm');
       constructEventMock.mockReturnValue(event);
 
@@ -1131,7 +1131,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     });
 
     it('skips processing when invoice subscription field is missing', async () => {
-      const invoice = { id: 'inv_nosub', customer: 'cus_abc' }; // no subscription field
+      const invoice = { id: 'inv_nosub', customer: 'cus_abc' }; // no parent field → no subscription
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_nosub');
       constructEventMock.mockReturnValue(event);
       setupDb({ selectRows: [] });
@@ -1146,7 +1146,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
   describe('invoice.payment_succeeded', () => {
     it('clears paymentFailedAt and nextReminderAt and sets status to active', async () => {
-      const invoice = { id: 'inv_ok_001', customer: 'cus_ok', subscription: 'sub_ok' };
+      const invoice = { id: 'inv_ok_001', customer: 'cus_ok', parent: { subscription_details: { subscription: 'sub_ok' }, type: 'subscription_details' } };
       const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_ok_001');
       constructEventMock.mockReturnValue(event);
 
@@ -1188,7 +1188,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     });
 
     it('skips processing when invoice has no subscription', async () => {
-      const invoice = { id: 'inv_ok_no_cus', subscription: '' };
+      const invoice = { id: 'inv_ok_no_cus', parent: null };
       const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_ok_no_cus');
       constructEventMock.mockReturnValue(event);
 
@@ -1201,7 +1201,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     it('returns 200 without error when no community matches the subscription id', async () => {
       // The source runs an unconditional UPDATE; no prior SELECT for community lookup.
       // A non-existent stripeSubscriptionId fires a no-op UPDATE — this is untested above.
-      const invoice = { id: 'inv_ok_nomatch', customer: 'cus_nomatch', subscription: 'sub_no_match' };
+      const invoice = { id: 'inv_ok_nomatch', customer: 'cus_nomatch', parent: { subscription_details: { subscription: 'sub_no_match' }, type: 'subscription_details' } };
       const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_ok_nomatch');
       constructEventMock.mockReturnValue(event);
 

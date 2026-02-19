@@ -29,6 +29,7 @@ import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '@/lib/services/payment-alert-scheduler';
+import { runProvisioning } from '@/lib/services/provisioning-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -77,8 +78,7 @@ async function handleCheckoutSessionCompleted(
     .set({ status: 'payment_completed', updatedAt: new Date() })
     .where(eq(pendingSignups.signupRequestId, signupRequestId));
 
-  // Insert provisioning job stub — P2-35 picks this up.
-  // onConflictDoNothing handles idempotent re-delivery.
+  // Insert provisioning job stub — onConflictDoNothing handles idempotent re-delivery.
   await db
     .insert(provisioningJobs)
     .values({
@@ -88,7 +88,22 @@ async function handleCheckoutSessionCompleted(
     })
     .onConflictDoNothing();
 
-  console.info('[stripe-webhook] provisioning job created for', signupRequestId);
+  // Look up the job id (may be a newly inserted row or an existing one from a prior delivery).
+  const [job] = await db
+    .select({ id: provisioningJobs.id })
+    .from(provisioningJobs)
+    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
+    .limit(1);
+
+  if (job) {
+    // Fire-and-forget: webhook must return 200 immediately. Provisioning is resumable
+    // if it fails — the job stays in the DB and can be retried via /api/v1/internal/provision.
+    void runProvisioning(job.id).catch((err) => {
+      captureException(err, { extra: { signupRequestId } });
+    });
+  }
+
+  console.info('[stripe-webhook] provisioning started for', signupRequestId);
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
@@ -206,10 +221,8 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Pro
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
-  const subscriptionId =
-    typeof invoice.subscription === 'string'
-      ? invoice.subscription
-      : (invoice.subscription as { id?: string } | null)?.id;
+  const rawSub = invoice.parent?.subscription_details?.subscription;
+  const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
   if (!subscriptionId) return;
 
   const db = createUnscopedClient();
@@ -254,10 +267,8 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
 }
 
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
-  const subscriptionId =
-    typeof invoice.subscription === 'string'
-      ? invoice.subscription
-      : (invoice.subscription as { id?: string } | null)?.id;
+  const rawSub = invoice.parent?.subscription_details?.subscription;
+  const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
   if (!subscriptionId) return;
 
   const db = createUnscopedClient();

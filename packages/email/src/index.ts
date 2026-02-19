@@ -50,6 +50,9 @@ export type { SubscriptionCanceledEmailProps } from "./templates/subscription-ca
 export { SubscriptionExpiryWarningEmail } from "./templates/subscription-expiry-warning";
 export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscription-expiry-warning";
 
+export { WelcomeEmail } from "./templates/welcome-email";
+export type { WelcomeEmailProps } from "./templates/welcome-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

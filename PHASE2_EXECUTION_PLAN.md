@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-17  
 **Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (10/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)  
+**Status:** In progress on `main` (12/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -25,10 +25,13 @@ Milestones:
 - [2026-02-17] P1 recovery branches merged to `main` in planned order: `codex/recover-p1-16-meetings` (`5a37de7`) -> `codex/recover-p1-26-notification-preferences` (`6d43950`) -> `codex/recover-p1-12-validation` (`01b92af`).
 - [2026-02-17] Networked multi-tenant route integration gate rerun passed (`45/45`) after shared-env schema reconciliation via `pnpm --filter @propertypro/db db:migrate`; `main` pushed to `origin/main` at `01b92af`.
 - [2026-02-17] `P2-33` self-service signup and `P2-33.5` billing/provisioning schema merged to `main` via PR #3 (`feat/p2-33-5-billing-provisioning-schema` -> `main`, merge `6123767`); `pending_signups`, `provisioning_jobs`, `stripe_webhook_events` tables and billing columns on `communities` live.
+- [2026-02-19] `P2-34` Stripe webhook integration + `P2-34a` subscription degradation policy committed to `main` (`4afac39`). Stripe v20 invoice API fix applied (`invoice.parent.subscription_details.subscription`), atomic cancellation guard (WHERE subscriptionCanceledAt IS NULL RETURNING), subscription guard wired to announcement/document/meeting mutation routes.
+- [2026-02-19] `P2-35` Provisioning pipeline state machine committed to `main`. Implements 7-step resumable provisioning (`community_created → user_linked → checklist_generated → categories_created → preferences_set → email_sent → completed`). Fire-and-forget from Stripe webhook. `WelcomeEmail` template added. Internal retry endpoint `POST /api/v1/internal/provision` added. All 984 tests pass; build clean; DB access guard clean (144 runtime files).
+- [2026-02-19] `P2-36` Apartment operational dashboard completed (prior session).
 
 Current cursor:
-- Run remaining implementation chain: `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
-- Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
+- Run remaining implementation chain: `P2-38` -> `P2-39`.
+- Apartment track: `P2-44` (depends on `P2-36`, `P2-37`, `P1-29`), then `P2-38`.
 
 Cross-phase merge guard:
 - Any feature branch more than 20 commits behind `origin/main` is non-mergeable until rebased/recreated.
