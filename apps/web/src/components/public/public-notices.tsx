@@ -1,5 +1,4 @@
 import React from 'react';
-import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface PublicNoticeItem {
   id: number;
@@ -23,7 +22,7 @@ function formatDate(value: string, timezone: string): string {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    timeZone: resolveTimezone(timezone),
+    timeZone: timezone,
   });
 }
 

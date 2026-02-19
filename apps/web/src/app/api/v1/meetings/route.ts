@@ -218,7 +218,7 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       : 'owner' as const;
 
   // Fetch community timezone so email displays the correct local time.
-  const communityRows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
+  const communityRows = await scoped.selectFrom(communities, { timezone: communities.timezone }, eq(communities.id, communityId));
   const communityTimezone = resolveTimezone(communityRows[0]?.['timezone'] as string | undefined);
 
   try {
