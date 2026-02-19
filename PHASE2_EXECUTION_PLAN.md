@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-17  
 **Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (9/16 base Phase 2 tasks complete; mandatory pre-batch hardening progress is 2/3 complete)  
+**Status:** In progress on `main` (10/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)  
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -24,9 +24,10 @@ Milestones:
 - [2026-02-17] Stop-the-line quality incident recorded for stale Phase 1 worktrees (`p1-12`, `p1-16`, `p1-26`) after verified authz/tenant/contract regressions; branches frozen and recovery branches rebuilt from `main`.
 - [2026-02-17] P1 recovery branches merged to `main` in planned order: `codex/recover-p1-16-meetings` (`5a37de7`) -> `codex/recover-p1-26-notification-preferences` (`6d43950`) -> `codex/recover-p1-12-validation` (`01b92af`).
 - [2026-02-17] Networked multi-tenant route integration gate rerun passed (`45/45`) after shared-env schema reconciliation via `pnpm --filter @propertypro/db db:migrate`; `main` pushed to `origin/main` at `01b92af`.
+- [2026-02-17] `P2-33` self-service signup and `P2-33.5` billing/provisioning schema merged to `main` via PR #3 (`feat/p2-33-5-billing-provisioning-schema` -> `main`, merge `6123767`); `pending_signups`, `provisioning_jobs`, `stripe_webhook_events` tables and billing columns on `communities` live.
 
 Current cursor:
-- Run remaining implementation chain: `P2-33` -> `P2-33.5` -> `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
+- Run remaining implementation chain: `P2-34/P2-34a` -> `P2-35` -> (`P2-38`, `P2-39`).
 - Run apartment track in parallel where dependencies permit: `P2-36` -> `P2-44` and then `P2-38`.
 
 Cross-phase merge guard:
@@ -47,7 +48,7 @@ Cross-phase merge guard:
 ## Mandatory Hardening and Prerequisites
 
 ### P2-33.5 - Billing and Provisioning Schema Migration (Required before P2-34)
-- **Status:** Not Started
+- **Status:** Complete (2026-02-17)
 - **Objective:** One migration only, schema-only, no business-logic code mixed in.
 - **Migration scope (single Drizzle migration):**
 - Add columns on `communities`:
@@ -122,6 +123,7 @@ Completed base Phase 2 tasks on `main`:
 - `P2-31` Marketing Landing Page
 - `P2-32` Legal Pages
 - `P2-32a` Document Extraction Status
+- `P2-33` Self-Service Signup
 - `P2-37` Lease Tracking
 - `P2-40` Community Features Config
 - `P2-41` Email Notifications
@@ -129,7 +131,6 @@ Completed base Phase 2 tasks on `main`:
 - `P2-43` Multi-Tenant Isolation Tests
 
 Remaining base implementation tasks:
-- `P2-33` Self-Service Signup
 - `P2-34/P2-34a` Stripe Integration + Payment Failure Handling
 - `P2-35` Provisioning Pipeline
 - `P2-36` Apartment Operational Dashboard
@@ -137,11 +138,11 @@ Remaining base implementation tasks:
 - `P2-39` Condo Onboarding Wizard
 - `P2-44` Apartment Demo Seed
 
-Count check: 9 completed + 7 remaining = 16 base tasks.  
+Count check: 10 completed + 6 remaining = 16 base tasks.
 Open non-denominator subtask scope: `P2-34a`.
 
 Remaining mandatory hardening tasks:
-- `P2-33.5` Billing and provisioning schema migration
+- (none — all hardening tasks complete)
 
 ---
 

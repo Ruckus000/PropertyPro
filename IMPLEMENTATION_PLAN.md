@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-17 (v21 — P1 recovery incident closeout merged and integration gate evidence captured)
+Generated: 2026-02-18 (v23 — PR #3 P2-33 + P2-33.5 recorded; 10/16 Phase 2 base tasks complete)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications rollout implementation (PR1→PR3 scope) is now completed in the local workspace checkpoint (2026-02-16) with migrations, processor, internal route, middleware exemption, scheduler fallback, and tests; merge/deploy evidence is pending. Remaining baseline Phase 2 tasks: P2-33 (Self-Service Signup), P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications implementation (migrations, processor, internal route, middleware exemption, scheduler fallback, and tests) is merged on `main` as part of `P2-41` and `p1-26` recovery. P2-33 (Self-Service Signup) and P2-33.5 (Billing/Provisioning Schema) merged via PR #3 on 2026-02-17 (merge `6123767`); base task count is now 10/16. Remaining baseline Phase 2 tasks: P2-34/P2-34a (Stripe Integration), P2-35 (Provisioning Pipeline), P2-36 (Apartment Operational Dashboard), P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -87,6 +87,19 @@ Generated: 2026-02-17 (v21 — P1 recovery incident closeout merged and integrat
   - Pass: targeted web notification/auth/announcement suites (`71/71`)
   - Pass: email template suite (`59/59`)
   - Note: `pnpm test:integration:preflight` did not complete in this environment due DNS resolution failure to Supabase host (`ENOTFOUND`), so shared-env integration evidence is still pending.
+
+### Progress Snapshot (2026-02-18 — PR #4 & PR #5 Merged)
+- **PR #4** (`codex/p1-16-meeting-management`) merged to `main` (2026-02-18):
+  - Added explanatory comment to `coerceMeeting()` cast workaround in the meetings API route documenting why the cast exists and when it can be removed.
+  - Fixed meeting date display in `MeetingList`: replaced `toUTCString()` with `toLocaleString()` using community IANA timezone (defaulting to `America/New_York`), showing full date, time, and timezone abbreviation.
+  - Centralized timezone validation in `apps/web/src/lib/utils/timezone.ts` (`resolveTimezone`) with unit test coverage (`__tests__/utils/timezone.test.ts`, 8 cases).
+  - Timezone resolved once at data-loading boundaries (`loadDashboardData`, `findCommunityBySlug`, meetings API POST) and passed as a pre-resolved prop to display components — no per-item re-validation.
+  - Perf fix (post-merge, commit `77be568`): hoisted `resolveTimezone(timezone)` above the `.map()` loop in `MeetingList` to avoid redundant `Intl.DateTimeFormat` validation on every list item.
+  - Meetings API query optimized to project only the `timezone` column instead of fetching all community columns.
+- **PR #5** (`codex/p1-26-notification-preferences`) merged to `main` (2026-02-18):
+  - Simplified notification preference model: removed legacy per-channel boolean columns in favour of a unified in-app toggle.
+  - Added in-app notification toggle UI in the settings page.
+  - Maintained backward-compatible `emailFrequency` extension from the digest rollout checkpoint.
 
 ### Stop-the-Line Incident (2026-02-17 — P1 Recovery Branches)
 - Incident scope: `p1-12`, `p1-16`, `p1-26` stale worktrees built on `ae517d4` while `main` was at `5a9d449` (50 commits behind at audit time).
@@ -411,7 +424,7 @@ No `Partial` findings were identified in this closeout pass.
 | Component | Status |
 |-----------|--------|
 | Phase 1 feature APIs and UX flows | IMPLEMENTED (Gate 2 complete) |
-| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (9 complete, 0 in progress, 7 not started) |
+| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (10 complete, 0 in progress, 6 not started) |
 | Phase 3 PM/mobile vertical features | NOT STARTED |
 | Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | NOT STARTED |
 
