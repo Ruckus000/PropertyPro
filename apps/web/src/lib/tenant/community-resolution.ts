@@ -1,6 +1,7 @@
 // Unsafe escape hatch: tenant slug resolution must happen before tenant context exists.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import type { CommunityType } from '@propertypro/shared';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { resolveCommunityContext } from './resolve-community-context';
 
 export interface ResolvedCommunityRecord {
@@ -8,6 +9,7 @@ export interface ResolvedCommunityRecord {
   slug: string;
   name: string;
   communityType: CommunityType;
+  timezone: string;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -43,6 +45,7 @@ export async function findCommunityBySlug(
     slug: row.slug,
     name: row.name,
     communityType: row.communityType as CommunityType,
+    timezone: resolveTimezone(row.timezone),
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,
     city: row.city,

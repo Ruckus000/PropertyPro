@@ -55,5 +55,5 @@ export default async function PublicNoticesPage({
       location: row['location'] as string,
     }));
 
-  return <PublicNotices communityName={community.name} notices={notices} />;
+  return <PublicNotices communityName={community.name} notices={notices} timezone={community.timezone} />;
 }

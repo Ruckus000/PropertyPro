@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   createScopedClient,
   logAuditEvent,
+  communities,
   documents,
   meetings,
   meetingDocuments,
@@ -32,6 +33,7 @@ import {
   type MeetingType,
 } from '@/lib/utils/meeting-calculator';
 import { queueNotification } from '@/lib/services/notification-service';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -96,6 +98,9 @@ function requireMeetingsEnabled(communityType: CommunityType): void {
 }
 
 function coerceMeeting(row: Record<string, unknown>): Meeting {
+  // coerceMeeting is a typed cast workaround because createScopedClient returns
+  // generic Record<string,unknown> rows. Once the scoped client is updated to
+  // return typed rows this cast can be removed.
   return row as unknown as Meeting;
 }
 
@@ -212,6 +217,10 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
       ? 'special' as const
       : 'owner' as const;
 
+  // Fetch community timezone so email displays the correct local time.
+  const communityRows = await scoped.selectFrom(communities, { timezone: communities.timezone }, eq(communities.id, communityId));
+  const communityTimezone = resolveTimezone(communityRows[0]?.['timezone'] as string | undefined);
+
   try {
     await queueNotification(
       communityId,
@@ -222,11 +231,13 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
           year: 'numeric',
           month: 'long',
           day: 'numeric',
+          timeZone: communityTimezone,
         }),
         meetingTime: startsAtDate.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
           timeZoneName: 'short',
+          timeZone: communityTimezone,
         }),
         location: data.location,
         meetingType: meetingTypeForEmail,

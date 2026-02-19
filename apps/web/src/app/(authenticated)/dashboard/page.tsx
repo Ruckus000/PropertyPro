@@ -43,7 +43,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">
         <DashboardAnnouncements items={data.announcements} />
-        <DashboardMeetings items={data.meetings} />
+        <DashboardMeetings items={data.meetings} timezone={data.timezone} />
       </div>
       <DashboardQuickLinks communityId={context.communityId} />
     </main>

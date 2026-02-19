@@ -14,10 +14,12 @@ import {
   type DashboardAnnouncement,
   type DashboardMeeting,
 } from './dashboard-selectors';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface DashboardData {
   communityName: string;
   firstName: string;
+  timezone: string;
   announcements: DashboardAnnouncement[];
   meetings: DashboardMeeting[];
 }
@@ -37,6 +39,7 @@ export async function loadDashboardData(
   const community = communityRows.find((row) => row['id'] === communityId);
   const communityName =
     typeof community?.['name'] === 'string' ? (community['name'] as string) : 'Community';
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   const user = userRows.find((row) => row['id'] === userId);
   const fullName = typeof user?.['fullName'] === 'string' ? (user['fullName'] as string) : null;
@@ -44,6 +47,7 @@ export async function loadDashboardData(
   return {
     communityName,
     firstName: toFirstName(fullName),
+    timezone,
     announcements: selectRecentAnnouncements(announcementRows as Announcement[]),
     meetings: selectUpcomingMeetings(meetingRows as Meeting[]),
   };
