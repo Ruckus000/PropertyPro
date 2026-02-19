@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-17  
 **Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (12/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)
+**Status:** In progress on `main` (13/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -27,6 +27,7 @@ Milestones:
 - [2026-02-17] `P2-33` self-service signup and `P2-33.5` billing/provisioning schema merged to `main` via PR #3 (`feat/p2-33-5-billing-provisioning-schema` -> `main`, merge `6123767`); `pending_signups`, `provisioning_jobs`, `stripe_webhook_events` tables and billing columns on `communities` live.
 - [2026-02-19] `P2-34` Stripe webhook integration + `P2-34a` subscription degradation policy committed to `main` (`4afac39`). Stripe v20 invoice API fix applied (`invoice.parent.subscription_details.subscription`), atomic cancellation guard (WHERE subscriptionCanceledAt IS NULL RETURNING), subscription guard wired to announcement/document/meeting mutation routes.
 - [2026-02-19] `P2-35` Provisioning pipeline state machine committed to `main`. Implements 7-step resumable provisioning (`community_created → user_linked → checklist_generated → categories_created → preferences_set → email_sent → completed`). Fire-and-forget from Stripe webhook. `WelcomeEmail` template added. Internal retry endpoint `POST /api/v1/internal/provision` added. All 984 tests pass; build clean; DB access guard clean (144 runtime files).
+- [2026-02-19] Pre-push audit (`17dbfb9`): corrected `stripeEventId` to store `event.id` (not `session.id`); added hard throw on missing `NEXT_PUBLIC_APP_URL`; removed dead sibling idempotency query (unreachable due to unique index); updated test selectSequences. 985 tests pass.
 - [2026-02-19] `P2-36` Apartment operational dashboard completed (prior session).
 
 Current cursor:
@@ -127,6 +128,9 @@ Completed base Phase 2 tasks on `main`:
 - `P2-32` Legal Pages
 - `P2-32a` Document Extraction Status
 - `P2-33` Self-Service Signup
+- `P2-34` Stripe Integration + Payment Failure Handling
+- `P2-35` Provisioning Pipeline
+- `P2-36` Apartment Operational Dashboard
 - `P2-37` Lease Tracking
 - `P2-40` Community Features Config
 - `P2-41` Email Notifications
@@ -134,15 +138,12 @@ Completed base Phase 2 tasks on `main`:
 - `P2-43` Multi-Tenant Isolation Tests
 
 Remaining base implementation tasks:
-- `P2-34/P2-34a` Stripe Integration + Payment Failure Handling
-- `P2-35` Provisioning Pipeline
-- `P2-36` Apartment Operational Dashboard
 - `P2-38` Apartment Onboarding Wizard
 - `P2-39` Condo Onboarding Wizard
 - `P2-44` Apartment Demo Seed
 
-Count check: 10 completed + 6 remaining = 16 base tasks.
-Open non-denominator subtask scope: `P2-34a`.
+Count check: 13 completed + 3 remaining = 16 base tasks.
+Open non-denominator subtask scope: `P2-34a` (complete).
 
 Remaining mandatory hardening tasks:
 - (none — all hardening tasks complete)
