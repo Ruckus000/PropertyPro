@@ -25,6 +25,7 @@ const {
   createAdminClientMock,
   sendEmailMock,
   captureExceptionMock,
+  andMock,
   eqMock,
   sqlMock,
   provisioningJobsTable,
@@ -41,6 +42,7 @@ const {
     createAdminClientMock: vi.fn(),
     sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_test_001' }),
     captureExceptionMock: vi.fn(),
+    andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
       _sql: { strings, values },
@@ -102,6 +104,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
+  and: andMock,
   eq: eqMock,
   sql: sqlMock,
 }));
@@ -259,12 +262,10 @@ describe('runProvisioning', () => {
 
     buildDb({
       selectSequence: [
-        [job],                   // load job
-        [],                      // business idempotency check (no sibling completed job)
-        [CONDO_SIGNUP],          // load pending signup
-        [{ id: 10 }],            // community_created: inserted community
-        [],                      // user_linked: users upsert (no return needed, onConflictDoNothing)
-        [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role
+        [job],                               // load job
+        [CONDO_SIGNUP],                      // load pending signup
+        // community_created uses .returning() on insert, not a select
+        [{ userId: 'auth-uuid-001' }],       // preferences_set: lookup user_role by communityId + role
       ],
     });
 
@@ -281,11 +282,9 @@ describe('runProvisioning', () => {
     const { calls } = buildDb({
       selectSequence: [
         [job],
-        [],
         [APT_SIGNUP],
-        [{ id: 20 }],           // community_created
-        [],                     // user_linked
-        [{ userId: 'auth-uuid-001' }], // preferences_set
+        // community_created uses .returning() on insert, not a select
+        [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role by communityId + role
       ],
     });
 
@@ -315,7 +314,6 @@ describe('runProvisioning', () => {
     const { calls } = buildDb({
       selectSequence: [
         [job],
-        [],
         [CONDO_SIGNUP],
         [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role
       ],
@@ -344,7 +342,6 @@ describe('runProvisioning', () => {
     // Build a db where insert into documentCategories throws
     const selectQueue = [
       [job],
-      [],
       [CONDO_SIGNUP],
     ];
 
@@ -393,10 +390,9 @@ describe('runProvisioning', () => {
     const { calls } = buildDb({
       selectSequence: [
         [job],
-        [],
         [CONDO_SIGNUP],
-        [{ id: 10 }],           // community_created insert return
-        [{ userId: 'auth-uuid-001' }], // preferences_set
+        // community_created uses .returning() on insert, not a select
+        [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role by communityId + role
       ],
     });
 
@@ -435,7 +431,6 @@ describe('runProvisioning', () => {
     buildDb({
       selectSequence: [
         [job],
-        [],
         [{ ...CONDO_SIGNUP, authUserId: 'existing-uuid' }],
         [{ userId: 'existing-uuid' }], // preferences_set
       ],
@@ -465,7 +460,6 @@ describe('runProvisioning', () => {
     buildDb({
       selectSequence: [
         [job],
-        [],
         [{ ...CONDO_SIGNUP, authUserId: null }],
         [{ userId: 'new-supabase-uuid' }], // preferences_set
       ],
@@ -497,7 +491,6 @@ describe('runProvisioning', () => {
     let selectCallCount = 0;
     const selectQueue = [
       [job],
-      [],
       [{ ...CONDO_SIGNUP, authUserId: null }],
     ];
 
@@ -521,5 +514,25 @@ describe('runProvisioning', () => {
     const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1][0];
     expect(setCall.status).toBe('failed');
     expect(setCall.errorMessage).toContain('Email already registered');
+  });
+
+  // 9. Email double-send guard — resume from email_sent skips re-send
+  it('skips email send on resume when lastSuccessfulStatus is email_sent', async () => {
+    const job = makeJob({
+      status: 'failed',
+      lastSuccessfulStatus: 'email_sent',
+      communityId: 10,
+    });
+
+    buildDb({
+      selectSequence: [
+        [job],
+        [CONDO_SIGNUP],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });

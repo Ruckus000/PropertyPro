@@ -16,7 +16,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
-import { eq, sql } from '@propertypro/db/filters';
+import { and, eq, sql } from '@propertypro/db/filters';
 import {
   communities,
   complianceChecklistItems,
@@ -51,7 +51,10 @@ function nextStep(last: string | null): ProvisioningStepSuccess {
   if (!last) return STEP_SEQUENCE[0];
   const idx = STEP_SEQUENCE.indexOf(last as ProvisioningStepSuccess);
   if (idx === -1) return STEP_SEQUENCE[0];
-  return STEP_SEQUENCE[Math.min(idx + 1, STEP_SEQUENCE.length - 1)] as ProvisioningStepSuccess;
+  if (idx === STEP_SEQUENCE.length - 1) {
+    throw new Error('[provisioning] nextStep called past terminal state: completed');
+  }
+  return STEP_SEQUENCE[idx + 1] as ProvisioningStepSuccess;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +214,7 @@ type JobContext = {
   jobId: number;
   communityId: number | null;
   signup: PendingSignupRow;
+  lastSuccessfulStatus: string | null;
 };
 
 async function stepCommunityCreated(ctx: JobContext): Promise<void> {
@@ -380,7 +384,7 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    .where(eq(userRoles.communityId, communityId))
+    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, role)))
     .limit(1);
 
   if (!roleRow) {
@@ -398,15 +402,19 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
       inAppEnabled: true,
     })
     .onConflictDoNothing();
-
-  void role; // suppress unused-variable warning (role used above for type safety)
 }
 
 async function stepEmailSent(ctx: JobContext): Promise<void> {
+  // Idempotency: if this step already succeeded on a prior run, skip re-send.
+  if (ctx.lastSuccessfulStatus === 'email_sent' || ctx.lastSuccessfulStatus === 'completed') return;
+
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] email_sent: communityId not set');
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!baseUrl) {
+    throw new Error('[provisioning] NEXT_PUBLIC_APP_URL env var not set');
+  }
   const loginUrl = `${baseUrl}/login`;
 
   await sendEmail({
@@ -476,18 +484,10 @@ export async function runProvisioning(jobId: number): Promise<void> {
   // Already done — no-op.
   if (job.status === 'completed') return;
 
-  // Business idempotency: if a different completed job exists for same signupRequestId, skip.
-  if (job.signupRequestId) {
-    const [completedSibling] = await db
-      .select({ id: provisioningJobs.id })
-      .from(provisioningJobs)
-      .where(eq(provisioningJobs.signupRequestId, job.signupRequestId))
-      .limit(1);
-
-    if (completedSibling && completedSibling.id !== job.id && job.status === 'completed') {
-      return;
-    }
-  }
+  // Business idempotency is enforced by the UNIQUE INDEX on provisioning_jobs.signup_request_id.
+  // Only one row per signupRequestId can ever exist, so there can never be a "different completed
+  // sibling" job for the same request. The job-level guard above (status === 'completed') is the
+  // only check needed here.
 
   // Load the pending signup.
   if (!job.signupRequestId) {
@@ -517,6 +517,7 @@ export async function runProvisioning(jobId: number): Promise<void> {
     jobId,
     communityId: job.communityId ?? null,
     signup: signup as PendingSignupRow,
+    lastSuccessfulStatus: job.lastSuccessfulStatus ?? null,
   };
 
   // Mark started_at on first run.
@@ -526,6 +527,17 @@ export async function runProvisioning(jobId: number): Promise<void> {
       .set({ startedAt: new Date() })
       .where(eq(provisioningJobs.id, jobId));
   }
+
+  // Mark provisioning in-progress on pending_signups (no-op on resume).
+  await db
+    .update(pendingSignups)
+    .set({ status: 'provisioning', updatedAt: new Date() })
+    .where(
+      and(
+        eq(pendingSignups.signupRequestId, ctx.signup.signupRequestId),
+        eq(pendingSignups.status, 'payment_completed'),
+      ),
+    );
 
   // State machine loop.
   let step = nextStep(job.lastSuccessfulStatus ?? null);

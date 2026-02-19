@@ -1,4 +1,4 @@
-import { bigserial, bigint, index, integer, pgTable, text, timestamp, check } from 'drizzle-orm/pg-core';
+import { bigserial, bigint, check, index, integer, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { communities } from './communities';
 import { pendingSignups } from './pending-signups';
@@ -19,6 +19,6 @@ export const provisioningJobs = pgTable('provisioning_jobs', {
 }, (table) => [
   check('status_check', sql`${table.status} IN ('initiated','community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed','failed')`),
   check('last_successful_status_check', sql`${table.lastSuccessfulStatus} IS NULL OR ${table.lastSuccessfulStatus} IN ('community_created','user_linked','checklist_generated','categories_created','preferences_set','email_sent','completed')`),
-  index('provisioning_jobs_signup_request_id_idx').on(table.signupRequestId),
+  uniqueIndex('provisioning_jobs_signup_request_id_unique').on(table.signupRequestId),
   index('provisioning_jobs_community_status_idx').on(table.communityId, table.status),
 ]);

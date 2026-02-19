@@ -58,6 +58,7 @@ function isUniqueConstraintError(err: unknown): boolean {
 
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
+  eventId: string,
 ): Promise<void> {
   const signupRequestId = session.metadata?.signupRequestId;
   if (!signupRequestId) {
@@ -83,7 +84,7 @@ async function handleCheckoutSessionCompleted(
     .insert(provisioningJobs)
     .values({
       signupRequestId,
-      stripeEventId: session.id,
+      stripeEventId: eventId,
       status: 'initiated',
     })
     .onConflictDoNothing();
@@ -291,7 +292,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
 async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'checkout.session.completed':
-      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id);
       break;
     case 'customer.subscription.updated':
       await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
