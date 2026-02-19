@@ -4,7 +4,7 @@
  * Route: apps/web/src/app/api/v1/webhooks/stripe/route.ts
  *
  * Coverage:
- * - Signature verification (missing secret, invalid sig, valid sig)
+ * - Signature verification (missing secret, invalid sig, valid sig, missing header)
  * - Idempotency: duplicate events return 200 without re-processing
  * - Unique constraint race condition on insert
  * - checkout.session.completed
@@ -13,6 +13,11 @@
  * - invoice.payment_failed
  * - invoice.payment_succeeded
  * - Unhandled event types are silently ignored
+ *
+ * NOTE: This file intentionally has no vi.mock('@/lib/middleware/subscription-guard').
+ * Stripe webhooks are system events that must always be processed regardless of
+ * subscription status. If that mock were needed here, it would mean the webhook
+ * route erroneously imported the guard — a regression caught by test failures above.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -277,6 +282,25 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(body.error).toBe('Invalid signature');
     });
 
+    it('returns 400 when stripe-signature header is absent', async () => {
+      // Source: req.headers.get('stripe-signature') ?? '' passes empty string to constructEvent.
+      // Stripe's constructEvent throws when the signature is empty/invalid.
+      constructEventMock.mockImplementation(() => {
+        throw new Error('No signatures found matching the expected signature');
+      });
+
+      const req = new NextRequest('http://localhost:3000/api/v1/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' }, // no stripe-signature header
+        body: '{}',
+      });
+
+      const res = await POST(req);
+      const body = (await res.json()) as { error: string };
+      expect(res.status).toBe(400);
+      expect(body.error).toBe('Invalid signature');
+    });
+
     it('passes the raw body string and stripe-signature header to constructEvent', async () => {
       const event = makeEvent('invoice.payment_succeeded', {
         customer: 'cus_abc',
@@ -455,6 +479,12 @@ describe('POST /api/v1/webhooks/stripe', () => {
           (v as Record<string, unknown>).signupRequestId === 'req-abc',
       );
       expect(provisioningInsert).toBeDefined();
+
+      // Verify processedAt was stamped on the stripeWebhookEvents record (issue 2b)
+      const allSetPayloads = setMock.mock.calls.map(([arg]: unknown[]) => arg as Record<string, unknown>);
+      const processedAtCall = allSetPayloads.find((p) => 'processedAt' in p);
+      expect(processedAtCall).toBeDefined();
+      expect((processedAtCall as Record<string, unknown>).processedAt).toBeInstanceOf(Date);
     });
 
     it('skips processing when session status is not complete', async () => {
@@ -475,6 +505,12 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(insertMock).toHaveBeenCalledTimes(1); // only the idempotency fence insert
       // update for processedAt only — pendingSignups update should NOT occur
       expect(updateMock).toHaveBeenCalledTimes(1);
+
+      // The single update() call is for processedAt stamping only (not pendingSignups) — issue 2d
+      // updateMock is called with the table as its first arg; verify no call targeted pendingSignups
+      const updateCalls = updateMock.mock.calls as [unknown][];
+      const pendingSignupUpdate = updateCalls.find(([table]) => table === pendingSignupsTable);
+      expect(pendingSignupUpdate).toBeUndefined();
     });
 
     it('skips processing when metadata is missing signupRequestId', async () => {
@@ -1160,6 +1196,21 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       const res = await POST(makeRequest());
       expect(res.status).toBe(200);
+    });
+
+    it('returns 200 without error when no community matches the subscription id', async () => {
+      // The source runs an unconditional UPDATE; no prior SELECT for community lookup.
+      // A non-existent stripeSubscriptionId fires a no-op UPDATE — this is untested above.
+      const invoice = { id: 'inv_ok_nomatch', customer: 'cus_nomatch', subscription: 'sub_no_match' };
+      const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_ok_nomatch');
+      constructEventMock.mockReturnValue(event);
+
+      // All selects return empty (idempotency check returns no existing event)
+      setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+      expect(captureExceptionMock).not.toHaveBeenCalled();
     });
   });
 

@@ -105,6 +105,13 @@ describe('requireActiveSubscriptionForMutation', () => {
       setupDb('incomplete');
       await expect(requireActiveSubscriptionForMutation(5)).resolves.toBeUndefined();
     });
+
+    it('resolves without throwing for unknown status "delinquent" (fail-open — not in LOCKED_STATUSES)', async () => {
+      // 'delinquent' is not in LOCKED_STATUSES = {canceled, expired, unpaid, incomplete_expired}
+      // Unknown statuses are treated as allowed (fail-open for unrecognized values).
+      setupDb('delinquent');
+      await expect(requireActiveSubscriptionForMutation(100)).resolves.toBeUndefined();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -286,6 +293,26 @@ describe('requireActiveSubscriptionForMutation', () => {
       expect(json.error.code).toBe('SUBSCRIPTION_REQUIRED');
       expect(json.error.message).toContain('subscription');
       expect(json.error.details).toEqual({ subscriptionStatus: 'canceled' });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Error propagation — guard has no try/catch, DB errors propagate
+  // -------------------------------------------------------------------------
+
+  describe('error propagation', () => {
+    it('propagates DB network error (guard has no try/catch)', async () => {
+      const networkError = new Error('getaddrinfo ENOTFOUND db.supabase.co');
+
+      const limitMock = vi.fn().mockRejectedValue(networkError);
+      const whereMock = vi.fn(() => ({ limit: limitMock }));
+      const fromMock = vi.fn(() => ({ where: whereMock }));
+      const selectMock = vi.fn(() => ({ from: fromMock }));
+      createUnscopedClientMock.mockReturnValue({ select: selectMock });
+
+      await expect(requireActiveSubscriptionForMutation(1)).rejects.toThrow(
+        'getaddrinfo ENOTFOUND db.supabase.co',
+      );
     });
   });
 });

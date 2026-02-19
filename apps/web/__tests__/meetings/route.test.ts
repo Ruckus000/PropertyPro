@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
   createScopedClientMock,
@@ -11,6 +12,8 @@ const {
   documentsTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  requireActiveSubscriptionForMutationMock,
+  queueNotificationMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +27,8 @@ const {
     role: 'owner',
     communityType: 'condo_718',
   }),
+  requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
+  queueNotificationMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -32,6 +37,8 @@ vi.mock('@propertypro/db', () => ({
   meetings: meetingsTableMock,
   meetingDocuments: meetingDocumentsTableMock,
   documents: documentsTableMock,
+  // communities is referenced by handleCreate for timezone lookup (selectFrom call)
+  communities: { id: Symbol('communities.id'), timezone: Symbol('communities.timezone') },
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -43,7 +50,11 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 
 vi.mock('@/lib/services/notification-service', () => ({
-  queueNotification: vi.fn().mockResolvedValue(undefined),
+  queueNotification: queueNotificationMock,
+}));
+
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
 import { GET, POST } from '../../src/app/api/v1/meetings/route';
@@ -110,6 +121,8 @@ describe('p1-16 meetings route', () => {
 
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockResolvedValue([]),
+      // selectFrom is called by handleCreate to fetch the community timezone for notification formatting
+      selectFrom: vi.fn().mockResolvedValue([{ timezone: 'America/New_York' }]),
       insert,
       update: vi.fn(),
       softDelete: vi.fn(),
@@ -147,6 +160,7 @@ describe('p1-16 meetings route', () => {
       }),
     );
     expect(json.data.id).toBe(99);
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(77);
   });
 
   it('POST update writes audit with changed fields', async () => {
@@ -180,7 +194,13 @@ describe('p1-16 meetings route', () => {
     await POST(req);
     expect(update).toHaveBeenCalled();
     expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'update', resourceType: 'meeting', resourceId: '5' }),
+      expect.objectContaining({
+        action: 'update',
+        resourceType: 'meeting',
+        resourceId: '5',
+        oldValues: expect.objectContaining({ title: 'Old', location: 'A' }),
+        newValues: expect.objectContaining({ title: 'New', location: 'B' }),
+      }),
     );
   });
 
@@ -210,6 +230,7 @@ describe('p1-16 meetings route', () => {
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'delete', resourceType: 'meeting', resourceId: '10' }),
     );
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(88);
   });
 
   it('POST attach creates join record and logs audit', async () => {
@@ -438,6 +459,7 @@ describe('p1-16 meetings route', () => {
     });
     const postRes = await POST(postReq);
     expect(postRes.status).toBe(403);
+    expect(queueNotificationMock).not.toHaveBeenCalled();
   });
 
   it('POST rejects unauthenticated requests', async () => {
@@ -475,5 +497,102 @@ describe('p1-16 meetings route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(403);
+  });
+
+  describe('subscription guard enforcement', () => {
+    it('POST returns 403 when guard throws SUBSCRIPTION_REQUIRED', async () => {
+      requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
+        new AppError('Your subscription is no longer active. Please reactivate to continue.', 403, 'SUBSCRIPTION_REQUIRED'),
+      );
+
+      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Annual Meeting',
+          meetingType: 'annual',
+          startsAt: '2026-03-01T00:00:00.000Z',
+          location: 'Hall',
+          communityId: 42,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('POST detach happy path', () => {
+    it('POST detach returns 200 when both meeting and document exist in community', async () => {
+      const hardDelete = vi.fn().mockResolvedValue([]);
+      const selectFrom = vi.fn()
+        .mockResolvedValueOnce([{ id: 1 }])   // meetings lookup
+        .mockResolvedValueOnce([{ id: 2 }]);  // documents lookup
+
+      createScopedClientMock.mockReturnValue({
+        query: vi.fn().mockResolvedValue([]),
+        selectFrom,
+        insert: vi.fn(),
+        update: vi.fn(),
+        softDelete: vi.fn(),
+        hardDelete,
+      });
+
+      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'detach',
+          communityId: 42,
+          meetingId: 1,
+          documentId: 2,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      expect(hardDelete).toHaveBeenCalled();
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          resourceType: 'meeting_document',
+          resourceId: '1:2',
+        }),
+      );
+    });
+  });
+
+  describe('POST input validation', () => {
+    it('POST with invalid meetingType returns 400', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Standup',
+          meetingType: 'standup',
+          startsAt: '2026-03-01T00:00:00.000Z',
+          location: 'Office',
+          communityId: 42,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
+
+    it('POST with non-ISO startsAt returns 400', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Annual Meeting',
+          meetingType: 'annual',
+          startsAt: 'not-a-date',
+          location: 'Hall',
+          communityId: 42,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
   });
 });

@@ -320,6 +320,114 @@ describe('processPaymentReminders', () => {
     expect(summary.emailsSent).toBe(1);
     expect(summary.errors).toBe(1);
   });
+
+  it('sends SubscriptionExpiryWarningEmail (not PaymentFailedEmail) when BOTH paymentFailedAt AND subscriptionCanceledAt are set', async () => {
+    // subscriptionCanceledAt is checked first in processCommunityReminder — it takes priority.
+    const community = {
+      id: 7,
+      name: 'Dual-Flag Community',
+      communityType: 'condo_718',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(23),
+    };
+    const recipients = [{ email: 'board@example.com', fullName: 'Helen Board' }];
+
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.communitiesScanned).toBe(1);
+    expect(summary.emailsSent).toBe(1);
+    expect(summary.errors).toBe(0);
+
+    // SubscriptionExpiryWarningEmail must be used
+    const createElementMock = createElement as ReturnType<typeof vi.fn>;
+    expect(createElementMock).toHaveBeenCalledWith(SubscriptionExpiryWarningEmail, expect.any(Object));
+
+    // PaymentFailedEmail must NOT be used
+    const paymentFailedCalls = createElementMock.mock.calls.filter(
+      ([comp]: unknown[]) => comp === PaymentFailedEmail,
+    );
+    expect(paymentFailedCalls).toHaveLength(0);
+  });
+
+  it('counts error when DB update throws during processing — other community still succeeds', async () => {
+    // NOTE: sendToAll uses Promise.allSettled, so sendEmail throwing is silently swallowed
+    // and does NOT increment summary.errors. To actually trip the error counter, the DB
+    // update must throw (which propagates out of processCommunityReminder).
+    resetDbMocks();
+
+    const goodCommunity = {
+      id: 8,
+      name: 'Good Payer',
+      communityType: 'condo_718',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const failCommunity = {
+      id: 9,
+      name: 'DB Failure',
+      communityType: 'condo_718',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+
+    const recipients = [{ email: 'board@example.com', fullName: 'Ivan Board' }];
+
+    mockDbWhere
+      .mockResolvedValueOnce([goodCommunity, failCommunity]) // main select
+      .mockResolvedValueOnce(recipients)                     // admin lookup for good
+      .mockResolvedValueOnce(recipients)                     // admin lookup for fail
+      .mockResolvedValueOnce(undefined)                      // update for good — succeeds
+      .mockRejectedValueOnce(new Error('DB write failure')); // update for fail — throws
+
+    mockDbSet.mockReturnValue({ where: mockDbWhere });
+    mockDbUpdate.mockReturnValue({ set: mockDbSet });
+    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+    mockDbFrom.mockReturnValue({ where: mockDbWhere, innerJoin: mockDbInnerJoin });
+    mockDbSelect.mockReturnValue({ from: mockDbFrom });
+
+    const db = { select: mockDbSelect, update: mockDbUpdate };
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.communitiesScanned).toBe(2);
+    expect(summary.emailsSent).toBe(1);
+    expect(summary.errors).toBe(1);
+  });
+
+  it('processes community when nextReminderAt is at or before now (boundary inclusive)', async () => {
+    // The DB where clause uses lte(nextReminderAt, now). This test verifies that
+    // when the mock returns a community (simulating nextReminderAt <= now), it is processed.
+    const community = {
+      id: 10,
+      name: 'Boundary Community',
+      communityType: 'condo_718',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const recipients = [{ email: 'exact@example.com', fullName: 'Exact User' }];
+
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+    expect(summary.communitiesScanned).toBe(1);
+    expect(summary.emailsSent).toBe(1);
+  });
+
+  it('does not process any community when DB returns empty (nextReminderAt > now)', async () => {
+    // Simulates the DB correctly filtering out future-dated nextReminderAt values.
+    const db = buildMockDb([], []);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+    expect(summary.communitiesScanned).toBe(0);
+    expect(summary.emailsSent).toBe(0);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

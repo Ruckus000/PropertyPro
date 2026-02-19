@@ -3,6 +3,13 @@
  *
  * Verifies that when a meeting is created via the meetings route handler,
  * the notification service is called with the correct parameters.
+ *
+ * CONSISTENCY NOTE (Issue 1b):
+ * This file mocks withErrorHandler as a bare passthrough: `(fn) => fn`.
+ * meetings/route.test.ts does NOT mock withErrorHandler — it relies on the
+ * real implementation to serialize errors into JSON HTTP responses.
+ * Tests here only verify notification side-effects on the happy path.
+ * HTTP error status code assertions (401, 403, etc.) belong in meetings/route.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -82,6 +89,10 @@ vi.mock('@/lib/utils/meeting-calculator', () => ({
   calculateMinutesPostingDeadline: () => new Date(),
   calculateNoticePostBy: () => new Date(),
   calculateOwnerVoteDocsDeadline: () => new Date(),
+}));
+
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { POST } from '../../src/app/api/v1/meetings/route';

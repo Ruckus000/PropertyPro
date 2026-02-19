@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
   createScopedClientMock,
@@ -11,6 +13,7 @@ const {
   usersTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  requireActiveSubscriptionForMutationMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   auditLogMock: vi.fn().mockResolvedValue(undefined),
@@ -22,6 +25,7 @@ const {
   usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -57,6 +61,10 @@ vi.mock('@/lib/middleware/audit-middleware', () => ({
 
 vi.mock('@/lib/services/announcement-delivery', () => ({
   queueAnnouncementDelivery: queueAnnouncementDeliveryMock,
+}));
+
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
 import { GET, POST } from '../../src/app/api/v1/announcements/route';
@@ -226,6 +234,7 @@ describe('p1-17 announcements route', () => {
       }),
     );
     expect(json.data.id).toBe(9);
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(200);
   });
 
   it('POST create keeps tenant context scoped by body communityId', async () => {
@@ -270,6 +279,7 @@ describe('p1-17 announcements route', () => {
     await POST(req);
     expect(createScopedClientMock).toHaveBeenCalledWith(777);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(777, 'session-user-1');
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(777);
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
@@ -291,5 +301,93 @@ describe('p1-17 announcements route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(403);
+  });
+
+  describe('subscription guard enforcement', () => {
+    it('POST returns 403 when guard throws SUBSCRIPTION_REQUIRED', async () => {
+      requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
+        new AppError('Your subscription is no longer active. Please reactivate to continue.', 403, 'SUBSCRIPTION_REQUIRED'),
+      );
+
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Board Meeting',
+          body: 'Reminder for next week',
+          audience: 'all',
+          isPinned: false,
+          communityId: 200,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('POST input validation', () => {
+    // TODO (security): filePath is not sanitized against path traversal in documents route.
+    it('POST without title returns 400', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+        method: 'POST',
+        body: JSON.stringify({ body: 'No title here', audience: 'all', communityId: 42 }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
+
+    it('POST with empty body returns 400', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Title', body: '', audience: 'all', communityId: 42 }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
+
+    it('POST with negative communityId returns 400', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Title', body: 'Body', audience: 'all', communityId: -1 }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
+
+    it('POST with title exceeding 500 characters returns 400', async () => {
+      const longTitle = 'A'.repeat(501);
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: longTitle,
+          body: 'Valid body',
+          audience: 'all',
+          isPinned: false,
+          communityId: 200,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect([400, 422]).toContain(res.status);
+    });
+  });
+
+  describe('GET edge cases', () => {
+    it('GET returns 401 when requireAuthenticatedUserId throws', async () => {
+      requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements?communityId=42');
+      const res = await GET(req);
+      expect(res.status).toBe(401);
+    });
+
+    it('GET does NOT call requireActiveSubscriptionForMutation', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/announcements?communityId=42');
+      await GET(req);
+      expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
+    });
   });
 });
