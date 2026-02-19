@@ -19,6 +19,7 @@ import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
 import { isElevatedRole } from '@propertypro/shared';
 import { queueNotification } from '@/lib/services/notification-service';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -146,6 +147,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const payload = parseResult.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
   await requireCommunityMembership(effectiveCommunityId, userId);
+  await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
   const storageBytes = await downloadStorageBytes(payload.filePath);
   if (storageBytes.byteLength !== payload.fileSize) {
@@ -294,6 +296,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   if (!isElevatedRole(membership.role)) {
     throw new ForbiddenError('Only elevated roles can delete documents');
   }
+  await requireActiveSubscriptionForMutation(communityId);
 
   const scoped = createScopedClient(communityId);
 

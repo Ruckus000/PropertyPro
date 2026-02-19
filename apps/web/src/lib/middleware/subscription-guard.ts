@@ -8,14 +8,14 @@
  * Degradation rules:
  *   active / trialing / null → allowed (null = new community, not yet provisioned)
  *   past_due               → allowed (banner shown at UI level only)
- *   canceled / expired     → throws 403 SUBSCRIPTION_REQUIRED
+ *   canceled / expired / unpaid → throws 403 SUBSCRIPTION_REQUIRED
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 
-const LOCKED_STATUSES = new Set(['canceled', 'expired']);
+const LOCKED_STATUSES = new Set(['canceled', 'expired', 'unpaid', 'incomplete_expired']);
 
 /**
  * Verify that the community's subscription allows admin mutations.

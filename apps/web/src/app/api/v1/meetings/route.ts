@@ -34,6 +34,7 @@ import {
 } from '@/lib/utils/meeting-calculator';
 import { queueNotification } from '@/lib/services/notification-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -167,6 +168,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireMeetingsEnabled(membership.communityType);
+  await requireActiveSubscriptionForMutation(communityId);
 
   if (action === 'update') return handleUpdate(normalizedBody, actorUserId);
   if (action === 'delete') return handleDelete(normalizedBody, actorUserId);

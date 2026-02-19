@@ -11,7 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { captureException } from '@sentry/nextjs';
-import { eq } from '@propertypro/db/filters';
+import { and, eq, isNull } from '@propertypro/db/filters';
 import type Stripe from 'stripe';
 import {
   communities,
@@ -23,10 +23,19 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   getStripeClient,
   retrieveCheckoutSession,
-  retrieveInvoice,
   retrieveSubscription,
 } from '@/lib/services/stripe-service';
-import { sendPaymentFailedEmail } from '@/lib/services/payment-alert-scheduler';
+import {
+  sendPaymentFailedEmail,
+  sendSubscriptionCanceledEmail,
+} from '@/lib/services/payment-alert-scheduler';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Grace period reminder offset: Day 23 after cancellation (ms). */
+const DAY_23_MS = 23 * 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,47 +97,120 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
   const db = createUnscopedClient();
   const now = new Date();
 
-  const updates: Record<string, unknown> = {
-    subscriptionStatus: fresh.status,
-    subscriptionPlan:
-      fresh.items.data[0]?.price.lookup_key ?? fresh.items.data[0]?.price.id ?? null,
-    updatedAt: now,
-  };
+  // Look up community by stripeSubscriptionId — needed for name/communityType (email) and to
+  // decide which update path to take.
+  // [AGENTS #28] retrieveSubscription called for fresh status + price lookup_key
+  const existing = await db
+    .select({
+      id: communities.id,
+      name: communities.name,
+      communityType: communities.communityType,
+    })
+    .from(communities)
+    .where(eq(communities.stripeSubscriptionId, fresh.id))
+    .limit(1);
 
-  if (fresh.status === 'canceled') {
-    updates['subscriptionCanceledAt'] = now;
+  const community = existing[0];
+  if (!community) return;
+
+  if (fresh.status !== 'canceled') {
+    // Non-canceled path: plain UPDATE by community.id, no atomic guard needed.
+    const updates: Record<string, unknown> = {
+      subscriptionStatus: fresh.status,
+      subscriptionPlan:
+        fresh.items.data[0]?.price.lookup_key ?? fresh.items.data[0]?.price.id ?? null,
+      updatedAt: now,
+    };
+    if (fresh.status === 'past_due') {
+      updates['paymentFailedAt'] = now;
+    }
+    await db
+      .update(communities)
+      .set(updates)
+      .where(eq(communities.id, community.id));
+    return;
   }
-  if (fresh.status === 'past_due') {
-    updates['paymentFailedAt'] = now;
-  }
 
-  await db
-    .update(communities)
-    .set(updates)
-    .where(eq(communities.stripeSubscriptionId, subscription.id));
-}
-
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
-  const db = createUnscopedClient();
-  const now = new Date();
-
-  await db
+  // Canceled path: atomic UPDATE WHERE subscriptionCanceledAt IS NULL RETURNING.
+  // If subscription.updated and subscription.deleted both arrive concurrently (different
+  // event IDs that both pass the idempotency fence), only the first to acquire the row
+  // lock will see subscriptionCanceledAt IS NULL; the loser gets an empty RETURNING and
+  // skips the email — preventing double-send.
+  const rows = await db
     .update(communities)
     .set({
       subscriptionStatus: 'canceled',
       subscriptionCanceledAt: now,
+      subscriptionPlan: null,
+      nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
       updatedAt: now,
     })
-    .where(eq(communities.stripeSubscriptionId, subscription.id));
+    .where(
+      and(
+        eq(communities.id, community.id),
+        isNull(communities.subscriptionCanceledAt),
+      ),
+    )
+    .returning({ id: communities.id });
+
+  if (!rows[0]) return; // already canceled — skip email
+
+  await sendSubscriptionCanceledEmail(community.id, {
+    communityName: community.name,
+    communityType: community.communityType,
+    canceledAt: now,
+  });
+}
+
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+  // [AGENTS #28] Fetch fresh state; [AGENTS #29] guard against out-of-order events.
+  const fresh = await retrieveSubscription(subscription.id);
+  if (fresh.status !== 'canceled') return;
+
+  const db = createUnscopedClient();
+  const now = new Date();
+
+  // Atomic UPDATE: only matches when subscriptionCanceledAt IS NULL.
+  // If two concurrent handlers race (subscription.updated + subscription.deleted on different
+  // event IDs), PostgreSQL's row lock ensures exactly one wins and gets rows back.
+  // The loser gets an empty RETURNING and skips the email — no double-send.
+  const rows = await db
+    .update(communities)
+    .set({
+      subscriptionStatus: 'canceled',
+      subscriptionCanceledAt: now,
+      subscriptionPlan: null,
+      nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(communities.stripeSubscriptionId, subscription.id),
+        isNull(communities.subscriptionCanceledAt),
+      ),
+    )
+    .returning({
+      id: communities.id,
+      name: communities.name,
+      communityType: communities.communityType,
+    });
+
+  const community = rows[0];
+  if (!community) return; // already canceled or community not found
+
+  await sendSubscriptionCanceledEmail(community.id, {
+    communityName: community.name,
+    communityType: community.communityType,
+    canceledAt: now,
+  });
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
-  const customerId =
-    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
-  if (!customerId) return;
-
-  // Fetch fresh state [AGENTS #28]
-  const freshInvoice = await retrieveInvoice(invoice.id);
+  const subscriptionId =
+    typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : (invoice.subscription as { id?: string } | null)?.id;
+  if (!subscriptionId) return;
 
   const db = createUnscopedClient();
   const now = new Date();
@@ -137,12 +219,12 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   const communityRows = await db
     .select()
     .from(communities)
-    .where(eq(communities.stripeCustomerId, customerId))
+    .where(eq(communities.stripeSubscriptionId, subscriptionId))
     .limit(1);
 
   const community = communityRows[0];
   if (!community) {
-    console.warn('[stripe-webhook] invoice.payment_failed: no community for customer', customerId);
+    console.warn('[stripe-webhook] invoice.payment_failed: no community for subscription', subscriptionId);
     return;
   }
 
@@ -156,12 +238,14 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     })
     .where(eq(communities.id, community.id));
 
-  const amountDue = freshInvoice.amount_due
+  const amountDue = invoice.amount_due
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-        freshInvoice.amount_due / 100,
+        invoice.amount_due / 100,
       )
     : 'unknown amount';
 
+  // Intentional: email fires on every Stripe retry (up to 3-4 per billing cycle).
+  // paymentFailedAt and nextReminderAt are preserved from the first failure via ??.
   await sendPaymentFailedEmail(community.id, {
     amountDue,
     lastFourDigits: null,
@@ -170,9 +254,11 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
 }
 
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
-  const customerId =
-    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
-  if (!customerId) return;
+  const subscriptionId =
+    typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : (invoice.subscription as { id?: string } | null)?.id;
+  if (!subscriptionId) return;
 
   const db = createUnscopedClient();
 
@@ -184,7 +270,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
       nextReminderAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(communities.stripeCustomerId, customerId));
+    .where(eq(communities.stripeSubscriptionId, subscriptionId));
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +313,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     console.error('[stripe-webhook] STRIPE_WEBHOOK_SECRET not configured');
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
   }
 
   let event: Stripe.Event;

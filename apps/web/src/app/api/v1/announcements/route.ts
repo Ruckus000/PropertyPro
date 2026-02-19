@@ -31,6 +31,7 @@ import {
   queueAnnouncementDelivery,
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -120,6 +121,7 @@ export const POST = withErrorHandler(
 
       const userId = await requireAuthenticatedUserId();
       await requireCommunityMembership(communityId, userId);
+      await requireActiveSubscriptionForMutation(communityId);
 
       return { userId, communityId };
     },
