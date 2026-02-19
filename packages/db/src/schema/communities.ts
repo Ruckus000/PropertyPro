@@ -21,6 +21,12 @@ export const communities = pgTable('communities', {
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),
   subscriptionStatus: text('subscription_status'),
+  /** P2-34a: When the most recent invoice.payment_failed event was received. Null = no active failure. */
+  paymentFailedAt: timestamp('payment_failed_at', { withTimezone: true }),
+  /** P2-34a: When the next payment reminder email should be sent. Null = no pending reminder. */
+  nextReminderAt: timestamp('next_reminder_at', { withTimezone: true }),
+  /** P2-34a: When the subscription was canceled (start of 30-day grace period). Null = not canceled. */
+  subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -41,6 +41,15 @@ export type {
 export { SignupVerificationEmail } from "./templates/signup-verification-email";
 export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
 
+export { PaymentFailedEmail } from "./templates/payment-failed";
+export type { PaymentFailedEmailProps } from "./templates/payment-failed";
+
+export { SubscriptionCanceledEmail } from "./templates/subscription-canceled";
+export type { SubscriptionCanceledEmailProps } from "./templates/subscription-canceled";
+
+export { SubscriptionExpiryWarningEmail } from "./templates/subscription-expiry-warning";
+export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscription-expiry-warning";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

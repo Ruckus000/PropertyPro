@@ -45,6 +45,22 @@ export const leaseStatusEnum = pgEnum('lease_status', [
   'terminated',
 ]);
 
+/** Maintenance request lifecycle status (P2-36). */
+export const maintenanceStatusEnum = pgEnum('maintenance_status', [
+  'open',
+  'in_progress',
+  'resolved',
+  'closed',
+]);
+
+/** Maintenance request priority level (P2-36). */
+export const maintenancePriorityEnum = pgEnum('maintenance_priority', [
+  'low',
+  'normal',
+  'high',
+  'urgent',
+]);
+
 /** PDF text extraction status for document records. */
 export const extractionStatusEnum = pgEnum('extraction_status', [
   'pending',

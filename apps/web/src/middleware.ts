@@ -38,6 +38,10 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/signup', method: 'GET' },
   { path: '/api/v1/auth/signup', method: 'POST' },
   { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
+  // Stripe webhook: signature-verified by handler, no session required [P2-34]
+  { path: '/api/v1/webhooks/stripe', method: 'POST' },
+  // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
+  { path: '/api/v1/internal/payment-reminders', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

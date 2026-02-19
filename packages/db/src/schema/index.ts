@@ -21,6 +21,7 @@ export * from './invitations';
 export * from './meetings';
 export * from './meeting-documents';
 export * from './leases';
+export * from './maintenance-requests';
 export * from './demo-seed-registry';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ import type { invitations } from './invitations';
 import type { meetings } from './meetings';
 import type { meetingDocuments } from './meeting-documents';
 import type { leases } from './leases';
+import type { maintenanceRequests } from './maintenance-requests';
 import type { demoSeedRegistry } from './demo-seed-registry';
 
 // Communities
@@ -121,6 +123,10 @@ export type NewMeetingDocument = typeof meetingDocuments.$inferInsert;
 // Leases
 export type Lease = typeof leases.$inferSelect;
 export type NewLease = typeof leases.$inferInsert;
+
+// Maintenance Requests
+export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
+export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
 
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;

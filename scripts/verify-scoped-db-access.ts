@@ -30,6 +30,14 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
+  // P2-34: Stripe integration — pre-tenant context, no communityId available
+  resolve(repoRoot, 'apps/web/src/lib/services/stripe-service.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/actions/checkout.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/stripe/route.ts'),
+  // P2-34a: Payment reminders + subscription guard — cross-community cron + mutation guard
+  resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
+  resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {
