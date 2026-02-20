@@ -13,7 +13,8 @@
  * - inviteEmail -> invite
  */
 
-export type WizardStatus = 'in_progress' | 'completed' | 'skipped';
+import type { WizardStatus } from './wizard-common';
+export type { WizardStatus };
 
 export interface ProfileStepData {
   name: string;
@@ -46,11 +47,11 @@ export interface InviteStepData {
   unitNumber: string;
 }
 
-export interface CompletionMarkers {
+export type CompletionMarkers = {
   unitsCreated?: boolean;
   residentCreated?: boolean;
   inviteCreated?: boolean;
-}
+};
 
 export interface WizardStepData {
   profile?: ProfileStepData;

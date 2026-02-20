@@ -107,7 +107,7 @@ async function execSelect(
 async function execInsert(
   database: DbInstance,
   table: PgTable<TableConfig>,
-  data: Record<string, unknown>,
+  data: Record<string, unknown> | Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   const q = (database as unknown as { insert(t: unknown): { values(d: unknown): { returning(): Promise<unknown[]> } } }).insert(table);
   const rows = await q.values(data).returning();
@@ -258,14 +258,24 @@ export function createScopedClient(
 
     async insert(table, data) {
       const columns = getTableColumns(table) as ColumnRecord;
-      const insertData = { ...data };
+      const requiresCommunityId = hasCommunityIdColumn(columns);
 
-      // Auto-inject communityId, overriding any caller-supplied value
-      if (hasCommunityIdColumn(columns)) {
-        insertData['communityId'] = ctx.communityId;
+      if (Array.isArray(data)) {
+        const insertDataArray = data.map(item => {
+          const newItem = { ...item };
+          if (requiresCommunityId) {
+            newItem['communityId'] = ctx.communityId;
+          }
+          return newItem;
+        });
+        return execInsert(database, table, insertDataArray);
+      } else {
+        const insertData = { ...data };
+        if (requiresCommunityId) {
+          insertData['communityId'] = ctx.communityId;
+        }
+        return execInsert(database, table, insertData);
       }
-
-      return execInsert(database, table, insertData);
     },
 
     async update(table, data, additionalWhere?) {
