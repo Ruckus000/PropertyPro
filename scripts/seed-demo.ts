@@ -748,7 +748,7 @@ async function seedCommunityCompliance(communityId: number, communityType: 'cond
   }
 }
 
-async function seedApartmentUnits(communityId: number): Promise<number[]> {
+async function seedApartmentUnits(communityId: number): Promise<{ unitIds: number[]; unitNumbers: string[] }> {
   const unitNumbers = [
     '101', '102', '103', '104', '105', '106',
     '201', '202', '203', '204', '205', '206',
@@ -786,22 +786,20 @@ async function seedApartmentUnits(communityId: number): Promise<number[]> {
     unitIds.push(created!.id);
   }
 
-  return unitIds;
+  return { unitIds, unitNumbers };
 }
 
 async function seedApartmentLeases(
   communityId: number,
   unitIds: number[],
-  tenantUserIds: string[],
+  unitNumbers: string[],
+  context: SeedContext,
 ): Promise<void> {
   const now = new Date();
-  const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   function formatDate(date: Date): string {
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return date.toISOString().split('T')[0]!;
   }
 
   function addDays(date: Date, days: number): Date {
@@ -810,30 +808,57 @@ async function seedApartmentLeases(
     return result;
   }
 
-  const leaseData: Array<{
-    unitId: number;
-    residentId: string;
-    startDate: string;
-    endDate: string;
+  // Declarative lease configuration
+  const leaseConfigs: Array<{
+    unitNumber: string;
+    tenantEmail: string;
     rentAmount: string;
-    status: 'active';
+    leaseStartDays: number;
+    leaseEndDays: number;
   }> = [
-    { unitId: unitIds[0]!, residentId: tenantUserIds[0]!, startDate: formatDate(addDays(today, -365)), endDate: formatDate(addDays(today, 15)), rentAmount: '1250.00', status: 'active' },
-    { unitId: unitIds[1]!, residentId: tenantUserIds[1]!, startDate: formatDate(addDays(today, -200)), endDate: formatDate(addDays(today, 25)), rentAmount: '1300.00', status: 'active' },
-    { unitId: unitIds[2]!, residentId: tenantUserIds[2]!, startDate: formatDate(addDays(today, -180)), endDate: formatDate(addDays(today, 45)), rentAmount: '1275.00', status: 'active' },
-    { unitId: unitIds[3]!, residentId: tenantUserIds[3]!, startDate: formatDate(addDays(today, -150)), endDate: formatDate(addDays(today, 50)), rentAmount: '1350.00', status: 'active' },
-    { unitId: unitIds[4]!, residentId: tenantUserIds[4]!, startDate: formatDate(addDays(today, -120)), endDate: formatDate(addDays(today, 70)), rentAmount: '1200.00', status: 'active' },
-    { unitId: unitIds[5]!, residentId: tenantUserIds[5]!, startDate: formatDate(addDays(today, -90)), endDate: formatDate(addDays(today, 75)), rentAmount: '1400.00', status: 'active' },
-    { unitId: unitIds[6]!, residentId: tenantUserIds[6]!, startDate: formatDate(addDays(today, -60)), endDate: formatDate(addDays(today, 90)), rentAmount: '1325.00', status: 'active' },
-    { unitId: unitIds[7]!, residentId: tenantUserIds[7]!, startDate: formatDate(addDays(today, -45)), endDate: formatDate(addDays(today, 105)), rentAmount: '1375.00', status: 'active' },
-    { unitId: unitIds[8]!, residentId: tenantUserIds[8]!, startDate: formatDate(addDays(today, -30)), endDate: formatDate(addDays(today, 120)), rentAmount: '1225.00', status: 'active' },
-    { unitId: unitIds[9]!, residentId: tenantUserIds[9]!, startDate: formatDate(addDays(today, -15)), endDate: formatDate(addDays(today, 135)), rentAmount: '1450.00', status: 'active' },
-    { unitId: unitIds[10]!, residentId: tenantUserIds[10]!, startDate: formatDate(addDays(today, -300)), endDate: formatDate(addDays(today, 150)), rentAmount: '1500.00', status: 'active' },
-    { unitId: unitIds[11]!, residentId: tenantUserIds[11]!, startDate: formatDate(addDays(today, -250)), endDate: formatDate(addDays(today, 160)), rentAmount: '1425.00', status: 'active' },
-    { unitId: unitIds[12]!, residentId: tenantUserIds[12]!, startDate: formatDate(addDays(today, -220)), endDate: formatDate(addDays(today, 165)), rentAmount: '1475.00', status: 'active' },
-    { unitId: unitIds[13]!, residentId: tenantUserIds[13]!, startDate: formatDate(addDays(today, -190)), endDate: formatDate(addDays(today, 170)), rentAmount: '1550.00', status: 'active' },
-    { unitId: unitIds[14]!, residentId: tenantUserIds[14]!, startDate: formatDate(addDays(today, -160)), endDate: formatDate(addDays(today, 180)), rentAmount: '1600.00', status: 'active' },
+    { unitNumber: '101', tenantEmail: 'tenant.apt101@sunsetridge.local', rentAmount: '1250.00', leaseStartDays: -365, leaseEndDays: 15 },
+    { unitNumber: '102', tenantEmail: 'tenant.apt102@sunsetridge.local', rentAmount: '1300.00', leaseStartDays: -200, leaseEndDays: 25 },
+    { unitNumber: '201', tenantEmail: 'tenant.apt201@sunsetridge.local', rentAmount: '1275.00', leaseStartDays: -180, leaseEndDays: 45 },
+    { unitNumber: '202', tenantEmail: 'tenant.apt202@sunsetridge.local', rentAmount: '1350.00', leaseStartDays: -150, leaseEndDays: 50 },
+    { unitNumber: '301', tenantEmail: 'tenant.apt301@sunsetridge.local', rentAmount: '1200.00', leaseStartDays: -120, leaseEndDays: 70 },
+    { unitNumber: '302', tenantEmail: 'tenant.apt302@sunsetridge.local', rentAmount: '1400.00', leaseStartDays: -90, leaseEndDays: 75 },
+    { unitNumber: '103', tenantEmail: 'tenant.apt103@sunsetridge.local', rentAmount: '1325.00', leaseStartDays: -60, leaseEndDays: 90 },
+    { unitNumber: '104', tenantEmail: 'tenant.apt104@sunsetridge.local', rentAmount: '1375.00', leaseStartDays: -45, leaseEndDays: 105 },
+    { unitNumber: '105', tenantEmail: 'tenant.apt105@sunsetridge.local', rentAmount: '1225.00', leaseStartDays: -30, leaseEndDays: 120 },
+    { unitNumber: '106', tenantEmail: 'tenant.apt106@sunsetridge.local', rentAmount: '1450.00', leaseStartDays: -15, leaseEndDays: 135 },
+    { unitNumber: '203', tenantEmail: 'tenant.apt203@sunsetridge.local', rentAmount: '1500.00', leaseStartDays: -300, leaseEndDays: 150 },
+    { unitNumber: '204', tenantEmail: 'tenant.apt204@sunsetridge.local', rentAmount: '1425.00', leaseStartDays: -250, leaseEndDays: 160 },
+    { unitNumber: '205', tenantEmail: 'tenant.apt205@sunsetridge.local', rentAmount: '1475.00', leaseStartDays: -220, leaseEndDays: 165 },
+    { unitNumber: '206', tenantEmail: 'tenant.apt206@sunsetridge.local', rentAmount: '1550.00', leaseStartDays: -190, leaseEndDays: 170 },
+    { unitNumber: '303', tenantEmail: 'tenant.apt303@sunsetridge.local', rentAmount: '1600.00', leaseStartDays: -160, leaseEndDays: 180 },
   ];
+
+  // Map configs to lease data with validation
+  const leaseData = leaseConfigs.map(config => {
+    const unitIndex = unitNumbers.indexOf(config.unitNumber);
+    if (unitIndex === -1) {
+      throw new Error(`Unit ${config.unitNumber} not found in seeded units`);
+    }
+
+    const unitId = unitIds[unitIndex];
+    const residentId = context.userIdsByEmail[config.tenantEmail];
+
+    if (!unitId) {
+      throw new Error(`Unit ID missing for unit ${config.unitNumber} at index ${unitIndex}`);
+    }
+    if (!residentId) {
+      throw new Error(`Tenant user ID missing for ${config.tenantEmail}`);
+    }
+
+    return {
+      unitId,
+      residentId,
+      startDate: formatDate(addDays(today, config.leaseStartDays)),
+      endDate: formatDate(addDays(today, config.leaseEndDays)),
+      rentAmount: config.rentAmount,
+      status: 'active' as const,
+    };
+  });
 
   for (const lease of leaseData) {
     const existing = await db
@@ -879,27 +904,57 @@ async function seedApartmentLeases(
 async function seedApartmentMaintenanceRequests(
   communityId: number,
   unitIds: number[],
-  submitterIds: string[],
+  unitNumbers: string[],
+  context: SeedContext,
 ): Promise<void> {
-  const requestData: Array<{
+  // Declarative maintenance request configuration
+  const requestConfigs: Array<{
     seedKey: string;
-    unitId: number;
-    submittedById: string;
+    unitNumber: string;
+    submitterEmail: string;
     title: string;
     description: string;
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
     priority: 'low' | 'normal' | 'high' | 'urgent';
   }> = [
-    { seedKey: 'apt-maint-1', unitId: unitIds[0]!, submittedById: submitterIds[0]!, title: 'Leaking faucet in kitchen', description: 'Kitchen sink faucet is dripping continuously.', status: 'open', priority: 'normal' },
-    { seedKey: 'apt-maint-2', unitId: unitIds[1]!, submittedById: submitterIds[1]!, title: 'AC not cooling properly', description: 'Air conditioner is running but not cooling the unit.', status: 'in_progress', priority: 'high' },
-    { seedKey: 'apt-maint-3', unitId: unitIds[2]!, submittedById: submitterIds[2]!, title: 'Broken window latch', description: 'Bedroom window latch is broken and won\'t close securely.', status: 'open', priority: 'normal' },
-    { seedKey: 'apt-maint-4', unitId: unitIds[3]!, submittedById: submitterIds[3]!, title: 'Dishwasher not draining', description: 'Dishwasher leaves standing water after cycle.', status: 'resolved', priority: 'normal' },
-    { seedKey: 'apt-maint-5', unitId: unitIds[4]!, submittedById: submitterIds[4]!, title: 'Light fixture flickering', description: 'Living room ceiling light flickers intermittently.', status: 'in_progress', priority: 'low' },
-    { seedKey: 'apt-maint-6', unitId: unitIds[5]!, submittedById: submitterIds[5]!, title: 'Garbage disposal jammed', description: 'Garbage disposal is stuck and making grinding noise.', status: 'open', priority: 'normal' },
-    { seedKey: 'apt-maint-7', unitId: unitIds[6]!, submittedById: submitterIds[6]!, title: 'Water heater issue', description: 'Hot water runs out very quickly.', status: 'in_progress', priority: 'high' },
-    { seedKey: 'apt-maint-8', unitId: unitIds[7]!, submittedById: submitterIds[7]!, title: 'Carpet stain removal', description: 'Need professional carpet cleaning for bedroom.', status: 'closed', priority: 'low' },
-    { seedKey: 'apt-maint-9', unitId: unitIds[8]!, submittedById: submitterIds[8]!, title: 'Door lock sticking', description: 'Front door lock is difficult to turn.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-1', unitNumber: '101', submitterEmail: 'tenant.apt101@sunsetridge.local', title: 'Leaking faucet in kitchen', description: 'Kitchen sink faucet is dripping continuously.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-2', unitNumber: '102', submitterEmail: 'tenant.apt102@sunsetridge.local', title: 'AC not cooling properly', description: 'Air conditioner is running but not cooling the unit.', status: 'in_progress', priority: 'high' },
+    { seedKey: 'apt-maint-3', unitNumber: '201', submitterEmail: 'tenant.apt201@sunsetridge.local', title: 'Broken window latch', description: 'Bedroom window latch is broken and won\'t close securely.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-4', unitNumber: '202', submitterEmail: 'tenant.apt202@sunsetridge.local', title: 'Dishwasher not draining', description: 'Dishwasher leaves standing water after cycle.', status: 'resolved', priority: 'normal' },
+    { seedKey: 'apt-maint-5', unitNumber: '301', submitterEmail: 'tenant.apt301@sunsetridge.local', title: 'Light fixture flickering', description: 'Living room ceiling light flickers intermittently.', status: 'in_progress', priority: 'low' },
+    { seedKey: 'apt-maint-6', unitNumber: '302', submitterEmail: 'tenant.apt302@sunsetridge.local', title: 'Garbage disposal jammed', description: 'Garbage disposal is stuck and making grinding noise.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-7', unitNumber: '103', submitterEmail: 'tenant.apt103@sunsetridge.local', title: 'Water heater issue', description: 'Hot water runs out very quickly.', status: 'in_progress', priority: 'high' },
+    { seedKey: 'apt-maint-8', unitNumber: '104', submitterEmail: 'tenant.apt104@sunsetridge.local', title: 'Carpet stain removal', description: 'Need professional carpet cleaning for bedroom.', status: 'closed', priority: 'low' },
+    { seedKey: 'apt-maint-9', unitNumber: '105', submitterEmail: 'tenant.apt105@sunsetridge.local', title: 'Door lock sticking', description: 'Front door lock is difficult to turn.', status: 'open', priority: 'normal' },
   ];
+
+  // Map configs to request data with validation
+  const requestData = requestConfigs.map(config => {
+    const unitIndex = unitNumbers.indexOf(config.unitNumber);
+    if (unitIndex === -1) {
+      throw new Error(`Unit ${config.unitNumber} not found in seeded units`);
+    }
+
+    const unitId = unitIds[unitIndex];
+    const submittedById = context.userIdsByEmail[config.submitterEmail];
+
+    if (!unitId) {
+      throw new Error(`Unit ID missing for unit ${config.unitNumber} at index ${unitIndex}`);
+    }
+    if (!submittedById) {
+      throw new Error(`Submitter user ID missing for ${config.submitterEmail}`);
+    }
+
+    return {
+      seedKey: config.seedKey,
+      unitId,
+      submittedById,
+      title: config.title,
+      description: config.description,
+      status: config.status,
+      priority: config.priority,
+    };
+  });
 
   for (const request of requestData) {
     const registryEntityId = await lookupRegistry('maintenance_request', request.seedKey);
@@ -976,7 +1031,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   }
 
   if (apartmentTenantIds.length < 15) {
-    throw new Error('Missing required apartment tenant users');
+    throw new Error(`Missing required apartment tenant users. Expected 15, got ${apartmentTenantIds.length}`);
   }
 
   await db
@@ -999,7 +1054,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     { communityId: palmCommunityId, userId: tenantId, role: 'tenant' },
     { communityId: palmCommunityId, userId: camId, role: 'cam' },
     { communityId: palmCommunityId, userId: pmAdminId, role: 'property_manager_admin' },
-    { communityId: sunsetRidgeCommunityId, userId: tenantId, role: 'tenant' },
+    { communityId: sunsetRidgeCommunityId, userId: apartmentTenantIds[0]!, role: 'tenant' },
     { communityId: sunsetRidgeCommunityId, userId: siteManagerId, role: 'site_manager' },
     { communityId: sunsetRidgeCommunityId, userId: pmAdminId, role: 'property_manager_admin' },
   ]);
@@ -1176,13 +1231,12 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   await seedCommunityCompliance(sunsetRidgeCommunityId, 'apartment');
   debugSeed('sunset ridge compliance seeded');
 
-  const apartmentUnitIds = await seedApartmentUnits(sunsetRidgeCommunityId);
+  const { unitIds: apartmentUnitIds, unitNumbers: apartmentUnitNumbers } = await seedApartmentUnits(sunsetRidgeCommunityId);
   debugSeed('apartment units seeded');
 
-  await seedApartmentLeases(sunsetRidgeCommunityId, apartmentUnitIds, apartmentTenantIds);
+  await seedApartmentLeases(sunsetRidgeCommunityId, apartmentUnitIds, apartmentUnitNumbers, context);
 
-  const maintenanceSubmitterIds = [...apartmentTenantIds.slice(0, 9)];
-  await seedApartmentMaintenanceRequests(sunsetRidgeCommunityId, apartmentUnitIds, maintenanceSubmitterIds);
+  await seedApartmentMaintenanceRequests(sunsetRidgeCommunityId, apartmentUnitIds, apartmentUnitNumbers, context);
 
   for (const tenantId of apartmentTenantIds) {
     await seedRoles([
