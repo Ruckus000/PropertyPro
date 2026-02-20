@@ -1,8 +1,8 @@
 # Phase 2 Execution Plan - Multi-Tenancy, Billing, and Onboarding
 
-**Date:** 2026-02-17  
-**Author:** PropertyPro Engineering  
-**Status:** In progress on `main` (13/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)
+**Date:** 2026-02-20
+**Author:** PropertyPro Engineering
+**Status:** In progress on `main` (14/16 base Phase 2 tasks complete; mandatory pre-batch hardening complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -30,10 +30,11 @@ Milestones:
 - [2026-02-19] Pre-push audit (`17dbfb9`): corrected `stripeEventId` to store `event.id` (not `session.id`); added hard throw on missing `NEXT_PUBLIC_APP_URL`; removed dead sibling idempotency query (unreachable due to unique index); updated test selectSequences. 985 tests pass.
 - [2026-02-19] `P2-36` Apartment operational dashboard completed (prior session).
 - [2026-02-20] Integration test suite unblocked: fixed `@propertypro/shared` module exports (added `"default"` condition), reconciled `maintenance_requests` migration state in database (inserted missing journal record as migration ID 13). Full integration preflight now passes: 102 tests (31 db + 71 web), `pnpm seed:demo` and `pnpm seed:verify` both operational.
+- [2026-02-20] `P2-38` Apartment Onboarding Wizard remediation completed and merged to `main` (commit `7a81f56`). Restored 4-step wizard flow (Profile → Units → Rules → Invite), added timezone field with IANA validation, implemented duplicate unit number validation (client + server), enforced `hasLeaseTracking` feature gate at API layer, created canonical type system with legacy normalizers (`unitsTable` → `units`, `inviteEmail` → `invite`), implemented conflict-safe wizard initialization, and added comprehensive test coverage. Verification passed: 999 tests, `pnpm build`, `pnpm typecheck`, `pnpm lint` all green.
 
 Current cursor:
-- Run remaining implementation chain: `P2-38` -> `P2-39`.
-- Apartment track: `P2-44` (depends on `P2-36`, `P2-37`, `P1-29`), then `P2-38`.
+- Run remaining implementation chain: `P2-39` (Condo Onboarding Wizard) -> `P2-44` (Apartment Demo Seed).
+- Apartment onboarding track is now complete.
 
 Cross-phase merge guard:
 - Any feature branch more than 20 commits behind `origin/main` is non-mergeable until rebased/recreated.
@@ -133,17 +134,17 @@ Completed base Phase 2 tasks on `main`:
 - `P2-35` Provisioning Pipeline
 - `P2-36` Apartment Operational Dashboard
 - `P2-37` Lease Tracking
+- `P2-38` Apartment Onboarding Wizard
 - `P2-40` Community Features Config
 - `P2-41` Email Notifications
 - `P2-42` Rate Limiting
 - `P2-43` Multi-Tenant Isolation Tests
 
 Remaining base implementation tasks:
-- `P2-38` Apartment Onboarding Wizard
 - `P2-39` Condo Onboarding Wizard
 - `P2-44` Apartment Demo Seed
 
-Count check: 13 completed + 3 remaining = 16 base tasks.
+Count check: 14 completed + 2 remaining = 16 base tasks.
 Open non-denominator subtask scope: `P2-34a` (complete).
 
 Remaining mandatory hardening tasks:
