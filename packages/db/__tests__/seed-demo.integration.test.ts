@@ -9,14 +9,17 @@ import {
   demoSeedRegistry,
   documentCategories,
   documents,
+  leases,
+  maintenanceRequests,
   meetings,
   complianceChecklistItems,
+  units,
 } from '../src/schema';
 import { runDemoSeed } from '../../../scripts/seed-demo';
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'bay-view-apartments'] as const;
+const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
 describeDb('demo seed integration', () => {
   let sql: ReturnType<typeof postgres>;
@@ -60,7 +63,7 @@ describeDb('demo seed integration', () => {
 
     const sunset = seededCommunities.find((row) => row.slug === 'sunset-condos');
     const palm = seededCommunities.find((row) => row.slug === 'palm-shores-hoa');
-    const bay = seededCommunities.find((row) => row.slug === 'bay-view-apartments');
+    const bay = seededCommunities.find((row) => row.slug === 'sunset-ridge-apartments');
     expect(sunset).toBeDefined();
     expect(palm).toBeDefined();
     expect(bay).toBeDefined();
@@ -138,7 +141,7 @@ describeDb('demo seed integration', () => {
 
     const sunset = seededCommunities.find((row) => row.slug === 'sunset-condos');
     const palm = seededCommunities.find((row) => row.slug === 'palm-shores-hoa');
-    const bay = seededCommunities.find((row) => row.slug === 'bay-view-apartments');
+    const bay = seededCommunities.find((row) => row.slug === 'sunset-ridge-apartments');
 
     // sunset-condos (condo_718): expect exactly 5 system categories
     const sunsetCategories = await db
@@ -160,7 +163,7 @@ describeDb('demo seed integration', () => {
       ));
     expect(palmCategories).toHaveLength(5);
 
-    // bay-view-apartments (apartment): expect exactly 6 system categories
+    // sunset-ridge-apartments (apartment): expect exactly 6 system categories
     const bayCategories = await db
       .select()
       .from(documentCategories)
@@ -202,5 +205,77 @@ describeDb('demo seed integration', () => {
         .where(eq(documents.communityId, community.id));
       expect(docs.length).toBeGreaterThanOrEqual(1);
     }
+  }, 30_000);
+
+  it('apartment demo has 20+ units, 15+ active leases, 8+ maintenance requests, 5+ announcements', async () => {
+    const seededCommunities = await db
+      .select()
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+
+    const sunsetRidge = seededCommunities.find((row) => row.slug === 'sunset-ridge-apartments');
+    expect(sunsetRidge).toBeDefined();
+
+    const apartmentUnits = await db
+      .select()
+      .from(units)
+      .where(eq(units.communityId, sunsetRidge!.id));
+    expect(apartmentUnits.length).toBeGreaterThanOrEqual(20);
+
+    const activeLeases = await db
+      .select()
+      .from(leases)
+      .where(
+        and(
+          eq(leases.communityId, sunsetRidge!.id),
+          eq(leases.status, 'active'),
+          isNull(leases.deletedAt),
+        ),
+      );
+    expect(activeLeases.length).toBeGreaterThanOrEqual(15);
+
+    const maintenanceReqs = await db
+      .select()
+      .from(maintenanceRequests)
+      .where(
+        and(
+          eq(maintenanceRequests.communityId, sunsetRidge!.id),
+          isNull(maintenanceRequests.deletedAt),
+        ),
+      );
+    expect(maintenanceReqs.length).toBeGreaterThanOrEqual(8);
+
+    const statusCounts = maintenanceReqs.reduce<Record<string, number>>((acc, req) => {
+      acc[req.status] = (acc[req.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    const distinctStatuses = Object.keys(statusCounts);
+    expect(distinctStatuses.length).toBeGreaterThanOrEqual(2);
+
+    const apartmentAnnouncements = await db
+      .select()
+      .from(announcements)
+      .where(
+        and(
+          eq(announcements.communityId, sunsetRidge!.id),
+          isNull(announcements.archivedAt),
+        ),
+      );
+    expect(apartmentAnnouncements.length).toBeGreaterThanOrEqual(5);
+
+    const leaseEndDates = activeLeases
+      .filter((l) => l.endDate != null)
+      .map((l) => new Date(l.endDate! + 'T00:00:00Z').getTime());
+    const now = Date.now();
+    const in30Days = now + 30 * 24 * 60 * 60 * 1000;
+    const in60Days = now + 60 * 24 * 60 * 60 * 1000;
+    const in90Days = now + 90 * 24 * 60 * 60 * 1000;
+    const within30 = leaseEndDates.filter((d) => d >= now && d <= in30Days).length;
+    const within60 = leaseEndDates.filter((d) => d >= now && d <= in60Days).length;
+    const within90 = leaseEndDates.filter((d) => d >= now && d <= in90Days).length;
+
+    expect(within30).toBeGreaterThanOrEqual(1);
+    expect(within60).toBeGreaterThanOrEqual(1);
+    expect(within90).toBeGreaterThanOrEqual(1);
   }, 30_000);
 });

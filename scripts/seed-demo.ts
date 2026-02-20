@@ -8,6 +8,8 @@ import {
   demoSeedRegistry,
   documentCategories,
   documents,
+  leases,
+  maintenanceRequests,
   meetingDocuments,
   meetings,
   notificationPreferences,
@@ -746,11 +748,200 @@ async function seedCommunityCompliance(communityId: number, communityType: 'cond
   }
 }
 
+async function seedApartmentUnits(communityId: number): Promise<number[]> {
+  const unitNumbers = [
+    '101', '102', '103', '104', '105', '106',
+    '201', '202', '203', '204', '205', '206',
+    '301', '302', '303', '304', '305', '306',
+    '401', '402', '403', '404',
+  ];
+
+  const unitIds: number[] = [];
+
+  for (const unitNumber of unitNumbers) {
+    const existing = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(
+        and(
+          eq(units.communityId, communityId),
+          eq(units.unitNumber, unitNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      unitIds.push(existing[0].id);
+      continue;
+    }
+
+    const [created] = await db
+      .insert(units)
+      .values({
+        communityId,
+        unitNumber,
+      })
+      .returning({ id: units.id });
+
+    unitIds.push(created!.id);
+  }
+
+  return unitIds;
+}
+
+async function seedApartmentLeases(
+  communityId: number,
+  unitIds: number[],
+  tenantUserIds: string[],
+): Promise<void> {
+  const now = new Date();
+  const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+  function formatDate(date: Date): string {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function addDays(date: Date, days: number): Date {
+    const result = new Date(date);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result;
+  }
+
+  const leaseData: Array<{
+    unitId: number;
+    residentId: string;
+    startDate: string;
+    endDate: string;
+    rentAmount: string;
+    status: 'active';
+  }> = [
+    { unitId: unitIds[0]!, residentId: tenantUserIds[0]!, startDate: formatDate(addDays(today, -365)), endDate: formatDate(addDays(today, 15)), rentAmount: '1250.00', status: 'active' },
+    { unitId: unitIds[1]!, residentId: tenantUserIds[1]!, startDate: formatDate(addDays(today, -200)), endDate: formatDate(addDays(today, 25)), rentAmount: '1300.00', status: 'active' },
+    { unitId: unitIds[2]!, residentId: tenantUserIds[2]!, startDate: formatDate(addDays(today, -180)), endDate: formatDate(addDays(today, 45)), rentAmount: '1275.00', status: 'active' },
+    { unitId: unitIds[3]!, residentId: tenantUserIds[3]!, startDate: formatDate(addDays(today, -150)), endDate: formatDate(addDays(today, 50)), rentAmount: '1350.00', status: 'active' },
+    { unitId: unitIds[4]!, residentId: tenantUserIds[4]!, startDate: formatDate(addDays(today, -120)), endDate: formatDate(addDays(today, 70)), rentAmount: '1200.00', status: 'active' },
+    { unitId: unitIds[5]!, residentId: tenantUserIds[5]!, startDate: formatDate(addDays(today, -90)), endDate: formatDate(addDays(today, 75)), rentAmount: '1400.00', status: 'active' },
+    { unitId: unitIds[6]!, residentId: tenantUserIds[6]!, startDate: formatDate(addDays(today, -60)), endDate: formatDate(addDays(today, 90)), rentAmount: '1325.00', status: 'active' },
+    { unitId: unitIds[7]!, residentId: tenantUserIds[7]!, startDate: formatDate(addDays(today, -45)), endDate: formatDate(addDays(today, 105)), rentAmount: '1375.00', status: 'active' },
+    { unitId: unitIds[8]!, residentId: tenantUserIds[8]!, startDate: formatDate(addDays(today, -30)), endDate: formatDate(addDays(today, 120)), rentAmount: '1225.00', status: 'active' },
+    { unitId: unitIds[9]!, residentId: tenantUserIds[9]!, startDate: formatDate(addDays(today, -15)), endDate: formatDate(addDays(today, 135)), rentAmount: '1450.00', status: 'active' },
+    { unitId: unitIds[10]!, residentId: tenantUserIds[10]!, startDate: formatDate(addDays(today, -300)), endDate: formatDate(addDays(today, 150)), rentAmount: '1500.00', status: 'active' },
+    { unitId: unitIds[11]!, residentId: tenantUserIds[11]!, startDate: formatDate(addDays(today, -250)), endDate: formatDate(addDays(today, 160)), rentAmount: '1425.00', status: 'active' },
+    { unitId: unitIds[12]!, residentId: tenantUserIds[12]!, startDate: formatDate(addDays(today, -220)), endDate: formatDate(addDays(today, 165)), rentAmount: '1475.00', status: 'active' },
+    { unitId: unitIds[13]!, residentId: tenantUserIds[13]!, startDate: formatDate(addDays(today, -190)), endDate: formatDate(addDays(today, 170)), rentAmount: '1550.00', status: 'active' },
+    { unitId: unitIds[14]!, residentId: tenantUserIds[14]!, startDate: formatDate(addDays(today, -160)), endDate: formatDate(addDays(today, 180)), rentAmount: '1600.00', status: 'active' },
+  ];
+
+  for (const lease of leaseData) {
+    const existing = await db
+      .select({ id: leases.id })
+      .from(leases)
+      .where(
+        and(
+          eq(leases.communityId, communityId),
+          eq(leases.unitId, lease.unitId),
+          eq(leases.residentId, lease.residentId),
+        ),
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      await db
+        .update(leases)
+        .set({
+          startDate: lease.startDate,
+          endDate: lease.endDate,
+          rentAmount: lease.rentAmount,
+          status: lease.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(leases.id, existing[0].id));
+      continue;
+    }
+
+    await db.insert(leases).values({
+      communityId,
+      unitId: lease.unitId,
+      residentId: lease.residentId,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+      rentAmount: lease.rentAmount,
+      status: lease.status,
+    });
+  }
+
+  debugSeed('apartment leases seeded');
+}
+
+async function seedApartmentMaintenanceRequests(
+  communityId: number,
+  unitIds: number[],
+  submitterIds: string[],
+): Promise<void> {
+  const requestData: Array<{
+    seedKey: string;
+    unitId: number;
+    submittedById: string;
+    title: string;
+    description: string;
+    status: 'open' | 'in_progress' | 'resolved' | 'closed';
+    priority: 'low' | 'normal' | 'high' | 'urgent';
+  }> = [
+    { seedKey: 'apt-maint-1', unitId: unitIds[0]!, submittedById: submitterIds[0]!, title: 'Leaking faucet in kitchen', description: 'Kitchen sink faucet is dripping continuously.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-2', unitId: unitIds[1]!, submittedById: submitterIds[1]!, title: 'AC not cooling properly', description: 'Air conditioner is running but not cooling the unit.', status: 'in_progress', priority: 'high' },
+    { seedKey: 'apt-maint-3', unitId: unitIds[2]!, submittedById: submitterIds[2]!, title: 'Broken window latch', description: 'Bedroom window latch is broken and won\'t close securely.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-4', unitId: unitIds[3]!, submittedById: submitterIds[3]!, title: 'Dishwasher not draining', description: 'Dishwasher leaves standing water after cycle.', status: 'resolved', priority: 'normal' },
+    { seedKey: 'apt-maint-5', unitId: unitIds[4]!, submittedById: submitterIds[4]!, title: 'Light fixture flickering', description: 'Living room ceiling light flickers intermittently.', status: 'in_progress', priority: 'low' },
+    { seedKey: 'apt-maint-6', unitId: unitIds[5]!, submittedById: submitterIds[5]!, title: 'Garbage disposal jammed', description: 'Garbage disposal is stuck and making grinding noise.', status: 'open', priority: 'normal' },
+    { seedKey: 'apt-maint-7', unitId: unitIds[6]!, submittedById: submitterIds[6]!, title: 'Water heater issue', description: 'Hot water runs out very quickly.', status: 'in_progress', priority: 'high' },
+    { seedKey: 'apt-maint-8', unitId: unitIds[7]!, submittedById: submitterIds[7]!, title: 'Carpet stain removal', description: 'Need professional carpet cleaning for bedroom.', status: 'closed', priority: 'low' },
+    { seedKey: 'apt-maint-9', unitId: unitIds[8]!, submittedById: submitterIds[8]!, title: 'Door lock sticking', description: 'Front door lock is difficult to turn.', status: 'open', priority: 'normal' },
+  ];
+
+  for (const request of requestData) {
+    const registryEntityId = await lookupRegistry('maintenance_request', request.seedKey);
+    if (registryEntityId) {
+      const id = Number(registryEntityId);
+      await db
+        .update(maintenanceRequests)
+        .set({
+          title: request.title,
+          description: request.description,
+          status: request.status,
+          priority: request.priority,
+          updatedAt: new Date(),
+        })
+        .where(eq(maintenanceRequests.id, id));
+      continue;
+    }
+
+    const [created] = await db
+      .insert(maintenanceRequests)
+      .values({
+        communityId,
+        unitId: request.unitId,
+        submittedById: request.submittedById,
+        title: request.title,
+        description: request.description,
+        status: request.status,
+        priority: request.priority,
+      })
+      .returning({ id: maintenanceRequests.id });
+
+    await upsertRegistryEntry('maintenance_request', request.seedKey, String(created!.id), communityId);
+  }
+
+  debugSeed('apartment maintenance requests seeded');
+}
+
 async function seedCoreEntities(context: SeedContext): Promise<void> {
   const sunsetCommunityId = context.communityIds['sunset-condos'];
   const palmCommunityId = context.communityIds['palm-shores-hoa'];
-  const bayCommunityId = context.communityIds['bay-view-apartments'];
-  if (!sunsetCommunityId || !palmCommunityId || !bayCommunityId) {
+  const sunsetRidgeCommunityId = context.communityIds['sunset-ridge-apartments'];
+  if (!sunsetCommunityId || !palmCommunityId || !sunsetRidgeCommunityId) {
     throw new Error('Missing seeded community IDs');
   }
 
@@ -760,10 +951,32 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   const tenantId = context.userIdsByEmail['tenant.one@sunset.local'];
   const camId = context.userIdsByEmail['cam.one@sunset.local'];
   const pmAdminId = context.userIdsByEmail['pm.admin@sunset.local'];
-  const siteManagerId = context.userIdsByEmail['site.manager@bayview.local'];
+  const siteManagerId = context.userIdsByEmail['site.manager@sunsetridge.local'];
+
+  const apartmentTenantIds = [
+    context.userIdsByEmail['tenant.apt101@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt102@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt201@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt202@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt301@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt302@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt103@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt104@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt105@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt106@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt203@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt204@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt205@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt206@sunsetridge.local'],
+    context.userIdsByEmail['tenant.apt303@sunsetridge.local'],
+  ].filter((id): id is string => id != null);
 
   if (!boardPresidentId || !boardMemberId || !ownerId || !tenantId || !camId || !pmAdminId || !siteManagerId) {
     throw new Error('Missing required seeded users');
+  }
+
+  if (apartmentTenantIds.length < 15) {
+    throw new Error('Missing required apartment tenant users');
   }
 
   await db
@@ -786,13 +999,13 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     { communityId: palmCommunityId, userId: tenantId, role: 'tenant' },
     { communityId: palmCommunityId, userId: camId, role: 'cam' },
     { communityId: palmCommunityId, userId: pmAdminId, role: 'property_manager_admin' },
-    { communityId: bayCommunityId, userId: tenantId, role: 'tenant' },
-    { communityId: bayCommunityId, userId: siteManagerId, role: 'site_manager' },
-    { communityId: bayCommunityId, userId: pmAdminId, role: 'property_manager_admin' },
+    { communityId: sunsetRidgeCommunityId, userId: tenantId, role: 'tenant' },
+    { communityId: sunsetRidgeCommunityId, userId: siteManagerId, role: 'site_manager' },
+    { communityId: sunsetRidgeCommunityId, userId: pmAdminId, role: 'property_manager_admin' },
   ]);
   debugSeed('roles seeded');
 
-  for (const communityId of [sunsetCommunityId, palmCommunityId, bayCommunityId]) {
+  for (const communityId of [sunsetCommunityId, palmCommunityId, sunsetRidgeCommunityId]) {
     for (const userId of [boardPresidentId, boardMemberId, ownerId, tenantId, camId, pmAdminId, siteManagerId]) {
       await ensureNotificationPreference(communityId, userId);
     }
@@ -801,7 +1014,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
 
   const sunsetCategories = await seedDocumentCategories(sunsetCommunityId, 'condo_718');
   const palmCategories = await seedDocumentCategories(palmCommunityId, 'hoa_720');
-  const bayCategories = await seedDocumentCategories(bayCommunityId, 'apartment');
+  const sunsetRidgeCategories = await seedDocumentCategories(sunsetRidgeCommunityId, 'apartment');
   debugSeed('document categories seeded');
 
   const sunsetDoc = await seedRegistryDocument(
@@ -820,14 +1033,24 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     'annual budget financial report',
     palmCategories.rules ?? null,
   );
-  const bayDoc = await seedRegistryDocument(
-    bayCommunityId,
-    'bay-doc-lease-rules',
-    'Bay View Resident Rules',
-    'bay-rules.pdf',
-    'resident handbook lease rules',
-    bayCategories.rules ?? null,
+
+  await seedRegistryDocument(
+    sunsetRidgeCommunityId,
+    'sunsetridge-doc-community-rules',
+    'Community Rules',
+    'sunsetridge-rules.pdf',
+    'resident community rules and policies',
+    sunsetRidgeCategories.rules ?? null,
   );
+  const moveInDoc = await seedRegistryDocument(
+    sunsetRidgeCommunityId,
+    'sunsetridge-doc-move-in',
+    'Move-In Instructions',
+    'sunsetridge-move-in.pdf',
+    'move-in procedures and checklist',
+    sunsetRidgeCategories.move_in_out_docs ?? null,
+  );
+  const sunsetRidgeDoc = moveInDoc;
 
   const now = Date.now();
   const sunsetMeeting = await seedRegistryMeeting(
@@ -846,13 +1069,13 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     new Date(now + 21 * 24 * 60 * 60 * 1000),
     'Palm Community Hall',
   );
-  const bayMeeting = await seedRegistryMeeting(
-    bayCommunityId,
-    'bay-meeting-ops-upcoming',
-    'Bay Operations Briefing',
+  const sunsetRidgeMeeting = await seedRegistryMeeting(
+    sunsetRidgeCommunityId,
+    'sunsetridge-meeting-ops-upcoming',
+    'Sunset Ridge Operations Briefing',
     'committee',
     new Date(now + 10 * 24 * 60 * 60 * 1000),
-    'Bay Leasing Office',
+    'Sunset Ridge Leasing Office',
   );
 
   await seedRegistryAnnouncement(
@@ -873,18 +1096,50 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
     boardPresidentId,
   );
   await seedRegistryAnnouncement(
-    bayCommunityId,
-    'bay-announcement-tenants',
+    sunsetRidgeCommunityId,
+    'sunsetridge-announcement-parking',
     'Parking Reminder',
     'Please update your parking decal by Friday.',
     siteManagerId,
     'tenants_only',
   );
+  await seedRegistryAnnouncement(
+    sunsetRidgeCommunityId,
+    'sunsetridge-announcement-gym',
+    'Fitness Center Hours Extended',
+    'The fitness center will now be open from 5 AM to 11 PM daily.',
+    siteManagerId,
+    'all',
+  );
+  await seedRegistryAnnouncement(
+    sunsetRidgeCommunityId,
+    'sunsetridge-announcement-maintenance',
+    'Scheduled Maintenance Window',
+    'HVAC system maintenance scheduled for this Saturday 8 AM - 12 PM.',
+    siteManagerId,
+    'all',
+  );
+  await seedRegistryAnnouncement(
+    sunsetRidgeCommunityId,
+    'sunsetridge-announcement-package',
+    'Package Delivery Update',
+    'New secure package lockers installed in the main lobby.',
+    siteManagerId,
+    'all',
+  );
+  await seedRegistryAnnouncement(
+    sunsetRidgeCommunityId,
+    'sunsetridge-announcement-event',
+    'Community BBQ Next Weekend',
+    'Join us for a resident appreciation BBQ on Saturday at 4 PM by the pool.',
+    siteManagerId,
+    'all',
+  );
 
   const meetingDocumentPairs: Array<{ meetingId: number; documentId: number; attachedBy: string }> = [
     { meetingId: sunsetMeeting, documentId: sunsetDoc, attachedBy: boardPresidentId },
     { meetingId: palmMeeting, documentId: palmDoc, attachedBy: boardPresidentId },
-    { meetingId: bayMeeting, documentId: bayDoc, attachedBy: siteManagerId },
+    { meetingId: sunsetRidgeMeeting, documentId: sunsetRidgeDoc, attachedBy: siteManagerId },
   ];
 
   for (const pair of meetingDocumentPairs) {
@@ -908,7 +1163,7 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
             ? sunsetCommunityId
             : pair.meetingId === palmMeeting
               ? palmCommunityId
-              : bayCommunityId,
+              : sunsetRidgeCommunityId,
       });
     }
   }
@@ -918,8 +1173,24 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   debugSeed('sunset compliance seeded');
   await seedCommunityCompliance(palmCommunityId, 'hoa_720');
   debugSeed('palm compliance seeded');
-  await seedCommunityCompliance(bayCommunityId, 'apartment');
-  debugSeed('bay compliance seeded');
+  await seedCommunityCompliance(sunsetRidgeCommunityId, 'apartment');
+  debugSeed('sunset ridge compliance seeded');
+
+  const apartmentUnitIds = await seedApartmentUnits(sunsetRidgeCommunityId);
+  debugSeed('apartment units seeded');
+
+  await seedApartmentLeases(sunsetRidgeCommunityId, apartmentUnitIds, apartmentTenantIds);
+
+  const maintenanceSubmitterIds = [...apartmentTenantIds.slice(0, 9)];
+  await seedApartmentMaintenanceRequests(sunsetRidgeCommunityId, apartmentUnitIds, maintenanceSubmitterIds);
+
+  for (const tenantId of apartmentTenantIds) {
+    await seedRoles([
+      { communityId: sunsetRidgeCommunityId, userId: tenantId, role: 'tenant' },
+    ]);
+    await ensureNotificationPreference(sunsetRidgeCommunityId, tenantId);
+  }
+  debugSeed('apartment tenant roles and preferences seeded');
 }
 
 export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> {

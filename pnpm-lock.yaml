@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@propertypro/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.4(vitest@3.2.4(@types/node@22.19.10)(jiti@1.21.7)(jsdom@25.0.1)(terser@5.46.0)(tsx@4.21.0))

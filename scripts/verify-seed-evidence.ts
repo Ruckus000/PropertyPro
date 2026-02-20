@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
 import postgres from 'postgres';
 
-const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'bay-view-apartments'] as const;
+const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
 const EXPECTED_CATEGORY_COUNTS = {
   'sunset-condos': 5,
   'palm-shores-hoa': 5,
-  'bay-view-apartments': 6,
+  'sunset-ridge-apartments': 6,
 } as const satisfies Record<(typeof DEMO_SLUGS)[number], number>;
 
 interface CategoryCountRow {
