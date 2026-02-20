@@ -143,6 +143,12 @@ describe('apartment wizard', () => {
   });
 
   it('shows units step on step 2 with back button', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
     await act(async () => {
       root.render(
         <ApartmentWizard
@@ -175,6 +181,12 @@ describe('apartment wizard', () => {
   });
 
   it('navigates back from step 2 to step 1', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
     await act(async () => {
       root.render(
         <ApartmentWizard
@@ -202,31 +214,7 @@ describe('apartment wizard', () => {
     expect(heading?.textContent).toBe('Community Profile');
   });
 
-  it('shows rules step on step 3 with skip option', async () => {
-    await act(async () => {
-      root.render(
-        <ApartmentWizard
-          communityId={42}
-          initialState={{
-            currentStep: 3,
-            status: 'in_progress',
-            stepData: {},
-          }}
-        />,
-      );
-      await flushEffects();
-    });
-
-    const heading = container.querySelector('h2');
-    expect(heading?.textContent).toBe('Upload Community Rules');
-
-    // Verify skip button exists
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const skipButton = buttons.find((btn) => btn.textContent === 'Skip');
-    expect(skipButton).not.toBeNull();
-  });
-
-  it('skips rules step and moves to step 4', async () => {
+  it('shows invite step on step 3 with skip option', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: {} }),
@@ -239,34 +227,6 @@ describe('apartment wizard', () => {
           communityId={42}
           initialState={{
             currentStep: 3,
-            status: 'in_progress',
-            stepData: {},
-          }}
-        />,
-      );
-      await flushEffects();
-    });
-
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const skipButton = buttons.find((btn) => btn.textContent === 'Skip');
-
-    await act(async () => {
-      skipButton?.click();
-      await flushEffects();
-    });
-
-    // Should show Invite step
-    const heading = container.querySelector('h2');
-    expect(heading?.textContent).toBe('Invite Your First Resident');
-  });
-
-  it('shows invite step on step 4 with skip option', async () => {
-    await act(async () => {
-      root.render(
-        <ApartmentWizard
-          communityId={42}
-          initialState={{
-            currentStep: 4,
             status: 'in_progress',
             stepData: {},
           }}
@@ -363,7 +323,7 @@ describe('apartment wizard', () => {
         <ApartmentWizard
           communityId={42}
           initialState={{
-            currentStep: 4,
+            currentStep: 3,
             status: 'in_progress',
             stepData: {},
           }}
@@ -415,7 +375,7 @@ describe('apartment wizard', () => {
         <ApartmentWizard
           communityId={42}
           initialState={{
-            currentStep: 4,
+            currentStep: 3,
             status: 'in_progress',
             stepData: {},
           }}
@@ -502,7 +462,7 @@ describe('apartment wizard', () => {
         <ApartmentWizard
           communityId={42}
           initialState={{
-            currentStep: 4,
+            currentStep: 3,
             status: 'in_progress',
             stepData: {},
           }}
@@ -640,7 +600,7 @@ describe('apartment wizard', () => {
         <ApartmentWizard
           communityId={42}
           initialState={{
-            currentStep: 4,
+            currentStep: 3,
             status: 'in_progress',
             stepData: {
               profile: {
@@ -659,7 +619,6 @@ describe('apartment wizard', () => {
                   rentAmount: 2000,
                 },
               ],
-              rulesDoc: null,
             },
           }}
         />,
@@ -697,12 +656,18 @@ describe('apartment wizard', () => {
   });
 
   it('preserves initial state when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
     await act(async () => {
       root.render(
         <ApartmentWizard
           communityId={42}
           initialState={{
-            currentStep: 3,
+            currentStep: 2,
             status: 'in_progress',
             stepData: {
               profile: {
@@ -728,12 +693,12 @@ describe('apartment wizard', () => {
       await flushEffects();
     });
 
-    // Should be on step 3
+    // Should be on step 2
     const heading = container.querySelector('h2');
-    expect(heading?.textContent).toBe('Upload Community Rules');
+    expect(heading?.textContent).toBe('Add Units');
 
-    // Step indicator should show step 3 as current
+    // Step indicator should show step 2 as current
     const currentStep = container.querySelector('[aria-current="step"]');
-    expect(currentStep?.textContent).toBe('3');
+    expect(currentStep?.textContent).toBe('2');
   });
 });
