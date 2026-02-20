@@ -6,31 +6,38 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./supabase/client": {
       "types": "./src/supabase/client.ts",
-      "import": "./src/supabase/client.ts"
+      "import": "./src/supabase/client.ts",
+      "default": "./src/supabase/client.ts"
     },
     "./supabase/server": {
       "types": "./src/supabase/server.ts",
-      "import": "./src/supabase/server.ts"
+      "import": "./src/supabase/server.ts",
+      "default": "./src/supabase/server.ts"
     },
     "./supabase/admin": {
       "types": "./src/supabase/admin.ts",
-      "import": "./src/supabase/admin.ts"
+      "import": "./src/supabase/admin.ts",
+      "default": "./src/supabase/admin.ts"
     },
     "./supabase/middleware": {
       "types": "./src/supabase/middleware.ts",
-      "import": "./src/supabase/middleware.ts"
+      "import": "./src/supabase/middleware.ts",
+      "default": "./src/supabase/middleware.ts"
     },
     "./filters": {
       "types": "./src/filters.ts",
-      "import": "./src/filters.ts"
+      "import": "./src/filters.ts",
+      "default": "./src/filters.ts"
     },
     "./unsafe": {
       "types": "./src/unsafe.ts",
-      "import": "./src/unsafe.ts"
+      "import": "./src/unsafe.ts",
+      "default": "./src/unsafe.ts"
     }
   },
   "main": "./dist/index.js",

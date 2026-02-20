@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-19 (v24 — P2-34, P2-35, P2-36 complete; audit fixes applied; 13/16 Phase 2 base tasks complete)
+Generated: 2026-02-20 (v25 — P2-34, P2-35, P2-36 complete; integration test suite unblocked; 13/16 Phase 2 base tasks complete)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications implementation (migrations, processor, internal route, middleware exemption, scheduler fallback, and tests) is merged on `main` as part of `P2-41` and `p1-26` recovery. P2-33 (Self-Service Signup) and P2-33.5 (Billing/Provisioning Schema) merged via PR #3 on 2026-02-17 (merge `6123767`); base task count reached 10/16. P2-34/P2-34a (Stripe webhook + subscription degradation), P2-35 (Provisioning pipeline), and P2-36 (Apartment operational dashboard) all committed to `main` on 2026-02-19; base task count is now 13/16. Pre-push audit fixes applied (`17dbfb9`): corrected `stripeEventId` storage, added hard env-var guard, removed dead idempotency query. Remaining baseline Phase 2 tasks: P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications implementation (migrations, processor, internal route, middleware exemption, scheduler fallback, and tests) is merged on `main` as part of `P2-41` and `p1-26` recovery. P2-33 (Self-Service Signup) and P2-33.5 (Billing/Provisioning Schema) merged via PR #3 on 2026-02-17 (merge `6123767`); base task count reached 10/16. P2-34/P2-34a (Stripe webhook + subscription degradation), P2-35 (Provisioning pipeline), and P2-36 (Apartment operational dashboard) all committed to `main` on 2026-02-19; base task count is now 13/16. Pre-push audit fixes applied (`17dbfb9`): corrected `stripeEventId` storage, added hard env-var guard, removed dead idempotency query. Integration test suite unblocked (2026-02-20): fixed `@propertypro/shared` module export condition and reconciled `maintenance_requests` migration state in database; full integration preflight now passes (102 tests: 31 db + 71 web). Remaining baseline Phase 2 tasks: P2-38 (Apartment Onboarding Wizard), P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -98,6 +98,23 @@ Generated: 2026-02-19 (v24 — P2-34, P2-35, P2-36 complete; audit fixes applied
   - Meetings API query optimized to project only the `timezone` column instead of fetching all community columns.
 - **PR #5** (`codex/p1-26-notification-preferences`) merged to `main` (2026-02-18):
   - Simplified notification preference model: removed legacy per-channel boolean columns in favour of a unified in-app toggle.
+
+### Progress Snapshot (2026-02-20 — Integration Test Suite Unblocked)
+- **Root Cause:** Integration preflight was blocked by two issues:
+  1. Module resolution failure in `@propertypro/shared` package due to missing `"default"` export condition
+  2. Database migration state drift where `maintenance_requests` table was manually applied but not recorded in Drizzle migration journal
+- **Fixes Applied:**
+  - Added `"default": "./dist/index.js"` to `packages/shared/package.json` exports map, resolving `ERR_PACKAGE_PATH_NOT_EXPORTED` errors
+  - Inserted missing migration record into `drizzle.__drizzle_migrations` table for `0012_maintenance_requests` migration (hash: `1fff3a8c1af800fb6362535cdcc500eee62eed285eb026d21bfa47ae655f5c90`)
+  - Fixed `seed:demo` command to complete cleanly without hanging
+- **Verification Evidence (2026-02-20):**
+  - Pass: `pnpm seed:demo` (completes successfully)
+  - Pass: `pnpm seed:verify` (all seed evidence checks pass)
+  - Pass: `pnpm test:integration:preflight` (102 tests total)
+    - Database integration: 31 tests passed (9 test files)
+    - Web integration: 71 tests passed (4 test files)
+  - All modified files: `packages/shared/package.json`, `packages/db/package.json`, `package.json`, `scripts/seed-demo.ts`
+- **Status:** Integration test suite fully operational; ready for remaining Phase 2 implementation work
   - Added in-app notification toggle UI in the settings page.
   - Maintained backward-compatible `emailFrequency` extension from the digest rollout checkpoint.
 

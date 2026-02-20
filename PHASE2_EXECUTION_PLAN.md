@@ -29,6 +29,7 @@ Milestones:
 - [2026-02-19] `P2-35` Provisioning pipeline state machine committed to `main`. Implements 7-step resumable provisioning (`community_created → user_linked → checklist_generated → categories_created → preferences_set → email_sent → completed`). Fire-and-forget from Stripe webhook. `WelcomeEmail` template added. Internal retry endpoint `POST /api/v1/internal/provision` added. All 984 tests pass; build clean; DB access guard clean (144 runtime files).
 - [2026-02-19] Pre-push audit (`17dbfb9`): corrected `stripeEventId` to store `event.id` (not `session.id`); added hard throw on missing `NEXT_PUBLIC_APP_URL`; removed dead sibling idempotency query (unreachable due to unique index); updated test selectSequences. 985 tests pass.
 - [2026-02-19] `P2-36` Apartment operational dashboard completed (prior session).
+- [2026-02-20] Integration test suite unblocked: fixed `@propertypro/shared` module exports (added `"default"` condition), reconciled `maintenance_requests` migration state in database (inserted missing journal record as migration ID 13). Full integration preflight now passes: 102 tests (31 db + 71 web), `pnpm seed:demo` and `pnpm seed:verify` both operational.
 
 Current cursor:
 - Run remaining implementation chain: `P2-38` -> `P2-39`.
