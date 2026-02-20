@@ -1,145 +1,173 @@
 'use client';
 
 /**
- * Apartment Onboarding Wizard — P2-38
+ * Apartment Onboarding Wizard — P2-38 closeout
  *
- * Main orchestrator component for the apartment onboarding flow.
- * Manages step progression, state persistence, and completion.
+ * 4-step flow:
+ * 0 Profile -> 1 Units -> 2 Rules -> 3 Invite
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProgressIndicator } from './progress-indicator';
-import { ProfileStep, UnitsStep, InviteStep } from './steps';
-import type { ProfileData, UnitData, InviteData } from './steps';
-
-interface WizardState {
-  currentStep: number;
-  status: 'in_progress' | 'completed' | 'skipped';
-  stepData: {
-    profile?: ProfileData;
-    unitsTable?: UnitData[];
-    inviteEmail?: InviteData | null;
-    completionMarkers?: {
-      unitsCreated: boolean;
-      residentCreated: boolean;
-      inviteCreated: boolean;
-    };
-  };
-}
+import { ProfileStep, UnitsStep, RulesStep, InviteStep } from './steps';
+import type { InviteData, UnitData } from './steps';
+import type {
+  ApartmentWizardStatePayload,
+  ProfileStepData,
+  RulesStepData,
+  WizardStepData,
+} from '@/lib/onboarding/apartment-wizard-types';
 
 interface ApartmentWizardProps {
   communityId: number;
-  initialState?: WizardState;
+  initialState?: ApartmentWizardStatePayload;
 }
 
-const STEP_TITLES = ['Profile', 'Units', 'Invite'];
+const STEP_TITLES = ['Profile', 'Units', 'Rules', 'Invite'];
+
+interface ApiErrorResponse {
+  error?: string;
+}
+
+function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>): WizardStepData {
+  return {
+    ...previous,
+    ...patch,
+    completionMarkers: {
+      ...(previous.completionMarkers ?? {}),
+      ...(patch.completionMarkers ?? {}),
+    },
+  };
+}
+
+async function readApiError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as ApiErrorResponse;
+    return body.error ?? 'Request failed';
+  } catch {
+    return 'Request failed';
+  }
+}
 
 export function ApartmentWizard({ communityId, initialState }: ApartmentWizardProps) {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(initialState?.currentStep ?? 1);
-  const [stepData, setStepData] = useState(initialState?.stepData ?? {});
+  const [currentStep, setCurrentStep] = useState<number>(initialState?.nextStep ?? 0);
+  const [stepData, setStepData] = useState<WizardStepData>(initialState?.stepData ?? {});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-save on step change
-  useEffect(() => {
-    if (currentStep > 1) {
-      saveProgress();
-    }
-  }, [currentStep]);
-
-  const saveProgress = async () => {
+  async function saveStep(step: number, patch: Partial<WizardStepData>): Promise<void> {
     setIsSaving(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/v1/onboarding/apartment?communityId=${communityId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            communityId,
-            currentStep,
-            stepData,
-          }),
+      const response = await fetch(`/api/v1/onboarding/apartment?communityId=${communityId}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          communityId,
+          step,
+          stepData: patch,
+        }),
+      });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save progress');
+        throw new Error(await readApiError(response));
       }
-    } catch (err) {
-      console.error('Failed to save wizard progress:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save progress');
+
+      setStepData((previous) => mergeStepData(previous, patch));
+      setCurrentStep(Math.min(step + 1, STEP_TITLES.length - 1));
     } finally {
       setIsSaving(false);
     }
-  };
+  }
 
-  const handleComplete = async (skip: boolean = false) => {
+  async function completeWizard(action: 'complete' | 'skip'): Promise<void> {
     setIsSaving(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/v1/onboarding/apartment?communityId=${communityId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            communityId,
-            skip,
-          }),
+      const response = await fetch(`/api/v1/onboarding/apartment?communityId=${communityId}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          communityId,
+          action,
+        }),
+      });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to complete onboarding');
+        throw new Error(await readApiError(response));
       }
 
-      // Redirect to apartment dashboard
       router.push(`/dashboard/apartment?communityId=${communityId}`);
-    } catch (err) {
-      console.error('Failed to complete wizard:', err);
-      setError(err instanceof Error ? err.message : 'Failed to complete onboarding');
+      return;
+    } catch (completeError) {
+      setError(
+        completeError instanceof Error ? completeError.message : 'Failed to complete onboarding',
+      );
       setIsSaving(false);
     }
-  };
+  }
 
-  const handleProfileNext = (data: ProfileData) => {
-    setStepData((prev) => ({ ...prev, profile: data }));
-    setCurrentStep(2);
-  };
+  async function handleProfileNext(data: ProfileStepData): Promise<void> {
+    try {
+      await saveStep(0, { profile: data });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save profile step');
+      setIsSaving(false);
+    }
+  }
 
-  const handleUnitsNext = (units: UnitData[]) => {
-    setStepData((prev) => ({ ...prev, unitsTable: units }));
-    setCurrentStep(3);
-  };
+  async function handleUnitsNext(units: UnitData[]): Promise<void> {
+    try {
+      await saveStep(1, { units });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save units step');
+      setIsSaving(false);
+    }
+  }
 
-  const handleInviteNext = (data: InviteData | null) => {
-    setStepData((prev) => ({ ...prev, inviteEmail: data }));
-    // Complete wizard with all data
-    handleComplete(false);
-  };
+  async function handleRulesNext(rules: RulesStepData | null): Promise<void> {
+    try {
+      await saveStep(2, { rules });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save rules step');
+      setIsSaving(false);
+    }
+  }
 
-  const handleSkip = () => {
-    handleComplete(true);
-  };
+  async function handleInviteSubmit(data: InviteData | null): Promise<void> {
+    try {
+      await saveStep(3, { invite: data });
+      await completeWizard('complete');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save invite step');
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSkipInvite(): Promise<void> {
+    await handleInviteSubmit(null);
+  }
+
+  async function handleSkipWizard(): Promise<void> {
+    await completeWizard('skip');
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Welcome to PropertyPro</h1>
-        <p className="mt-2 text-gray-600">
-          Let's set up your community in just a few steps
-        </p>
+        <p className="mt-2 text-gray-600">Set up your apartment community in four quick steps.</p>
       </div>
 
-      <ProgressIndicator currentStep={currentStep} stepTitles={STEP_TITLES} />
+      <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
 
       {error && (
         <div className="my-4 rounded-md bg-red-50 p-4">
@@ -154,34 +182,50 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
       )}
 
       <div className="mt-8">
+        {currentStep === 0 && (
+          <ProfileStep
+            communityId={communityId}
+            onNext={handleProfileNext}
+            initialData={stepData.profile}
+          />
+        )}
+
         {currentStep === 1 && (
-          <ProfileStep onNext={handleProfileNext} initialData={stepData.profile} />
+          <UnitsStep
+            onNext={handleUnitsNext}
+            onBack={() => setCurrentStep(0)}
+            initialData={stepData.units}
+          />
         )}
 
         {currentStep === 2 && (
-          <UnitsStep
-            onNext={handleUnitsNext}
+          <RulesStep
+            communityId={communityId}
+            onNext={handleRulesNext}
             onBack={() => setCurrentStep(1)}
-            initialData={stepData.unitsTable}
+            initialData={stepData.rules ?? null}
           />
         )}
 
         {currentStep === 3 && (
           <InviteStep
-            onNext={handleInviteNext}
+            units={stepData.units ?? []}
+            initialData={stepData.invite ?? null}
+            onNext={handleInviteSubmit}
             onBack={() => setCurrentStep(2)}
-            onSkip={handleSkip}
+            onSkip={handleSkipInvite}
           />
         )}
       </div>
 
       <div className="mt-8 border-t pt-6">
         <button
-          onClick={handleSkip}
+          type="button"
+          onClick={handleSkipWizard}
           disabled={isSaving}
-          className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+          className="text-sm text-gray-600 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Skip setup and go to dashboard →
+          Skip entire setup and go to dashboard
         </button>
       </div>
     </div>

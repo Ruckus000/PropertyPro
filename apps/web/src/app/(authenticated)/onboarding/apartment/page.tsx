@@ -1,8 +1,5 @@
 /**
- * Apartment Onboarding Page — P2-38
- *
- * Server component with auth + feature gate.
- * Loads wizard state and redirects if completed.
+ * Apartment Onboarding Page — P2-38 closeout
  */
 
 import { headers } from 'next/headers';
@@ -34,16 +31,13 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
 
-  // Feature gate: only apartment communities [AGENTS #34]
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasLeaseTracking) {
     redirect('/dashboard');
   }
 
-  // Load wizard state
   const wizardState = await loadWizardState(context.communityId);
 
-  // If wizard is completed, redirect to apartment dashboard
   if (wizardState?.status === 'completed' || wizardState?.status === 'skipped') {
     redirect(`/dashboard/apartment?communityId=${context.communityId}`);
   }
@@ -51,15 +45,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   return (
     <ApartmentWizard
       communityId={context.communityId}
-      initialState={
-        wizardState
-          ? {
-              currentStep: wizardState.currentStep,
-              status: wizardState.status as 'in_progress' | 'completed' | 'skipped',
-              stepData: wizardState.stepData as any,
-            }
-          : undefined
-      }
+      initialState={wizardState ?? undefined}
     />
   );
 }

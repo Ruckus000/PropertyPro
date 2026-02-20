@@ -1477,14 +1477,16 @@ active → past_due → canceled → expired
 
 ### Task: P2-38 Apartment Onboarding Wizard
 - **Phase:** 2
-- **Status:** Not Started
-- **Files to Create/Modify:** apps/web/src/app/onboarding/apartment/page.tsx, apps/web/src/components/onboarding/apartment-wizard.tsx, apps/web/src/components/onboarding/steps/profile-step.tsx, units-step.tsx, rules-step.tsx
+- **Status:** In Progress (4-step closeout remediation in active branch)
+- **Files to Create/Modify:** apps/web/src/app/(authenticated)/onboarding/apartment/page.tsx, apps/web/src/app/api/v1/onboarding/apartment/route.ts, apps/web/src/lib/onboarding/apartment-wizard-types.ts, apps/web/src/lib/queries/wizard-state.ts, apps/web/src/components/onboarding/apartment-wizard.tsx, apps/web/src/components/onboarding/steps/profile-step.tsx, apps/web/src/components/onboarding/steps/units-step.tsx, apps/web/src/components/onboarding/steps/rules-step.tsx, apps/web/src/components/onboarding/steps/invite-step.tsx
 - **Dependencies:** P2-35, P2-36, P2-37
 - **Blocks:** None
 - **Acceptance Criteria:**
-  - Multi-step wizard: Step 1 (community profile) → Step 2 (units configuration) → Step 3 (lease rules)
+  - Multi-step wizard: Step 1 (community profile) → Step 2 (units configuration) → Step 3 (rules upload) → Step 4 (optional invite)
   - Data saved at each step (can resume if wizard abandoned mid-way)
   - Validation at each step before advancing
+  - Feature gate enforced at API layer via `CommunityFeatures.hasLeaseTracking` (no direct type checks)
+  - Subscription guard enforced for onboarding mutations
   - After completion, apartment dashboard shows configured data
 - **Known Pitfalls:** None specific
 - **Testing:** Step progression test. Validation test: invalid data at step 2 → cannot advance. Resume test: complete step 1, leave wizard, return → step 1 data preserved. End-to-end test: complete all steps → verify dashboard populated.

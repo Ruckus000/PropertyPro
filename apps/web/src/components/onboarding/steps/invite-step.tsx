@@ -1,45 +1,97 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
+import type { InviteStepData } from '@/lib/onboarding/apartment-wizard-types';
 
-export interface InviteData {
-  email: string;
-}
+export interface InviteData extends InviteStepData {}
 
 interface InviteStepProps {
-  onNext: (data: InviteData | null) => void;
+  units: Array<{ unitNumber: string }>;
+  initialData?: InviteData | null;
+  onNext: (data: InviteData | null) => Promise<void> | void;
   onBack: () => void;
-  onSkip: () => void;
+  onSkip: () => Promise<void> | void;
 }
 
-export function InviteStep({ onNext, onBack, onSkip }: InviteStepProps) {
-  const [email, setEmail] = useState('');
+export function InviteStep({ units, initialData, onNext, onBack, onSkip }: InviteStepProps) {
+  const [email, setEmail] = useState(initialData?.email ?? '');
+  const [fullName, setFullName] = useState(initialData?.fullName ?? '');
+  const [unitNumber, setUnitNumber] = useState(initialData?.unitNumber ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function validateEmail(email: string): boolean {
+  const unitOptions = useMemo(
+    () =>
+      units
+        .map((unit) => unit.unitNumber.trim())
+        .filter((value, index, array) => value.length > 0 && array.indexOf(value) === index),
+    [units],
+  );
+
+  function validateEmail(value: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return emailRegex.test(value);
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    if (!email.trim()) {
-      onNext(null);
+    const normalizedEmail = email.trim();
+    const normalizedFullName = fullName.trim();
+    const normalizedUnitNumber = unitNumber.trim();
+
+    const allBlank = !normalizedEmail && !normalizedFullName && !normalizedUnitNumber;
+    if (allBlank) {
+      setIsSubmitting(true);
+      try {
+        await onNext(null);
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : 'Failed to save invite step');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
-    if (!validateEmail(email.trim())) {
-      setError('Please enter a valid email address');
+    if (!normalizedEmail || !normalizedFullName || !normalizedUnitNumber) {
+      setError('Provide email, full name, and unit number, or leave all fields blank to skip.');
       return;
     }
 
-    onNext({ email: email.trim() });
+    if (!validateEmail(normalizedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!unitOptions.includes(normalizedUnitNumber)) {
+      setError('Select a valid unit for this invite.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onNext({
+        email: normalizedEmail,
+        fullName: normalizedFullName,
+        unitNumber: normalizedUnitNumber,
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Failed to save invite step');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function handleSkip() {
-    onSkip();
+  async function handleSkipInvite(): Promise<void> {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await onSkip();
+    } catch (skipError) {
+      setError(skipError instanceof Error ? skipError.message : 'Failed to skip invite step');
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -47,76 +99,93 @@ export function InviteStep({ onNext, onBack, onSkip }: InviteStepProps) {
       <div>
         <h2 className="text-2xl font-semibold text-gray-900">Invite Your First Resident</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Invite a resident to join your community portal. They'll receive an email with instructions to create their account.
+          This step is optional. Invite one resident now, or skip and invite later.
         </p>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
-              Resident Email Address
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setError(null);
-              }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="resident@example.com"
-            />
-            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-          </div>
+      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+        <div>
+          <label htmlFor="inviteEmail" className="mb-1 block text-sm font-medium text-gray-700">
+            Resident Email
+          </label>
+          <input
+            id="inviteEmail"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setError(null);
+            }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="resident@example.com"
+          />
+        </div>
 
-          <div className="rounded-md bg-blue-50 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-blue-400"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-blue-700">
-                  You can invite more residents later from your dashboard. This is just to help you get started.
-                </p>
-              </div>
-            </div>
-          </div>
+        <div>
+          <label htmlFor="inviteFullName" className="mb-1 block text-sm font-medium text-gray-700">
+            Resident Full Name
+          </label>
+          <input
+            id="inviteFullName"
+            type="text"
+            value={fullName}
+            onChange={(event) => {
+              setFullName(event.target.value);
+              setError(null);
+            }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Jane Resident"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="inviteUnit" className="mb-1 block text-sm font-medium text-gray-700">
+            Unit
+          </label>
+          <select
+            id="inviteUnit"
+            value={unitNumber}
+            onChange={(event) => {
+              setUnitNumber(event.target.value);
+              setError(null);
+            }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">Select a unit</option>
+            {unitOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
+
+      {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       <div className="flex justify-between">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Back
         </button>
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={handleSkip}
-            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={handleSkipInvite}
+            disabled={isSubmitting}
+            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Skip for Now
+            Skip Invite
           </button>
           <button
             type="submit"
-            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            disabled={isSubmitting}
+            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {email.trim() ? 'Send Invite' : 'Finish'}
+            {isSubmitting ? 'Saving...' : 'Complete Setup'}
           </button>
         </div>
       </div>

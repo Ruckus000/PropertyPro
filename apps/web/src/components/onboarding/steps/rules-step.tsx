@@ -1,171 +1,191 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { DocumentUploadArea } from '@/components/documents/document-upload-area';
+import type { RulesStepData } from '@/lib/onboarding/apartment-wizard-types';
 
-export interface RulesData {
-  fileName: string;
-  fileSize: number;
-  file: File;
+interface DocumentCategorySummary {
+  id: number;
+  name: string;
 }
 
 interface RulesStepProps {
   communityId: number;
-  onNext: (data: RulesData | null) => void;
+  initialData?: RulesStepData | null;
+  onNext: (data: RulesStepData | null) => Promise<void> | void;
   onBack: () => void;
-  onSkip: () => void;
 }
 
-export function RulesStep({ onNext, onBack, onSkip }: RulesStepProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+function pickRulesCategoryId(categories: DocumentCategorySummary[]): number | null {
+  if (categories.length === 0) return null;
 
-  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(true);
+  const byPriority = [
+    (name: string) => name.includes('lease'),
+    (name: string) => name.includes('compliance'),
+    (name: string) => name.includes('communication'),
+  ];
+
+  for (const matcher of byPriority) {
+    const match = categories.find((category) => matcher(category.name.toLowerCase()));
+    if (match) return match.id;
   }
 
-  function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
+  return categories[0]?.id ?? null;
+}
+
+export function RulesStep({ communityId, initialData, onNext, onBack }: RulesStepProps) {
+  const [categories, setCategories] = useState<DocumentCategorySummary[]>([]);
+  const [uploadedRule, setUploadedRule] = useState<RulesStepData | null>(initialData ?? null);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCategories(): Promise<void> {
+      setIsLoadingCategories(true);
+      try {
+        const response = await fetch(`/api/v1/document-categories?communityId=${communityId}`);
+        if (!response.ok) {
+          throw new Error('Failed to load document categories');
+        }
+        const body = (await response.json()) as {
+          data: Array<{ id: number; name: string }>;
+        };
+
+        if (active) {
+          setCategories(body.data);
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load categories');
+        }
+      } finally {
+        if (active) {
+          setIsLoadingCategories(false);
+        }
+      }
+    }
+
+    loadCategories();
+
+    return () => {
+      active = false;
+    };
+  }, [communityId]);
+
+  const rulesCategoryId = useMemo(() => pickRulesCategoryId(categories), [categories]);
+
+  function handleUpload(document: Record<string, unknown>): void {
+    const documentId = Number(document.id);
+    const pathValue =
+      typeof document.filePath === 'string'
+        ? document.filePath
+        : typeof document.path === 'string'
+          ? document.path
+          : null;
+
+    if (!Number.isFinite(documentId) || !pathValue) {
+      setError('Uploaded document is missing required metadata. Please retry upload.');
+      return;
+    }
+
+    setUploadedRule({
+      documentId,
+      path: pathValue,
+    });
+    setError(null);
   }
 
-  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
+  async function handleContinue(): Promise<void> {
+    if (!uploadedRule) {
+      setError('Upload a rules document or use Skip to continue.');
+      return;
+    }
 
-    const file = event.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onNext(uploadedRule);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Failed to save rules step');
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-    }
-  }
-
-  function handleNext() {
-    if (selectedFile) {
-      onNext({
-        fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-        file: selectedFile,
-      });
-    } else {
-      onNext(null);
+  async function handleSkip(): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onNext(null);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Failed to skip rules step');
+      setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="space-y-6">
+    <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Upload Community Rules</h2>
+        <h2 className="text-2xl font-semibold text-gray-900">Upload Rules Document</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Upload your community rules and regulations document. This will be posted in the Compliance category.
+          Optional: upload your current community rules document now.
         </p>
       </div>
 
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
-          isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-        }`}
-      >
-        {selectedFile ? (
-          <div className="text-center">
-            <svg
-              className="mx-auto mb-3 h-12 w-12 text-green-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <p className="font-medium text-gray-900">{selectedFile.name}</p>
-            <p className="text-sm text-gray-500">
-              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-            <button
-              type="button"
-              onClick={() => setSelectedFile(null)}
-              className="mt-3 text-sm text-red-600 hover:text-red-700"
-            >
-              Remove File
-            </button>
-          </div>
+      <div className="rounded-lg border border-gray-200 bg-white p-6">
+        {isLoadingCategories ? (
+          <p className="text-sm text-gray-600">Loading upload settings...</p>
         ) : (
-          <>
-            <svg
-              className="mb-3 h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <p className="text-sm text-gray-600">
-              Drag and drop your rules document, or{' '}
-              <label className="cursor-pointer text-blue-600 hover:text-blue-700">
-                browse
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                  accept=".pdf,.doc,.docx"
-                />
-              </label>
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              PDF or DOCX up to 50MB
-            </p>
-          </>
+          <DocumentUploadArea
+            communityId={communityId}
+            categoryId={rulesCategoryId}
+            onUploaded={handleUpload}
+          />
+        )}
+
+        {uploadedRule && (
+          <p className="mt-3 text-sm text-green-700">
+            Rules document uploaded successfully.
+          </p>
         )}
       </div>
+
+      {error && (
+        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="flex justify-between">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Back
         </button>
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={onSkip}
-            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={handleSkip}
+            disabled={isSubmitting}
+            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Skip
+            Skip Step
           </button>
           <button
             type="button"
-            onClick={handleNext}
-            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={handleContinue}
+            disabled={isSubmitting}
+            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Next
+            {isSubmitting ? 'Saving...' : 'Next'}
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

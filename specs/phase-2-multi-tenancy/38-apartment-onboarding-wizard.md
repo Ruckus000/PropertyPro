@@ -25,6 +25,8 @@ P1
 - [ ] Each step saves data correctly
 - [ ] Can skip and resume
 - [ ] Unit roster populated after completion
+- [ ] Rules step supports upload or explicit skip
+- [ ] Optional invite step accepts email, full name, and unit selection
 - [ ] pnpm test passes
 
 ## Technical Notes
@@ -38,7 +40,8 @@ P1
 - apps/web/src/components/onboarding/steps/profile-step.tsx
 - apps/web/src/components/onboarding/steps/units-step.tsx
 - apps/web/src/components/onboarding/steps/rules-step.tsx
-- apps/web/src/lib/actions/onboarding.ts
+- apps/web/src/components/onboarding/steps/invite-step.tsx
+- apps/web/src/app/api/v1/onboarding/apartment/route.ts
 
 ## Attempts
 0
