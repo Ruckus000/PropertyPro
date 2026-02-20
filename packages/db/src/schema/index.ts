@@ -23,6 +23,7 @@ export * from './meeting-documents';
 export * from './leases';
 export * from './maintenance-requests';
 export * from './demo-seed-registry';
+export * from './onboarding-wizard-state';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -48,6 +49,7 @@ import type { meetingDocuments } from './meeting-documents';
 import type { leases } from './leases';
 import type { maintenanceRequests } from './maintenance-requests';
 import type { demoSeedRegistry } from './demo-seed-registry';
+import type { onboardingWizardState } from './onboarding-wizard-state';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -131,3 +133,7 @@ export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;
 export type NewDemoSeedRegistryRecord = typeof demoSeedRegistry.$inferInsert;
+
+// Onboarding Wizard State
+export type OnboardingWizardState = typeof onboardingWizardState.$inferSelect;
+export type NewOnboardingWizardState = typeof onboardingWizardState.$inferInsert;

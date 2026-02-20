@@ -30,6 +30,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/documents',
   '/maintenance',
   '/communities',
+  '/onboarding',
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';

@@ -1,4 +1,6 @@
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
@@ -35,7 +37,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(context.communityId, userId);
+  const membership = await requireCommunityMembership(context.communityId, userId);
+
+  // Redirect apartment communities to specialized dashboard [P2-38]
+  const features = getFeaturesForCommunity(membership.communityType);
+  if (features.hasLeaseTracking) {
+    redirect(`/dashboard/apartment?communityId=${context.communityId}`);
+  }
+
   const data = await loadDashboardData(context.communityId, userId);
 
   return (

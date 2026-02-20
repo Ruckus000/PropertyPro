@@ -17,6 +17,8 @@ export const communities = pgTable('communities', {
   city: text('city'),
   state: text('state'),
   zipCode: text('zip_code'),
+  /** P2-38: Community logo — Supabase Storage path (stored via onboarding wizard). */
+  logoPath: text('logo_path'),
   stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),
