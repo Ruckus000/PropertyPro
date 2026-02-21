@@ -1,8 +1,8 @@
 # Phase 2 Execution Plan - Multi-Tenancy, Billing, and Onboarding
 
-**Date:** 2026-02-20
+**Date:** 2026-02-21
 **Author:** PropertyPro Engineering
-**Status:** Complete on `main` (16/16 base Phase 2 tasks complete; Gate 3 verification in progress)
+**Status:** Complete on `main` (16/16 base Phase 2 tasks complete; Gate 3 closed 2026-02-21)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
 ---
@@ -33,11 +33,12 @@ Milestones:
 - [2026-02-20] `P2-38` Apartment Onboarding Wizard remediation completed and merged to `main` (commit `7a81f56`). Restored 4-step wizard flow (Profile → Units → Rules → Invite), added timezone field with IANA validation, implemented duplicate unit number validation (client + server), enforced `hasLeaseTracking` feature gate at API layer, created canonical type system with legacy normalizers (`unitsTable` → `units`, `inviteEmail` → `invite`), implemented conflict-safe wizard initialization, and added comprehensive test coverage. Verification passed: 999 tests, `pnpm build`, `pnpm typecheck`, `pnpm lint` all green.
 - [2026-02-20] `P2-39` Condo Onboarding Wizard merged to `main` via PR #7 (`feat/p2-39-condo-onboarding` -> `main`, merge `170d987`). Implemented 3-step wizard (Community Profile → Statutory Documents → Initial Units), added Florida compliance integration (automatic checklist generation from uploaded documents), implemented unit number validation with duplicate prevention, added IANA timezone validation, and created comprehensive test coverage for both condo_718 and hoa_720 community types. Verification passed: 1003 tests green.
 - [2026-02-20] `P2-44` Apartment Demo Seed merged to `main` via PR #6 (`feat/p2-44-apartment-demo-seed` -> `main`, merge `ac7a2fb`). Extended seed-demo.ts with Bay View Apartments fixture (24 units, realistic lease distribution, maintenance requests, announcements). Fixed deployment blocker in seed script (timezone handling), resolved data integrity issues (duplicate unit numbers, invalid lease dates). Seed verification passed: all 3 communities seeded with correct category counts and zero orphaned documents.
+- [2026-02-21] Gate 3 closeout verification completed on `main` (HEAD `ae55ca8`): `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` (`1022/1022`), `pnpm test:integration:preflight` (DB `32/32`, web `100/102` passed with 2 intentional skips), and `pnpm plan:verify:phase2` all passed. Reconciled Drizzle metadata sequence drift by realigning `drizzle.__drizzle_migrations_id_seq` to `max(id)+1` before rerun. Evidence captured in `docs/audits/gate3-evidence-2026-02-21.md`.
 
 Current cursor:
 - All Phase 2 base tasks complete (16/16).
-- Gate 3 verification in progress.
-- Condo onboarding and apartment demo seed both merged on 2026-02-20.
+- Gate 3 closed on 2026-02-21.
+- Phase 2 is fully closed; next implementation focus is Phase 3 kickoff sequencing.
 
 Cross-phase merge guard:
 - Any feature branch more than 20 commits behind `origin/main` is non-mergeable until rebased/recreated.
@@ -390,17 +391,19 @@ Every remaining Phase 2 task must satisfy:
 
 ## Gate 3 Verification (Phase 2 Closeout)
 
+**Status:** Complete (2026-02-21)
+
 Run after all Phase 2 tasks and hardening tasks are complete:
-- [ ] All Phase 2 tests pass (unit + integration: 102 tests total).
-- [ ] Cross-tenant isolation tests pass (64 tests across 3 integration test files).
-- [ ] Subdomain routing resolves correctly in test environment.
-- [ ] Stripe checkout -> webhook -> subscription flow works end-to-end.
-- [ ] Provisioning pipeline creates community with required resources.
-- [ ] Rate limiting returns `429` correctly.
-- [ ] `pnpm build && pnpm typecheck` clean.
-- [ ] `pnpm lint` clean.
-- [ ] `pnpm plan:verify:phase2` clean.
-- [ ] Full integration preflight passes: `pnpm test:integration:preflight` (102 tests: 31 DB + 71 web).
+- [x] All Phase 2 tests pass (unit `1022/1022`; integration preflight `132/134` passed with 2 intentional skips in web integration).
+- [x] Cross-tenant isolation tests pass (65 tests across 3 integration test files).
+- [x] Subdomain routing resolves correctly in test environment.
+- [x] Stripe checkout -> webhook -> subscription flow works end-to-end.
+- [x] Provisioning pipeline creates community with required resources.
+- [x] Rate limiting returns `429` correctly.
+- [x] `pnpm build && pnpm typecheck` clean.
+- [x] `pnpm lint` clean.
+- [x] `pnpm plan:verify:phase2` clean.
+- [x] Full integration preflight passes: `pnpm test:integration:preflight` (134 tests total: 32 DB + 102 web, with 2 skips in web integration).
 
 Evidence commands:
 ```bash
@@ -417,7 +420,7 @@ pnpm test
 set -a; source .env.local; set +a; pnpm test:integration:preflight
 ```
 
-**IMPORTANT:** Gate 3 requires the full `pnpm test:integration:preflight` command (102 tests), not just `pnpm --filter @propertypro/db test:integration` (31 tests). The web integration tests (71 tests) cover critical multi-tenant route isolation that DB-only tests cannot verify.
+**IMPORTANT:** Gate 3 requires the full `pnpm test:integration:preflight` command, not just `pnpm --filter @propertypro/db test:integration`. The web integration suite (102 tests in current baseline) covers critical multi-tenant route isolation that DB-only tests cannot verify.
 
 **Evidence protocol:** See `/docs/audits/GATE3_EVIDENCE_PROTOCOL.md` for detailed evidence capture, redaction guidelines, and verification checklist.
 
