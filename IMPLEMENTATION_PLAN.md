@@ -1,5 +1,5 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-20 (v27 — All Phase 2 base tasks complete; 16/16; Gate 3 verification in progress)
+Generated: 2026-02-21 (v28 — Phase 2 status reconciliation complete; Gate 3 verification in progress)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
@@ -114,7 +114,7 @@ Generated: 2026-02-20 (v27 — All Phase 2 base tasks complete; 16/16; Gate 3 ve
     - Database integration: 31 tests passed (9 test files)
     - Web integration: 71 tests passed (4 test files)
   - All modified files: `packages/shared/package.json`, `packages/db/package.json`, `package.json`, `scripts/seed-demo.ts`
-- **Status:** Integration test suite fully operational; ready for remaining Phase 2 implementation work
+- **Status:** Integration test suite fully operational; Phase 2 base implementation complete (16/16); Gate 3 verification in progress
   - Added in-app notification toggle UI in the settings page.
   - Maintained backward-compatible `emailFrequency` extension from the digest rollout checkpoint.
 
@@ -441,7 +441,7 @@ No `Partial` findings were identified in this closeout pass.
 | Component | Status |
 |-----------|--------|
 | Phase 1 feature APIs and UX flows | IMPLEMENTED (Gate 2 complete) |
-| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IN PROGRESS (13 complete, 0 in progress, 3 not started) |
+| Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IMPLEMENTED (16/16 complete; Gate 3 verification in progress) |
 | Phase 3 PM/mobile vertical features | NOT STARTED |
 | Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | NOT STARTED |
 
@@ -744,11 +744,11 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 2 Execution Readiness (2026-02-16)
 
-- **Status:** In Progress (canonical Phase 2 base-task counts are maintained in `PHASE2_EXECUTION_PLAN.md`; `P2-43` merged on 2026-02-15)
+- **Status:** Complete (all Phase 2 base tasks are complete on `main`; Gate 3 verification is in progress; canonical status ownership remains in `PHASE2_EXECUTION_PLAN.md`)
 - **Execution Source of Truth:** `PHASE2_EXECUTION_PLAN.md`
-- **Tracking Note:** Active sequencing, milestone logging, and Gate 3 closeout evidence for remaining baseline Phase 2 tasks (`P2-33`, `P2-34/P2-34a`, `P2-35`, `P2-36`, `P2-38`, `P2-39`, `P2-44`) should be maintained in `PHASE2_EXECUTION_PLAN.md`.
-- **Hardening Note (2026-02-16):** `P2-PRE-03` scoped-only DB access enforcement is complete (`@propertypro/db/unsafe`, `@propertypro/db/filters`, runtime import guard, and CI workflow); remaining mandatory hardening item is `P2-33.5`.
-- **Checkpoint Note (2026-02-16):** Digest notification rollout (preference contract extension + digest queue + processor + internal cron route + middleware carve-out + scheduler fallback) is implemented in local workspace and validated by targeted suites; merge + shared-env preflight evidence remains outstanding.
+- **Tracking Note:** Phase 2 milestone logging and Gate 3 closeout evidence should be maintained in `PHASE2_EXECUTION_PLAN.md`.
+- **Hardening Note (2026-02-16):** Mandatory hardening items are complete (`P2-33.5`, `P2-PRE-02`, `P2-PRE-03`) and tracked in `PHASE2_EXECUTION_PLAN.md`.
+- **Checkpoint Note (2026-02-16):** Digest notification rollout is merged on `main`, and shared-env integration preflight evidence is captured in this plan and in `PHASE2_EXECUTION_PLAN.md`.
 
 ---
 
@@ -1316,7 +1316,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-33 Self-Service Signup
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (merged 2026-02-17 via PR #3, commit `6123767`)
 - **Files to Create/Modify:** apps/web/src/app/(auth)/signup/page.tsx, apps/web/src/components/signup/signup-form.tsx, apps/web/src/components/signup/community-type-selector.tsx, apps/web/src/components/signup/subdomain-checker.tsx, apps/web/src/lib/auth/signup.ts, apps/web/src/lib/auth/signup-schema.ts, apps/web/src/app/api/v1/auth/signup/route.ts
 - **Dependencies:** P2-31, P0-04
 - **Blocks:** P2-34
@@ -1344,7 +1344,7 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ### Task: P2-34 Stripe Integration
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (implemented 2026-02-19, commit `4afac39`; includes `P2-34a` enforcement)
 - **Files to Create/Modify:** apps/web/src/app/api/v1/webhooks/stripe/route.ts, apps/web/src/lib/actions/checkout.ts, apps/web/src/lib/services/stripe-service.ts, packages/db/src/schema/subscriptions.ts
 - **Dependencies:** P2-33
 - **Blocks:** P2-35
@@ -1435,7 +1435,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-35 Provisioning Pipeline
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (implemented 2026-02-19, commit `3144034`)
 - **Files to Create/Modify:** apps/web/src/lib/services/provisioning-service.ts, apps/web/src/lib/provisioning-idempotency.ts, packages/email/src/templates/welcome.tsx, packages/db/src/schema/provisioning-events.ts
 - **Dependencies:** P2-34, P0-05, P0-06
 - **Blocks:** P2-38, P2-39
@@ -1456,7 +1456,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-36 Apartment Operational Dashboard
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (implemented 2026-02-19, commit `5ee9118`)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/dashboard/apartment/page.tsx, apps/web/src/components/dashboard/apartment-dashboard.tsx, apartment-metrics.tsx, apps/web/src/lib/queries/apartment-metrics.ts
 - **Dependencies:** P0-03, P0-05, P0-06
 - **Blocks:** P2-38, P2-44
@@ -1494,7 +1494,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-38 Apartment Onboarding Wizard
 - **Phase:** 2
-- **Status:** In Progress (4-step closeout remediation in active branch)
+- **Status:** Complete (merged 2026-02-20, commit `7a81f56`; 999-test closeout)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/onboarding/apartment/page.tsx, apps/web/src/app/api/v1/onboarding/apartment/route.ts, apps/web/src/lib/onboarding/apartment-wizard-types.ts, apps/web/src/lib/queries/wizard-state.ts, apps/web/src/components/onboarding/apartment-wizard.tsx, apps/web/src/components/onboarding/steps/profile-step.tsx, apps/web/src/components/onboarding/steps/units-step.tsx, apps/web/src/components/onboarding/steps/rules-step.tsx, apps/web/src/components/onboarding/steps/invite-step.tsx
 - **Dependencies:** P2-35, P2-36, P2-37
 - **Blocks:** None

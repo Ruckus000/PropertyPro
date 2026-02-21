@@ -133,6 +133,39 @@ function collectSection(lines: string[], headingPrefix: string): string[] {
   return section;
 }
 
+function collectPhase2TaskStatuses(lines: string[]): Map<string, string> {
+  const phase2StartIndex = lines.findIndex((line) => line.trim() === '## Phase 2 Tasks');
+  if (phase2StartIndex === -1) {
+    throw new Error('IMPLEMENTATION_PLAN.md: missing "## Phase 2 Tasks" section.');
+  }
+
+  const phase3StartIndex = lines.findIndex(
+    (line, index) => index > phase2StartIndex && line.trim().startsWith('## Phase 3 Tasks'),
+  );
+  if (phase3StartIndex === -1) {
+    throw new Error('IMPLEMENTATION_PLAN.md: missing "## Phase 3 Tasks" section boundary.');
+  }
+
+  const statuses = new Map<string, string>();
+  let currentTaskId: string | null = null;
+
+  for (let i = phase2StartIndex + 1; i < phase3StartIndex; i += 1) {
+    const trimmed = lines[i].trim();
+    const taskMatch = trimmed.match(/^### Task:\s+(P2-\d+[a-z]?)/i);
+    if (taskMatch) {
+      currentTaskId = taskMatch[1];
+      continue;
+    }
+
+    const statusMatch = trimmed.match(/^- \*\*Status:\*\*\s*(.+)$/);
+    if (statusMatch && currentTaskId) {
+      statuses.set(currentTaskId, statusMatch[1].trim());
+    }
+  }
+
+  return statuses;
+}
+
 function verifyPhase2ExecutionPlan(content: string, errors: string[]): void {
   const lines = content.split(/\r?\n/);
 
@@ -237,10 +270,16 @@ function verifyPhase2ExecutionPlan(content: string, errors: string[]): void {
   }
 }
 
-function verifyImplementationPlan(content: string, errors: string[]): void {
+function verifyImplementationPlan(
+  content: string,
+  canonicalCompleted: number,
+  canonicalTotal: number,
+  errors: string[],
+): void {
   const lines = content.split(/\r?\n/);
   const section = collectSection(lines, '## Phase 2 Execution Readiness');
   const sectionText = section.join('\n');
+  const phase2IsComplete = canonicalTotal > 0 && canonicalCompleted === canonicalTotal;
 
   const statusLine = section.find((line) => line.trim().startsWith('- **Status:**'));
   if (!statusLine) {
@@ -269,10 +308,54 @@ function verifyImplementationPlan(content: string, errors: string[]): void {
     );
   }
 
-  if (!sectionText.includes('`P2-34/P2-34a`')) {
+  if (
+    phase2IsComplete &&
+    /remaining baseline phase 2 tasks|remaining mandatory hardening item/i.test(sectionText)
+  ) {
     errors.push(
-      'IMPLEMENTATION_PLAN.md: remaining baseline task list should use combined `P2-34/P2-34a` naming.',
+      'IMPLEMENTATION_PLAN.md: Phase 2 Execution Readiness still references remaining tasks/hardening despite canonical completion state.',
     );
+  }
+
+  if (phase2IsComplete) {
+    const summaryRowIsInProgress =
+      /\|\s*Phase 2 multi-tenant product workflows \(subdomain \+ provisioning \+ billing\)\s*\|\s*IN PROGRESS/i.test(
+        content,
+      );
+    if (summaryRowIsInProgress) {
+      errors.push(
+        'IMPLEMENTATION_PLAN.md: Phase 2 audit summary row is still "IN PROGRESS" while canonical state is complete.',
+      );
+    }
+
+    let phase2TaskStatuses: Map<string, string>;
+    try {
+      phase2TaskStatuses = collectPhase2TaskStatuses(lines);
+    } catch (error) {
+      if (error instanceof Error) {
+        errors.push(error.message);
+      } else {
+        errors.push('IMPLEMENTATION_PLAN.md: unable to parse Phase 2 task statuses.');
+      }
+      return;
+    }
+
+    const orderedBaseTaskIds = [...BASE_TASK_IDS].sort();
+    for (const taskId of orderedBaseTaskIds) {
+      const statusText = phase2TaskStatuses.get(taskId);
+      if (!statusText) {
+        errors.push(
+          `IMPLEMENTATION_PLAN.md: missing status line for Phase 2 base task "${taskId}".`,
+        );
+        continue;
+      }
+
+      if (/^(Not Started|In Progress)\b/i.test(statusText)) {
+        errors.push(
+          `IMPLEMENTATION_PLAN.md: Phase 2 base task "${taskId}" has stale status "${statusText}" while canonical state is ${canonicalCompleted}/${canonicalTotal}.`,
+        );
+      }
+    }
   }
 }
 
@@ -423,14 +506,15 @@ function main(): void {
   const claudeMd = readFileSync(claudeMdPath, 'utf8');
 
   const errors: string[] = [];
+  const completedCountMatch = phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
+  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+  const canonicalTotal = completedCountMatch
+    ? Number.parseInt(completedCountMatch[2], 10)
+    : BASE_DENOMINATOR;
 
   // Existing validators
   verifyPhase2ExecutionPlan(phase2Plan, errors);
-  verifyImplementationPlan(implementationPlan, errors);
-
-  // New validators
-  const completedCountMatch = phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
-  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+  verifyImplementationPlan(implementationPlan, completedCount, canonicalTotal, errors);
 
   validateCursorText(phase2Plan, completedCount, errors);
   validateGate3Checklist(phase2Plan, errors);
