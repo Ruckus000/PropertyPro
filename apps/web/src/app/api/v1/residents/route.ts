@@ -31,6 +31,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { requireCommunityRole, requireCommunityType } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 
 const communityIdSchema = z.coerce.number().int().positive();
@@ -67,7 +68,7 @@ async function getCommunityType(communityId: number): Promise<CommunityType> {
     throw new NotFoundError(`Community ${communityId} not found`);
   }
 
-  return community['communityType'] as CommunityType;
+  return requireCommunityType(community['communityType'], `residents.getCommunityType(${communityId})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +262,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
   }
 
-  const oldRole = existingRole['role'] as CommunityRole;
+  const oldRole = requireCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
   const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
   const newRole = role ?? oldRole;

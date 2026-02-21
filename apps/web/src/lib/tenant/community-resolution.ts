@@ -2,6 +2,7 @@
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveTimezone } from '@/lib/utils/timezone';
+import { requireCommunityType } from '@/lib/utils/community-validators';
 import { resolveCommunityContext } from './resolve-community-context';
 
 export interface ResolvedCommunityRecord {
@@ -44,7 +45,10 @@ export async function findCommunityBySlug(
     id: row.id,
     slug: row.slug,
     name: row.name,
-    communityType: row.communityType as CommunityType,
+    communityType: requireCommunityType(
+      row.communityType,
+      `findCommunityBySlug(slug=${slug})`,
+    ),
     timezone: resolveTimezone(row.timezone),
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,

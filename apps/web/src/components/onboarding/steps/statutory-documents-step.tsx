@@ -50,9 +50,12 @@ export function StatutoryDocumentsStep({
                 const postRes = await fetch('/api/v1/compliance', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ communityId, communityType }),
+                    body: JSON.stringify({ communityId }),
                 });
                 if (!postRes.ok) {
+                    if (postRes.status === 403) {
+                        throw new Error('Compliance checklist is only available for condo/HOA communities.');
+                    }
                     throw new Error('Failed to initialize compliance checklist');
                 }
 

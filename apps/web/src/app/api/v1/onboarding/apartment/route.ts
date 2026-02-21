@@ -133,8 +133,8 @@ const completeWizardSchema = z.object({
   skip: z.boolean().optional(),
 });
 
-function requireApartmentCommunity(communityType: string): void {
-  const features = getFeaturesForCommunity(communityType as Parameters<typeof getFeaturesForCommunity>[0]);
+function requireApartmentCommunity(communityType: CommunityType): void {
+  const features = getFeaturesForCommunity(communityType);
   if (!features.hasLeaseTracking) {
     throw new ForbiddenError('Apartment onboarding is only available for apartment communities');
   }
@@ -441,7 +441,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       role: 'tenant',
       unitId: matchedUnit['id'] as number,
       actorUserId,
-      communityType: membership.communityType as CommunityType,
+      communityType: membership.communityType,
     });
 
     completionMarkers.residentCreated = true;

@@ -92,6 +92,20 @@
       "when": 1771541317270,
       "tag": "0012_modern_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771705755540,
+      "tag": "0013_subscription_status_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1771705759818,
+      "tag": "0014_nifty_scorpion",
+      "breakpoints": true
     }
   ]
 }

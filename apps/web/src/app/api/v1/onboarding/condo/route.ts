@@ -17,7 +17,7 @@ import {
     units,
 } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -127,8 +127,8 @@ const completeWizardSchema = z.object({
     skip: z.boolean().optional(),
 });
 
-function requireCondoCommunity(communityType: string): void {
-    const features = getFeaturesForCommunity(communityType as Parameters<typeof getFeaturesForCommunity>[0]);
+function requireCondoCommunity(communityType: CommunityType): void {
+    const features = getFeaturesForCommunity(communityType);
     if (!features.hasCompliance) {
         throw new ForbiddenError('Condo onboarding is only available for condo/HOA communities');
     }

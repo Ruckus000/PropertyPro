@@ -152,7 +152,6 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         const generateRes = await appRoutes.compliance.POST(
             jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
                 communityId: communityA.id,
-                communityType: 'condo_718',
             })
         );
         expect(generateRes.status).toBe(201); // Created
@@ -309,7 +308,6 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         const generateRes = await appRoutes.compliance.POST(
             jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
                 communityId: communityA.id,
-                communityType: 'condo_718',
             }),
         );
         expect([200, 201]).toContain(generateRes.status);
@@ -360,7 +358,6 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         const generateRes = await appRoutes.compliance.POST(
             jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
                 communityId: communityA.id,
-                communityType: 'condo_718',
             }),
         );
         expect([200, 201]).toContain(generateRes.status);
@@ -418,7 +415,6 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         const generateRes = await appRoutes.compliance.POST(
             jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
                 communityId: communityA.id,
-                communityType: 'condo_718',
             }),
         );
         expect([200, 201]).toContain(generateRes.status);

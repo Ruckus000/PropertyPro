@@ -1,18 +1,17 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
-  communities,
   complianceChecklistItems,
   createScopedClient,
   logAuditEvent,
 } from '@propertypro/db';
 import {
-  COMMUNITY_TYPES,
   getComplianceTemplate,
+  getFeaturesForCommunity,
   type CommunityType,
 } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -24,10 +23,30 @@ import {
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
-const generateChecklistSchema = z.object({
-  communityId: z.number().int().positive(),
-  communityType: z.enum(COMMUNITY_TYPES),
-});
+const generateChecklistSchema = z
+  .object({
+    communityId: z.number().int().positive(),
+  })
+  .strict();
+
+/**
+ * Feature gate: Require condo/HOA community for compliance features
+ */
+function requireCondoCommunity(communityType: CommunityType): void {
+  const features = getFeaturesForCommunity(communityType);
+  if (!features.hasCompliance) {
+    throw new ForbiddenError('Compliance features are only available for condo/HOA communities');
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const maybeCode = (error as { code?: unknown }).code;
+  return maybeCode === '23505';
+}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -41,7 +60,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
+  requireCondoCommunity(membership.communityType);
+
   const scoped = createScopedClient(communityId);
 
   const rows = await scoped.query(complianceChecklistItems);
@@ -85,48 +106,45 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedBody.data.communityId);
-  const { communityType } = parsedBody.data;
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
+
+  // Feature gate: compliance is only available for condo/HOA communities
+  requireCondoCommunity(membership.communityType);
+
   const scoped = createScopedClient(communityId);
-
-  // Guard: ensure community exists in current tenant context.
-  const communityRows = await scoped.query(communities);
-  const targetCommunity = communityRows.find((row) => row['id'] === communityId);
-  if (!targetCommunity) {
-    throw new ValidationError(`Community ${communityId} not found`);
-  }
-
-  if (communityType === 'apartment') {
-    return NextResponse.json({ data: [] }, { status: 201 });
-  }
 
   const existing = await scoped.query(complianceChecklistItems);
   if (existing.length > 0) {
     return NextResponse.json({ data: existing, meta: { alreadyGenerated: true } });
   }
 
-  const template = getComplianceTemplate(communityType as CommunityType);
-  const inserted: Record<string, unknown>[] = [];
+  const template = getComplianceTemplate(membership.communityType);
   const now = new Date();
+  const rows = template.map((item) => ({
+    templateKey: item.templateKey,
+    title: item.title,
+    description: item.description,
+    category: item.category,
+    statuteReference: item.statuteReference,
+    deadline: item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null,
+    rollingWindow: item.rollingMonths ? { months: item.rollingMonths } : null,
+    documentId: null,
+    documentPostedAt: null,
+    lastModifiedBy: userId,
+  }));
 
-  for (const item of template) {
-    const rows = await scoped.insert(complianceChecklistItems, {
-      templateKey: item.templateKey,
-      title: item.title,
-      description: item.description,
-      category: item.category,
-      statuteReference: item.statuteReference,
-      deadline: item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null,
-      rollingWindow: item.rollingMonths ? { months: item.rollingMonths } : null,
-      documentId: null,
-      documentPostedAt: null,
-      lastModifiedBy: userId,
-    });
-
-    if (rows[0]) {
-      inserted.push(rows[0]);
+  try {
+    await scoped.insert(complianceChecklistItems, rows);
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
     }
+
+    const raced = await scoped.query(complianceChecklistItems);
+    return NextResponse.json({ data: raced, meta: { alreadyGenerated: true } });
   }
+
+  const inserted = await scoped.query(complianceChecklistItems);
 
   await logAuditEvent({
     userId,
@@ -135,7 +153,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     resourceId: String(communityId),
     communityId,
     newValues: {
-      communityType,
+      communityType: membership.communityType,
       itemCount: inserted.length,
       templateKeys: template.map((item) => item.templateKey),
     },

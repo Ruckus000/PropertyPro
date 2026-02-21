@@ -6,7 +6,7 @@ Compliance and community management platform for Florida condominium association
 
 PropertyPro is a demo platform for Florida condo/HOA compliance with Florida Statute §718.111(12)(g). The platform helps associations meet statutory requirements for document posting, meeting notices, and owner portal access.
 
-**Status:** Pre-Development Planning (Demo Phase)
+**Status:** Phase 2 Complete (16/16 base tasks), Gate 3 Verification in Progress
 
 ## Tech Stack
 
@@ -24,7 +24,7 @@ PropertyPro is a demo platform for Florida condo/HOA compliance with Florida Sta
 ### Backend
 - **Runtime:** Node.js
 - **Database:** PostgreSQL via Supabase
-- **ORM:** Prisma
+- **ORM:** Drizzle ORM
 - **Authentication:** NextAuth.js (email + password)
 - **File Storage:** Supabase Storage or AWS S3
 - **Email:** Resend
@@ -35,28 +35,36 @@ PropertyPro is a demo platform for Florida condo/HOA compliance with Florida Sta
 - **Database:** Supabase (managed Postgres)
 - **CDN:** Cloudflare
 
-## Project Structure (Planned)
+## Project Structure
 
 ```
 propertyprofl/
 ├── apps/
-│   ├── web/                    # Next.js web application
-│   │   ├── app/
-│   │   │   ├── (public)/       # Public website routes
-│   │   │   ├── (portal)/       # Owner portal routes
-│   │   │   ├── (admin)/        # Admin dashboard routes
-│   │   │   ├── (pm)/           # Property manager routes
-│   │   │   └── api/            # API routes
-│   │   ├── components/
-│   │   ├── lib/
-│   │   └── prisma/
-│   └── mobile/                 # React Native / Expo app
+│   └── web/                    # Next.js web application
+│       ├── app/
+│       │   ├── (public)/       # Public website routes
+│       │   ├── (portal)/       # Owner portal routes
+│       │   ├── (admin)/        # Admin dashboard routes
+│       │   └── api/            # API routes
+│       ├── components/
+│       ├── lib/
+│       └── __tests__/          # Test suites
 ├── packages/
-│   └── shared/                 # Shared types and constants
+│   ├── db/                     # Database layer (Drizzle ORM)
+│   │   ├── src/
+│   │   │   └── schema/         # Drizzle schema definitions
+│   │   ├── migrations/         # SQL migrations
+│   │   └── __tests__/          # DB integration tests
+│   ├── email/                  # Email templates and service
+│   ├── shared/                 # Shared types and constants
+│   └── ui/                     # Shared UI components
 ├── scripts/
-│   └── seed-demo.ts            # Demo data seeding
+│   ├── seed-demo.ts
+│   └── verify-*.ts             # Verification scripts
 └── docs/                       # Documentation
 ```
+
+**Note:** Mobile app is planned for future phases. Current focus is web platform.
 
 ## Key Concepts
 
@@ -105,16 +113,22 @@ pnpm install
 pnpm dev
 
 # Run database migrations
-pnpm prisma migrate dev
+pnpm --filter @propertypro/db db:migrate
 
 # Seed demo data
-pnpm seed
+pnpm seed:demo
+
+# Verify seed integrity
+pnpm seed:verify
 
 # Build for production
 pnpm build
 
-# Run tests
+# Run unit tests
 pnpm test
+
+# Run full integration test suite
+set -a; source .env.local; set +a; pnpm test:integration:preflight
 ```
 
 ## Environment Setup

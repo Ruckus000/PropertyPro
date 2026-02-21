@@ -404,11 +404,28 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
 
       const req = jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
         communityId: communityB.id,
-        communityType: 'hoa_720',
       });
       const res = await compliance.POST(req);
 
       expect([200, 201]).toContain(res.status);
+    });
+
+    it('rejects compliance POST on apartment communities (hasCompliance=false)', async () => {
+      const kit = requireState();
+      const { compliance } = requireRoutes();
+      const communityC = requireCommunity(kit, 'communityC');
+
+      setActor(kit, 'siteManagerC');
+
+      const req = jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
+        communityId: communityC.id,
+      });
+      const res = await compliance.POST(req);
+
+      expect(res.status).toBe(403);
+      const body = await parseJson(res);
+      expect(body.error.message).toMatch(/compliance/i);
+      expect(body.error.message).toMatch(/condo\/hoa/i);
     });
 
     it('rejects compliance GET on apartment communities (hasCompliance=false)', async () => {

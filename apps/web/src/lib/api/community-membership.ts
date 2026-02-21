@@ -1,6 +1,7 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import { requireCommunityRole, requireCommunityType } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
   userId: string;
@@ -33,7 +34,13 @@ export async function requireCommunityMembership(
   return {
     userId,
     communityId,
-    role: membership['role'] as CommunityRole,
-    communityType: community['communityType'] as CommunityType,
+    role: requireCommunityRole(
+      membership['role'],
+      `requireCommunityMembership(communityId=${communityId}, userId=${userId}) role`,
+    ),
+    communityType: requireCommunityType(
+      community['communityType'],
+      `requireCommunityMembership(communityId=${communityId}) community`,
+    ),
   };
 }

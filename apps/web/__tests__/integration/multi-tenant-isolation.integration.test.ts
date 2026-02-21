@@ -661,7 +661,6 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
     const complianceCreateResponse = await appRoutes.compliance.POST(
       jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
         communityId: seeded.communityBId,
-        communityType: 'hoa_720',
       }),
     );
     expect(complianceCreateResponse.status).toBe(403);
@@ -793,7 +792,6 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
         'POST',
         {
           communityId: seeded.communityBId,
-          communityType: 'hoa_720',
         },
         mismatchHeaders,
       ),

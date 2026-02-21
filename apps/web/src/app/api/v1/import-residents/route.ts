@@ -18,6 +18,7 @@ import type { CommunityRole, CommunityType } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
+import { requireCommunityType } from "@/lib/utils/community-validators";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
@@ -34,7 +35,10 @@ async function getCommunityType(communityId: number): Promise<CommunityType> {
     throw new NotFoundError(`Community ${communityId} not found`);
   }
 
-  return community["communityType"] as CommunityType;
+  return requireCommunityType(
+    community["communityType"],
+    `import-residents.getCommunityType(${communityId})`,
+  );
 }
 
 function getInsertedStringId(row: Record<string, unknown> | undefined): string | null {

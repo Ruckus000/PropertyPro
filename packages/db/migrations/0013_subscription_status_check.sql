@@ -1,5 +1,5 @@
 -- P2-34 follow-up: Constrain subscription_status to known Stripe + custom values.
--- Applied manually (not tracked in drizzle-kit journal — follows same pattern as 0011/0012).
+-- Applied manually and reconciled into drizzle-kit migration metadata.
 -- Prevents unexpected values (e.g., 'incomplete_expired') from silently passing the
 -- subscription guard's Set-based check in apps/web/src/lib/middleware/subscription-guard.ts.
 ALTER TABLE communities

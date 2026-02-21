@@ -5,3 +5,4 @@ export { ForbiddenError } from './ForbiddenError';
 export { NotFoundError } from './NotFoundError';
 export { UnprocessableEntityError } from './UnprocessableEntityError';
 export { RateLimitError } from './RateLimitError';
+export { DataIntegrityError } from './DataIntegrityError';

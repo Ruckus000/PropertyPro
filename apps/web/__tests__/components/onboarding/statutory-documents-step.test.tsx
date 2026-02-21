@@ -84,6 +84,14 @@ describe('StatutoryDocumentsStep', () => {
             await flushEffects();
         });
 
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/compliance',
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ communityId: 1 }),
+            }),
+        );
+
         expect(container.textContent).toContain('Articles of Incorporation');
         expect(container.textContent).toContain('Bylaws');
 
@@ -155,6 +163,28 @@ describe('StatutoryDocumentsStep', () => {
         });
 
         expect(onNext).toHaveBeenCalledWith({ items: [] });
+    });
+
+    it('shows explicit 403 message when compliance initialization is forbidden', async () => {
+        const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+            if (url === '/api/v1/compliance' && options?.method === 'POST') {
+                return Promise.resolve({ ok: false, status: 403 });
+            }
+
+            return Promise.resolve({ ok: false, status: 500 });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await act(async () => {
+            root.render(
+                <StatutoryDocumentsStep communityId={1} communityType="condo_718" onNext={vi.fn()} />
+            );
+            await flushEffects();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            await flushEffects();
+        });
+
+        expect(container.textContent).toContain('Compliance checklist is only available for condo/HOA communities.');
     });
 
     it('blocks continue when uploaded documents cannot be mapped to category IDs', async () => {

@@ -17,8 +17,8 @@ import {
   retrieveCheckoutSession,
 } from '@/lib/services/stripe-service';
 import type { SignupPlanId } from '@/lib/auth/signup-schema';
-import type { CommunityType } from '@propertypro/shared';
 import { headers } from 'next/headers';
+import { requireCommunityType } from '@/lib/utils/community-validators';
 
 export interface CheckoutSessionResult {
   clientSecret: string;
@@ -74,7 +74,10 @@ export async function createCheckoutSession(
   const returnBaseUrl = `${protocol}://${host}`;
 
   const planId = signup.planKey as SignupPlanId;
-  const communityType = signup.communityType as CommunityType;
+  const communityType = requireCommunityType(
+    signup.communityType,
+    `createCheckoutSession(signupRequestId=${signupRequestId})`,
+  );
 
   const result = await createEmbeddedCheckoutSession(
     signupRequestId,

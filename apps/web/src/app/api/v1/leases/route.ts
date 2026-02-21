@@ -18,7 +18,7 @@ import {
   userRoles,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -89,8 +89,8 @@ const deleteLeaseSchema = z.object({
  * Enforce that the community is an apartment.
  * [AGENTS #34] Lease tracking is apartment-only — check at route handler, not just UI.
  */
-function requireApartmentCommunity(communityType: string): void {
-  const features = getFeaturesForCommunity(communityType as Parameters<typeof getFeaturesForCommunity>[0]);
+function requireApartmentCommunity(communityType: CommunityType): void {
+  const features = getFeaturesForCommunity(communityType);
   if (!features.hasLeaseTracking) {
     throw new ForbiddenError('Lease tracking is only available for apartment communities');
   }

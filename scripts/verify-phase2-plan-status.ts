@@ -276,18 +276,166 @@ function verifyImplementationPlan(content: string, errors: string[]): void {
   }
 }
 
+/**
+ * Validates that the "Current cursor" section reflects completion state.
+ * Detects stale "Run remaining implementation chain" text when all tasks are complete.
+ */
+function validateCursorText(content: string, completedCount: number, errors: string[]): void {
+  const lines = content.split(/\r?\n/);
+  const cursorSection: string[] = [];
+  let inCursorSection = false;
+
+  for (const line of lines) {
+    if (line.trim() === 'Current cursor:') {
+      inCursorSection = true;
+      continue;
+    }
+    if (inCursorSection && line.trim().startsWith('Cross-phase merge guard:')) {
+      break;
+    }
+    if (inCursorSection && line.trim().startsWith('- ')) {
+      cursorSection.push(line.trim());
+    }
+  }
+
+  const cursorText = cursorSection.join('\n');
+
+  // If all tasks complete, cursor should not mention "remaining" or specific task IDs
+  if (completedCount === BASE_DENOMINATOR) {
+    if (cursorText.includes('remaining') && !cursorText.includes('All Phase 2 base tasks complete')) {
+      errors.push(
+        `PHASE2_EXECUTION_PLAN.md: "Current cursor" section mentions "remaining" but all ${BASE_DENOMINATOR} tasks are complete.`,
+      );
+    }
+
+    // Check for stale task ID references
+    const taskIdPattern = /P2-\d+[a-z]?/gi;
+    const taskIds = cursorText.match(taskIdPattern);
+    if (taskIds && taskIds.length > 0) {
+      errors.push(
+        `PHASE2_EXECUTION_PLAN.md: "Current cursor" references task IDs (${[...new Set(taskIds)].join(', ')}) but all tasks complete.`,
+      );
+    }
+  }
+}
+
+/**
+ * Validates Gate 3 checklist uses correct integration test command.
+ * Prevents false-green by ensuring full 102-test suite is referenced, not just DB tests (31).
+ */
+function validateGate3Checklist(content: string, errors: string[]): void {
+  const lines = content.split(/\r?\n/);
+  const gate3StartIdx = lines.findIndex((line) => line.includes('## Gate 3 Verification'));
+
+  if (gate3StartIdx === -1) {
+    errors.push('PHASE2_EXECUTION_PLAN.md: missing "## Gate 3 Verification" section.');
+    return;
+  }
+
+  const gate3Section = lines.slice(gate3StartIdx, gate3StartIdx + 50).join('\n');
+
+  // Must reference the full preflight command
+  if (!gate3Section.includes('pnpm test:integration:preflight')) {
+    errors.push(
+      'PHASE2_EXECUTION_PLAN.md: Gate 3 must reference `pnpm test:integration:preflight` (102 tests), not just DB tests.',
+    );
+  }
+
+  // Must explain test count
+  if (!gate3Section.includes('102 tests')) {
+    errors.push(
+      'PHASE2_EXECUTION_PLAN.md: Gate 3 should document total test count (102 tests: 31 DB + 71 web).',
+    );
+  }
+}
+
+/**
+ * Validates consistency between PHASE2_EXECUTION_PLAN.md and IMPLEMENTATION_PLAN.md.
+ * Prevents partial-update edge case where one file is updated but not the other.
+ */
+function validateCrossFileConsistency(
+  phase2Plan: string,
+  implementationPlan: string,
+  errors: string[],
+): void {
+  // Extract completed count from PHASE2_EXECUTION_PLAN.md
+  const phase2Match = phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
+  if (!phase2Match) {
+    errors.push('Cross-file: cannot extract task count from PHASE2_EXECUTION_PLAN.md.');
+    return;
+  }
+
+  const phase2Completed = Number.parseInt(phase2Match[1], 10);
+  const phase2Total = Number.parseInt(phase2Match[2], 10);
+
+  // If Phase 2 is complete, IMPLEMENTATION_PLAN.md should reflect that
+  if (phase2Completed === phase2Total) {
+    if (implementationPlan.includes('Remaining baseline Phase 2 tasks:')) {
+      errors.push(
+        'IMPLEMENTATION_PLAN.md: mentions "Remaining baseline Phase 2 tasks" but all tasks complete per PHASE2_EXECUTION_PLAN.md.',
+      );
+    }
+  }
+}
+
+/**
+ * Validates CLAUDE.md tech stack section matches actual implementation.
+ * Detects Prisma vs Drizzle contradictions and stale project structure.
+ */
+function validateClaudeMd(content: string, errors: string[]): void {
+  const lines = content.split(/\r?\n/);
+
+  // Check ORM field
+  const ormLine = lines.find((line) => line.includes('**ORM:**'));
+  if (ormLine && ormLine.includes('Prisma') && !ormLine.includes('Drizzle')) {
+    errors.push('CLAUDE.md: Tech Stack lists "ORM: Prisma" but project uses Drizzle ORM.');
+  }
+
+  // Check for stale prisma commands
+  if (content.includes('pnpm prisma migrate dev')) {
+    errors.push(
+      'CLAUDE.md: Contains "pnpm prisma migrate dev" but project uses Drizzle. Correct: "pnpm --filter @propertypro/db db:migrate".',
+    );
+  }
+
+  // Check project structure for prisma directory
+  if (content.includes('└── prisma/')) {
+    errors.push(
+      'CLAUDE.md: Project Structure shows "└── prisma/" but project uses packages/db/src/schema/ with Drizzle.',
+    );
+  }
+
+  // Check status field
+  const statusLine = lines.find((line) => line.includes('**Status:**'));
+  if (statusLine && statusLine.includes('Pre-Development Planning')) {
+    errors.push('CLAUDE.md: Project status is "Pre-Development Planning" but Phase 2 is complete.');
+  }
+}
+
 function main(): void {
   const root = process.cwd();
   const phase2PlanPath = join(root, 'PHASE2_EXECUTION_PLAN.md');
   const implementationPlanPath = join(root, 'IMPLEMENTATION_PLAN.md');
+  const claudeMdPath = join(root, 'CLAUDE.md');
 
   const phase2Plan = readFileSync(phase2PlanPath, 'utf8');
   const implementationPlan = readFileSync(implementationPlanPath, 'utf8');
+  const claudeMd = readFileSync(claudeMdPath, 'utf8');
 
   const errors: string[] = [];
 
+  // Existing validators
   verifyPhase2ExecutionPlan(phase2Plan, errors);
   verifyImplementationPlan(implementationPlan, errors);
+
+  // New validators
+  const completedCountMatch = phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
+  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+
+  validateCursorText(phase2Plan, completedCount, errors);
+  validateGate3Checklist(phase2Plan, errors);
+  validateCrossFileConsistency(phase2Plan, implementationPlan, errors);
+  validateClaudeMd(claudeMd, errors);
 
   if (errors.length > 0) {
     console.error('Phase 2 status consistency verification failed:');
@@ -298,6 +446,10 @@ function main(): void {
   }
 
   console.log('Phase 2 status consistency verification passed.');
+  console.log(`- Completed tasks: ${completedCount}/${BASE_DENOMINATOR}`);
+  console.log('- Cross-file consistency: VERIFIED');
+  console.log('- Tech stack accuracy: VERIFIED');
+  console.log('- Gate 3 checklist: VERIFIED');
 }
 
 main();

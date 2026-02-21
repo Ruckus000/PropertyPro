@@ -1,11 +1,11 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-20 (v26 — P2-38 complete; 14/16 Phase 2 base tasks complete)
+Generated: 2026-02-20 (v27 — All Phase 2 base tasks complete; 16/16; Gate 3 verification in progress)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). `P2-30` middleware/routing hardening is implemented on `main` (2026-02-13). A Phase 2 parallel batch of 7 tasks is completed and gate-passed (2026-02-14): P2-40 (593 tests), P2-31 (587 tests), P2-32 (587 tests), P2-32a (570 tests, badge fix committed), P2-37 (557 tests), P2-41 (557 tests), P2-42 (557 tests). `P2-43` (Multi-Tenant Isolation Tests) merged on `main` on 2026-02-15 (`bbaade5`) after expanded route isolation coverage (`aac4bbb`). Stop-the-line recovery for stale Phase 1 branches is now fully merged and pushed on `main` (2026-02-17): `codex/recover-p1-16-meetings` -> `5a37de7`, `codex/recover-p1-26-notification-preferences` -> `6d43950`, `codex/recover-p1-12-validation` -> `01b92af`. Networked rerun of `apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts` is now passing (`45/45`) after shared-env migration reconciliation via `pnpm --filter @propertypro/db db:migrate`. Digest notifications implementation (migrations, processor, internal route, middleware exemption, scheduler fallback, and tests) is merged on `main` as part of `P2-41` and `p1-26` recovery. P2-33 (Self-Service Signup) and P2-33.5 (Billing/Provisioning Schema) merged via PR #3 on 2026-02-17 (merge `6123767`); base task count reached 10/16. P2-34/P2-34a (Stripe webhook + subscription degradation), P2-35 (Provisioning pipeline), and P2-36 (Apartment operational dashboard) all committed to `main` on 2026-02-19; base task count is now 13/16. Pre-push audit fixes applied (`17dbfb9`): corrected `stripeEventId` storage, added hard env-var guard, removed dead idempotency query. Integration test suite unblocked (2026-02-20): fixed `@propertypro/shared` module export condition and reconciled `maintenance_requests` migration state in database; full integration preflight now passes (102 tests: 31 db + 71 web). P2-38 (Apartment Onboarding Wizard) remediated and merged to `main` on 2026-02-20 (commit `7a81f56`): restored 4-step wizard (Profile → Units → Rules → Invite), added timezone field with IANA validation, implemented duplicate unit validation (client + server), enforced `hasLeaseTracking` feature gate, added canonical types with legacy normalizers, and achieved 999 passing tests. Base task count is now 14/16. Remaining baseline Phase 2 tasks: P2-39 (Condo Onboarding Wizard), P2-44 (Apartment Demo Seed).
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). Phase 2 is complete with all 16/16 base tasks merged to `main` as of 2026-02-20. Gate 3 verification is in progress. P2-39 (Condo Onboarding Wizard) merged via PR #7 (`170d987`). P2-44 (Apartment Demo Seed) merged via PR #6 (`ac7a2fb`). Full integration preflight suite passes (102 tests: 31 DB + 71 web). Canonical Phase 2 status tracking is maintained in `PHASE2_EXECUTION_PLAN.md`.
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -1514,7 +1514,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-39 Condo Onboarding Wizard
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (merged 2026-02-20, PR #7, commit 170d987; 1003 tests passed)
 - **Files to Create/Modify:** apps/web/src/app/onboarding/condo/page.tsx, apps/web/src/components/onboarding/condo-wizard.tsx, apps/web/src/components/onboarding/steps/statutory-documents-step.tsx, community-profile-step.tsx, unit-roster-step.tsx
 - **Dependencies:** P2-35, P1-09
 - **Blocks:** None
@@ -1629,7 +1629,7 @@ active → past_due → canceled → expired
 
 ### Task: P2-44 Apartment Demo Seed
 - **Phase:** 2
-- **Status:** Not Started
+- **Status:** Complete (merged 2026-02-20, PR #6, commit ac7a2fb; seed verification passed for all 3 communities)
 - **Files to Create/Modify:** scripts/seed-demo.ts (extend), scripts/fixtures/apartment-demo-data.ts, scripts/seed-apartment-demo.ts
 - **Dependencies:** P2-36, P2-37, P1-29
 - **Blocks:** P4-61
