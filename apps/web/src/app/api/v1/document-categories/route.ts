@@ -15,6 +15,10 @@ const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
 });
 
+function toSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 
@@ -39,6 +43,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const categories = rows.map((row) => ({
     id: row['id'] as number,
     name: row['name'] as string,
+    slug: toSlug(row['name'] as string),
     description: row['description'] as string | null,
     isSystem: row['isSystem'] as boolean,
   }));

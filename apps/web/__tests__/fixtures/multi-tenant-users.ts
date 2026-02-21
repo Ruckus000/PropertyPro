@@ -10,6 +10,7 @@ export type MultiTenantUserKey =
   | 'camA'
   | 'actorC'
   | 'tenantC'
+  | 'siteManagerA'
   | 'siteManagerC';
 
 export interface MultiTenantUserFixture {
@@ -62,6 +63,13 @@ export const MULTI_TENANT_USERS: readonly MultiTenantUserFixture[] = [
     role: 'cam',
     emailPrefix: 'p243-cam-a',
     fullName: 'P2-43 CAM A',
+  },
+  {
+    key: 'siteManagerA',
+    communityKey: 'communityA',
+    role: 'site_manager',
+    emailPrefix: 'p243-sitemgr-a',
+    fullName: 'P2-43 Site Mgr A',
   },
   {
     key: 'actorC',

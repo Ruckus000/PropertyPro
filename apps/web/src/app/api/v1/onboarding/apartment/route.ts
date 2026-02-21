@@ -33,11 +33,23 @@ import {
   type ProfileStepData,
   type RulesStepData,
   type UnitDraftData,
-  type WizardStatus,
   type WizardStepData,
   normalizeWizardStepData,
   normalizeWizardStepPatch,
 } from '@/lib/onboarding/apartment-wizard-types';
+import {
+  type ScopedClient,
+  type WizardStatus,
+  requireMutationAuthorization,
+  isUniqueViolation,
+  toIsoString,
+  deriveNextStep,
+  normalizeStepIndex,
+  normalizeAction,
+  mergeStepData,
+  updateCommunityProfile,
+  getOrCreateWizardState,
+} from '@/lib/onboarding/wizard-common';
 
 const WIZARD_TYPE = 'apartment';
 const MAX_STEP_INDEX = 3;
@@ -121,94 +133,11 @@ const completeWizardSchema = z.object({
   skip: z.boolean().optional(),
 });
 
-type ScopedClient = ReturnType<typeof createScopedClient>;
-
-type WizardRow = {
-  status: WizardStatus;
-  lastCompletedStep: number | null;
-  stepData: unknown;
-  completedAt: Date | string | null;
-};
-
-function requireMutationAuthorization(role: string): void {
-  if (!['site_manager', 'property_manager_admin'].includes(role)) {
-    throw new ForbiddenError('Only site managers and property manager admins can modify wizard state');
-  }
-}
-
 function requireApartmentCommunity(communityType: string): void {
   const features = getFeaturesForCommunity(communityType as Parameters<typeof getFeaturesForCommunity>[0]);
   if (!features.hasLeaseTracking) {
     throw new ForbiddenError('Apartment onboarding is only available for apartment communities');
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const maybeCode = (error as { code?: unknown }).code;
-  return maybeCode === '23505';
-}
-
-function toIsoString(value: Date | string | null): string | null {
-  if (value == null) return null;
-  if (typeof value === 'string') return value;
-  return value.toISOString();
-}
-
-function deriveNextStep(lastCompletedStep: number | null): number {
-  if (lastCompletedStep == null) return 0;
-  return Math.min(lastCompletedStep + 1, MAX_STEP_INDEX);
-}
-
-function normalizeStepIndex(step: number | undefined, currentStep: number | undefined): number {
-  if (step !== undefined) return step;
-  if (currentStep === undefined) {
-    throw new ValidationError('step or currentStep is required');
-  }
-  return currentStep - 1;
-}
-
-function normalizeAction(action: 'complete' | 'skip' | undefined, skip: boolean | undefined): 'complete' | 'skip' {
-  if (action) return action;
-  return skip ? 'skip' : 'complete';
-}
-
-function mergeStepData(existing: WizardStepData, patch: Partial<WizardStepData>): WizardStepData {
-  const merged: WizardStepData = {
-    ...existing,
-    ...patch,
-  };
-
-  if (existing.completionMarkers || patch.completionMarkers) {
-    merged.completionMarkers = {
-      ...(existing.completionMarkers ?? {}),
-      ...(patch.completionMarkers ?? {}),
-    };
-  }
-
-  return merged;
-}
-
-async function updateCommunityProfile(
-  scoped: ScopedClient,
-  communityId: number,
-  profile: ProfileStepData,
-): Promise<void> {
-  const updatePayload = {
-    name: profile.name,
-    addressLine1: profile.addressLine1,
-    addressLine2: profile.addressLine2 ?? null,
-    city: profile.city,
-    state: profile.state,
-    zipCode: profile.zipCode,
-    timezone: profile.timezone,
-    logoPath: profile.logoPath ?? null,
-    updatedAt: new Date(),
-  };
-
-  await scoped.update(communities, updatePayload, eq(communities.id, communityId));
 }
 
 async function persistStepData(
@@ -227,54 +156,6 @@ async function persistStepData(
       eq(onboardingWizardState.wizardType, WIZARD_TYPE),
     ),
   );
-}
-
-function parseWizardRow(row: Record<string, unknown>): WizardRow {
-  return {
-    status: (row['status'] as WizardStatus) ?? 'in_progress',
-    lastCompletedStep:
-      typeof row['lastCompletedStep'] === 'number' ? (row['lastCompletedStep'] as number) : null,
-    stepData: row['stepData'] ?? {},
-    completedAt: (row['completedAt'] as Date | string | null | undefined) ?? null,
-  };
-}
-
-async function getOrCreateWizardState(
-  scoped: ScopedClient,
-  communityId: number,
-): Promise<WizardRow> {
-  const rows = await scoped.query(onboardingWizardState);
-  const existing = rows.find((row) => row['wizardType'] === WIZARD_TYPE);
-
-  if (existing) {
-    return parseWizardRow(existing);
-  }
-
-  try {
-    const inserted = await scoped.insert(onboardingWizardState, {
-      communityId,
-      wizardType: WIZARD_TYPE,
-      status: 'in_progress',
-      lastCompletedStep: null,
-      stepData: {},
-    });
-
-    if (inserted[0]) {
-      return parseWizardRow(inserted[0]);
-    }
-  } catch (error) {
-    if (!isUniqueViolation(error)) {
-      throw error;
-    }
-  }
-
-  const retryRows = await scoped.query(onboardingWizardState);
-  const retry = retryRows.find((row) => row['wizardType'] === WIZARD_TYPE);
-  if (!retry) {
-    throw new NotFoundError('Failed to load wizard state after initialization');
-  }
-
-  return parseWizardRow(retry);
 }
 
 function validateStepPatch(step: number, rawStepData: unknown): Partial<WizardStepData> {
@@ -335,7 +216,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requireApartmentCommunity(membership.communityType);
 
   const scoped = createScopedClient(communityId);
-  const wizard = await getOrCreateWizardState(scoped, communityId);
+  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
 
   const stepData = normalizeWizardStepData(wizard.stepData);
 
@@ -343,7 +224,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     data: {
       status: wizard.status,
       lastCompletedStep: wizard.lastCompletedStep,
-      nextStep: deriveNextStep(wizard.lastCompletedStep),
+      nextStep: deriveNextStep(wizard.lastCompletedStep, MAX_STEP_INDEX),
       stepData,
       completedAt: toIsoString(wizard.completedAt),
     },
@@ -372,7 +253,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const stepPatch = validateStepPatch(step, parseResult.data.stepData);
 
   const scoped = createScopedClient(communityId);
-  const wizard = await getOrCreateWizardState(scoped, communityId);
+  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
 
   const existingStepData = normalizeWizardStepData(wizard.stepData);
   const mergedStepData = mergeStepData(existingStepData, stepPatch);
@@ -417,7 +298,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       success: true,
       step,
       lastCompletedStep,
-      nextStep: deriveNextStep(lastCompletedStep),
+      nextStep: deriveNextStep(lastCompletedStep, MAX_STEP_INDEX),
       status,
       stepData: mergedStepData,
     },
@@ -445,7 +326,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const action = normalizeAction(parseResult.data.action, parseResult.data.skip);
 
   const scoped = createScopedClient(communityId);
-  const wizard = await getOrCreateWizardState(scoped, communityId);
+  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
 
   if (action === 'skip') {
     if (wizard.status !== 'completed') {
@@ -521,17 +402,16 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       });
     }
 
-    for (const unit of draftUnits) {
-      await scoped.insert(units, {
-        communityId,
-        unitNumber: unit.unitNumber,
-        floor: unit.floor ?? null,
-        bedrooms: unit.bedrooms ?? null,
-        bathrooms: unit.bathrooms ?? null,
-        sqft: unit.sqft ?? null,
-        rentAmount: unit.rentAmount ?? null,
-      });
-    }
+    const unitData = draftUnits.map(unit => ({
+      communityId,
+      unitNumber: unit.unitNumber,
+      floor: unit.floor ?? null,
+      bedrooms: unit.bedrooms ?? null,
+      bathrooms: unit.bathrooms ?? null,
+      sqft: unit.sqft ?? null,
+      rentAmount: unit.rentAmount ?? null,
+    }));
+    await scoped.insert(units, unitData);
 
     completionMarkers.unitsCreated = true;
     stepData.completionMarkers = completionMarkers;

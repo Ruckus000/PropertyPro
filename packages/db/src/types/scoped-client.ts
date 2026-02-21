@@ -51,8 +51,8 @@ export interface ScopedClient {
    */
   buildWhere: (table: ScopedTable, additionalWhere?: SQL) => SQL | undefined;
 
-  /** INSERT with communityId ownership enforced by scope. */
-  insert: (table: ScopedTable, data: ScopedRow) => Promise<ScopedRow[]>;
+  /** INSERT with communityId ownership enforced by scope. Supports bulk inserts. */
+  insert: (table: ScopedTable, data: ScopedRow | ScopedRow[]) => Promise<ScopedRow[]>;
 
   /** UPDATE with tenant + soft-delete scoping applied to WHERE. */
   update: (

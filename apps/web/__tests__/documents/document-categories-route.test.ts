@@ -73,13 +73,13 @@ describe('document categories route', () => {
     );
     const res = await GET(req);
     const json = (await res.json()) as {
-      data: Array<{ id: number; name: string; description: string | null; isSystem: boolean }>;
+      data: Array<{ id: number; name: string; slug: string; description: string | null; isSystem: boolean }>;
     };
 
     expect(res.status).toBe(200);
     expect(json.data).toEqual([
-      { id: 1, name: 'Rules', description: 'Rules docs', isSystem: true },
-      { id: 2, name: 'Meeting Minutes', description: null, isSystem: false },
+      { id: 1, name: 'Rules', slug: 'rules', description: 'Rules docs', isSystem: true },
+      { id: 2, name: 'Meeting Minutes', slug: 'meeting-minutes', description: null, isSystem: false },
     ]);
   });
 
