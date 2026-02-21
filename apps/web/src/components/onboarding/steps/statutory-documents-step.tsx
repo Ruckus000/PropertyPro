@@ -18,14 +18,12 @@ function normalizeCategorySlug(value: string): string {
 
 interface StatutoryDocumentsStepProps {
     communityId: number;
-    communityType: string;
     onNext: (data: StatutoryStepData) => void;
     initialData?: StatutoryStepData;
 }
 
 export function StatutoryDocumentsStep({
     communityId,
-    communityType,
     onNext,
     initialData,
 }: StatutoryDocumentsStepProps) {
@@ -53,10 +51,14 @@ export function StatutoryDocumentsStep({
                     body: JSON.stringify({ communityId }),
                 });
                 if (!postRes.ok) {
+                    const errorJson = await postRes.json().catch(() => null) as
+                        { error?: { message?: string } } | null;
+                    const serverMessage = errorJson?.error?.message;
+
                     if (postRes.status === 403) {
-                        throw new Error('Compliance checklist is only available for condo/HOA communities.');
+                        throw new Error(serverMessage ?? 'Compliance checklist is only available for condo/HOA communities.');
                     }
-                    throw new Error('Failed to initialize compliance checklist');
+                    throw new Error(serverMessage ?? 'Failed to initialize compliance checklist');
                 }
 
                 // 2. Fetch checklist items
@@ -99,7 +101,7 @@ export function StatutoryDocumentsStep({
         return () => {
             mounted = false;
         };
-    }, [communityId, communityType, initialData]);
+    }, [communityId, initialData]);
 
     // We only require them to upload documents that have a 'deadline' indicating statutory requirement,
     // or maybe all generated items are statutory. Let's show all items, but mark them as required.

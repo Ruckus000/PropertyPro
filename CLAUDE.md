@@ -127,7 +127,11 @@ pnpm build
 # Run unit tests
 pnpm test
 
-# Run full integration test suite
+# Run integration tests (requires DATABASE_URL)
+set -a; source .env.local; set +a
+pnpm exec vitest run --config apps/web/vitest.integration.config.ts
+
+# Run full integration preflight (migrations + seed verify + tests)
 set -a; source .env.local; set +a; pnpm test:integration:preflight
 ```
 

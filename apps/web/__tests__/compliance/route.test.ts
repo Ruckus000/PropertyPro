@@ -9,6 +9,7 @@ const {
   logAuditEventMock,
   scopedQueryMock,
   scopedInsertMock,
+  getComplianceTemplateMock,
   communitiesTable,
   complianceChecklistItemsTable,
   requireAuthenticatedUserIdMock,
@@ -18,6 +19,7 @@ const {
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedQueryMock: vi.fn(),
   scopedInsertMock: vi.fn(),
+  getComplianceTemplateMock: vi.fn(),
   communitiesTable: Symbol('communities'),
   complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -39,40 +41,14 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
-  getComplianceTemplate: (communityType: string) => {
-    if (communityType === 'condo_718') {
-      return [
-        {
-          templateKey: '718_budget',
-          title: 'Budget',
-          description: 'Budget posting',
-          category: 'financial_records',
-          statuteReference: '§718.112(2)(f)',
-          deadlineDays: 30,
-        },
-      ];
-    }
+vi.mock('@propertypro/shared', async () => {
+  const actual = await vi.importActual<typeof import('@propertypro/shared')>('@propertypro/shared');
 
-    if (communityType === 'hoa_720') {
-      return [
-        {
-          templateKey: '720_minutes',
-          title: 'Minutes',
-          description: 'Minutes retention',
-          category: 'meeting_records',
-          statuteReference: '§720.303(4)(l)',
-          rollingMonths: 12,
-        },
-      ];
-    }
-
-    return [];
-  },
-  getFeaturesForCommunity: (communityType: string) => ({
-    hasCompliance: communityType !== 'apartment',
-  }),
-}));
+  return {
+    ...actual,
+    getComplianceTemplate: getComplianceTemplateMock,
+  };
+});
 
 import { GET, POST } from '../../src/app/api/v1/compliance/route';
 
@@ -83,6 +59,35 @@ describe('p1-09 compliance route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'board_president',
       communityType: 'condo_718',
+    });
+    getComplianceTemplateMock.mockImplementation((communityType: string) => {
+      if (communityType === 'condo_718') {
+        return [
+          {
+            templateKey: '718_budget',
+            title: 'Budget',
+            description: 'Budget posting',
+            category: 'financial_records',
+            statuteReference: '§718.112(2)(f)',
+            deadlineDays: 30,
+          },
+        ];
+      }
+
+      if (communityType === 'hoa_720') {
+        return [
+          {
+            templateKey: '720_minutes',
+            title: 'Minutes',
+            description: 'Minutes retention',
+            category: 'meeting_records',
+            statuteReference: '§720.303(4)(l)',
+            rollingMonths: 12,
+          },
+        ];
+      }
+
+      return [];
     });
 
     createScopedClientMock.mockReturnValue({
@@ -175,6 +180,77 @@ describe('p1-09 compliance route', () => {
         communityId: 42,
       }),
     );
+  });
+
+  it('POST returns emptyTemplate meta when hasCompliance=true but template is empty', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    getComplianceTemplateMock.mockReturnValueOnce([]);
+    scopedQueryMock.mockResolvedValueOnce([]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/compliance', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+      }),
+    });
+
+    const res = await POST(req);
+    const json = (await res.json()) as {
+      data: Array<{ templateKey: string }>;
+      meta?: { emptyTemplate?: boolean };
+    };
+
+    expect(res.status).toBe(200);
+    expect(json.data).toEqual([]);
+    expect(json.meta?.emptyTemplate).toBe(true);
+    expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[compliance] Empty template for community type "condo_718" despite hasCompliance=true. Skipping checklist generation.',
+    );
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('POST warns when post-insert canonical read has fewer rows than template', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    scopedQueryMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    scopedInsertMock.mockResolvedValueOnce([]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/compliance', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+      }),
+    });
+
+    const res = await POST(req);
+    const json = (await res.json()) as { data: Array<{ templateKey: string }> };
+
+    expect(res.status).toBe(201);
+    expect(json.data).toEqual([]);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[compliance] Expected 1 checklist items for community 42, but found 0. Possible data inconsistency.',
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'create',
+        resourceType: 'compliance_checklist',
+        communityId: 42,
+      }),
+    );
+
+    consoleWarnSpy.mockRestore();
   });
 
   it('POST returns existing rows when checklist is already generated', async () => {

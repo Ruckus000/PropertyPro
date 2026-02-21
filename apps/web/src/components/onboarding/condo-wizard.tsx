@@ -175,7 +175,6 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                 {currentStep === 0 && (
                     <StatutoryDocumentsStep
                         communityId={communityId}
-                        communityType={communityType}
                         onNext={handleStatutoryNext}
                         initialData={stepData.statutory}
                     />

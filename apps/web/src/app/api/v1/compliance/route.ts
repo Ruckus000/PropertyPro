@@ -119,6 +119,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const template = getComplianceTemplate(membership.communityType);
+  if (template.length === 0) {
+    console.warn(
+      `[compliance] Empty template for community type "${membership.communityType}" despite hasCompliance=true. Skipping checklist generation.`,
+    );
+    return NextResponse.json({ data: [], meta: { emptyTemplate: true } });
+  }
+
   const now = new Date();
   const rows = template.map((item) => ({
     templateKey: item.templateKey,
@@ -145,6 +152,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const inserted = await scoped.query(complianceChecklistItems);
+  if (inserted.length < template.length) {
+    console.warn(
+      `[compliance] Expected ${template.length} checklist items for community ${communityId}, `
+      + `but found ${inserted.length}. Possible data inconsistency.`,
+    );
+  }
 
   await logAuditEvent({
     userId,

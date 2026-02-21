@@ -76,7 +76,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} communityType="condo_718" onNext={onNext} />
+                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
             );
             await flushEffects();
             // wait for use-compliance-items hook fetch
@@ -145,7 +145,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} communityType="condo_718" onNext={onNext} />
+                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -168,7 +168,13 @@ describe('StatutoryDocumentsStep', () => {
     it('shows explicit 403 message when compliance initialization is forbidden', async () => {
         const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
             if (url === '/api/v1/compliance' && options?.method === 'POST') {
-                return Promise.resolve({ ok: false, status: 403 });
+                return Promise.resolve({
+                    ok: false,
+                    status: 403,
+                    json: async () => ({
+                        error: { message: 'You are not a member of this community' },
+                    }),
+                });
             }
 
             return Promise.resolve({ ok: false, status: 500 });
@@ -177,7 +183,35 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} communityType="condo_718" onNext={vi.fn()} />
+                <StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />
+            );
+            await flushEffects();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            await flushEffects();
+        });
+
+        expect(container.textContent).toContain('You are not a member of this community');
+    });
+
+    it('falls back to default 403 message when compliance error response body is invalid', async () => {
+        const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+            if (url === '/api/v1/compliance' && options?.method === 'POST') {
+                return Promise.resolve({
+                    ok: false,
+                    status: 403,
+                    json: async () => {
+                        throw new Error('invalid json');
+                    },
+                });
+            }
+
+            return Promise.resolve({ ok: false, status: 500 });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await act(async () => {
+            root.render(
+                <StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -217,7 +251,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} communityType="condo_718" onNext={onNext} />
+                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));

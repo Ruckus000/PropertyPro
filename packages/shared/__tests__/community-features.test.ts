@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CommunityType } from '../src';
 import { COMMUNITY_TYPES } from '../src';
+import { getComplianceTemplate } from '../src/compliance/templates';
 import type { CommunityFeatures } from '../src/features/types';
 import { COMMUNITY_FEATURES } from '../src/features/community-features';
 import { getFeaturesForCommunity } from '../src/features/get-features';
@@ -220,6 +221,36 @@ describe('CommunityFeatures config', () => {
         expect(features.hasMeetings).toBe(true);
         expect(features.hasMaintenanceRequests).toBe(true);
         expect(features.hasAnnouncements).toBe(true);
+      }
+    });
+  });
+
+  describe('feature gate / template invariants', () => {
+    it('every community type with hasCompliance=true has a non-empty compliance template', () => {
+      for (const communityType of COMMUNITY_TYPES) {
+        const features = getFeaturesForCommunity(communityType);
+        const template = getComplianceTemplate(communityType);
+
+        if (features.hasCompliance) {
+          expect(
+            template.length,
+            `${communityType} has hasCompliance=true but getComplianceTemplate returns empty`,
+          ).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('every community type with hasCompliance=false has an empty compliance template', () => {
+      for (const communityType of COMMUNITY_TYPES) {
+        const features = getFeaturesForCommunity(communityType);
+        const template = getComplianceTemplate(communityType);
+
+        if (!features.hasCompliance) {
+          expect(
+            template.length,
+            `${communityType} has hasCompliance=false but getComplianceTemplate returns items`,
+          ).toBe(0);
+        }
       }
     });
   });
