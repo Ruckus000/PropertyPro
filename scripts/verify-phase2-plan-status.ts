@@ -420,14 +420,21 @@ function validateGate3Checklist(content: string, errors: string[]): void {
   // Must reference the full preflight command
   if (!gate3Section.includes('pnpm test:integration:preflight')) {
     errors.push(
-      'PHASE2_EXECUTION_PLAN.md: Gate 3 must reference `pnpm test:integration:preflight` (102 tests), not just DB tests.',
+      'PHASE2_EXECUTION_PLAN.md: Gate 3 must reference `pnpm test:integration:preflight`, not just DB tests.',
     );
   }
 
-  // Must explain test count
-  if (!gate3Section.includes('102 tests')) {
+  const hasSummedBreakdown = /\b\d+\s*(?:DB|database)\b\s*\+\s*\d+\s*web\b/i.test(gate3Section);
+  const hasDbRatio = /\bDB\s*`?\d+\/\d+`?/i.test(gate3Section);
+  const hasWebRatio = /\bweb\s*`?\d+\/\d+`?/i.test(gate3Section);
+  const hasDbWebBreakdown = hasSummedBreakdown || (hasDbRatio && hasWebRatio);
+  const hasTotalCount = /\b\d+\s+tests?\b/i.test(gate3Section);
+  const hasComponentCoverage = /\b(?:DB|database)\b/i.test(gate3Section) && /\bweb\b/i.test(gate3Section);
+
+  // Must describe integration coverage without hard-coding a specific test count.
+  if (!(hasDbWebBreakdown || (hasTotalCount && hasComponentCoverage))) {
     errors.push(
-      'PHASE2_EXECUTION_PLAN.md: Gate 3 should document total test count (102 tests: 31 DB + 71 web).',
+      'PHASE2_EXECUTION_PLAN.md: Gate 3 should document integration coverage with a total count and DB/web component breakdown.',
     );
   }
 }
