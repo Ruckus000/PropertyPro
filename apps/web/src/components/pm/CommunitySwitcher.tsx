@@ -11,7 +11,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSelectedCommunity } from '@/hooks/useSelectedCommunity';
 import type { PmCommunityPortfolioCard } from '@/lib/api/pm-communities';
 
@@ -25,8 +25,21 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
   const { recentCommunityIds, selectCommunity } = useSelectedCommunity();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
+
+  // Close dropdown when user clicks outside the container
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
 
   const sorted = useMemo(() => {
     const recentSet = new Set(recentCommunityIds);
@@ -66,7 +79,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         aria-haspopup="listbox"
@@ -110,7 +123,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
             className="max-h-64 overflow-y-auto py-1"
           >
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-gray-400">No communities found</li>
+              <li role="none" className="px-3 py-2 text-sm text-gray-400">No communities found</li>
             ) : (
               filtered.map((community, index) => {
                 const isRecent = recentCommunityIds.includes(community.communityId);
@@ -121,14 +134,14 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
                   recentCommunityIds.includes(filtered[index - 1]?.communityId ?? -1);
 
                 return (
-                  <li key={community.communityId}>
+                  <li key={community.communityId} role="none">
                     {showRecentDivider && (
-                      <p className="px-3 pt-1 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+                      <p role="presentation" className="px-3 pt-1 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
                         Recent
                       </p>
                     )}
                     {showRestDivider && recentCommunityIds.length > 0 && (
-                      <div className="my-1 border-t border-gray-100" />
+                      <div role="presentation" className="my-1 border-t border-gray-100" />
                     )}
                     <button
                       type="button"

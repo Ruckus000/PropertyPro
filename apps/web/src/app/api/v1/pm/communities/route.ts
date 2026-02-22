@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { COMMUNITY_TYPES } from '@propertypro/shared';
 import { isPmAdminInAnyCommunity } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -8,7 +9,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 
 const querySchema = z.object({
-  communityType: z.enum(['condo_718', 'hoa_720', 'apartment']).optional(),
+  communityType: z.enum(COMMUNITY_TYPES).optional(),
   search: z
     .string()
     .trim()
