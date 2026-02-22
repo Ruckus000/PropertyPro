@@ -45,6 +45,9 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
   resolve(repoRoot, 'apps/web/src/lib/services/provisioning-service.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/provision/route.ts'),
+  // P3-47: White-label branding — communities is the root tenant table (no communityId column);
+  // getBrandingForCommunity must query by primary key directly.
+  resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {
