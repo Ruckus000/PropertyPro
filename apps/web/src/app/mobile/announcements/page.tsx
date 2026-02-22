@@ -8,8 +8,9 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { and, desc, isNull, sql } from '@propertypro/db/filters';
-import { createScopedClient, announcements } from '@propertypro/db';
+import { communities, createScopedClient, announcements } from '@propertypro/db';
 import type { Announcement } from '@propertypro/db';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -34,14 +35,19 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
   }
 
   const scoped = createScopedClient(communityId);
-  // Filter and sort at the DB level; communityId + deletedAt IS NULL are injected automatically
-  const active = await scoped
-    .selectFrom<Announcement>(
-      announcements,
-      {},
-      and(isNull(announcements.archivedAt)),
-    )
-    .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
+  // Fetch community timezone and announcements in parallel
+  const [communityRows, active] = await Promise.all([
+    scoped.query(communities),
+    scoped
+      .selectFrom<Announcement>(
+        announcements,
+        {},
+        and(isNull(announcements.archivedAt)),
+      )
+      .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt)),
+  ]);
+  const community = communityRows.find((row) => row['id'] === communityId);
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   return (
     <div>
@@ -54,7 +60,7 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
             key={a.id}
             title={a.title}
             subtitle={a.isPinned ? 'Pinned' : undefined}
-            meta={new Date(a.publishedAt).toLocaleDateString('en-US')}
+            meta={new Date(a.publishedAt).toLocaleDateString('en-US', { timeZone: timezone })}
           />
         ))
       )}

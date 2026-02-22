@@ -60,6 +60,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const objectUrlRef = useRef<string | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Revoke previous object URL on unmount or file change
   useEffect(() => {
@@ -164,6 +165,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
 
       setSuccess(true);
       setLogoFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
@@ -191,6 +193,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
           </p>
           <input
             id="logo-upload"
+            ref={fileInputRef}
             type="file"
             accept="image/png,image/jpeg,image/jpg,image/webp"
             onChange={handleLogoChange}

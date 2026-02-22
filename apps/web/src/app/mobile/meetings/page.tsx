@@ -12,8 +12,9 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { asc, gte } from '@propertypro/db/filters';
-import { createScopedClient, meetings } from '@propertypro/db';
+import { communities, createScopedClient, meetings } from '@propertypro/db';
 import type { Meeting } from '@propertypro/db';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -46,9 +47,14 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
 
   const scoped = createScopedClient(communityId);
   // Filter and sort at the DB level; communityId + deletedAt IS NULL are injected automatically
-  const upcoming = await scoped
-    .selectFrom<Meeting>(meetings, {}, gte(meetings.startsAt, new Date()))
-    .orderBy(asc(meetings.startsAt));
+  const [communityRows, upcoming] = await Promise.all([
+    scoped.query(communities),
+    scoped
+      .selectFrom<Meeting>(meetings, {}, gte(meetings.startsAt, new Date()))
+      .orderBy(asc(meetings.startsAt)),
+  ]);
+  const community = communityRows.find((row) => row['id'] === communityId);
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   return (
     <div>
@@ -61,7 +67,7 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
             key={m.id}
             title={m.title}
             subtitle={m.meetingType}
-            meta={new Date(m.startsAt).toLocaleDateString('en-US')}
+            meta={new Date(m.startsAt).toLocaleDateString('en-US', { timeZone: timezone })}
           />
         ))
       )}

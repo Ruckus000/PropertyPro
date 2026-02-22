@@ -10,7 +10,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getAccessibleDocuments } from '@propertypro/db';
+import { communities, createScopedClient, getAccessibleDocuments } from '@propertypro/db';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -51,11 +52,17 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
     redirect('/auth/login');
   }
 
-  const docs = await getAccessibleDocuments({
-    communityId,
-    role: membership!.role,
-    communityType: membership!.communityType,
-  });
+  const scoped = createScopedClient(communityId);
+  const [communityRows, docs] = await Promise.all([
+    scoped.query(communities),
+    getAccessibleDocuments({
+      communityId,
+      role: membership!.role,
+      communityType: membership!.communityType,
+    }),
+  ]);
+  const community = communityRows.find((row) => row['id'] === communityId);
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   return (
     <div>
@@ -68,7 +75,7 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
             key={doc.id}
             title={doc.title}
             subtitle={doc.fileName}
-            meta={new Date(doc.createdAt).toLocaleDateString('en-US')}
+            meta={new Date(doc.createdAt).toLocaleDateString('en-US', { timeZone: timezone })}
           />
         ))
       )}

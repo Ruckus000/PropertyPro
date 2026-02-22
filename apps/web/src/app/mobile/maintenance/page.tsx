@@ -10,7 +10,8 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { desc, eq } from '@propertypro/db/filters';
-import { createScopedClient, maintenanceRequests } from '@propertypro/db';
+import { communities, createScopedClient, maintenanceRequests } from '@propertypro/db';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -45,9 +46,14 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
 
   const scoped = createScopedClient(communityId);
   // Filter by submittedById at the DB level; communityId + deletedAt IS NULL are injected automatically
-  const active = await scoped
-    .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
-    .orderBy(desc(maintenanceRequests.createdAt));
+  const [communityRows, active] = await Promise.all([
+    scoped.query(communities),
+    scoped
+      .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
+      .orderBy(desc(maintenanceRequests.createdAt)),
+  ]);
+  const community = communityRows.find((row) => row['id'] === communityId);
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   return (
     <div>
@@ -60,7 +66,7 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
             key={r['id'] as number}
             title={r['title'] as string}
             subtitle={STATUS_LABEL[r['status'] as string] ?? (r['status'] as string)}
-            meta={new Date(r['createdAt'] as string).toLocaleDateString('en-US')}
+            meta={new Date(r['createdAt'] as string).toLocaleDateString('en-US', { timeZone: timezone })}
           />
         ))
       )}
