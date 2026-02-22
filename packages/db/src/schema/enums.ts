@@ -37,6 +37,14 @@ export const userRoleEnum = pgEnum('user_role', [
   'property_manager_admin',
 ]);
 
+/** Contract lifecycle status for vendor contract tracking (P3-52). */
+export const contractStatusEnum = pgEnum('contract_status', [
+  'draft',
+  'active',
+  'expired',
+  'terminated',
+]);
+
 /** Lease lifecycle status for apartment lease tracking (P2-37). */
 export const leaseStatusEnum = pgEnum('lease_status', [
   'active',
