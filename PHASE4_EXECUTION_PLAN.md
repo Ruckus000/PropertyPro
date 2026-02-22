@@ -72,6 +72,71 @@ Batch-specific gate checks:
 - Dependency scan reports zero critical/high vulnerabilities (or blocking remediation PR exists before merge).
 - Middleware/API hardening checks (CORS/CSP/input validation error shape) are covered by tests.
 
+#### `P4-55` execution scope (concrete subtask breakdown)
+
+Implementation outputs (Batch A / task-level):
+- SQL migration to enable RLS + create policies on tenant-scoped tables (`packages/db/migrations/XXXX_p4_55_rls.sql`)
+- Policy inventory/config map for coverage assertions and maintenance (`packages/db/src/schema/rls-config.ts`)
+- DB integration tests for policy enforcement, coverage, and service-role bypass (`packages/db/__tests__/rls-policies.integration.test.ts`)
+- Web/API validation test(s) for route behavior under restricted DB role if app-level harness is needed (`apps/web/__tests__/rls-validation.test.ts`)
+
+Tenant-scoped table inventory (direct `community_id` columns; current schema scan = 21):
+- `announcement_delivery_log`
+- `announcements`
+- `compliance_audit_log`
+- `compliance_checklist_items`
+- `contract_bids`
+- `contracts`
+- `demo_seed_registry`
+- `document_categories`
+- `documents`
+- `invitations`
+- `leases`
+- `maintenance_comments`
+- `maintenance_requests`
+- `meeting_documents`
+- `meetings`
+- `notification_digest_queue`
+- `notification_preferences`
+- `onboarding_wizard_state`
+- `provisioning_jobs`
+- `units`
+- `user_roles`
+
+Global/non-tenant exceptions to explicitly document in `rls-config` (no `community_id`, different handling):
+- `communities`, `users`, `pending_signups`, `stripe_webhook_events`
+- Note: `compliance_audit_log` is tenant-scoped but append-only and requires role-restricted read policy design.
+
+Subtasks (execute in order):
+1. Policy design + SQL helper strategy
+- Define auth mapping from `auth.uid()` -> `users.id` -> `user_roles.community_id`.
+- Choose/sessionize tenant context for insert auto-scoping (e.g., DB session setting used by policies/triggers) and document fallback behavior for service-role jobs.
+- Define policy families: standard tenant CRUD, service-role-only/system tables, and audit-log restricted reads.
+
+2. `rls-config` source of truth
+- Encode tenant-scoped table list, policy family, and expected access mode (`tenant_crud`, `tenant_read_only`, `service_only`, `audit_log_restricted`).
+- Encode explicit exclusions to prevent silent drift when new schema files are added.
+- Reuse config in tests to drive coverage assertions (no hand-maintained duplicate table list).
+
+3. Migration implementation (`P4-55`)
+- Enable RLS on every tenant-scoped table (all 21 above).
+- Create `SELECT` / `INSERT` / `UPDATE` / `DELETE` policies per family with `USING` + `WITH CHECK`.
+- Add insert auto-scoping mechanism for tenant tables (trigger/default/session context) so forged `community_id` writes are rejected or overwritten by DB policy path.
+- Preserve service-role/background access (verify bypass behavior; do not break migrations/seed/demo reset workflows).
+- Keep changes additive/reviewable; avoid manual production SQL outside Drizzle migration flow.
+
+4. DB integration test suite (required for task completion)
+- Policy coverage test: query catalog (`pg_class`/`pg_tables`) and assert RLS enabled for every tenant-scoped table from `rls-config`.
+- Cross-tenant read negative tests: community A auth context cannot read community B rows across representative tables (and table-family coverage).
+- Cross-tenant write negative tests: forged `community_id` insert/update/delete attempts fail or no-op per policy.
+- Audit-log tests: non-authorized tenant roles denied; authorized canonical roles limited to own/managed communities only.
+- Service-role test: privileged connection can access multi-community rows (bypass confirmed).
+
+5. Batch A readiness outputs before `P4-56`
+- Record exact test command(s) and evidence artifact paths for Gate 4 checklist.
+- List any tables intentionally deferred/excluded (must be zero unless justified in writing with follow-up issue).
+- Document operational rollback/mitigation notes for overly restrictive policy regressions.
+
 ### Batch B - Access Control and Integration Coverage
 Tasks:
 - `P4-57` RBAC Audit
