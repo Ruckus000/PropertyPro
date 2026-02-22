@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq } from '@propertypro/db/filters';
 import { createScopedClient, maintenanceRequests } from '@propertypro/db';
 import { CompactCard } from '@/components/mobile/CompactCard';
 

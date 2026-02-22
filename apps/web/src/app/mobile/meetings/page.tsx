@@ -11,7 +11,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getFeaturesForCommunity } from '@propertypro/shared';
-import { asc, gte } from 'drizzle-orm';
+import { asc, gte } from '@propertypro/db/filters';
 import { createScopedClient, meetings } from '@propertypro/db';
 import type { Meeting } from '@propertypro/db';
 import { CompactCard } from '@/components/mobile/CompactCard';
