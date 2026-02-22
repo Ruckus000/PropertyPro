@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-21
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (3/10 base Phase 3 tasks complete; Batch C complete)
+**Status:** In progress on `main` (5/10 base Phase 3 tasks complete; Batch C complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed
 
 ---
@@ -22,7 +22,7 @@ Milestones:
 - [2026-02-21] Batch C complete (`P3-47`, `P3-48`, `P3-49`) - white-label branding, PhoneFrame mobile preview, and mobile layout/pages shipped (`codex/p3-batch-b-pm-core`).
 
 Current cursor:
-- 3/10 base tasks complete (P3-45, P3-46, P3-47, P3-48, P3-49 — Batches B and C done).
+- 5/10 base tasks complete (P3-45, P3-46, P3-47, P3-48, P3-49 — Batches B and C done).
 - Next: Batch D (P3-50 Maintenance Request Submission, P3-51 Maintenance Request Admin).
 - Gate 3 remains closed; Gate 4 remains the official pre-deployment gate in Phase 4.
 
