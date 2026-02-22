@@ -228,3 +228,7 @@ See `/docs` for detailed documentation:
 - `01-DOCUMENT-CONTRADICTIONS-ANALYSIS.md` - Analysis notes
 - `02-NEXT-STEPS-TASK-LIST.md` - Development tasks
 - `03-08` - Sales and market documentation
+- `adr/` - Architecture Decision Records
+- `audits/` - Gate verification evidence
+- `design-system/` - Design system documentation
+- `spec-bundle/` - Specification bundles
