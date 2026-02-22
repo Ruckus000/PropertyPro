@@ -134,6 +134,13 @@
       "when": 1771990000000,
       "tag": "0018_maintenance_p3_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772000000000,
+      "tag": "0019_contracts_indexes",
+      "breakpoints": true
     }
   ]
 }

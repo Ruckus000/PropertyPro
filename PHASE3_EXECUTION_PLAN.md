@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-21
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (5/10 base Phase 3 tasks complete; Batch C complete)
+**Status:** Complete on `main` (10/10 base Phase 3 tasks complete; hardening tasks complete; Phase 3 exit verification passed)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed
 
 ---
@@ -20,10 +20,16 @@ Milestones:
 - [2026-02-21] `P3-PRE-03`/`P3-PRE-05` baseline safeguards completed - added unscoped PM portfolio query helper under `@propertypro/db/unsafe` and expanded middleware protected path prefixes for planned `/pm`, `/mobile`, `/contracts`, and `/audit-trail` surfaces.
 - [2026-02-21] Batch B complete (`P3-45`, `P3-46`) - PM portfolio dashboard and community switcher shipped and Agent C verified (`codex/p3-batch-b-pm-core`).
 - [2026-02-21] Batch C complete (`P3-47`, `P3-48`, `P3-49`) - white-label branding, PhoneFrame mobile preview, and mobile layout/pages shipped (`codex/p3-batch-b-pm-core`).
+- [2026-02-22] Batch E complete (`P3-52`, `P3-53`) - contract/vendor tracking and audit trail viewer merged via PR #9 (`baf4bb4`, `codex/p3-batch-b-pm-core`) out of planned sequence before Batch D.
+- [2026-02-22] Batch E post-merge hardening complete - audit trail CSV cap/redaction hardening merged via PR #10 (`379494c`, `claude/gracious-ptolemy`).
+- [2026-02-22] Batch D complete (`P3-50`, `P3-51`) - maintenance request submission and admin inbox merged via PR #11 (`c266565`, `codex/p3-batch-b-pm-core`).
+- [2026-02-22] `P3-PRE-02` schema compatibility contract completed - reconciled orphan contracts-index migration into `0019`, restored Drizzle journal/snapshot lockstep, and fixed fresh-bootstrap `0018` maintenance migration breakpoints/enum default application on `db:migrate` (`codex/p3-phase3-closeout`).
+- [2026-02-22] Batch F complete (`P3-54`) - final performance closeout verification passed (`pnpm build` + `pnpm perf:check`) with no additional Phase 3 code changes required (`codex/p3-phase3-closeout`).
+- [2026-02-22] Phase 3 exit verification completed - build/typecheck/lint/tests/integration preflight/plan verifier/perf check all passed; evidence captured in `docs/audits/phase3-exit-evidence-2026-02-22.md` (`codex/p3-phase3-closeout`).
 
 Current cursor:
-- 5/10 base tasks complete (P3-45, P3-46, P3-47, P3-48, P3-49 — Batches B and C done).
-- Next: Batch D (P3-50 Maintenance Request Submission, P3-51 Maintenance Request Admin).
+- 10/10 base tasks complete (P3-45 through P3-54 — Batches B, C, D, E, and F done).
+- Next: Phase 4 / Gate 4 pre-deployment validation.
 - Gate 3 remains closed; Gate 4 remains the official pre-deployment gate in Phase 4.
 
 Cross-phase merge guard:
@@ -53,7 +59,7 @@ Cross-phase merge guard:
 - `P3-54` is documented as a final pass over all shipped Phase 3 surfaces.
 
 ### P3-PRE-02 - Schema Compatibility Contract
-- **Status:** In Progress
+- **Status:** Complete (2026-02-22)
 - **Objective:** Safely evolve existing live schema (especially `maintenance_requests`) without breaking seeded or existing data.
 - **Required outcomes:**
 - Migrations are additive and backward-safe.
@@ -94,18 +100,17 @@ Completed base Phase 3 tasks on `main`:
 - `P3-47` White-Label Branding
 - `P3-48` Phone Frame Mobile Preview
 - `P3-49` Mobile Layouts
-
-Remaining base implementation tasks:
 - `P3-50` Maintenance Request Submission
 - `P3-51` Maintenance Request Admin
 - `P3-52` Contract and Vendor Tracking
 - `P3-53` Audit Trail Viewer
 - `P3-54` Performance Optimization
 
-Count check: 5 completed + 5 remaining = 10 base tasks.
+Remaining base implementation tasks:
+
+Count check: 10 completed + 0 remaining = 10 base tasks.
 
 Remaining mandatory hardening tasks:
-- `P3-PRE-02` Schema Compatibility Contract
 
 ---
 
@@ -198,16 +203,16 @@ Every Phase 3 task must satisfy:
 ## Phase 3 Exit Verification (Internal)
 
 Run when all Phase 3 base tasks and hardening tasks are complete:
-- [ ] 10/10 base tasks complete in this file.
-- [ ] Hardening tasks complete.
-- [ ] `pnpm build` clean.
-- [ ] `pnpm typecheck` clean.
-- [ ] `pnpm lint` clean.
-- [ ] `pnpm test` clean.
-- [ ] `set -a; source .env.local; set +a; pnpm test:integration:preflight` clean.
-- [ ] `pnpm plan:verify:phase3` clean.
-- [ ] `pnpm perf:check` clean.
-- [ ] Evidence artifact captured under `docs/audits/` with timestamped command outputs.
+- [x] 10/10 base tasks complete in this file.
+- [x] Hardening tasks complete.
+- [x] `pnpm build` clean.
+- [x] `pnpm typecheck` clean.
+- [x] `pnpm lint` clean.
+- [x] `pnpm test` clean.
+- [x] `set -a; source .env.local; set +a; pnpm test:integration:preflight` clean.
+- [x] `pnpm plan:verify:phase3` clean.
+- [x] `pnpm perf:check` clean.
+- [x] Evidence artifact captured under `docs/audits/` with timestamped command outputs.
 
 Evidence commands:
 ```bash
