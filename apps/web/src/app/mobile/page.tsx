@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * P3-48/49: Mobile home/dashboard page.
  *

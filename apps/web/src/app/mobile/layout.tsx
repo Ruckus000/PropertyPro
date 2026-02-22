@@ -8,6 +8,8 @@
  * Community ID is resolved from the ?communityId= search param on every
  * request. Unauthenticated or membership-denied requests redirect to login.
  */
+export const dynamic = 'force-dynamic';
+
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { SearchParams } from 'next/dist/server/request/search-params';

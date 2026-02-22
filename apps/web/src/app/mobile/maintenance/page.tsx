@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * P3-48/49: Mobile maintenance requests list page (resident view).
  *
