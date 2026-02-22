@@ -5,6 +5,9 @@
  * in the target community before calling these functions.
  */
 import { communities, createScopedClient } from '@propertypro/db';
+// Unsafe escape hatch: communities is the root tenant table (no communityId column),
+// so getBrandingForCommunity must query by primary key directly.
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq } from '@propertypro/db/filters';
 import type { CommunityBranding } from '@propertypro/shared';
 import { isValidHexColor } from '@propertypro/shared';
@@ -17,11 +20,16 @@ import { ValidationError } from '@/lib/api/errors';
 export async function getBrandingForCommunity(
   communityId: number,
 ): Promise<CommunityBranding | null> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const row = rows.find((r) => r['id'] === communityId);
+  // communities has no communityId column — query directly by primary key
+  const db = createUnscopedClient();
+  const rows = await db
+    .select()
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  const row = rows[0];
   if (!row) return null;
-  const raw = row['branding'];
+  const raw = row.branding;
   if (!raw || typeof raw !== 'object') return null;
   return raw as CommunityBranding;
 }

@@ -109,7 +109,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
     const uploadUrl = signedUpload.signedUrl.startsWith('http')
       ? signedUpload.signedUrl
-      : `${supabaseUrl}${signedUpload.signedUrl}`;
+      : new URL(signedUpload.signedUrl, supabaseUrl).toString();
 
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',

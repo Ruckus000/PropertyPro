@@ -54,7 +54,7 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
             key={a.id}
             title={a.title}
             subtitle={a.isPinned ? 'Pinned' : undefined}
-            meta={new Date(a.publishedAt).toLocaleDateString()}
+            meta={new Date(a.publishedAt).toLocaleDateString('en-US')}
           />
         ))
       )}

@@ -61,7 +61,7 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
             key={m.id}
             title={m.title}
             subtitle={m.meetingType}
-            meta={new Date(m.startsAt).toLocaleDateString()}
+            meta={new Date(m.startsAt).toLocaleDateString('en-US')}
           />
         ))
       )}

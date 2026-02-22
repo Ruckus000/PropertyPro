@@ -17,6 +17,22 @@ interface PageProps {
   searchParams: Promise<SearchParams>;
 }
 
+interface DocumentRow {
+  id: number;
+  title: string;
+  fileName: string;
+  createdAt: string;
+}
+
+function toDocumentRow(doc: Record<string, unknown>): DocumentRow {
+  return {
+    id: doc['id'] as number,
+    title: doc['title'] as string,
+    fileName: doc['fileName'] as string,
+    createdAt: doc['createdAt'] as string,
+  };
+}
+
 export default async function MobileDocumentsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const communityId = Number(params['communityId']);
@@ -47,12 +63,12 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
       {docs.length === 0 ? (
         <p className="mobile-empty">No documents available</p>
       ) : (
-        docs.map((doc: Record<string, unknown>) => (
+        docs.map(toDocumentRow).map((doc) => (
           <CompactCard
-            key={doc['id'] as number}
-            title={doc['title'] as string}
-            subtitle={doc['fileName'] as string}
-            meta={new Date(doc['createdAt'] as string).toLocaleDateString()}
+            key={doc.id}
+            title={doc.title}
+            subtitle={doc.fileName}
+            meta={new Date(doc.createdAt).toLocaleDateString('en-US')}
           />
         ))
       )}

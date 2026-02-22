@@ -53,7 +53,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
               key={a.id}
               title={a.title}
               subtitle={a.isPinned ? 'Pinned' : undefined}
-              meta={new Date(a.publishedAt).toLocaleDateString()}
+              meta={new Date(a.publishedAt).toLocaleDateString('en-US')}
               href={`/mobile/announcements/${a.id}?communityId=${communityId}`}
             />
           ))
@@ -71,7 +71,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
               key={m.id}
               title={m.title}
               subtitle={m.meetingType}
-              meta={new Date(m.startsAt).toLocaleDateString()}
+              meta={new Date(m.startsAt).toLocaleDateString('en-US')}
               href={`/mobile/meetings?communityId=${communityId}`}
             />
           ))}

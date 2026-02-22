@@ -60,7 +60,7 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
             key={r['id'] as number}
             title={r['title'] as string}
             subtitle={STATUS_LABEL[r['status'] as string] ?? (r['status'] as string)}
-            meta={new Date(r['createdAt'] as string).toLocaleDateString()}
+            meta={new Date(r['createdAt'] as string).toLocaleDateString('en-US')}
           />
         ))
       )}
