@@ -6,34 +6,31 @@ Compliance and community management platform for Florida condominium association
 
 PropertyPro is a demo platform for Florida condo/HOA compliance with Florida Statute §718.111(12)(g). The platform helps associations meet statutory requirements for document posting, meeting notices, and owner portal access.
 
-**Status:** Phase 2 Complete (16/16 base tasks), Gate 3 Verification in Progress
+**Status:** Phase 2 Complete (16/16 base tasks, Gate 3 closed 2026-02-21). Phase 3 kickoff next.
 
 ## Tech Stack
 
 ### Web Application
-- **Framework:** Next.js 14+ (App Router) with TypeScript
+- **Framework:** Next.js 15.1.0 (App Router) with TypeScript / React 19
 - **Styling:** Tailwind CSS
 - **UI Components:** shadcn/ui
 - **State Management:** TanStack Query (React Query)
 
-### Mobile Application
-- **Framework:** React Native with Expo
-- **Navigation:** Expo Router
-- **Push Notifications:** Expo Notifications → APNs/FCM
+### Mobile
+- Mobile-optimized web routes at `/mobile/` (Next.js pages, not a native app)
+- No React Native/Expo app exists yet
 
 ### Backend
 - **Runtime:** Node.js
 - **Database:** PostgreSQL via Supabase
 - **ORM:** Drizzle ORM
-- **Authentication:** NextAuth.js (email + password)
-- **File Storage:** Supabase Storage or AWS S3
+- **Authentication:** Supabase Auth (email + password)
+- **File Storage:** Supabase Storage
 - **Email:** Resend
 
 ### Infrastructure
 - **Web Hosting:** Vercel
-- **Mobile:** Expo Application Services (EAS)
 - **Database:** Supabase (managed Postgres)
-- **CDN:** Cloudflare
 
 ## Project Structure
 
@@ -41,18 +38,31 @@ PropertyPro is a demo platform for Florida condo/HOA compliance with Florida Sta
 propertyprofl/
 ├── apps/
 │   └── web/                    # Next.js web application
-│       ├── app/
-│       │   ├── (public)/       # Public website routes
-│       │   ├── (portal)/       # Owner portal routes
-│       │   ├── (admin)/        # Admin dashboard routes
-│       │   └── api/            # API routes
-│       ├── components/
-│       ├── lib/
-│       └── __tests__/          # Test suites
+│       └── src/
+│           ├── app/
+│           │   ├── (auth)/           # Auth routes (login, signup, verify)
+│           │   ├── (authenticated)/  # Protected routes (dashboard, settings)
+│           │   ├── (marketing)/      # Marketing/landing pages
+│           │   ├── (public)/         # Public website routes
+│           │   ├── api/              # API routes
+│           │   └── mobile/           # Mobile web routes
+│           ├── components/
+│           ├── hooks/
+│           ├── lib/
+│           │   ├── auth/             # Supabase auth utilities
+│           │   ├── services/         # Business logic services
+│           │   ├── middleware/        # Middleware utilities
+│           │   └── tenant/           # Multi-tenancy resolution
+│           └── middleware.ts          # Request middleware
 ├── packages/
 │   ├── db/                     # Database layer (Drizzle ORM)
 │   │   ├── src/
-│   │   │   └── schema/         # Drizzle schema definitions
+│   │   │   ├── schema/         # Drizzle schema definitions (24 tables)
+│   │   │   ├── supabase/       # Supabase client factories (client, server, admin, middleware, storage)
+│   │   │   ├── queries/        # Query builders
+│   │   │   ├── scoped-client.ts  # Tenant-scoped query builder (primary entry point)
+│   │   │   ├── filters.ts      # Drizzle operator facade (eq, and, or, etc.)
+│   │   │   └── unsafe.ts       # Allowlisted cross-tenant imports
 │   │   ├── migrations/         # SQL migrations
 │   │   └── __tests__/          # DB integration tests
 │   ├── email/                  # Email templates and service
@@ -64,8 +74,6 @@ propertyprofl/
 └── docs/                       # Documentation
 ```
 
-**Note:** Mobile app is planned for future phases. Current focus is web platform.
-
 ## Key Concepts
 
 ### Multi-Tenancy
@@ -75,9 +83,11 @@ propertyprofl/
 
 ### User Roles
 - `owner` - Unit owner with portal access
+- `tenant` - Resident (renter) in condos/HOAs/apartments
 - `board_member` - Board member with admin access
 - `board_president` - Board president
 - `cam` - Community Association Manager
+- `site_manager` - Apartment on-site manager (apartment-only role)
 - `property_manager_admin` - PM company admin
 
 ### Florida Compliance Requirements
@@ -89,19 +99,50 @@ propertyprofl/
 ## API Patterns
 
 ```
-GET/POST /api/v1/associations/:id/documents
-GET/POST /api/v1/associations/:id/meetings
-GET/POST /api/v1/associations/:id/announcements
-GET/POST /api/v1/associations/:id/maintenance-requests
-GET      /api/v1/associations/:id/compliance
+# Core resources (tenant-scoped via middleware, not URL)
+GET/POST /api/v1/documents
+GET/POST /api/v1/meetings
+GET/POST /api/v1/announcements
+GET      /api/v1/compliance
+GET/POST /api/v1/leases
+GET/POST /api/v1/residents
+
+# Documents extras
+GET      /api/v1/documents/:id/download
+GET/POST /api/v1/documents/:id/versions
+GET      /api/v1/documents/search
+GET      /api/v1/document-categories
+
+# Auth & onboarding
+POST     /api/v1/auth/signup
+POST     /api/v1/invitations
+POST     /api/v1/onboarding/condo
+POST     /api/v1/onboarding/apartment
+
+# PM dashboard
+GET      /api/v1/pm/communities
+GET/POST /api/v1/pm/branding
+
+# Internal / webhooks
+POST     /api/v1/webhooks/stripe
+POST     /api/v1/internal/provision
+POST     /api/v1/internal/notification-digests/process
+POST     /api/v1/internal/payment-reminders
+
+# Uploads & preferences
+POST     /api/v1/upload
+GET/PUT  /api/v1/notification-preferences
+POST     /api/v1/import-residents
 ```
 
 ## Demo Data
 
-The platform uses a fictional association "Palm Gardens Condominium Association" for demos:
-- 50 units in West Palm Beach, FL
-- Pre-populated with documents, meetings, announcements, and maintenance requests
-- Demo credentials reset nightly
+Three demo communities are seeded via `pnpm seed:demo`:
+- **Sunset Condos** (`sunset-condos`) — Miami, FL (condo_718)
+- **Palm Shores HOA** (`palm-shores-hoa`) — Fort Lauderdale, FL (hoa_720)
+- **Sunset Ridge Apartments** (`sunset-ridge-apartments`) — Tampa, FL (apartment)
+
+Each is pre-populated with documents, meetings, announcements, and residents.
 
 ## Development Commands
 
@@ -111,6 +152,12 @@ pnpm install
 
 # Run development server
 pnpm dev
+
+# Type-check all packages
+pnpm typecheck
+
+# Lint code + run DB access guard
+pnpm lint
 
 # Run database migrations
 pnpm --filter @propertypro/db db:migrate
@@ -133,6 +180,12 @@ pnpm exec vitest run --config apps/web/vitest.integration.config.ts
 
 # Run full integration preflight (migrations + seed verify + tests)
 set -a; source .env.local; set +a; pnpm test:integration:preflight
+
+# Performance budget check
+pnpm perf:check
+
+# Clean build outputs
+pnpm clean
 ```
 
 ## Environment Setup
@@ -148,6 +201,25 @@ pnpm install
 ```
 
 The setup script creates a symlink at `apps/web/.env.local` pointing to the root env file, since Next.js only loads `.env*` from its own directory.
+
+## Gotchas & Architecture Notes
+
+### Scoped Database Access
+- All tenant queries MUST go through `createScopedClient()` from `@propertypro/db`
+- Direct Drizzle imports are blocked; use `@propertypro/db/filters` for operators (`eq`, `and`, `or`, `gte`, etc.)
+- CI guard (`pnpm guard:db-access`) scans for unauthorized imports — only 8 allowlisted files may bypass scoping
+- The `communities` table is the root tenant table and cannot be scoped by `community_id`
+
+### Middleware
+- `apps/web/src/middleware.ts` handles: Supabase session refresh, tenant resolution, auth redirects, email verification checks, request tracing (`X-Request-ID`), rate limiting, and header sanitization
+- Protected paths: `/dashboard`, `/settings`, `/documents`, `/maintenance`, `/api/v1`, etc.
+- Token-authenticated routes (no session): `/api/v1/invitations`, `/api/v1/auth/signup`, `/api/v1/webhooks/stripe`, cron endpoints
+
+### Node Version
+- `.nvmrc` locks to Node 20
+
+### Turbo
+- Build orchestration via Turbo (`turbo.json`) — `pnpm build`/`dev`/`lint` are turbo-orchestrated
 
 ## Documentation
 

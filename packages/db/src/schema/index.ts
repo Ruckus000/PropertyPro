@@ -22,6 +22,8 @@ export * from './meetings';
 export * from './meeting-documents';
 export * from './leases';
 export * from './maintenance-requests';
+export * from './contracts';
+export * from './contract-bids';
 export * from './demo-seed-registry';
 export * from './onboarding-wizard-state';
 
@@ -48,6 +50,8 @@ import type { meetings } from './meetings';
 import type { meetingDocuments } from './meeting-documents';
 import type { leases } from './leases';
 import type { maintenanceRequests } from './maintenance-requests';
+import type { contracts } from './contracts';
+import type { contractBids } from './contract-bids';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { onboardingWizardState } from './onboarding-wizard-state';
 
@@ -133,6 +137,14 @@ export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;
 export type NewDemoSeedRegistryRecord = typeof demoSeedRegistry.$inferInsert;
+
+// Contracts (P3-52)
+export type Contract = typeof contracts.$inferSelect;
+export type NewContract = typeof contracts.$inferInsert;
+
+// Contract Bids (P3-52)
+export type ContractBid = typeof contractBids.$inferSelect;
+export type NewContractBid = typeof contractBids.$inferInsert;
 
 // Onboarding Wizard State
 export type OnboardingWizardState = typeof onboardingWizardState.$inferSelect;

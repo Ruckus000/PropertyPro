@@ -113,6 +113,20 @@
       "when": 1771733172871,
       "tag": "0015_nostalgic_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1771800000000,
+      "tag": "0016_communities_branding",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1771900000000,
+      "tag": "0017_contracts_and_bids",
+      "breakpoints": true
     }
   ]
 }
