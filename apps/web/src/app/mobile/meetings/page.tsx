@@ -11,7 +11,9 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getFeaturesForCommunity } from '@propertypro/shared';
+import { asc, gte } from 'drizzle-orm';
 import { createScopedClient, meetings } from '@propertypro/db';
+import type { Meeting } from '@propertypro/db';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -43,11 +45,10 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
   }
 
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(meetings);
-  const now = Date.now();
-  const upcoming = rows
-    .filter((r) => new Date(r['startsAt'] as string).getTime() >= now)
-    .sort((a, b) => new Date(a['startsAt'] as string).getTime() - new Date(b['startsAt'] as string).getTime());
+  // Filter and sort at the DB level; communityId + deletedAt IS NULL are injected automatically
+  const upcoming = await scoped
+    .selectFrom<Meeting>(meetings, {}, gte(meetings.startsAt, new Date()))
+    .orderBy(asc(meetings.startsAt));
 
   return (
     <div>
@@ -57,10 +58,10 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
       ) : (
         upcoming.map((m) => (
           <CompactCard
-            key={m['id'] as number}
-            title={m['title'] as string}
-            subtitle={m['meetingType'] as string}
-            meta={new Date(m['startsAt'] as string).toLocaleDateString()}
+            key={m.id}
+            title={m.title}
+            subtitle={m.meetingType}
+            meta={new Date(m.startsAt).toLocaleDateString()}
           />
         ))
       )}

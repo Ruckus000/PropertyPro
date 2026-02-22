@@ -183,13 +183,14 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Logo */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="logo-upload" className="mb-1.5 block text-sm font-medium text-gray-700">
             Company Logo
           </label>
           <p className="mb-2 text-xs text-gray-500">
             PNG, JPEG, or WebP · max 10 MB · will be resized to 400×400 WebP
           </p>
           <input
+            id="logo-upload"
             type="file"
             accept="image/png,image/jpeg,image/jpg,image/webp"
             onChange={handleLogoChange}

@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { desc, eq } from 'drizzle-orm';
 import { createScopedClient, maintenanceRequests } from '@propertypro/db';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
@@ -43,16 +44,10 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
   }
 
   const scoped = createScopedClient(communityId);
-  const allRows = await scoped.query(maintenanceRequests);
-  // Residents see only their own requests — filter client-side after scoped fetch
-  const rows = allRows.filter((r) => r['submittedById'] === userId);
-  const active = rows
-    .filter((r) => r['deletedAt'] == null)
-    .sort(
-      (a, b) =>
-        new Date(b['createdAt'] as string).getTime() -
-        new Date(a['createdAt'] as string).getTime(),
-    );
+  // Filter by submittedById at the DB level; communityId + deletedAt IS NULL are injected automatically
+  const active = await scoped
+    .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
+    .orderBy(desc(maintenanceRequests.createdAt));
 
   return (
     <div>
