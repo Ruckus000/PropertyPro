@@ -3066,7 +3066,40 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "contracts_community_id_idx": {
+          "name": "contracts_community_id_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {},
+          "where": "\"deleted_at\" IS NULL"
+        },
+        "contracts_bidding_closes_at_idx": {
+          "name": "contracts_bidding_closes_at_idx",
+          "columns": [
+            {
+              "expression": "bidding_closes_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {},
+          "where": "\"deleted_at\" IS NULL"
+        }
+      },
       "foreignKeys": {
         "contracts_community_id_communities_id_fk": {
           "name": "contracts_community_id_communities_id_fk",
@@ -3201,7 +3234,40 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "contract_bids_community_id_idx": {
+          "name": "contract_bids_community_id_idx",
+          "columns": [
+            {
+              "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {},
+          "where": "\"deleted_at\" IS NULL"
+        },
+        "contract_bids_contract_id_idx": {
+          "name": "contract_bids_contract_id_idx",
+          "columns": [
+            {
+              "expression": "contract_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {},
+          "where": "\"deleted_at\" IS NULL"
+        }
+      },
       "foreignKeys": {
         "contract_bids_contract_id_contracts_id_fk": {
           "name": "contract_bids_contract_id_contracts_id_fk",

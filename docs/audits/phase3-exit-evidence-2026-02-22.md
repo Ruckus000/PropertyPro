@@ -38,7 +38,7 @@ All required Phase 3 exit commands completed successfully on this branch.
 ## Command Evidence
 
 Environment note:
-- Commands requiring secrets/DB access were run with env sourced from `/Users/jphilistin/Documents/Coding/PropertyPro/.env.local`.
+- Commands requiring secrets/DB access were run with env sourced from a local `.env.local` file.
 
 ### `pnpm build`
 - Status: PASS
