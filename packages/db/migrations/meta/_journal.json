@@ -141,6 +141,13 @@
       "when": 1772000000000,
       "tag": "0019_contracts_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772100000000,
+      "tag": "0020_p4_55_rls",
+      "breakpoints": true
     }
   ]
 }
