@@ -50,9 +50,11 @@ const SOFT_DELETE_EXEMPT_TABLES: ReadonlySet<string> = new Set([
 /**
  * Tables that are append-only (INSERT permitted, UPDATE/DELETE rejected).
  * compliance_audit_log must never be modified or deleted for compliance.
+ * maintenance_comments are append-only — no PATCH endpoint exists for comments.
  */
 const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
+  'maintenance_comments',
 ]);
 
 // ---------------------------------------------------------------------------

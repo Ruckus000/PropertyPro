@@ -23,7 +23,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, inArray } from '@propertypro/db/filters';
 import { COMMUNITY_ROLES, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -91,7 +91,33 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
 
-  const roleRows = await scoped.query(userRoles);
+  // Optional role filters pushed to the DB — avoids fetching and discarding unneeded rows
+  const validRoles = new Set(COMMUNITY_ROLES as unknown as string[]);
+  const rolesParam = searchParams.get('roles');
+  const roleParam = searchParams.get('role');
+
+  let roleRows: Record<string, unknown>[];
+  if (rolesParam) {
+    const roleList = rolesParam.split(',').map((r) => r.trim()).filter(Boolean);
+    for (const r of roleList) {
+      if (!validRoles.has(r)) throw new ValidationError(`Invalid role filter: ${r}`);
+    }
+    roleRows = await scoped.selectFrom(
+      userRoles,
+      {},
+      inArray(userRoles.role, roleList as CommunityRole[]),
+    ) as unknown as Record<string, unknown>[];
+  } else if (roleParam) {
+    if (!validRoles.has(roleParam)) throw new ValidationError(`Invalid role filter: ${roleParam}`);
+    roleRows = await scoped.selectFrom(
+      userRoles,
+      {},
+      eq(userRoles.role, roleParam as CommunityRole),
+    ) as unknown as Record<string, unknown>[];
+  } else {
+    roleRows = await scoped.query(userRoles) as unknown as Record<string, unknown>[];
+  }
+
   if (roleRows.length === 0) {
     return NextResponse.json({ data: [] });
   }

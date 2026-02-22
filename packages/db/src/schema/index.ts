@@ -22,6 +22,7 @@ export * from './meetings';
 export * from './meeting-documents';
 export * from './leases';
 export * from './maintenance-requests';
+export * from './maintenance-comments';
 export * from './contracts';
 export * from './contract-bids';
 export * from './demo-seed-registry';
@@ -50,6 +51,7 @@ import type { meetings } from './meetings';
 import type { meetingDocuments } from './meeting-documents';
 import type { leases } from './leases';
 import type { maintenanceRequests } from './maintenance-requests';
+import type { maintenanceComments } from './maintenance-comments';
 import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
 import type { demoSeedRegistry } from './demo-seed-registry';
@@ -133,6 +135,9 @@ export type NewLease = typeof leases.$inferInsert;
 // Maintenance Requests
 export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
 export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
+
+// Maintenance Comments (append-only — no NewMaintenanceComment Insert type)
+export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;

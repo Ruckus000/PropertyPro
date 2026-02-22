@@ -7,6 +7,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -18,10 +19,6 @@ const presignSchema = z.object({
   mimeType: z.string().min(1),
   fileSize: z.number().int().positive(),
 });
-
-function sanitizeFileName(fileName: string): string {
-  return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
 
 function validateFileSize(mimeType: string, fileSize: number): void {
   const isImage = mimeType.startsWith('image/');
@@ -55,7 +52,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   validateFileSize(mimeType, fileSize);
 
   const documentId = crypto.randomUUID();
-  const safeFileName = sanitizeFileName(fileName);
+  const safeFileName = sanitizeFilename(fileName);
   const storagePath = `communities/${communityId}/documents/${documentId}/${safeFileName}`;
 
   const signedUpload = await createPresignedUploadUrl('documents', storagePath, { upsert: false });
