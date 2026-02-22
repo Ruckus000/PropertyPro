@@ -8,8 +8,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { createScopedClient, maintenanceRequests } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { createScopedClient, maintenanceRequests, maintenanceComments } from '@propertypro/db';
+import { and, eq, inArray } from '@propertypro/db/filters';
 import { SubmitForm } from '@/components/maintenance/SubmitForm';
 import { RequestCard } from '@/components/maintenance/RequestCard';
 
@@ -49,6 +49,26 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
       new Date(a['createdAt'] as string).getTime(),
   );
 
+  // Batch-fetch all comments for these requests in one query — avoids per-card client round-trips
+  const requestIds = ownRequests.map((r) => r['id'] as number);
+  const allComments = requestIds.length > 0
+    ? await scoped.selectFrom(
+        maintenanceComments,
+        {},
+        and(
+          inArray(maintenanceComments.requestId, requestIds),
+          eq(maintenanceComments.isInternal, false),
+        ),
+      ) as unknown as Record<string, unknown>[]
+    : [];
+  const commentsByRequestId = new Map<number, Record<string, unknown>[]>();
+  for (const c of allComments) {
+    const rid = c['requestId'] as number;
+    const bucket = commentsByRequestId.get(rid) ?? [];
+    bucket.push(c);
+    commentsByRequestId.set(rid, bucket);
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-8">
@@ -84,7 +104,14 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
                   photos: null,
                   createdAt: r['createdAt'] as string,
                   updatedAt: r['updatedAt'] as string,
-                  comments: [],
+                  comments: (commentsByRequestId.get(r['id'] as number) ?? []).map((c) => ({
+                    id: c['id'] as number,
+                    requestId: c['requestId'] as number,
+                    userId: c['userId'] as string,
+                    text: c['text'] as string,
+                    isInternal: c['isInternal'] as boolean,
+                    createdAt: c['createdAt'] as string,
+                  })),
                 }}
               />
             ))}

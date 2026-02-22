@@ -10,13 +10,7 @@ interface ResidentRow {
   role: string;
 }
 
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+const ADMIN_ROLES_PARAM = 'board_member,board_president,cam,site_manager,property_manager_admin';
 
 interface AssignmentModalProps {
   request: MaintenanceRequestItem;
@@ -38,19 +32,18 @@ export function AssignmentModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/v1/residents?communityId=${communityId}`)
+    fetch(`/api/v1/residents?communityId=${communityId}&roles=${ADMIN_ROLES_PARAM}`)
       .then((res) => res.json())
       .then((body: unknown) => {
         const data = (body as Record<string, unknown>)['data'];
         if (Array.isArray(data)) {
-          const adminUsers = (data as Record<string, unknown>[])
-            .filter((r) => ADMIN_ROLES.has(r['role'] as string))
-            .map((r) => ({
+          setResidents(
+            (data as Record<string, unknown>[]).map((r) => ({
               userId: r['userId'] as string,
               fullName: r['fullName'] as string,
               role: r['role'] as string,
-            }));
-          setResidents(adminUsers);
+            })),
+          );
         }
       })
       .catch(() => setError('Failed to load assignable users'))
