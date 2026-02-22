@@ -1,0 +1,96 @@
+/**
+ * Maintenance Request Submission — P3-50
+ *
+ * Route: /maintenance/submit?communityId=X
+ * Auth: any community member (all roles can submit)
+ */
+import { redirect } from 'next/navigation';
+import type { SearchParams } from 'next/dist/server/request/search-params';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { createScopedClient, maintenanceRequests } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
+import { SubmitForm } from '@/components/maintenance/SubmitForm';
+import { RequestCard } from '@/components/maintenance/RequestCard';
+
+interface PageProps {
+  searchParams: Promise<SearchParams>;
+}
+
+export default async function MaintenanceSubmitPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const rawId = Number(params['communityId']);
+
+  if (!Number.isInteger(rawId) || rawId <= 0) {
+    redirect('/dashboard?reason=invalid-selection');
+  }
+
+  const communityId = rawId;
+  let userId: string;
+
+  try {
+    userId = await requireAuthenticatedUserId();
+  } catch {
+    redirect('/auth/login');
+  }
+
+  await requireCommunityMembership(communityId, userId);
+
+  // Fetch the user's own requests server-side for initial render
+  const scoped = createScopedClient(communityId);
+  const allRequests = await scoped.selectFrom(
+    maintenanceRequests,
+    {},
+    eq(maintenanceRequests.submittedById, userId),
+  );
+  const ownRequests = (allRequests as unknown as Record<string, unknown>[]).sort(
+    (a, b) =>
+      new Date(b['createdAt'] as string).getTime() -
+      new Date(a['createdAt'] as string).getTime(),
+  );
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900">Maintenance Requests</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Submit a new request or view the status of existing ones.
+        </p>
+      </div>
+
+      <SubmitForm communityId={communityId} userId={userId} />
+
+      {ownRequests.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-4 text-lg font-medium text-gray-900">Your Requests</h2>
+          <div className="space-y-3">
+            {ownRequests.map((r) => (
+              <RequestCard
+                key={r['id'] as number}
+                communityId={communityId}
+                request={{
+                  id: r['id'] as number,
+                  communityId: r['communityId'] as number,
+                  unitId: (r['unitId'] as number | null) ?? null,
+                  submittedById: r['submittedById'] as string,
+                  title: r['title'] as string,
+                  description: r['description'] as string,
+                  status: r['status'] as string,
+                  priority: r['priority'] as string,
+                  category: (r['category'] as string) ?? 'general',
+                  assignedToId: (r['assignedToId'] as string | null) ?? null,
+                  resolutionDescription: (r['resolutionDescription'] as string | null) ?? null,
+                  resolutionDate: (r['resolutionDate'] as string | null) ?? null,
+                  photos: null,
+                  createdAt: r['createdAt'] as string,
+                  updatedAt: r['updatedAt'] as string,
+                  comments: [],
+                }}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}

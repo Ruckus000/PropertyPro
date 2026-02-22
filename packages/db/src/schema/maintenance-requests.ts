@@ -9,7 +9,7 @@
  * - unit_id: set null on delete (unit may be removed, request survives)
  * - submitted_by_id: restrict (preserve data integrity, cannot delete user with open requests)
  */
-import { bigint, bigserial, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { units } from './units';
 import { users } from './users';
@@ -30,6 +30,16 @@ export const maintenanceRequests = pgTable('maintenance_requests', {
   description: text('description').notNull(),
   status: maintenanceStatusEnum('status').notNull().default('open'),
   priority: maintenancePriorityEnum('priority').notNull().default('normal'),
+  category: text('category').notNull().default('general'),
+  assignedToId: uuid('assigned_to_id')
+    .references(() => users.id, { onDelete: 'set null' }),
+  internalNotes: text('internal_notes'),
+  resolutionDescription: text('resolution_description'),
+  resolutionDate: timestamp('resolution_date', { withTimezone: true }),
+  // photos shape: Array<{ url: string; thumbnailUrl: string | null; storagePath: string; uploadedAt: string }>
+  // thumbnailUrl is nullable — thumbnail generation is best-effort fire-and-forget
+  // Max 5 entries enforced at API layer
+  photos: jsonb('photos'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

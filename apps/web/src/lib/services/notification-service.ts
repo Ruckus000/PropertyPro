@@ -37,7 +37,12 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type RecipientFilter = 'all' | 'owners_only' | 'board_only' | 'community_admins';
+export type RecipientFilter =
+  | 'all'
+  | 'owners_only'
+  | 'board_only'
+  | 'community_admins'
+  | { type: 'specific_user'; userId: string };
 
 export type NotificationEvent =
   | MeetingNoticeEvent
@@ -124,11 +129,12 @@ function getBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
-function isRoleMatch(role: string, filter: RecipientFilter): boolean {
+function isRoleMatch(role: string, filter: RecipientFilter, userId: string): boolean {
   if (filter === 'all') return true;
   if (filter === 'owners_only') return role === 'owner';
   if (filter === 'board_only') return BOARD_ROLES.has(role);
   if (filter === 'community_admins') return ADMIN_ROLES.has(role);
+  if (typeof filter === 'object' && filter.type === 'specific_user') return userId === filter.userId;
   return false;
 }
 
@@ -276,12 +282,29 @@ async function resolveRecipientDeliveries(
     }
   }
 
+  // Short-circuit: specific_user filter bypasses the role-based loop.
+  // usersById is community-scoped so the submitter is always present.
+  // The role loop is skipped entirely — submitter may have no userRoles row in edge cases.
+  if (typeof filter === 'object' && filter.type === 'specific_user') {
+    const user = usersById.get(filter.userId);
+    if (!user) return [];
+    const email = user['email'];
+    const fullName = user['fullName'];
+    if (typeof email !== 'string' || typeof fullName !== 'string') return [];
+    const prefs = preferencesByUserId.get(filter.userId) ?? getDefaultPreferences();
+    if (!isNotificationTypeEnabled(notificationKind, prefs) || prefs.emailFrequency === 'never') {
+      return [];
+    }
+    const mode = supportsDigest && isDigestFrequency(prefs.emailFrequency) ? 'digest' : 'immediate';
+    return [{ userId: filter.userId, email, fullName, preferences: prefs, mode }];
+  }
+
   const recipients: RecipientDelivery[] = [];
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter)) continue;
+    if (!isRoleMatch(role, filter, userId)) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
 
