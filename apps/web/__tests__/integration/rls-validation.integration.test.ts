@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { inArray } from 'drizzle-orm';
+import { and, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { NextRequest } from 'next/server';
 import postgres from 'postgres';
@@ -173,6 +173,20 @@ describeDb('P4-55 RLS validation (integration)', () => {
 
   afterAll(async () => {
     if (db && dbModule && seeded) {
+      // Delete dependents first (reverse creation order)
+      await db
+        .delete(dbModule.documents)
+        .where(inArray(dbModule.documents.communityId, [seeded.communityAId, seeded.communityBId]));
+      await db
+        .delete(dbModule.userRoles)
+        .where(
+          and(
+            inArray(dbModule.userRoles.userId, [seeded.actorAId, seeded.actorBId]),
+            inArray(dbModule.userRoles.communityId, [seeded.communityAId, seeded.communityBId]),
+          ),
+        );
+
+      // Then parents (best-effort)
       try {
         await db
           .delete(dbModule.communities)

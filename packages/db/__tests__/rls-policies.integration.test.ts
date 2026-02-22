@@ -463,8 +463,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
           insert into public.demo_seed_registry (entity_type, seed_key, entity_id, community_id)
           values ('test', ${`${seed.runTag}_blocked`}, 'blocked-1', ${seed.communityAId})
         `;
-        // If we get here without error, the INSERT silently returned 0 rows (RLS policy denied)
-        // Either way, the row should not exist
+        expect.fail('Authenticated INSERT on service_only table should have been blocked by RLS');
       } catch (error: unknown) {
         const pgError = error as { code?: string };
         expect(pgError.code).toBe('42501');
