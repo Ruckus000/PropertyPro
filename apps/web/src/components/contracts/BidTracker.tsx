@@ -7,29 +7,7 @@
  * Allows adding new bids via POST /api/v1/contracts with action=add_bid.
  */
 import { useState } from 'react';
-
-interface Bid {
-  id: number;
-  vendorName: string;
-  bidAmount: string;
-  submittedAt: string | null;
-  notes: string | null;
-}
-
-interface BidSummary {
-  bids: Bid[];
-  embargoed: boolean;
-  bidCount: number;
-  biddingClosesAt: string | null;
-}
-
-interface ContractRecord {
-  id: number;
-  title: string;
-  vendorName: string;
-  biddingClosesAt: string | null;
-  bidSummary: BidSummary;
-}
+import type { ContractRecord } from './types';
 
 interface BidTrackerProps {
   communityId: number;

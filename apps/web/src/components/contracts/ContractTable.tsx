@@ -9,38 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ContractForm } from './ContractForm';
 import { BidTracker } from './BidTracker';
-
-interface BidSummary {
-  bids: Record<string, unknown>[];
-  embargoed: boolean;
-  bidCount: number;
-  biddingClosesAt: string | null;
-}
-
-interface ContractRecord {
-  id: number;
-  title: string;
-  vendorName: string;
-  description: string | null;
-  contractValue: string | null;
-  startDate: string;
-  endDate: string | null;
-  documentId: number | null;
-  complianceChecklistItemId: number | null;
-  biddingClosesAt: string | null;
-  conflictOfInterest: boolean;
-  status: string;
-  bidSummary: BidSummary;
-}
-
-interface ExpirationAlert {
-  contractId: number;
-  title: string;
-  vendorName: string;
-  endDate: string;
-  daysUntilExpiry: number;
-  window: string;
-}
+import type { ContractRecord, ExpirationAlert } from './types';
 
 interface ContractTableProps {
   communityId: number;
