@@ -36,7 +36,7 @@ describe('requireCommunityMembership', () => {
       }
 
       if (table === communitiesTable) {
-        return [{ id: 42, communityType: 'condo_718' }];
+        return [{ id: 42, communityType: 'condo_718', timezone: 'America/New_York' }];
       }
 
       return [];
@@ -49,6 +49,7 @@ describe('requireCommunityMembership', () => {
       communityId: 42,
       role: 'owner',
       communityType: 'condo_718',
+      timezone: 'America/New_York',
     });
   });
 
