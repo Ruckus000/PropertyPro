@@ -14,10 +14,12 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
     "plan:verify:phase2": "tsx scripts/verify-phase2-plan-status.ts",
+    "plan:verify:phase3": "tsx scripts/verify-phase3-plan-status.ts",
+    "perf:check": "tsx scripts/perf-check.ts",
     "lint:docs": "tsx scripts/lint-documentation.ts",
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
     "test:watch": "vitest",
-    "guard:db-access": "node --import tsx scripts/verify-scoped-db-access.ts",
+    "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "lint": "turbo run lint && pnpm guard:db-access",
     "clean": "turbo run clean"
   },

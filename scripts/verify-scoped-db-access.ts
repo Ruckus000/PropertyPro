@@ -38,6 +38,10 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
   resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
+  // P3-PRE-03: PM portfolio cross-community read boundary
+  resolve(repoRoot, 'apps/web/src/lib/api/pm-communities.ts'),
+  // P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
+  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/communities/route.ts'),
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
   resolve(repoRoot, 'apps/web/src/lib/services/provisioning-service.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/provision/route.ts'),

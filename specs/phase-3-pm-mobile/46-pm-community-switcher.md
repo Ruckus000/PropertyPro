@@ -26,14 +26,15 @@ P0
 
 ## Technical Notes
 - Use URL state to preserve community selection on page reload
+- Persist recent-switch ordering in local device storage (not DB-backed).
 - Consider query debouncing if switching is rapid
 - Ensure auth context validates PM's access to selected community before rendering
 
 ## Files Expected
-- `apps/web/app/(pm)/dashboard/[community_id]/page.tsx`
-- `apps/web/components/pm/CommunitySwitcher.tsx`
-- `apps/web/lib/api/community-context.ts`
-- `apps/web/hooks/useSelectedCommunity.ts`
+- `apps/web/src/app/(pm)/dashboard/[community_id]/page.tsx`
+- `apps/web/src/components/pm/CommunitySwitcher.tsx`
+- `apps/web/src/lib/api/community-context.ts`
+- `apps/web/src/hooks/useSelectedCommunity.ts`
 
 ## Attempts
 0
