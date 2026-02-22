@@ -33,12 +33,12 @@ P1
 - Consider rate-limiting export functionality to prevent abuse
 
 ## Files Expected
-- `apps/web/app/(admin)/audit-trail/page.tsx`
-- `apps/web/components/audit/AuditTrailViewer.tsx`
-- `apps/web/components/audit/AuditFilters.tsx`
-- `apps/web/components/audit/AuditEntry.tsx`
-- `apps/web/lib/api/audit-trail.ts`
-- `apps/web/lib/services/csv-export.ts`
+- `apps/web/src/app/(authenticated)/audit-trail/page.tsx`
+- `apps/web/src/components/audit/AuditTrailViewer.tsx`
+- `apps/web/src/components/audit/AuditFilters.tsx`
+- `apps/web/src/components/audit/AuditEntry.tsx`
+- `apps/web/src/lib/api/audit-trail.ts`
+- `apps/web/src/lib/services/csv-export.ts`
 
 ## Attempts
 0

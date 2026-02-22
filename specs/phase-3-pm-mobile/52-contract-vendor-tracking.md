@@ -35,12 +35,12 @@ P1
 - Consider email alerts for approaching expirations
 
 ## Files Expected
-- `apps/web/app/(admin)/contracts/page.tsx`
-- `apps/web/components/contracts/ContractForm.tsx`
-- `apps/web/components/contracts/ContractTable.tsx`
-- `apps/web/components/contracts/BidTracker.tsx`
-- `apps/web/lib/api/contracts.ts`
-- `apps/web/lib/services/expiration-alerts.ts`
+- `apps/web/src/app/(authenticated)/contracts/page.tsx`
+- `apps/web/src/components/contracts/ContractForm.tsx`
+- `apps/web/src/components/contracts/ContractTable.tsx`
+- `apps/web/src/components/contracts/BidTracker.tsx`
+- `apps/web/src/lib/api/contracts.ts`
+- `apps/web/src/lib/services/contract-renewal-alerts.ts`
 
 ## Attempts
 0

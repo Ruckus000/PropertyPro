@@ -1,0 +1,69 @@
+name: Performance Budget Check
+
+on:
+  pull_request:
+    paths:
+      - apps/web/src/**
+      - apps/web/next.config.ts
+      - apps/web/package.json
+      - packages/ui/src/**
+      - packages/ui/package.json
+      - packages/shared/src/**
+      - packages/shared/package.json
+      - packages/db/src/**
+      - packages/db/package.json
+      - packages/email/src/**
+      - packages/email/package.json
+      - scripts/perf-check.ts
+      - package.json
+      - pnpm-lock.yaml
+      - turbo.json
+      - .github/workflows/performance-budget-check.yml
+  workflow_dispatch:
+
+jobs:
+  perf-budget:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: propertypro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations and build
+        run: pnpm --filter @propertypro/db db:migrate && pnpm build
+
+      - name: Check performance budgets
+        run: pnpm perf:check

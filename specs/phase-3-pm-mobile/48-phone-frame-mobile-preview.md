@@ -34,16 +34,17 @@ P1
 - Use same-origin iframe to avoid CORS/auth issues
 - Beware iframe performance on low-end devices
 - Consider lazy loading iframe content
+- `/mobile/*` routes are protected routes and must pass middleware auth/tenant checks.
 - Test on actual mobile devices for touch responsiveness
 
 ## Files Expected
-- `apps/web/components/mobile/PhoneFrame.tsx`
-- `apps/web/app/mobile/layout.tsx`
-- `apps/web/app/mobile/page.tsx`
-- `apps/web/app/mobile/documents/page.tsx`
-- `apps/web/app/mobile/meetings/page.tsx`
-- `apps/web/app/mobile/announcements/page.tsx`
-- `apps/web/app/mobile/maintenance/page.tsx`
+- `apps/web/src/components/mobile/PhoneFrame.tsx`
+- `apps/web/src/app/mobile/layout.tsx`
+- `apps/web/src/app/mobile/page.tsx`
+- `apps/web/src/app/mobile/documents/page.tsx`
+- `apps/web/src/app/mobile/meetings/page.tsx`
+- `apps/web/src/app/mobile/announcements/page.tsx`
+- `apps/web/src/app/mobile/maintenance/page.tsx`
 
 ## Attempts
-0
+1

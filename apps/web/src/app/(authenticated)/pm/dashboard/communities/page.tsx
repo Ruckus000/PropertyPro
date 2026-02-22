@@ -13,6 +13,7 @@ import { isPmAdminInAnyCommunity, listManagedCommunitiesForPm } from '@/lib/api/
 import type { PmCommunityFilters } from '@/lib/api/pm-communities';
 import { CommunityCard } from '@/components/pm/CommunityCard';
 import { CommunityFilters } from '@/components/pm/CommunityFilters';
+import { PhoneFrame } from '@/components/mobile/PhoneFrame';
 import type { CommunityType } from '@propertypro/shared';
 
 interface CommunitiesPageProps {
@@ -52,8 +53,23 @@ export default async function PmCommunitiesPage({ searchParams }: CommunitiesPag
 
   const communities = await listManagedCommunitiesForPm(userId, filters);
 
+  const firstCommunityId = communities[0]?.communityId;
+
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="mx-auto max-w-7xl px-6 py-8">
+      {/* Phone frame preview — shown when at least one community is managed */}
+      {firstCommunityId !== undefined && (
+        <div className="mb-8 flex justify-end">
+          <details className="group">
+            <summary className="cursor-pointer select-none text-sm font-medium text-blue-600 hover:text-blue-700">
+              Mobile Preview
+            </summary>
+            <div className="mt-4 flex justify-end">
+              <PhoneFrame communityId={firstCommunityId} />
+            </div>
+          </details>
+        </div>
+      )}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">My Communities</h1>

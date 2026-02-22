@@ -29,14 +29,15 @@ P1
 - Store logo in Supabase Storage with public access for performance
 - Resize and convert to WebP using sharp to optimize file size and reduce bandwidth
 - Use CSS custom properties (--primary-color, --secondary-color) for consistent theming
+- Persist branding to `communities.branding` JSONB while keeping `logo_path` compatibility reads during migration window.
 - Cache logo URLs appropriately
 
 ## Files Expected
-- `apps/web/app/(pm)/settings/branding/page.tsx`
-- `apps/web/components/pm/BrandingForm.tsx`
-- `apps/web/components/pm/BrandingPreview.tsx`
-- `apps/web/lib/api/branding.ts`
-- `apps/web/lib/services/image-processor.ts`
+- `apps/web/src/app/(pm)/settings/branding/page.tsx`
+- `apps/web/src/components/pm/BrandingForm.tsx`
+- `apps/web/src/components/pm/BrandingPreview.tsx`
+- `apps/web/src/lib/api/branding.ts`
+- `apps/web/src/lib/services/image-processor.ts`
 
 ## Attempts
-0
+1
