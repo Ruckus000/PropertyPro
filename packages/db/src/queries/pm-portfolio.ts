@@ -138,7 +138,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
           and(
             inArray(maintenanceRequests.communityId, communityIds),
             isNull(maintenanceRequests.deletedAt),
-            sql`${maintenanceRequests.status}::text in ('open', 'submitted', 'acknowledged', 'in_progress')`,
+            inArray(maintenanceRequests.status, ['open', 'in_progress']),
           ),
         )
         .groupBy(maintenanceRequests.communityId),
@@ -154,7 +154,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
           and(
             inArray(complianceChecklistItems.communityId, communityIds),
             isNull(complianceChecklistItems.deletedAt),
-            sql`${complianceChecklistItems.documentId} is null`,
+            isNull(complianceChecklistItems.documentId),
           ),
         )
         .groupBy(complianceChecklistItems.communityId),
