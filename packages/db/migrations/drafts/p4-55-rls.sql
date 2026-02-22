@@ -1,0 +1,36 @@
+-- P4-55 RLS migration draft scaffold
+-- DRAFT ONLY: do not move this into packages/db/migrations root or add a journal entry
+-- until the SQL is finalized and accompanied by tests + snapshot/journal updates.
+--
+-- Intended final migration scope:
+-- 1) Helper functions/session settings for tenant context resolution (auth.uid() + active community)
+-- 2) ENABLE ROW LEVEL SECURITY on all tenant-scoped tables
+-- 3) CREATE POLICY statements by family:
+--    - tenant_crud
+--    - tenant_read_only (if any)
+--    - service_only
+--    - audit_log_restricted
+-- 4) Explicit verification notes for service-role bypass behavior
+--
+-- Tenant-scoped tables (21, sourced from src/schema/rls-config.ts):
+-- announcement_delivery_log
+-- announcements
+-- compliance_audit_log
+-- compliance_checklist_items
+-- contract_bids
+-- contracts
+-- demo_seed_registry
+-- document_categories
+-- documents
+-- invitations
+-- leases
+-- maintenance_comments
+-- maintenance_requests
+-- meeting_documents
+-- meetings
+-- notification_digest_queue
+-- notification_preferences
+-- onboarding_wizard_state
+-- provisioning_jobs
+-- units
+-- user_roles
