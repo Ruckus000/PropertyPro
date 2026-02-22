@@ -9,7 +9,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'propertypro.pm.recentCommunityIds';
 const MAX_RECENT = 5;
@@ -44,20 +44,30 @@ export function useSelectedCommunity(): {
   selectCommunity: (communityId: number) => void;
 } {
   const [recentCommunityIds, setRecentCommunityIds] = useState<number[]>([]);
+  // Track whether we've completed the initial hydration so that the sync
+  // effect does not redundantly write the value we just read from storage.
+  const hasMounted = useRef(false);
 
   // Hydrate from localStorage on mount (client only)
   useEffect(() => {
     setRecentCommunityIds(readFromStorage());
+    hasMounted.current = true;
   }, []);
+
+  // Sync state to localStorage whenever it changes — but skip the initial
+  // hydration write so we don't clobber storage with the empty initial state
+  // before readFromStorage() has run.
+  useEffect(() => {
+    if (!hasMounted.current) return;
+    writeToStorage(recentCommunityIds);
+  }, [recentCommunityIds]);
 
   const selectCommunity = useCallback((communityId: number) => {
     setRecentCommunityIds((prev) => {
       // Dedupe: remove existing entry if present
       const deduped = prev.filter((id) => id !== communityId);
       // Prepend new selection, cap at MAX_RECENT
-      const next = [communityId, ...deduped].slice(0, MAX_RECENT);
-      writeToStorage(next);
-      return next;
+      return [communityId, ...deduped].slice(0, MAX_RECENT);
     });
   }, []);
 

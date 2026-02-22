@@ -138,7 +138,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
           and(
             inArray(maintenanceRequests.communityId, communityIds),
             isNull(maintenanceRequests.deletedAt),
-            inArray(maintenanceRequests.status, ['open', 'in_progress']),
+            inArray(maintenanceRequests.status, ['open', 'submitted', 'acknowledged', 'in_progress']),
           ),
         )
         .groupBy(maintenanceRequests.communityId),

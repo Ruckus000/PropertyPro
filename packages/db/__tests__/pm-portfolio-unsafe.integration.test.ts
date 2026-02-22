@@ -231,6 +231,46 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     expect(rowB!.unsatisfiedComplianceItems).toBe(1);
   });
 
+  it('counts submitted and acknowledged requests as open work (P3-50 lifecycle)', async () => {
+    await db.insert(maintenanceRequests).values([
+      {
+        communityId: communityAId,
+        unitId: null,
+        submittedById: submittedByUserId,
+        title: 'Submitted request',
+        description: 'New submission',
+        status: 'submitted',
+        priority: 'normal',
+      },
+      {
+        communityId: communityAId,
+        unitId: null,
+        submittedById: submittedByUserId,
+        title: 'Acknowledged request',
+        description: 'Acknowledged',
+        status: 'acknowledged',
+        priority: 'normal',
+      },
+      {
+        communityId: communityAId,
+        unitId: null,
+        submittedById: submittedByUserId,
+        title: 'Resolved request',
+        description: 'Done',
+        status: 'resolved',
+        priority: 'low',
+      },
+    ]);
+
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+    const rowA = rows.find((row) => row.communityId === communityAId);
+
+    expect(rowA).toBeDefined();
+    // submitted + acknowledged count as open work; resolved does not
+    expect(rowA!.openMaintenanceRequests).toBe(2);
+  });
+
   it('returns empty array for users without PM portfolio role', async () => {
     const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
     const rows = await findManagedCommunitiesPortfolioUnscoped(outsiderUserId);
