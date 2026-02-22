@@ -4,10 +4,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/schema';
+import { announcementDeliveryLog } from '../src/schema/announcement-delivery-log';
+import { announcements } from '../src/schema/announcements';
 import { communities } from '../src/schema/communities';
 import { complianceAuditLog } from '../src/schema/compliance-audit-log';
+import { demoSeedRegistry } from '../src/schema/demo-seed-registry';
 import { documents } from '../src/schema/documents';
-import { RLS_TENANT_TABLE_NAMES, validateRlsConfigInvariant } from '../src/schema/rls-config';
+import { RLS_TENANT_TABLES, RLS_TENANT_TABLE_NAMES, validateRlsConfigInvariant } from '../src/schema/rls-config';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
 
@@ -25,6 +28,7 @@ interface SeedData {
   adminBUserId: string;
   communityADocumentId: number;
   communityBDocumentId: number;
+  communityAAnnouncementId: number;
   filePrefix: string;
   auditResourcePrefix: string;
 }
@@ -36,6 +40,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
   let db: DbClient;
   let seed: SeedData;
   const createdDocumentIds = new Set<number>();
+  const createdDemoSeedRegistryIds = new Set<number>();
+  const createdAnnouncementDeliveryLogIds = new Set<number>();
 
   async function resetSession(sqlClient: SqlClient): Promise<void> {
     await sqlClient.unsafe('reset role');
@@ -193,6 +199,22 @@ describeDb('P4-55 RLS policies (integration)', () => {
       },
     ]);
 
+    const [announcementA] = await db
+      .insert(announcements)
+      .values({
+        communityId: communityA.id,
+        title: `RLS Announcement A ${runTag}`,
+        body: 'Test announcement for delivery log FK',
+        audience: 'all',
+        isPinned: false,
+        publishedBy: adminAUserId,
+      })
+      .returning({ id: announcements.id });
+
+    if (!announcementA) {
+      throw new Error('Failed to seed announcement for RLS integration tests');
+    }
+
     seed = {
       runTag,
       communityAId: communityA.id,
@@ -202,6 +224,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       adminBUserId,
       communityADocumentId: documentA.id,
       communityBDocumentId: documentB.id,
+      communityAAnnouncementId: announcementA.id,
       filePrefix,
       auditResourcePrefix,
     };
@@ -224,10 +247,28 @@ describeDb('P4-55 RLS policies (integration)', () => {
     }
 
     if (db && seed) {
+      const deliveryLogIds = [...createdAnnouncementDeliveryLogIds];
+      if (deliveryLogIds.length > 0) {
+        await db
+          .delete(announcementDeliveryLog)
+          .where(inArray(announcementDeliveryLog.id, deliveryLogIds));
+      }
+
+      const registryIds = [...createdDemoSeedRegistryIds];
+      if (registryIds.length > 0) {
+        await db
+          .delete(demoSeedRegistry)
+          .where(inArray(demoSeedRegistry.id, registryIds));
+      }
+
       const documentIds = [...createdDocumentIds];
       if (documentIds.length > 0) {
         await db.delete(documents).where(inArray(documents.id, documentIds));
       }
+
+      await db
+        .delete(announcements)
+        .where(inArray(announcements.id, [seed.communityAAnnouncementId]));
 
       await db
         .delete(userRoles)
@@ -397,6 +438,165 @@ describeDb('P4-55 RLS policies (integration)', () => {
     expect(communitiesVisible.has(seed.communityBId)).toBe(true);
   });
 
-  it.todo('adds table-family representative coverage for service_only tables beyond tenant CRUD');
-  it.todo('verifies policy presence in pg_policies for every tenant table and family');
+  describe('service_only table coverage', () => {
+    it('blocks authenticated SELECT on service_only tables', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const registryRows = await authSql`select * from public.demo_seed_registry limit 1`;
+      expect(registryRows).toHaveLength(0);
+
+      const deliveryRows = await authSql`select * from public.announcement_delivery_log limit 1`;
+      expect(deliveryRows).toHaveLength(0);
+
+      const digestRows = await authSql`select * from public.notification_digest_queue limit 1`;
+      expect(digestRows).toHaveLength(0);
+
+      const provisioningRows = await authSql`select * from public.provisioning_jobs limit 1`;
+      expect(provisioningRows).toHaveLength(0);
+    });
+
+    it('blocks authenticated INSERT on service_only tables', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      try {
+        await authSql`
+          insert into public.demo_seed_registry (entity_type, seed_key, entity_id, community_id)
+          values ('test', ${`${seed.runTag}_blocked`}, 'blocked-1', ${seed.communityAId})
+        `;
+        // If we get here without error, the INSERT silently returned 0 rows (RLS policy denied)
+        // Either way, the row should not exist
+      } catch (error: unknown) {
+        const pgError = error as { code?: string };
+        expect(pgError.code).toBe('42501');
+      }
+
+      // Verify no row was persisted regardless of error path
+      await setServiceRoleContext(serviceSql);
+      const check = await serviceSql`
+        select id from public.demo_seed_registry
+        where seed_key = ${`${seed.runTag}_blocked`}
+      `;
+      expect(check).toHaveLength(0);
+    });
+
+    it('allows service_role full CRUD on demo_seed_registry', async () => {
+      await setServiceRoleContext(serviceSql);
+
+      const seedKey = `${seed.runTag}_svc_crud_${randomUUID().slice(0, 8)}`;
+
+      // INSERT
+      const inserted = await serviceSql<{ id: number }[]>`
+        insert into public.demo_seed_registry (entity_type, seed_key, entity_id, community_id)
+        values ('test', ${seedKey}, 'test-1', ${seed.communityAId})
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+      const insertedId = Number(inserted[0]!.id);
+      createdDemoSeedRegistryIds.add(insertedId);
+
+      // SELECT
+      const selected = await serviceSql<{ id: number; entity_id: string }[]>`
+        select id, entity_id from public.demo_seed_registry where id = ${insertedId}
+      `;
+      expect(selected).toHaveLength(1);
+      expect(selected[0]!.entity_id).toBe('test-1');
+
+      // UPDATE
+      const updated = await serviceSql<{ id: number }[]>`
+        update public.demo_seed_registry
+        set entity_id = 'test-1-updated'
+        where id = ${insertedId}
+        returning id
+      `;
+      expect(updated).toHaveLength(1);
+
+      // DELETE
+      const deleted = await serviceSql<{ id: number }[]>`
+        delete from public.demo_seed_registry where id = ${insertedId}
+        returning id
+      `;
+      expect(deleted).toHaveLength(1);
+      createdDemoSeedRegistryIds.delete(insertedId);
+    });
+
+    it('allows service_role INSERT and SELECT on announcement_delivery_log', async () => {
+      await setServiceRoleContext(serviceSql);
+
+      const inserted = await serviceSql<{ id: number }[]>`
+        insert into public.announcement_delivery_log (
+          community_id, announcement_id, user_id, email, status
+        ) values (
+          ${seed.communityAId},
+          ${seed.communityAAnnouncementId},
+          ${seed.tenantAUserId},
+          ${`${seed.runTag}-delivery@example.com`},
+          'pending'
+        )
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+      const insertedId = Number(inserted[0]!.id);
+      createdAnnouncementDeliveryLogIds.add(insertedId);
+
+      const selected = await serviceSql<{ id: number; status: string }[]>`
+        select id, status from public.announcement_delivery_log where id = ${insertedId}
+      `;
+      expect(selected).toHaveLength(1);
+      expect(selected[0]!.status).toBe('pending');
+
+      // Cleanup
+      await serviceSql`delete from public.announcement_delivery_log where id = ${insertedId}`;
+      createdAnnouncementDeliveryLogIds.delete(insertedId);
+    });
+  });
+
+  it('verifies policy presence in pg_policies for every tenant table and family', async () => {
+    const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
+      select schemaname, tablename, policyname
+      from pg_policies
+      where schemaname = 'public'
+      order by tablename, policyname
+    `;
+
+    const policyMap = new Map<string, string[]>();
+    for (const row of rows) {
+      const existing = policyMap.get(row.tablename) ?? [];
+      existing.push(row.policyname);
+      policyMap.set(row.tablename, existing);
+    }
+
+    for (const entry of RLS_TENANT_TABLES) {
+      const actualPolicies = (policyMap.get(entry.tableName) ?? []).sort();
+      let expectedPolicies: string[];
+
+      switch (entry.policyFamily) {
+        case 'tenant_crud':
+          expectedPolicies = [
+            'pp_tenant_delete',
+            'pp_tenant_insert',
+            'pp_tenant_select',
+            'pp_tenant_update',
+          ];
+          break;
+        case 'service_only':
+          expectedPolicies = [
+            'pp_service_delete',
+            'pp_service_insert',
+            'pp_service_select',
+            'pp_service_update',
+          ];
+          break;
+        case 'audit_log_restricted':
+          expectedPolicies = ['pp_audit_insert', 'pp_audit_select'];
+          break;
+        default:
+          throw new Error(`Unhandled policy family: ${entry.policyFamily as string}`);
+      }
+
+      expect(
+        actualPolicies,
+        `${entry.tableName} (${entry.policyFamily}) should have policies: ${expectedPolicies.join(', ')}`,
+      ).toEqual(expectedPolicies);
+    }
+  });
 });
