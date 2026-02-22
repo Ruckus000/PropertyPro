@@ -23,12 +23,19 @@ import {
  * Routes under (authenticated) that require a valid session.
  * The Next.js route group `(authenticated)` is stripped from the URL,
  * so we match on the actual URL paths that live inside that group.
+ *
+ * No prefix should be a substring-prefix of another (e.g. adding '/con'
+ * would incorrectly match '/contracts' and '/communities').
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
   '/settings',
   '/documents',
   '/maintenance',
+  '/contracts',
+  '/audit-trail',
+  '/mobile',
+  '/pm',
   '/communities',
   '/onboarding',
   '/api/v1',

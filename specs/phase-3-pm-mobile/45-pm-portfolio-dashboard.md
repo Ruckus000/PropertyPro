@@ -29,15 +29,16 @@ P0
 - [ ] `pnpm test` passes
 
 ## Technical Notes
-- Ensure query is scoped to PM's managed communities via property_manager_communities table
+- PM portfolio membership source-of-truth is `user_roles` with `role='property_manager_admin'` (no `property_manager_communities` table).
+- Use explicit unsafe read helper(s) from `@propertypro/db/unsafe` only for cross-community PM aggregation queries.
 - Cache community metrics with appropriate invalidation strategy
 - Monitor rendering performance with large community counts (50+)
 
 ## Files Expected
-- `apps/web/app/(pm)/dashboard/communities/page.tsx`
-- `apps/web/components/pm/CommunityCard.tsx`
-- `apps/web/components/pm/CommunityFilters.tsx`
-- `apps/web/lib/api/pm-communities.ts`
+- `apps/web/src/app/(pm)/dashboard/communities/page.tsx`
+- `apps/web/src/components/pm/CommunityCard.tsx`
+- `apps/web/src/components/pm/CommunityFilters.tsx`
+- `apps/web/src/lib/api/pm-communities.ts`
 
 ## Attempts
 0

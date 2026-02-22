@@ -32,16 +32,18 @@ P1
 - [ ] `pnpm test` passes
 
 ## Technical Notes
+- This task is a final pass after `P3-45` through `P3-53`; do not treat it as early tuning work.
 - Use next/image for automatic image optimization
 - Profile bundle size using next/bundle-analyzer
 - Implement dynamic imports for code splitting heavy components
 - Monitor Core Web Vitals in production using web-vitals library
+- Enforce repository-level performance checks via `pnpm perf:check` in CI.
 - Consider implementing prefetching for likely navigation paths
 
 ## Files Expected
-- `apps/web/lib/performance/vitals-monitor.ts`
-- `apps/web/next.config.js`
-- `apps/web/middleware.ts`
+- `apps/web/src/lib/performance/vitals-monitor.ts`
+- `apps/web/next.config.ts`
+- `apps/web/src/middleware.ts`
 - Various component refactors for dynamic imports
 
 ## Attempts

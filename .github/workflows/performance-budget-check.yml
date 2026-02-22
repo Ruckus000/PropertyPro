@@ -1,0 +1,57 @@
+name: Performance Budget Check
+
+on:
+  pull_request:
+    paths:
+      - apps/web/src/**
+      - apps/web/next.config.ts
+      - apps/web/package.json
+      - packages/ui/src/**
+      - packages/ui/package.json
+      - packages/shared/src/**
+      - packages/shared/package.json
+      - packages/db/src/**
+      - packages/db/package.json
+      - packages/email/src/**
+      - packages/email/package.json
+      - scripts/perf-check.ts
+      - package.json
+      - pnpm-lock.yaml
+      - turbo.json
+      - .github/workflows/performance-budget-check.yml
+  workflow_dispatch:
+
+jobs:
+  perf-budget:
+    runs-on: ubuntu-latest
+
+    env:
+      # Build-time env stubs — no live DB needed for bundle size checks.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_test
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check performance budgets
+        run: pnpm perf:check

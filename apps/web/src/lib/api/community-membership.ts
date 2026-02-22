@@ -8,6 +8,7 @@ export interface CommunityMembership {
   communityId: number;
   role: CommunityRole;
   communityType: CommunityType;
+  timezone: string;
 }
 
 /**
@@ -42,5 +43,6 @@ export async function requireCommunityMembership(
       community['communityType'],
       `requireCommunityMembership(communityId=${communityId}) community`,
     ),
+    timezone: typeof community['timezone'] === 'string' ? community['timezone'] : 'America/New_York',
   };
 }

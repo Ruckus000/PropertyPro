@@ -31,14 +31,15 @@ P1
 ## Technical Notes
 - Use CSS Grid or Flexbox for responsive bottom tab bar
 - Ensure safe area insets respected on devices with notches
+- Meetings-tab visibility is feature-gated; apartment communities hide Meetings by default in Phase 3 mobile UX.
 - Test with actual touch devices to verify tap target sizing
 - Monitor performance on devices with limited memory
 
 ## Files Expected
-- `apps/web/components/mobile/BottomTabBar.tsx`
-- `apps/web/components/mobile/CompactCard.tsx`
-- `apps/web/app/mobile/layout.tsx`
-- `apps/web/styles/mobile.css`
+- `apps/web/src/components/mobile/BottomTabBar.tsx`
+- `apps/web/src/components/mobile/CompactCard.tsx`
+- `apps/web/src/app/mobile/layout.tsx`
+- `apps/web/src/styles/mobile.css`
 
 ## Attempts
-0
+1

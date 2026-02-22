@@ -13,6 +13,19 @@ export {
   hasMoreDigestRows,
 } from './queries/notification-digest';
 export type { DigestFrequency } from './queries/notification-digest';
+/**
+ * PM portfolio queries — cross-community by design.
+ *
+ * **Authorization contract:** callers MUST verify PM role via
+ * `isPmAdminInAnyCommunity` (or equivalent) and return 403 for non-PMs
+ * before invoking `findManagedCommunitiesPortfolioUnscoped`.
+ */
+export {
+  isPmAdminInAnyCommunity,
+  findManagedCommunitiesPortfolioUnscoped,
+  type ManagedCommunityPortfolioRow,
+  type PortfolioQueryFilters,
+} from './queries/pm-portfolio';
 
 /**
  * Returns the raw Drizzle client without tenant scoping.

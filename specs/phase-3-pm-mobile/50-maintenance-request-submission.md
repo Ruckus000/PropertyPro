@@ -14,7 +14,7 @@ P1
 - P0-03
 
 ## Functional Requirements
-- Submit form: title, description, category (plumbing, electrical, HVAC, general, etc.), priority (low/medium/high/emergency), photos (up to 5, 10MB each)
+- Submit form: title, description, category (plumbing, electrical, HVAC, general, etc.), priority (low/medium/high/urgent), photos (up to 5, 10MB each)
 - Photo thumbnails auto-generated at 300px width via sharp
 - Status tracking: submitted → acknowledged → in_progress → resolved → closed
 - Comment thread on each request
@@ -31,16 +31,17 @@ P1
 ## Technical Notes
 - Use presigned URLs with 15-minute expiry for photo uploads
 - Validate file mime types (magic bytes) server-side
+- Backward compatibility: accept legacy write aliases (`emergency -> urgent`) and normalize old reads (`open -> submitted`, `normal -> medium`) in API response contracts.
 - Implement thumbnail generation asynchronously to avoid blocking request
 - Consider adding photo compression before upload on mobile
 
 ## Files Expected
-- `apps/web/app/(resident)/maintenance/submit/page.tsx`
-- `apps/web/components/maintenance/SubmitForm.tsx`
-- `apps/web/components/maintenance/RequestCard.tsx`
-- `apps/web/components/maintenance/CommentThread.tsx`
-- `apps/web/lib/api/maintenance-requests.ts`
-- `apps/web/lib/services/photo-processor.ts`
+- `apps/web/src/app/(authenticated)/maintenance/submit/page.tsx`
+- `apps/web/src/components/maintenance/SubmitForm.tsx`
+- `apps/web/src/components/maintenance/RequestCard.tsx`
+- `apps/web/src/components/maintenance/CommentThread.tsx`
+- `apps/web/src/lib/api/maintenance-requests.ts`
+- `apps/web/src/lib/services/photo-processor.ts`
 
 ## Attempts
 0

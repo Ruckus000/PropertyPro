@@ -2,7 +2,7 @@
  * Communities table — the core tenant entity.
  * Every tenant-scoped table references communities.id.
  */
-import { bigserial, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigserial, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 
 export const communities = pgTable('communities', {
@@ -19,6 +19,9 @@ export const communities = pgTable('communities', {
   zipCode: text('zip_code'),
   /** P2-38: Community logo — Supabase Storage path (stored via onboarding wizard). */
   logoPath: text('logo_path'),
+  /** P3-47: White-label branding settings. Shape: { primaryColor?, secondaryColor?, logoPath? }.
+   *  branding->>'logoPath' supersedes logo_path when present (migration window compatibility). */
+  branding: jsonb('branding'),
   stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),

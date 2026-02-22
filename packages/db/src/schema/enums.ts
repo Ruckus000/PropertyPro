@@ -45,9 +45,11 @@ export const leaseStatusEnum = pgEnum('lease_status', [
   'terminated',
 ]);
 
-/** Maintenance request lifecycle status (P2-36). */
+/** Maintenance request lifecycle status (P2-36, extended for P3-50 lifecycle). */
 export const maintenanceStatusEnum = pgEnum('maintenance_status', [
   'open',
+  'submitted',
+  'acknowledged',
   'in_progress',
   'resolved',
   'closed',

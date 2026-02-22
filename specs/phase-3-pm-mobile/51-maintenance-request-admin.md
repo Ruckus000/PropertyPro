@@ -34,12 +34,12 @@ P1
 - Use event system or webhook to trigger notification emails
 
 ## Files Expected
-- `apps/web/app/(admin)/maintenance/inbox/page.tsx`
-- `apps/web/components/maintenance/AdminInbox.tsx`
-- `apps/web/components/maintenance/AssignmentModal.tsx`
-- `apps/web/components/maintenance/StatusUpdateForm.tsx`
-- `apps/web/lib/api/admin-maintenance.ts`
-- `apps/web/lib/services/notification-service.ts`
+- `apps/web/src/app/(authenticated)/maintenance/inbox/page.tsx`
+- `apps/web/src/components/maintenance/AdminInbox.tsx`
+- `apps/web/src/components/maintenance/AssignmentModal.tsx`
+- `apps/web/src/components/maintenance/StatusUpdateForm.tsx`
+- `apps/web/src/lib/api/admin-maintenance.ts`
+- `apps/web/src/lib/services/notification-service.ts`
 
 ## Attempts
 0

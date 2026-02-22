@@ -53,6 +53,7 @@ export const PERMISSION_PROFILE_MAP = {
   resident_tenant: ["tenant"],
 } as const;
 
+export * from './branding';
 export * from './compliance/templates';
 export * from './access-policies';
 export * from './features';
