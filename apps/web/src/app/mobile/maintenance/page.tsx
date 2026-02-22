@@ -10,7 +10,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { desc, eq } from '@propertypro/db/filters';
-import { communities, createScopedClient, maintenanceRequests } from '@propertypro/db';
+import { createScopedClient, maintenanceRequests } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
@@ -38,22 +38,19 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
     redirect('/auth/login');
   }
 
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
-    await requireCommunityMembership(communityId, userId!);
+    membership = await requireCommunityMembership(communityId, userId!);
   } catch {
     redirect('/auth/login');
   }
 
+  const timezone = resolveTimezone(membership!.timezone);
   const scoped = createScopedClient(communityId);
   // Filter by submittedById at the DB level; communityId + deletedAt IS NULL are injected automatically
-  const [communityRows, active] = await Promise.all([
-    scoped.query(communities),
-    scoped
-      .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
-      .orderBy(desc(maintenanceRequests.createdAt)),
-  ]);
-  const community = communityRows.find((row) => row['id'] === communityId);
-  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
+  const active = await scoped
+    .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
+    .orderBy(desc(maintenanceRequests.createdAt));
 
   return (
     <div>

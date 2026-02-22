@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { communities, createScopedClient, getAccessibleDocuments } from '@propertypro/db';
+import { getAccessibleDocuments } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
@@ -52,17 +52,12 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
     redirect('/auth/login');
   }
 
-  const scoped = createScopedClient(communityId);
-  const [communityRows, docs] = await Promise.all([
-    scoped.query(communities),
-    getAccessibleDocuments({
-      communityId,
-      role: membership!.role,
-      communityType: membership!.communityType,
-    }),
-  ]);
-  const community = communityRows.find((row) => row['id'] === communityId);
-  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
+  const timezone = resolveTimezone(membership!.timezone);
+  const docs = await getAccessibleDocuments({
+    communityId,
+    role: membership!.role,
+    communityType: membership!.communityType,
+  });
 
   return (
     <div>

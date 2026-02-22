@@ -8,7 +8,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { and, desc, isNull, sql } from '@propertypro/db/filters';
-import { communities, createScopedClient, announcements } from '@propertypro/db';
+import { createScopedClient, announcements } from '@propertypro/db';
 import type { Announcement } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
@@ -28,26 +28,22 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
     redirect('/auth/login');
   }
 
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
-    await requireCommunityMembership(communityId, userId!);
+    membership = await requireCommunityMembership(communityId, userId!);
   } catch {
     redirect('/auth/login');
   }
 
+  const timezone = resolveTimezone(membership!.timezone);
   const scoped = createScopedClient(communityId);
-  // Fetch community timezone and announcements in parallel
-  const [communityRows, active] = await Promise.all([
-    scoped.query(communities),
-    scoped
-      .selectFrom<Announcement>(
-        announcements,
-        {},
-        and(isNull(announcements.archivedAt)),
-      )
-      .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt)),
-  ]);
-  const community = communityRows.find((row) => row['id'] === communityId);
-  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
+  const active = await scoped
+    .selectFrom<Announcement>(
+      announcements,
+      {},
+      and(isNull(announcements.archivedAt)),
+    )
+    .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
 
   return (
     <div>
