@@ -40,6 +40,9 @@ const ADMIN_ROLES = new Set([
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
+/** Maximum rows for CSV export to prevent OOM on large datasets. */
+const MAX_CSV_ROWS = 10_000;
+
 /**
  * Sensitive key patterns (case-insensitive) to redact from metadata before export/display.
  * Matches any key that contains these substrings.
@@ -272,7 +275,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (format === 'csv') {
     const csvRawRows = await scoped
       .selectFrom(complianceAuditLog, {}, additionalWhere)
-      .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id));
+      .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id))
+      .limit(MAX_CSV_ROWS);
     const auditRows = (csvRawRows as unknown as Record<string, unknown>[]).map(coerceAuditRow);
 
     const csvHeaders = [
@@ -297,13 +301,16 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
     const csv = generateCSV(csvHeaders, csvRows);
 
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="audit-trail-${communityId}.csv"`,
-      },
-    });
+    const responseHeaders: Record<string, string> = {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="audit-trail-${communityId}.csv"`,
+    };
+    if (auditRows.length === MAX_CSV_ROWS) {
+      responseHeaders['X-CSV-Truncated'] = 'true';
+      responseHeaders['X-CSV-Max-Rows'] = String(MAX_CSV_ROWS);
+    }
+
+    return new NextResponse(csv, { status: 200, headers: responseHeaders });
   }
 
   // --- Paginated query: fetch limit+1 rows to detect hasMore ---
@@ -318,9 +325,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const lastEntry = page[page.length - 1];
   const nextCursor = lastEntry && hasMore ? encodeCursor(lastEntry) : null;
 
-  // Redact metadata in API response
+  // Redact sensitive keys in metadata, oldValues, and newValues
   const redactedPage = page.map((row) => ({
     ...row,
+    oldValues: redactMetadata(row.oldValues),
+    newValues: redactMetadata(row.newValues),
     metadata: redactMetadata(row.metadata),
   }));
 
