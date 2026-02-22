@@ -22,6 +22,7 @@ import {
   logAuditEvent,
   maintenanceRequests,
   maintenanceComments,
+  units,
 } from '@propertypro/db';
 import { eq, and, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -126,12 +127,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (isAdmin && assignedToIdFilter) conditions.push(eq(maintenanceRequests.assignedToId, assignedToIdFilter));
 
   const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
-  const filtered = await scoped.selectFrom(maintenanceRequests, {}, additionalWhere) as unknown as Record<string, unknown>[];
+  const dbOffset = (page - 1) * limit;
 
-  // Paginate in memory on the already-filtered set (consistent with other routes)
-  const total = filtered.length;
-  const offset = (page - 1) * limit;
-  const paged = filtered.slice(offset, offset + limit);
+  // Run count (ID-only) and paginated full-row fetch in parallel — avoids fetching all rows into memory
+  type IdRow = { id: number };
+  type DynBuilder = { limit(n: number): { offset(n: number): Promise<Record<string, unknown>[]> } };
+  const [countRows, paged] = await Promise.all([
+    scoped.selectFrom(maintenanceRequests, { id: maintenanceRequests.id }, additionalWhere) as unknown as Promise<IdRow[]>,
+    (scoped.selectFrom(maintenanceRequests, {}, additionalWhere) as unknown as DynBuilder)
+      .limit(limit)
+      .offset(dbOffset),
+  ]);
+  const total = (countRows as IdRow[]).length;
 
   // Fetch comments only for this page's request IDs (not all community comments)
   const pagedIds = paged.map((r) => r['id'] as number);
@@ -205,6 +212,20 @@ async function handleCreateRequest(
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await requireCommunityMembership(communityId, actorUserId);
 
+  const scoped = createScopedClient(communityId);
+
+  // Validate unitId belongs to this community (scoped client auto-injects communityId filter)
+  if (payload.unitId != null) {
+    const unitRows = await scoped.selectFrom(
+      units,
+      {},
+      eq(units.id, payload.unitId),
+    ) as unknown as Record<string, unknown>[];
+    if (unitRows.length === 0) {
+      throw new ValidationError('Unit not found in this community');
+    }
+  }
+
   // Build photo entries from already-uploaded storage paths.
   // thumbnailUrl is null initially — fire-and-forget thumbnail generation runs after insert.
   // thumbnailUrl cannot be written back without a separate PATCH-photos path (deferred per design).
@@ -217,12 +238,15 @@ async function handleCreateRequest(
   if (payload.storagePaths?.length) {
     const uploadedAt = new Date().toISOString();
     for (const storagePath of payload.storagePaths) {
+      // Validate path prefix to prevent cross-tenant photo access
+      if (!storagePath.startsWith(`maintenance/${communityId}/`)) {
+        throw new ValidationError('Invalid storage path');
+      }
       const url = await createPresignedDownloadUrl('maintenance', storagePath);
       photoEntries.push({ url, thumbnailUrl: null, storagePath, uploadedAt });
     }
   }
 
-  const scoped = createScopedClient(communityId);
   const insertedRows = await scoped.insert(maintenanceRequests, {
     submittedById: actorUserId,
     unitId: payload.unitId ?? null,

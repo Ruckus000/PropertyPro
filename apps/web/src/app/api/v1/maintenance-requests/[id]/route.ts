@@ -206,9 +206,15 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
   if (fields.assignedToId !== undefined) {
     // Validate that the assignee is a community member with an admin role
     if (fields.assignedToId !== null) {
-      const roleRows = await scoped.query(userRoles) as unknown as Record<string, unknown>[];
+      // Filter by userId at the DB level — scoped client auto-injects communityId,
+      // so this is a point lookup (unique constraint on userId+communityId)
+      const roleRows = await scoped.selectFrom(
+        userRoles,
+        {},
+        eq(userRoles.userId, fields.assignedToId),
+      ) as unknown as Record<string, unknown>[];
       const match = roleRows.find(
-        (row) => row['userId'] === fields.assignedToId && ADMIN_ROLES.has(row['role'] as string),
+        (row) => ADMIN_ROLES.has(row['role'] as string),
       );
       if (!match) {
         throw new ValidationError('Assigned user must be a community administrator');
