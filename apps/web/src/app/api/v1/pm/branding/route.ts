@@ -83,7 +83,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   let canonicalLogoPath: string | undefined;
   if (logoStoragePath) {
     // Fetch raw bytes from Supabase Storage
-    const signedUrl = await createPresignedDownloadUrl('documents', logoStoragePath, PRESIGN_TTL_SECONDS);
+    const rawSignedUrl = await createPresignedDownloadUrl('documents', logoStoragePath, PRESIGN_TTL_SECONDS);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+    const signedUrl = rawSignedUrl.startsWith('http')
+      ? rawSignedUrl
+      : new URL(rawSignedUrl, supabaseUrl).toString();
     const res = await fetch(signedUrl);
     if (!res.ok) {
       throw new ValidationError('Could not fetch uploaded logo from storage');

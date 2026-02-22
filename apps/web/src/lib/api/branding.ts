@@ -4,7 +4,7 @@
  * All callers must have already verified the user holds property_manager_admin
  * in the target community before calling these functions.
  */
-import { communities, createScopedClient } from '@propertypro/db';
+import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -62,8 +62,8 @@ export async function updateBrandingForCommunity(
     ...patch,
   };
 
-  const scoped = createScopedClient(communityId);
-  await scoped.update(communities, { branding: updated }, eq(communities.id, communityId));
+  const db = createUnscopedClient();
+  await db.update(communities).set({ branding: updated }).where(eq(communities.id, communityId));
 
   return updated;
 }
