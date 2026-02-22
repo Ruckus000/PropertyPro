@@ -63,23 +63,69 @@ function makeAuditRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
-  const query = vi.fn().mockImplementation(async (table: unknown) => {
-    if (table === complianceAuditLogTableMock) {
-      return [
-        makeAuditRow({ id: 3, createdAt: new Date('2026-02-22T10:00:00Z') }),
-        makeAuditRow({ id: 1, createdAt: new Date('2026-02-20T12:00:00Z') }),
-        makeAuditRow({ id: 2, createdAt: new Date('2026-02-21T08:00:00Z') }),
-      ];
+function makeChainableBuilder(rows: unknown[]) {
+  let currentRows = [...rows];
+  const builder: Record<string, unknown> = {};
+  builder.orderBy = vi.fn().mockImplementation(() => {
+    // Simulate DB ordering used by the route: (createdAt DESC, id DESC).
+    if (
+      currentRows.every(
+        (row) =>
+          row !== null &&
+          typeof row === 'object' &&
+          'createdAt' in (row as Record<string, unknown>) &&
+          'id' in (row as Record<string, unknown>),
+      )
+    ) {
+      currentRows = [...currentRows].sort((a, b) => {
+        const aRow = a as { createdAt: Date; id: number };
+        const bRow = b as { createdAt: Date; id: number };
+        const byCreatedAt = bRow.createdAt.getTime() - aRow.createdAt.getTime();
+        if (byCreatedAt !== 0) return byCreatedAt;
+        return bRow.id - aRow.id;
+      });
     }
+    return builder;
+  });
+  builder.limit = vi.fn().mockImplementation((n: number) => {
+    // Return a thenable that resolves to rows.slice(0, n)
+    const limited = currentRows.slice(0, n);
+    const thenable: Record<string, unknown> = { ...builder };
+    thenable.then = (resolve: (v: unknown) => unknown) => Promise.resolve(limited).then(resolve);
+    return thenable;
+  });
+  builder.then = (resolve: (v: unknown) => unknown) => Promise.resolve(currentRows).then(resolve);
+  return builder;
+}
+
+function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
+  // Pre-sorted DESC by (createdAt, id) as the DB would return with orderBy
+  const defaultAuditRows = [
+    makeAuditRow({ id: 3, createdAt: new Date('2026-02-22T10:00:00Z') }),
+    makeAuditRow({ id: 2, createdAt: new Date('2026-02-21T08:00:00Z') }),
+    makeAuditRow({ id: 1, createdAt: new Date('2026-02-20T12:00:00Z') }),
+  ];
+
+  const query = vi.fn().mockImplementation(async (table: unknown) => {
     if (table === userRolesTableMock) {
       return [{ userId: 'user-abc', role: 'board_president', communityId: 42 }];
     }
     return [];
   });
 
+  const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+    if (table === complianceAuditLogTableMock) {
+      return makeChainableBuilder(defaultAuditRows);
+    }
+    if (table === userRolesTableMock) {
+      return makeChainableBuilder([{ userId: 'user-abc', role: 'board_president', communityId: 42 }]);
+    }
+    return makeChainableBuilder([]);
+  });
+
   return {
     query,
+    selectFrom,
     ...overrides,
   };
 }
@@ -182,18 +228,14 @@ describe('p3-53 audit trail route', () => {
 
   describe('filters', () => {
     it('filters by action', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      // DB-level filtering: route passes additionalWhere to selectFrom; mock returns only matching rows
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
-            makeAuditRow({ id: 1, action: 'create' }),
-            makeAuditRow({ id: 2, action: 'update' }),
-            makeAuditRow({ id: 3, action: 'delete' }),
-          ];
+          return makeChainableBuilder([makeAuditRow({ id: 2, action: 'update' })]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&action=update',
@@ -206,17 +248,13 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('filters by userId', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
-            makeAuditRow({ id: 1, userId: 'user-a' }),
-            makeAuditRow({ id: 2, userId: 'user-b' }),
-          ];
+          return makeChainableBuilder([makeAuditRow({ id: 2, userId: 'user-b' })]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&userId=user-b',
@@ -229,18 +267,13 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('filters by date range', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
-            makeAuditRow({ id: 1, createdAt: new Date('2026-02-19T12:00:00Z') }),
-            makeAuditRow({ id: 2, createdAt: new Date('2026-02-20T12:00:00Z') }),
-            makeAuditRow({ id: 3, createdAt: new Date('2026-02-22T12:00:00Z') }),
-          ];
+          return makeChainableBuilder([makeAuditRow({ id: 2, createdAt: new Date('2026-02-20T12:00:00Z') })]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&startDate=2026-02-20&endDate=2026-02-21',
@@ -265,12 +298,11 @@ describe('p3-53 audit trail route', () => {
           createdAt: new Date(`2026-02-${String(Math.min(i + 1, 28)).padStart(2, '0')}T12:00:00Z`),
         }),
       );
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === complianceAuditLogTableMock) return rows;
-        if (table === userRolesTableMock) return [];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) return makeChainableBuilder(rows);
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&limit=10',
@@ -317,21 +349,20 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('sanitizes formula injection in CSV cells', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               action: '=CMD()',
               resourceType: '+evil',
               resourceId: '@malicious',
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv',
@@ -346,19 +377,18 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('redacts sensitive metadata keys in CSV', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               metadata: { requestId: 'req-1', token: 'secret-token-123', password: 'p@ss' },
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv',
@@ -378,19 +408,18 @@ describe('p3-53 audit trail route', () => {
 
   describe('metadata redaction', () => {
     it('redacts sensitive keys in JSON response', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               metadata: { requestId: 'safe', apiKey: 'secret-key' },
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
       const res = await GET(req);
@@ -403,9 +432,9 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('recursively redacts sensitive keys in nested objects', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               metadata: {
@@ -417,12 +446,11 @@ describe('p3-53 audit trail route', () => {
                 },
               },
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
       const res = await GET(req);
@@ -441,9 +469,9 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('recursively redacts sensitive keys in arrays', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               metadata: {
@@ -453,12 +481,11 @@ describe('p3-53 audit trail route', () => {
                 ],
               },
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
       const res = await GET(req);
@@ -475,9 +502,9 @@ describe('p3-53 audit trail route', () => {
     });
 
     it('redacts case-insensitive key variants (Authorization, COOKIE, SignedUrl)', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
-          return [
+          return makeChainableBuilder([
             makeAuditRow({
               id: 1,
               metadata: {
@@ -487,12 +514,11 @@ describe('p3-53 audit trail route', () => {
                 safe: 'visible',
               },
             }),
-          ];
+          ]);
         }
-        if (table === userRolesTableMock) return [];
-        return [];
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
       const res = await GET(req);
@@ -556,6 +582,17 @@ describe('p3-53 audit trail route', () => {
     it('returns 400 for invalid cursor', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/audit-trail?communityId=42&cursor=not-valid-base64-json',
+      );
+      const res = await GET(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for semantically invalid decoded cursor payload', async () => {
+      const badCursor = Buffer.from(
+        JSON.stringify({ createdAt: 'not-a-date', id: 'oops' }),
+      ).toString('base64');
+      const req = new NextRequest(
+        `http://localhost:3000/api/v1/audit-trail?communityId=42&cursor=${encodeURIComponent(badCursor)}`,
       );
       const res = await GET(req);
       expect(res.status).toBe(400);

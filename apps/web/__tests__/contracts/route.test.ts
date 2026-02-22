@@ -61,17 +61,32 @@ import { GET, POST, PATCH } from '../../src/app/api/v1/contracts/route';
 // Setup
 // ---------------------------------------------------------------------------
 
+function makeChainableBuilder(rows: unknown[]) {
+  const builder: Record<string, unknown> = {};
+  builder.orderBy = vi.fn().mockReturnValue(builder);
+  builder.limit = vi.fn().mockReturnValue(builder);
+  builder.then = (resolve: (v: unknown) => unknown) => Promise.resolve(rows).then(resolve);
+  return builder;
+}
+
 function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
   const query = vi.fn().mockImplementation(async (table: unknown) => {
     if (table === contractsTableMock) return [];
     if (table === contractBidsTableMock) return [];
-    if (table === documentsTableMock) return [{ id: 100, communityId: 42 }];
-    if (table === complianceChecklistItemsTableMock) return [{ id: 200, communityId: 42 }];
     return [];
+  });
+
+  // selectFrom is used for single-record lookups in PATCH and POST handlers
+  const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+    if (table === documentsTableMock) return makeChainableBuilder([{ id: 100, communityId: 42 }]);
+    if (table === complianceChecklistItemsTableMock) return makeChainableBuilder([{ id: 200, communityId: 42 }]);
+    // contracts and contractBids: default to empty (tests override as needed)
+    return makeChainableBuilder([]);
   });
 
   return {
     query,
+    selectFrom,
     insert: vi.fn().mockResolvedValue([
       {
         id: 1,
@@ -327,11 +342,11 @@ describe('p3-52 contracts route', () => {
     });
 
     it('validates document belongs to same community', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === documentsTableMock) return []; // no document found
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === documentsTableMock) return makeChainableBuilder([]); // no document found
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'POST',
@@ -352,11 +367,11 @@ describe('p3-52 contracts route', () => {
     });
 
     it('validates checklist item belongs to same community', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === complianceChecklistItemsTableMock) return [];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceChecklistItemsTableMock) return makeChainableBuilder([]);
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'POST',
@@ -383,14 +398,14 @@ describe('p3-52 contracts route', () => {
 
   describe('POST create bid', () => {
     it('creates a bid and logs audit event', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === contractsTableMock) return [{ id: 10, communityId: 42 }];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === contractsTableMock) return makeChainableBuilder([{ id: 10, communityId: 42 }]);
+        return makeChainableBuilder([]);
       });
       const insert = vi.fn().mockResolvedValue([
         { id: 5, contractId: 10, vendorName: 'BidCo', bidAmount: '25000.00' },
       ]);
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query, insert }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom, insert }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'POST',
@@ -416,11 +431,11 @@ describe('p3-52 contracts route', () => {
     });
 
     it('rejects bid for non-existent contract', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === contractsTableMock) return [];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === contractsTableMock) return makeChainableBuilder([]);
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'POST',
@@ -445,14 +460,14 @@ describe('p3-52 contracts route', () => {
 
   describe('PATCH', () => {
     it('updates contract and logs audit', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === contractsTableMock) {
-          return [{ id: 1, communityId: 42, title: 'Old Title', status: 'active' }];
+          return makeChainableBuilder([{ id: 1, communityId: 42, title: 'Old Title', status: 'active' }]);
         }
-        return [];
+        return makeChainableBuilder([]);
       });
       const update = vi.fn().mockResolvedValue([{ id: 1, title: 'New Title' }]);
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query, update }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom, update }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'PATCH',
@@ -474,11 +489,11 @@ describe('p3-52 contracts route', () => {
     });
 
     it('returns 404 when contract not found', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === contractsTableMock) return [];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === contractsTableMock) return makeChainableBuilder([]);
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'PATCH',
@@ -491,11 +506,11 @@ describe('p3-52 contracts route', () => {
     });
 
     it('returns 400 when no update fields provided', async () => {
-      const query = vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === contractsTableMock) return [{ id: 1, communityId: 42 }];
-        return [];
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === contractsTableMock) return makeChainableBuilder([{ id: 1, communityId: 42 }]);
+        return makeChainableBuilder([]);
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/contracts', {
         method: 'PATCH',

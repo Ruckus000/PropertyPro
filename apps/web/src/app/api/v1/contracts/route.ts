@@ -288,26 +288,24 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(communityId);
 
-  const existingRows = await scoped.query(contracts);
-  const existing = existingRows.find((row) => row['id'] === id);
+  const existingRows = await scoped.selectFrom(contracts, {}, eq(contracts.id, id));
+  const existing = (existingRows as unknown as Record<string, unknown>[])[0];
   if (!existing) {
     throw new NotFoundError('Contract not found');
   }
 
   // Validate documentId belongs to this community if provided
   if (fields.documentId) {
-    const docRows = await scoped.query(documents);
-    const doc = docRows.find((row) => row['id'] === fields.documentId);
-    if (!doc) {
+    const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, fields.documentId));
+    if ((docRows as unknown as unknown[]).length === 0) {
       throw new ValidationError('Document not found in this community');
     }
   }
 
   // Validate complianceChecklistItemId belongs to this community if provided
   if (fields.complianceChecklistItemId) {
-    const checklistRows = await scoped.query(complianceChecklistItems);
-    const item = checklistRows.find((row) => row['id'] === fields.complianceChecklistItemId);
-    if (!item) {
+    const checklistRows = await scoped.selectFrom(complianceChecklistItems, {}, eq(complianceChecklistItems.id, fields.complianceChecklistItemId));
+    if ((checklistRows as unknown as unknown[]).length === 0) {
       throw new ValidationError('Compliance checklist item not found in this community');
     }
   }
@@ -369,18 +367,16 @@ async function handleCreateContract(
 
   // Validate documentId belongs to this community
   if (payload.documentId) {
-    const docRows = await scoped.query(documents);
-    const doc = docRows.find((row) => row['id'] === payload.documentId);
-    if (!doc) {
+    const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, payload.documentId));
+    if ((docRows as unknown as unknown[]).length === 0) {
       throw new ValidationError('Document not found in this community');
     }
   }
 
   // Validate complianceChecklistItemId belongs to this community
   if (payload.complianceChecklistItemId) {
-    const checklistRows = await scoped.query(complianceChecklistItems);
-    const item = checklistRows.find((row) => row['id'] === payload.complianceChecklistItemId);
-    if (!item) {
+    const checklistRows = await scoped.selectFrom(complianceChecklistItems, {}, eq(complianceChecklistItems.id, payload.complianceChecklistItemId));
+    if ((checklistRows as unknown as unknown[]).length === 0) {
       throw new ValidationError('Compliance checklist item not found in this community');
     }
   }
@@ -446,8 +442,8 @@ async function handleCreateBid(
   const scoped = createScopedClient(communityId);
 
   // Validate contract belongs to this community
-  const contractRows = await scoped.query(contracts);
-  const contract = contractRows.find((row) => row['id'] === payload.contractId);
+  const contractRows = await scoped.selectFrom(contracts, {}, eq(contracts.id, payload.contractId));
+  const contract = (contractRows as unknown as Record<string, unknown>[])[0];
   if (!contract) {
     throw new NotFoundError('Contract not found in this community');
   }

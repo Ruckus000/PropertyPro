@@ -16,6 +16,7 @@ import {
   complianceAuditLog,
   userRoles,
 } from '@propertypro/db';
+import { and, desc, eq, gte, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -133,12 +134,22 @@ function redactValue(value: unknown): unknown {
 function decodeCursor(cursor: string): { createdAt: Date; id: number } | null {
   try {
     const decoded = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) as {
-      createdAt: string;
-      id: number;
+      createdAt?: unknown;
+      id?: unknown;
     };
+    if (typeof decoded.createdAt !== 'string') {
+      return null;
+    }
+    if (!Number.isInteger(decoded.id) || (decoded.id as number) <= 0) {
+      return null;
+    }
+    const createdAt = new Date(decoded.createdAt);
+    if (Number.isNaN(createdAt.getTime())) {
+      return null;
+    }
     return {
-      createdAt: new Date(decoded.createdAt),
-      id: decoded.id,
+      createdAt,
+      id: decoded.id as number,
     };
   } catch {
     return null;
@@ -201,45 +212,71 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireAdminRole(membership.role);
 
-  const scoped = createScopedClient(communityId);
-  const allRows = await scoped.query(complianceAuditLog);
-  let auditRows = allRows.map(coerceAuditRow);
+  // --- Cursor-based pagination params (validated before DB query) ---
+  const cursor = searchParams.get('cursor');
+  const rawLimit = searchParams.get('limit');
+  let limit = DEFAULT_PAGE_SIZE;
 
-  // --- Filters ---
+  if (rawLimit !== null) {
+    const parsedLimit = Number(rawLimit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE) {
+      throw new ValidationError(
+        `limit must be an integer between 1 and ${MAX_PAGE_SIZE}`,
+      );
+    }
+    limit = parsedLimit;
+  }
+
+  // --- Build DB-level WHERE clause from filters ---
+  const conditions: ReturnType<typeof eq>[] = [];
+
   const actionFilter = searchParams.get('action');
   if (actionFilter) {
-    auditRows = auditRows.filter((r) => r.action === actionFilter);
+    conditions.push(eq(complianceAuditLog.action, actionFilter));
   }
 
   const userIdFilter = searchParams.get('userId');
   if (userIdFilter) {
-    auditRows = auditRows.filter((r) => r.userId === userIdFilter);
+    conditions.push(eq(complianceAuditLog.userId, userIdFilter));
   }
 
   const startDate = searchParams.get('startDate');
   if (startDate) {
     const start = new Date(startDate);
     start.setUTCHours(0, 0, 0, 0);
-    auditRows = auditRows.filter((r) => r.createdAt >= start);
+    conditions.push(gte(complianceAuditLog.createdAt, start));
   }
 
   const endDate = searchParams.get('endDate');
   if (endDate) {
     const end = new Date(endDate);
     end.setUTCHours(23, 59, 59, 999);
-    auditRows = auditRows.filter((r) => r.createdAt <= end);
+    conditions.push(lte(complianceAuditLog.createdAt, end));
   }
 
-  // --- Sort: reverse chronological (createdAt DESC, id DESC) ---
-  auditRows.sort((a, b) => {
-    const timeDiff = b.createdAt.getTime() - a.createdAt.getTime();
-    if (timeDiff !== 0) return timeDiff;
-    return b.id - a.id;
-  });
+  if (cursor) {
+    const decoded = decodeCursor(cursor);
+    if (!decoded) {
+      throw new ValidationError('Invalid cursor value');
+    }
+    // Compound cursor: (created_at, id) < (cursor.createdAt, cursor.id) in DESC order
+    conditions.push(
+      sql`(${complianceAuditLog.createdAt}, ${complianceAuditLog.id}) < (${decoded.createdAt.toISOString()}::timestamptz, ${decoded.id})`,
+    );
+  }
 
-  // --- CSV Export ---
+  const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const scoped = createScopedClient(communityId);
+
+  // --- CSV Export: fetch all matching rows from DB ---
   const format = searchParams.get('format');
   if (format === 'csv') {
+    const csvRawRows = await scoped
+      .selectFrom(complianceAuditLog, {}, additionalWhere)
+      .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id));
+    const auditRows = (csvRawRows as unknown as Record<string, unknown>[]).map(coerceAuditRow);
+
     const csvHeaders = [
       { key: 'id', label: 'ID' },
       { key: 'createdAt', label: 'Timestamp' },
@@ -271,36 +308,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  // --- Cursor-based pagination ---
-  const cursor = searchParams.get('cursor');
-  const rawLimit = searchParams.get('limit');
-  let limit = DEFAULT_PAGE_SIZE;
+  // --- Paginated query: fetch limit+1 rows to detect hasMore ---
+  const rawRows = await scoped
+    .selectFrom(complianceAuditLog, {}, additionalWhere)
+    .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id))
+    .limit(limit + 1);
+  const auditRows = (rawRows as unknown as Record<string, unknown>[]).map(coerceAuditRow);
 
-  if (rawLimit !== null) {
-    const parsedLimit = Number(rawLimit);
-    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE) {
-      throw new ValidationError(
-        `limit must be an integer between 1 and ${MAX_PAGE_SIZE}`,
-      );
-    }
-    limit = parsedLimit;
-  }
-
-  if (cursor) {
-    const decoded = decodeCursor(cursor);
-    if (!decoded) {
-      throw new ValidationError('Invalid cursor value');
-    }
-    auditRows = auditRows.filter((r) => {
-      const timeDiff = r.createdAt.getTime() - decoded.createdAt.getTime();
-      if (timeDiff < 0) return true;
-      if (timeDiff === 0 && r.id < decoded.id) return true;
-      return false;
-    });
-  }
-
-  const page = auditRows.slice(0, limit);
   const hasMore = auditRows.length > limit;
+  const page = auditRows.slice(0, limit);
   const lastEntry = page[page.length - 1];
   const nextCursor = lastEntry && hasMore ? encodeCursor(lastEntry) : null;
 
