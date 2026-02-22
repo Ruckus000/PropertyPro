@@ -16,7 +16,7 @@ import {
   complianceAuditLog,
   userRoles,
 } from '@propertypro/db';
-import { and, desc, eq, gte, lte, sql } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -176,15 +176,13 @@ async function loadUserDisplayNames(
   if (userIds.size === 0) return new Map();
 
   const scoped = createScopedClient(communityId);
-  const roleRows = await scoped.query(userRoles);
+  const roleRows = await scoped.selectFrom(userRoles, {}, inArray(userRoles.userId, [...userIds]));
 
   const nameMap = new Map<string, string>();
-  for (const row of roleRows) {
+  for (const row of roleRows as unknown as Record<string, unknown>[]) {
     const userId = row['userId'] as string;
-    if (userIds.has(userId)) {
-      // Use userId as fallback display name (actual name lookup would require users table)
-      nameMap.set(userId, userId.substring(0, 8));
-    }
+    // Use userId as fallback display name (actual name lookup would require users table)
+    nameMap.set(userId, userId.substring(0, 8));
   }
 
   return nameMap;

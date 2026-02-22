@@ -8,8 +8,16 @@
  */
 import { useState } from 'react';
 
+interface Bid {
+  id: number;
+  vendorName: string;
+  bidAmount: string;
+  submittedAt: string | null;
+  notes: string | null;
+}
+
 interface BidSummary {
-  bids: Record<string, unknown>[];
+  bids: Bid[];
   embargoed: boolean;
   bidCount: number;
   biddingClosesAt: string | null;
@@ -120,21 +128,21 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {bidSummary.bids.map((bid, idx) => (
-                  <tr key={idx}>
+                {bidSummary.bids.map((bid) => (
+                  <tr key={bid.id}>
                     <td className="px-4 py-2 text-sm text-gray-900">
-                      {bid['vendorName'] as string}
+                      {bid.vendorName}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-600">
-                      ${bid['bidAmount'] as string}
+                      ${bid.bidAmount}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-600">
-                      {bid['submittedAt']
-                        ? new Date(bid['submittedAt'] as string).toLocaleDateString()
+                      {bid.submittedAt
+                        ? new Date(bid.submittedAt).toLocaleDateString()
                         : '-'}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-600">
-                      {(bid['notes'] as string | null) ?? '-'}
+                      {bid.notes ?? '-'}
                     </td>
                   </tr>
                 ))}
