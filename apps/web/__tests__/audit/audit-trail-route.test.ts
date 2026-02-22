@@ -376,6 +376,86 @@ describe('p3-53 audit trail route', () => {
       expect(csvText).toContain("'@malicious");
     });
 
+    it('caps CSV export at MAX_CSV_ROWS when input exceeds limit', async () => {
+      const rows = Array.from({ length: 10_005 }, (_, i) =>
+        makeAuditRow({
+          id: i + 1,
+          createdAt: new Date(Date.now() - i * 1000),
+        }),
+      );
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) return makeChainableBuilder(rows);
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv',
+      );
+      const res = await GET(req);
+      const csvText = await res.text();
+
+      // CSV: 1 header line + exactly 10,000 data lines + trailing CRLF
+      const lines = csvText.split('\r\n').filter(Boolean);
+      expect(lines.length).toBe(10_001); // exactly 1 header + 10,000 data rows
+      expect(lines[0]).toContain('ID'); // header row is present
+
+      // Truncation headers must be set
+      expect(res.headers.get('x-csv-truncated')).toBe('true');
+      expect(res.headers.get('x-csv-max-rows')).toBe('10000');
+    });
+
+    it('sets truncation headers at exactly MAX_CSV_ROWS boundary', async () => {
+      // At exactly 10,000 rows, we can't distinguish "exactly 10k" from
+      // "10k+ truncated", so the route conservatively signals truncation.
+      const rows = Array.from({ length: 10_000 }, (_, i) =>
+        makeAuditRow({
+          id: i + 1,
+          createdAt: new Date(Date.now() - i * 1000),
+        }),
+      );
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) return makeChainableBuilder(rows);
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv',
+      );
+      const res = await GET(req);
+      const csvText = await res.text();
+      const lines = csvText.split('\r\n').filter(Boolean);
+
+      expect(lines.length).toBe(10_001); // 1 header + 10,000 data rows
+      expect(res.headers.get('x-csv-truncated')).toBe('true');
+    });
+
+    it('does not set truncation headers when under limit (9999 rows)', async () => {
+      const rows = Array.from({ length: 9_999 }, (_, i) =>
+        makeAuditRow({
+          id: i + 1,
+          createdAt: new Date(Date.now() - i * 1000),
+        }),
+      );
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) return makeChainableBuilder(rows);
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv',
+      );
+      const res = await GET(req);
+      const csvText = await res.text();
+      const lines = csvText.split('\r\n').filter(Boolean);
+
+      expect(lines.length).toBe(10_000); // 1 header + 9,999 data rows
+      expect(res.headers.get('x-csv-truncated')).toBeNull();
+      expect(res.headers.get('x-csv-max-rows')).toBeNull();
+    });
+
     it('redacts sensitive metadata keys in CSV', async () => {
       const selectFrom = vi.fn().mockImplementation((table: unknown) => {
         if (table === complianceAuditLogTableMock) {
@@ -499,6 +579,116 @@ describe('p3-53 audit trail route', () => {
       expect(items[0]['label']).toBe('a');
       expect(items[1]['secret']).toBe('[REDACTED]');
       expect(items[1]['label']).toBe('b');
+    });
+
+    it('redacts sensitive keys in oldValues and newValues (flat)', async () => {
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) {
+          return makeChainableBuilder([
+            makeAuditRow({
+              id: 1,
+              oldValues: { token: 'old-secret', title: 'Old Title' },
+              newValues: { token: 'new-secret', title: 'New Title' },
+              metadata: null,
+            }),
+          ]);
+        }
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
+      const res = await GET(req);
+      const json = (await res.json()) as {
+        data: Array<{
+          oldValues: Record<string, unknown> | null;
+          newValues: Record<string, unknown> | null;
+        }>;
+      };
+
+      expect(json.data[0].oldValues?.['token']).toBe('[REDACTED]');
+      expect(json.data[0].newValues?.['token']).toBe('[REDACTED]');
+      expect(json.data[0].oldValues?.['title']).toBe('Old Title');
+      expect(json.data[0].newValues?.['title']).toBe('New Title');
+    });
+
+    it('recursively redacts nested sensitive keys in oldValues and newValues', async () => {
+      // Real-world scenario: a settings update where config contains an API key
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) {
+          return makeChainableBuilder([
+            makeAuditRow({
+              id: 1,
+              oldValues: {
+                config: { apiKey: 'old-api-key', webhookUrl: 'https://old.example.com' },
+                name: 'Old Name',
+              },
+              newValues: {
+                config: { apiKey: 'new-api-key', webhookUrl: 'https://new.example.com' },
+                name: 'New Name',
+              },
+              metadata: null,
+            }),
+          ]);
+        }
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
+      const res = await GET(req);
+      const json = (await res.json()) as {
+        data: Array<{
+          oldValues: Record<string, unknown> | null;
+          newValues: Record<string, unknown> | null;
+        }>;
+      };
+
+      const oldConfig = (json.data[0].oldValues?.['config'] as Record<string, unknown>);
+      const newConfig = (json.data[0].newValues?.['config'] as Record<string, unknown>);
+
+      // Nested apiKey must be redacted
+      expect(oldConfig['apiKey']).toBe('[REDACTED]');
+      expect(newConfig['apiKey']).toBe('[REDACTED]');
+
+      // Non-sensitive nested keys preserved
+      expect(oldConfig['webhookUrl']).toBe('https://old.example.com');
+      expect(newConfig['webhookUrl']).toBe('https://new.example.com');
+
+      // Top-level non-sensitive keys preserved
+      expect(json.data[0].oldValues?.['name']).toBe('Old Name');
+      expect(json.data[0].newValues?.['name']).toBe('New Name');
+    });
+
+    it('handles null oldValues and newValues without throwing', async () => {
+      // Common case: a "create" audit event has null oldValues
+      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
+        if (table === complianceAuditLogTableMock) {
+          return makeChainableBuilder([
+            makeAuditRow({
+              id: 1,
+              oldValues: null,
+              newValues: { title: 'Created Document' },
+              metadata: null,
+            }),
+          ]);
+        }
+        return makeChainableBuilder([]);
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as {
+        data: Array<{
+          oldValues: Record<string, unknown> | null;
+          newValues: Record<string, unknown> | null;
+        }>;
+      };
+
+      expect(json.data[0].oldValues).toBeNull();
+      expect(json.data[0].newValues).toEqual({ title: 'Created Document' });
     });
 
     it('redacts case-insensitive key variants (Authorization, COOKIE, SignedUrl)', async () => {
