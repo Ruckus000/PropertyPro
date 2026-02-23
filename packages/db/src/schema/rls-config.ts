@@ -1,16 +1,15 @@
 /**
- * P4-55 RLS inventory and policy-family config (draft scaffold).
+ * P4-55 RLS inventory and policy-family config.
  *
  * This file is the source of truth for policy coverage tests so new tenant-scoped
- * tables do not silently miss RLS rollout. Policy classifications are intentionally
- * conservative and may be refined as the SQL migration is implemented.
+ * tables do not silently miss RLS rollout.
  */
 
 export type RlsPolicyFamily =
-  | 'tenant_crud'
-  | 'tenant_read_only'
-  | 'service_only'
-  | 'audit_log_restricted';
+  | 'tenant_crud'           // All 4 ops gated on community membership
+  | 'tenant_admin_write'    // SELECT/DELETE on membership; INSERT/UPDATE require admin-tier role
+  | 'service_only'          // All ops require pp_rls_is_privileged()
+  | 'audit_log_restricted'; // SELECT requires admin-tier role; INSERT requires privilege
 
 export interface RlsTenantTableConfig {
   tableName: string;
@@ -46,8 +45,8 @@ export const RLS_TENANT_TABLES = [
   { tableName: 'units', policyFamily: 'tenant_crud' },
   {
     tableName: 'user_roles',
-    policyFamily: 'tenant_crud',
-    notes: 'Role rows are used to derive tenant access; finalize recursion-safe policy SQL.',
+    policyFamily: 'tenant_admin_write',
+    notes: 'INSERT/UPDATE require admin-tier role (pp_rls_can_read_audit_log). SELECT/DELETE use community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
   },
 ] as const satisfies readonly RlsTenantTableConfig[];
 

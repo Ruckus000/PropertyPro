@@ -279,7 +279,13 @@ describeDb('P4-55 RLS policies (integration)', () => {
           ),
         );
 
-      // compliance_audit_log is append-only and has restrictive FKs (AGENTS learnings).
+      // compliance_audit_log rows seeded in beforeAll are intentionally not cleaned up.
+      // The BEFORE UPDATE OR DELETE trigger (migration 0005_append_only_audit_log.sql)
+      // blocks deletion even for the postgres superuser — this is a correct invariant.
+      // These rows accumulate per test run; this is acceptable for a compliance-grade
+      // test environment where audit log immutability is a first-class design property.
+
+      // compliance_audit_log has restrictive FKs (AGENTS learnings).
       // Parent cleanup is best-effort and may fail once audit rows exist.
       try {
         await db
@@ -390,6 +396,62 @@ describeDb('P4-55 RLS policies (integration)', () => {
       returning id
     `;
     expect(deleted).toHaveLength(0);
+  });
+
+  it('blocks tenant-role actor from inserting a privileged user_roles row (escalation prevention)', async () => {
+    // pp_user_roles_insert requires admin-tier role via pp_rls_can_read_audit_log.
+    // A tenant actor must not be able to INSERT a new user_roles row with an elevated role.
+    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    try {
+      await authSql`
+        insert into public.user_roles (user_id, community_id, role)
+        values (${seed.tenantAUserId}, ${seed.communityAId}, 'board_president')
+      `;
+      expect.fail('Tenant INSERT on user_roles should be blocked by pp_user_roles_insert');
+    } catch (error: unknown) {
+      expect((error as { code?: string }).code).toBe('42501');
+    }
+  });
+
+  it('blocks tenant-role actor from escalating their own user_roles row via UPDATE', async () => {
+    // pp_user_roles_update requires admin-tier role via pp_rls_can_read_audit_log.
+    // A tenant actor must not be able to UPDATE their own role to an elevated value.
+    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    try {
+      await authSql`
+        update public.user_roles
+        set role = 'board_president'
+        where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
+      `;
+    } catch (error: unknown) {
+      // Some Postgres versions throw 42501; others silently return 0 rows on USING mismatch.
+      expect((error as { code?: string }).code).toBe('42501');
+      return;
+    }
+    // If no exception: verify the row was NOT escalated.
+    const check = await adminSql<{ role: string }[]>`
+      select role from public.user_roles
+      where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
+    `;
+    expect(check[0]?.role, 'Tenant role must not have been escalated').toBe('tenant');
+  });
+
+  it('blocks authenticated actor from inserting directly into compliance_audit_log', async () => {
+    // pp_audit_insert requires pp_rls_is_privileged() — authenticated actors are blocked.
+    // logAuditEvent() works because it uses the postgres-role db instance (drizzle.ts).
+    await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+    try {
+      await authSql`
+        insert into public.compliance_audit_log
+          (user_id, community_id, action, resource_type, resource_id)
+        values
+          (${seed.adminAUserId}, ${seed.communityAId}, 'document_created', 'document',
+           ${`${seed.auditResourcePrefix}_blocked`})
+      `;
+      expect.fail('Authenticated INSERT on compliance_audit_log should be blocked by pp_audit_insert');
+    } catch (error: unknown) {
+      expect((error as { code?: string }).code).toBe('42501');
+    }
   });
 
   it('restricts compliance_audit_log reads to admin roles for the actor community', async () => {
@@ -587,6 +649,14 @@ describeDb('P4-55 RLS policies (integration)', () => {
           break;
         case 'audit_log_restricted':
           expectedPolicies = ['pp_audit_insert', 'pp_audit_select'];
+          break;
+        case 'tenant_admin_write':
+          expectedPolicies = [
+            'pp_tenant_delete',
+            'pp_tenant_select',
+            'pp_user_roles_insert',
+            'pp_user_roles_update',
+          ];
           break;
         default:
           throw new Error(`Unhandled policy family: ${entry.policyFamily as string}`);

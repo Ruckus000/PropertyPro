@@ -1,3 +1,21 @@
+/**
+ * P4-55 RLS validation — APPLICATION-LAYER isolation tests.
+ *
+ * Despite the "RLS validation" name, this file tests application-layer tenant isolation,
+ * NOT PostgreSQL Row-Level Security enforcement at the database layer.
+ *
+ * What is tested: route handlers return structured 401/403/404 for unauthorized access,
+ * and createScopedClient scopes queries to the actor's community. The 403s originate from
+ * requireCommunityMembership() in app code — NOT from Postgres RLS policy violations.
+ *
+ * DB-layer RLS enforcement (actual Postgres policy behavior) is covered separately in:
+ *   packages/db/__tests__/rls-policies.integration.test.ts
+ *
+ * This distinction matters: the app's DATABASE_URL connects as the postgres superuser,
+ * which bypasses RLS. Scoped isolation is enforced via TypeScript WHERE-clause injection,
+ * not Postgres policies. DB-layer RLS defends against direct connections using the
+ * authenticated role (e.g., Supabase client-side queries).
+ */
 import { randomUUID } from 'node:crypto';
 import { and, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
