@@ -190,11 +190,6 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
         'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must run DB integration tests via `scripts/with-env-local.sh`.',
       );
     }
-    if (!signoffWindow.includes('pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage')) {
-      errors.push(
-        'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must include explicit web integration coverage command.',
-      );
-    }
     if (
       !signoffWindow.includes(
         'scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage',
