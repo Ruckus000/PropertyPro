@@ -117,11 +117,11 @@ function condoHoaAccess(role: CommunityRole): ResourceAccessMap {
 
   return {
     documents: isElevatedDoc ? 'write' : 'read',
-    meetings: 'write', // all condo/hoa members can manage meetings
-    announcements: 'write', // all members can manage announcements
-    residents: 'write', // all members can manage residents
+    meetings: isAdmin ? 'write' : 'read',
+    announcements: isAdmin ? 'write' : 'read',
+    residents: isAdmin ? 'write' : 'read',
     audit_trail: isAdmin ? 'read' : 'none',
-    compliance: 'write', // all members can access compliance
+    compliance: isAdmin ? 'write' : 'read',
     contracts: isAdmin ? 'write' : 'none',
     maintenance: isAdmin ? 'write' : isResident ? 'own' : 'none',
     leases: 'none', // leases are apartment-only
@@ -141,13 +141,13 @@ function apartmentAccess(role: CommunityRole): ResourceAccessMap {
   return {
     documents: isElevatedDoc ? 'write' : 'read',
     meetings: 'none', // meetings route blocks apartment community type
-    announcements: 'write',
-    residents: 'write',
+    announcements: isAdmin ? 'write' : 'read',
+    residents: isAdmin ? 'write' : 'read',
     audit_trail: isAdmin ? 'read' : 'none',
     compliance: 'none', // compliance is condo/hoa only
     contracts: 'none', // contracts is condo/hoa only
     maintenance: isAdmin ? 'write' : isResident ? 'own' : 'none',
-    leases: 'write', // all apartment members can manage leases
+    leases: isAdmin ? 'write' : isResident ? 'own' : 'none',
     settings: isAdmin ? 'write' : 'none',
   };
 }

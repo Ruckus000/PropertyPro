@@ -164,7 +164,7 @@ describeDb('p4-58 signup-to-dashboard integration', () => {
         jsonRequest(
           apiUrl(`/api/v1/onboarding/condo?communityId=${community.id}`),
           'POST',
-          { action: 'skip' },
+          { communityId: community.id, action: 'skip' },
         ),
       );
       expect(response.status).toBe(200);
@@ -204,7 +204,7 @@ describeDb('p4-58 signup-to-dashboard integration', () => {
         jsonRequest(
           apiUrl(`/api/v1/onboarding/apartment?communityId=${community.id}`),
           'POST',
-          { action: 'skip' },
+          { communityId: community.id, action: 'skip' },
         ),
       );
       expect(response.status).toBe(200);

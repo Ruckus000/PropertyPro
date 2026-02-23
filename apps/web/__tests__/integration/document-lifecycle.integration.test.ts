@@ -284,12 +284,11 @@ describeDb('p4-58 document-lifecycle integration', () => {
     const beforeTitles = beforeJson.data.map((d) => String(d['title']));
     expect(beforeTitles).toContain(`Delete Target ${kit.runSuffix}`);
 
-    // Soft delete via route
+    // Soft delete via route (DELETE uses query params, not JSON body)
     const deleteResponse = await r.documents.DELETE(
-      jsonRequest(
-        apiUrl(`/api/v1/documents?communityId=${community.id}`),
-        'DELETE',
-        { documentIds: [delDocId] },
+      new NextRequest(
+        apiUrl(`/api/v1/documents?communityId=${community.id}&id=${delDocId}`),
+        { method: 'DELETE' },
       ),
     );
     expect(deleteResponse.status).toBe(200);

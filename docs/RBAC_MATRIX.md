@@ -30,11 +30,11 @@ Access levels: `none` | `read` | `write` | `own`
 | Resource | owner | tenant | board_member | board_president | cam | pma |
 |----------|-------|--------|--------------|-----------------|-----|-----|
 | documents | write | read | write | write | read | write |
-| meetings | write | write | write | write | write | write |
-| announcements | write | write | write | write | write | write |
-| residents | write | write | write | write | write | write |
+| meetings | read | read | write | write | write | write |
+| announcements | read | read | write | write | write | write |
+| residents | read | read | write | write | write | write |
 | audit_trail | none | none | read | read | read | read |
-| compliance | write | write | write | write | write | write |
+| compliance | read | read | write | write | write | write |
 | contracts | none | none | write | write | write | write |
 | maintenance | own | own | write | write | write | write |
 | leases | none | none | none | none | none | none |
@@ -50,13 +50,13 @@ Identical to condo_718 (same role set, same feature flags).
 |----------|--------|--------------|-----|
 | documents | read | read | write |
 | meetings | none | none | none |
-| announcements | write | write | write |
-| residents | write | write | write |
+| announcements | read | write | write |
+| residents | read | write | write |
 | audit_trail | none | read | read |
 | compliance | none | none | none |
 | contracts | none | none | none |
 | maintenance | own | write | write |
-| leases | write | write | write |
+| leases | own | write | write |
 | settings | none | write | write |
 
 Roles not valid for apartment (owner, board_member, board_president, cam) have `none` for all resources.

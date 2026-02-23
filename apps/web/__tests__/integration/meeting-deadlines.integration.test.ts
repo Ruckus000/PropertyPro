@@ -127,10 +127,11 @@ describeDb('p4-58 meeting-deadlines integration', () => {
         apiUrl(`/api/v1/meetings?communityId=${community.id}`),
         'POST',
         {
+          communityId: community.id,
           action: 'create',
           title: `Board Meeting ${kit.runSuffix}`,
           meetingType: 'board',
-          scheduledAt: meetingDate.toISOString(),
+          startsAt: meetingDate.toISOString(),
           location: 'Clubhouse',
         },
       ),
@@ -141,10 +142,10 @@ describeDb('p4-58 meeting-deadlines integration', () => {
     // Should have deadline fields
     expect(json.data).toHaveProperty('noticePostBy');
     const noticePostBy = new Date(json.data['noticePostBy'] as string);
-    const scheduledAt = new Date(json.data['scheduledAt'] as string);
+    const startsAt = new Date(json.data['startsAt'] as string);
 
     // Board meeting notice: 48 hours before
-    const hoursDiff = (scheduledAt.getTime() - noticePostBy.getTime()) / (1000 * 60 * 60);
+    const hoursDiff = (startsAt.getTime() - noticePostBy.getTime()) / (1000 * 60 * 60);
     expect(hoursDiff).toBeCloseTo(48, 0);
   });
 
@@ -163,10 +164,11 @@ describeDb('p4-58 meeting-deadlines integration', () => {
         apiUrl(`/api/v1/meetings?communityId=${community.id}`),
         'POST',
         {
+          communityId: community.id,
           action: 'create',
           title: `Owner Meeting ${kit.runSuffix}`,
           meetingType: 'owner',
-          scheduledAt: meetingDate.toISOString(),
+          startsAt: meetingDate.toISOString(),
           location: 'Community Hall',
         },
       ),
@@ -176,10 +178,10 @@ describeDb('p4-58 meeting-deadlines integration', () => {
 
     expect(json.data).toHaveProperty('noticePostBy');
     const noticePostBy = new Date(json.data['noticePostBy'] as string);
-    const scheduledAt = new Date(json.data['scheduledAt'] as string);
+    const startsAt = new Date(json.data['startsAt'] as string);
 
     // Owner meeting notice: 14 days before
-    const daysDiff = (scheduledAt.getTime() - noticePostBy.getTime()) / (1000 * 60 * 60 * 24);
+    const daysDiff = (startsAt.getTime() - noticePostBy.getTime()) / (1000 * 60 * 60 * 24);
     expect(daysDiff).toBeCloseTo(14, 0);
   });
 
@@ -235,10 +237,11 @@ describeDb('p4-58 meeting-deadlines integration', () => {
         apiUrl(`/api/v1/meetings?communityId=${community.id}`),
         'POST',
         {
+          communityId: community.id,
           action: 'create',
           title: `Blocked Meeting ${kit.runSuffix}`,
           meetingType: 'board',
-          scheduledAt: new Date().toISOString(),
+          startsAt: new Date().toISOString(),
           location: 'Nowhere',
         },
       ),

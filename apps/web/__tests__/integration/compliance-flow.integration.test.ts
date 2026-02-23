@@ -133,7 +133,7 @@ describeDb('p4-58 compliance-flow integration', () => {
       jsonRequest(
         apiUrl(`/api/v1/compliance?communityId=${community.id}`),
         'POST',
-        { action: 'generate' },
+        { communityId: community.id },
       ),
     );
     // 200 or 201 on successful generation
@@ -179,7 +179,7 @@ describeDb('p4-58 compliance-flow integration', () => {
       jsonRequest(
         apiUrl(`/api/v1/compliance?communityId=${community.id}`),
         'POST',
-        { action: 'generate' },
+        { communityId: community.id },
       ),
     );
     expect([200, 201]).toContain(postResponse.status);
