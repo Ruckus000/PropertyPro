@@ -7,7 +7,8 @@
 
 export type RlsPolicyFamily =
   | 'tenant_crud'           // All 4 ops gated on community membership
-  | 'tenant_admin_write'    // SELECT/DELETE on membership; INSERT/UPDATE require admin-tier role
+  | 'tenant_append_only'    // SELECT + INSERT only; UPDATE/DELETE blocked at RLS level
+  | 'tenant_admin_write'    // SELECT on membership; INSERT/UPDATE/DELETE require admin-tier role
   | 'service_only'          // All ops require pp_rls_is_privileged()
   | 'audit_log_restricted'; // SELECT requires admin-tier role; INSERT requires privilege
 
@@ -34,7 +35,11 @@ export const RLS_TENANT_TABLES = [
   { tableName: 'documents', policyFamily: 'tenant_crud' },
   { tableName: 'invitations', policyFamily: 'tenant_crud' },
   { tableName: 'leases', policyFamily: 'tenant_crud' },
-  { tableName: 'maintenance_comments', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'maintenance_comments',
+    policyFamily: 'tenant_append_only',
+    notes: 'Append-only: UPDATE/DELETE dropped at RLS level, consistent with scoped-client APPEND_ONLY_TABLES.',
+  },
   { tableName: 'maintenance_requests', policyFamily: 'tenant_crud' },
   { tableName: 'meeting_documents', policyFamily: 'tenant_crud' },
   { tableName: 'meetings', policyFamily: 'tenant_crud' },
@@ -46,7 +51,7 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'user_roles',
     policyFamily: 'tenant_admin_write',
-    notes: 'INSERT/UPDATE require admin-tier role (pp_rls_can_read_audit_log). SELECT/DELETE use community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
+    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT uses community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
   },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
