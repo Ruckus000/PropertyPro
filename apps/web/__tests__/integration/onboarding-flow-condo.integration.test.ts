@@ -138,7 +138,9 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
     });
 
     afterAll(async () => {
-        if (state) await teardownTestKit(state);
+        if (state) {
+            await teardownTestKit(state);
+        }
     });
 
     it('3-step condo progression persists and links compliance items', async () => {

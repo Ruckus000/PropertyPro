@@ -382,7 +382,9 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // =========================================================================

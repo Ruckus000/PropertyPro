@@ -111,7 +111,9 @@ describeDb('p4-58 signup-to-dashboard integration', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // =========================================================================

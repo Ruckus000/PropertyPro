@@ -103,7 +103,9 @@ describeDb('onboarding flow (db-backed integration)', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   it('step progression persists and completion creates units/resident/invitation', async () => {

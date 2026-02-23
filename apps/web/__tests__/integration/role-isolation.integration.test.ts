@@ -209,7 +209,9 @@ describeDb('p4-58 role-isolation integration', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // =========================================================================

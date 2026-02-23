@@ -104,7 +104,9 @@ describeDb('p4-58 compliance-flow integration', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // =========================================================================
