@@ -207,6 +207,12 @@ export function getAccessLevel(
  *
  * - 'read'  succeeds if access is 'read', 'write', or 'own'
  * - 'write' succeeds if access is 'write' or 'own'
+ *
+ * **Important:** When the underlying access level is `'own'`, this function
+ * returns `true` for both read and write actions, but the caller **must**
+ * enforce record-level ownership (e.g., verify `submittedById === actorUserId`).
+ * The matrix only declares capability; route handlers are responsible for
+ * scoping queries/mutations to the actor's own records.
  */
 export function canAccessResource(
   role: CommunityRole,
