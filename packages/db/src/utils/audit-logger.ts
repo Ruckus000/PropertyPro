@@ -34,6 +34,12 @@ export interface AuditEventParams {
  * Called from mutation handlers across the application.
  * Throws on database error — callers should handle or let it propagate
  * so that unaudited mutations do not silently succeed.
+ *
+ * @invariant Requires a privileged DB connection (postgres or service_role) to satisfy
+ * the pp_audit_insert RLS policy, which blocks INSERT for authenticated-role connections.
+ * This invariant is satisfied by the `db` instance (drizzle.ts), which connects via
+ * DATABASE_URL as the postgres superuser. Do NOT call from a Supabase anon/authenticated
+ * client — the INSERT will be blocked by RLS with no error surfaced to the caller.
  */
 export async function logAuditEvent(params: AuditEventParams): Promise<void> {
   await db.insert(complianceAuditLog).values({

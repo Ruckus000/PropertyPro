@@ -36,6 +36,29 @@ import { db as defaultDb } from './drizzle';
 export type { ScopedClient } from './types/scoped-client';
 
 // ---------------------------------------------------------------------------
+// Error classes
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown when a mutation (update / softDelete / hardDelete) is attempted on a
+ * table that produces no scope filter — i.e. the table has no communityId
+ * column and is not the communities root entity. Without a WHERE clause the
+ * operation would affect ALL rows in the table, which is never correct through
+ * the scoped client. Pass an explicit additionalWhere, or use the unsafe
+ * escape-hatch for truly global tables (users, stripe_webhook_events, etc.).
+ */
+export class UnscopedMutationError extends Error {
+  constructor(operation: string, tableName: string) {
+    super(
+      `Unscoped ${operation} attempted on table "${tableName}". ` +
+      `The table has no communityId column and is not the communities root entity. ` +
+      `Pass an explicit additionalWhere clause or use the unsafe escape-hatch for global tables.`,
+    );
+    this.name = 'UnscopedMutationError';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Table exemption registry
 // ---------------------------------------------------------------------------
 
@@ -56,6 +79,13 @@ const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
   'maintenance_comments',
 ]);
+
+/**
+ * The communities table is the root tenant entity.
+ * It has no communityId foreign-key column — isolation is enforced
+ * on its own `id` column (id = communityId) as a ScopedClient special case.
+ */
+const COMMUNITIES_TABLE_NAME = 'communities';
 
 // ---------------------------------------------------------------------------
 // Column detection helpers
@@ -79,6 +109,12 @@ function hasUpdatedAtColumn(
   columns: ColumnRecord,
 ): columns is ColumnRecord & { updatedAt: PgColumn } {
   return 'updatedAt' in columns;
+}
+
+function hasIdColumn(
+  columns: ColumnRecord,
+): columns is ColumnRecord & { id: PgColumn } {
+  return 'id' in columns;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +197,12 @@ function buildScopeFilters(
   const tableName = getTableName(table as unknown as Table);
   const filters: SQL[] = [];
 
-  if (hasCommunityIdColumn(columns)) {
+  if (tableName === COMMUNITIES_TABLE_NAME) {
+    // Root tenant entity — isolation enforced on id, not community_id
+    if (hasIdColumn(columns)) {
+      filters.push(eq(columns.id, communityId));
+    }
+  } else if (hasCommunityIdColumn(columns)) {
     filters.push(eq(columns.communityId, communityId));
   }
 
@@ -180,6 +221,21 @@ function combineFilters(filters: SQL[]): SQL | undefined {
   if (filters.length === 0) return undefined;
   if (filters.length === 1) return filters[0];
   return and(...filters);
+}
+
+/**
+ * Returns true when the table will receive a tenant-isolation WHERE condition
+ * from the scoped client — either via a communityId FK column or the
+ * communities root-entity special-case (scoped on id).
+ * Tables that return false (e.g. users, stripe_webhook_events) are not
+ * tenant-scoped and must not be mutated without an explicit additionalWhere.
+ */
+function hasTenantIsolation(
+  table: PgTable<TableConfig>,
+): boolean {
+  const columns = getTableColumns(table) as ColumnRecord;
+  const tableName = getTableName(table as unknown as Table);
+  return tableName === COMMUNITIES_TABLE_NAME || hasCommunityIdColumn(columns);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,22 +318,21 @@ export function createScopedClient(
       const columns = getTableColumns(table) as ColumnRecord;
       const requiresCommunityId = hasCommunityIdColumn(columns);
 
-      if (Array.isArray(data)) {
-        const insertDataArray = data.map(item => {
-          const newItem = { ...item };
-          if (requiresCommunityId) {
-            newItem['communityId'] = ctx.communityId;
-          }
-          return newItem;
-        });
-        return execInsert(database, table, insertDataArray);
-      } else {
-        const insertData = { ...data };
+      const preparePayload = (item: Record<string, unknown>) => {
+        const newItem = { ...item };
         if (requiresCommunityId) {
-          insertData['communityId'] = ctx.communityId;
+          newItem['communityId'] = ctx.communityId;
         }
-        return execInsert(database, table, insertData);
-      }
+        return newItem;
+      };
+
+      const insertData = Array.isArray(data) ? data.map(preparePayload) : preparePayload(data as Record<string, unknown>);
+
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execInsert(database, table, insertData);
     },
 
     async update(table, data, additionalWhere?) {
@@ -286,6 +341,9 @@ export function createScopedClient(
         throw new Error(
           `Table "${updateTableName}" is append-only. UPDATE operations are not permitted.`,
         );
+      }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('update', updateTableName);
       }
 
       const filters = buildScopeFilters(table, ctx.communityId);
@@ -303,7 +361,13 @@ export function createScopedClient(
         updateData['updatedAt'] = new Date();
       }
 
-      return execUpdate(database, table, updateData, combineFilters(filters));
+      const whereClause = combineFilters(filters);
+
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execUpdate(database, table, updateData, whereClause);
     },
 
     async softDelete(table, additionalWhere?) {
@@ -315,6 +379,9 @@ export function createScopedClient(
           `Table "${tableName}" is append-only. DELETE operations are not permitted.`,
         );
       }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('softDelete', tableName);
+      }
 
       if (!hasDeletedAtColumn(columns)) {
         throw new Error(
@@ -322,10 +389,15 @@ export function createScopedClient(
         );
       }
 
-      // Build scoping filters (community_id only — don't add deleted_at IS NULL
+      // Build scoping filters (tenant isolation only — don't add deleted_at IS NULL
       // since we're setting it, and we should be able to re-soft-delete)
       const filters: SQL[] = [];
-      if (hasCommunityIdColumn(columns)) {
+      if (tableName === COMMUNITIES_TABLE_NAME) {
+        // Root tenant entity — isolation enforced on id, not community_id
+        if (hasIdColumn(columns)) {
+          filters.push(eq(columns.id, ctx.communityId));
+        }
+      } else if (hasCommunityIdColumn(columns)) {
         filters.push(eq(columns.communityId, ctx.communityId));
       }
       if (additionalWhere) {
@@ -338,7 +410,13 @@ export function createScopedClient(
         setData['updatedAt'] = new Date();
       }
 
-      return execUpdate(database, table, setData, combineFilters(filters));
+      const whereClause = combineFilters(filters);
+
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execUpdate(database, table, setData, whereClause);
     },
 
     async hardDelete(table, additionalWhere?) {
@@ -347,6 +425,9 @@ export function createScopedClient(
         throw new Error(
           `Table "${hardDeleteTableName}" is append-only. DELETE operations are not permitted.`,
         );
+      }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('hardDelete', hardDeleteTableName);
       }
 
       const filters = buildScopeFilters(table, ctx.communityId);

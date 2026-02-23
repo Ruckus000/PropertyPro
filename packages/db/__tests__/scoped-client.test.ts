@@ -44,11 +44,15 @@ const {
   const mockFrom = vi.fn().mockReturnValue({ where: mockWhereOnSelect });
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
+  // transaction executes its callback immediately with the same mock db,
+  // so update/softDelete/insert transaction wrappers work without a real connection.
   const mockDb = {
     select: mockSelect,
     insert: mockInsertInto,
     update: vi.fn().mockReturnValue({ set: mockSet }),
     delete: mockDeleteFrom,
+    execute: vi.fn().mockResolvedValue([]),
+    transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb)),
   };
 
   return {
@@ -71,12 +75,14 @@ vi.mock('../src/drizzle', () => ({
 }));
 
 // Now import createScopedClient AFTER the mock is set up
-const { createScopedClient, isSoftDeleteExempt } = await import('../src/scoped-client');
+const { createScopedClient, isSoftDeleteExempt, UnscopedMutationError } = await import('../src/scoped-client');
 
 // Import schema tables for testing
 const { units } = await import('../src/schema/units');
 const { userRoles } = await import('../src/schema/user-roles');
 const { communities } = await import('../src/schema/communities');
+// Global table fixture: users has no communityId column (id is UUID PK, not community_id FK)
+const { users } = await import('../src/schema/users');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -91,6 +97,8 @@ beforeEach(() => {
   mockWhereOnUpdate.mockReturnValue({ returning: mockReturning });
   mockDeleteFrom.mockReturnValue({ where: mockWhereOnDelete, returning: mockReturning });
   mockWhereOnDelete.mockReturnValue({ returning: mockReturning });
+  mockDb.execute.mockResolvedValue([]);
+  mockDb.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb));
 });
 
 // ---------------------------------------------------------------------------
@@ -245,6 +253,112 @@ describe('createScopedClient', () => {
 
       expect(mockDeleteFrom).toHaveBeenCalledWith(units);
       expect(mockWhereOnDelete).toHaveBeenCalled();
+    });
+  });
+
+  describe('communities table — root tenant isolation', () => {
+    it('query on communities applies a WHERE filter (id = communityId)', async () => {
+      const client = createScopedClient(42);
+      await client.query(communities);
+
+      expect(mockWhereOnSelect).toHaveBeenCalled();
+      const whereArg = mockWhereOnSelect.mock.calls[0]?.[0];
+      expect(whereArg).toBeDefined();
+    });
+
+    it('query on communities produces different WHERE args for different communityIds', async () => {
+      const clientA = createScopedClient(42);
+      await clientA.query(communities);
+      const whereArgA = mockWhereOnSelect.mock.calls[0]?.[0];
+
+      vi.clearAllMocks();
+      mockFrom.mockReturnValue({ where: mockWhereOnSelect });
+      mockSelect.mockReturnValue({ from: mockFrom });
+
+      const clientB = createScopedClient(99);
+      await clientB.query(communities);
+      const whereArgB = mockWhereOnSelect.mock.calls[0]?.[0];
+
+      expect(whereArgA).toBeDefined();
+      expect(whereArgB).toBeDefined();
+      // Different community IDs produce distinct SQL expression objects
+      expect(whereArgA).not.toBe(whereArgB);
+    });
+
+    it('update on communities applies WHERE using id = communityId', async () => {
+      const client = createScopedClient(42);
+      await client.update(communities, { name: 'Updated Name' });
+
+      expect(mockWhereOnUpdate).toHaveBeenCalled();
+      const whereArg = mockWhereOnUpdate.mock.calls[0]?.[0];
+      expect(whereArg).toBeDefined();
+    });
+
+    it('softDelete on communities applies WHERE using id = communityId', async () => {
+      const client = createScopedClient(42);
+      await client.softDelete(communities);
+
+      expect(mockWhereOnUpdate).toHaveBeenCalled();
+      const whereArg = mockWhereOnUpdate.mock.calls[0]?.[0];
+      expect(whereArg).toBeDefined();
+    });
+
+    it('hardDelete on communities applies WHERE using id = communityId', async () => {
+      const client = createScopedClient(42);
+      await client.hardDelete(communities);
+
+      expect(mockDeleteFrom).toHaveBeenCalledWith(communities);
+      expect(mockWhereOnDelete).toHaveBeenCalled();
+      const whereArg = mockWhereOnDelete.mock.calls[0]?.[0];
+      expect(whereArg).toBeDefined();
+    });
+  });
+});
+
+describe('unscoped mutation guard', () => {
+  // users has no communityId and is not the communities root entity —
+  // so buildScopeFilters returns [] and combineFilters returns undefined
+  // unless additionalWhere is supplied.
+
+  describe('update', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      await expect(client.update(users, { fullName: 'Test' })).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const client = createScopedClient(42);
+      // sql`true` is a valid non-undefined SQL expression — enough to satisfy the guard
+      const { sql } = await import('drizzle-orm');
+      await expect(client.update(users, { fullName: 'Test' }, sql`true`)).resolves.not.toThrow();
+    });
+  });
+
+  describe('softDelete', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      // users HAS deletedAt, so the "no deletedAt" guard won't fire first;
+      // the unscoped guard should fire instead.
+      await expect(client.softDelete(users)).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const { sql } = await import('drizzle-orm');
+      const client = createScopedClient(42);
+      await expect(client.softDelete(users, sql`true`)).resolves.not.toThrow();
+    });
+  });
+
+  describe('hardDelete', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      await expect(client.hardDelete(users)).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const { sql } = await import('drizzle-orm');
+      const client = createScopedClient(42);
+      await expect(client.hardDelete(users, sql`true`)).resolves.not.toThrow();
     });
   });
 });

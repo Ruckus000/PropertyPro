@@ -27,6 +27,7 @@ export * from './contracts';
 export * from './contract-bids';
 export * from './demo-seed-registry';
 export * from './onboarding-wizard-state';
+export * from './rls-config';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert

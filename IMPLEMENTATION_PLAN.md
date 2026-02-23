@@ -1,11 +1,18 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-21 (v29 — Gate 3 closed; Phase 2 fully signed off)
+Generated: 2026-02-22 (v30 — Phase 3 closed; Gate 4 pre-deployment validation kickoff)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
 - **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). Phase 2 is complete with all 16/16 base tasks merged to `main` and Gate 3 closed on 2026-02-21. P2-39 (Condo Onboarding Wizard) merged via PR #7 (`170d987`). P2-44 (Apartment Demo Seed) merged via PR #6 (`ac7a2fb`). Gate 3 evidence is recorded in `docs/audits/gate3-evidence-2026-02-21.md`. Canonical Phase 2 status tracking is maintained in `PHASE2_EXECUTION_PLAN.md`.
+- **Current State:** Phase 0 and Phase 1 are fully complete (Gates 1 & 2 signed off). Phase 2 is complete with all 16/16 base tasks merged to `main` and Gate 3 closed on 2026-02-21. Phase 3 is complete with all 10/10 base tasks plus hardening/closeout merged to `main` (PR #12 merge commit `90d6e17`) and exit evidence recorded in `docs/audits/phase3-exit-evidence-2026-02-22.md`. Gate 4 is the next formal milestone; pre-deployment validation kickoff (main sync, closeout cleanup, and recommended post-merge sanity checks) was executed on 2026-02-22. Canonical execution tracking for Phases 2-4 is maintained in `PHASE2_EXECUTION_PLAN.md`, `PHASE3_EXECUTION_PLAN.md`, and `PHASE4_EXECUTION_PLAN.md`.
+
+### Progress Snapshot (2026-02-22)
+- Phase 3 closeout merged to `main` via PR #12 (`90d6e17`): tracker/evidence updates plus migration metadata hygiene remediation.
+- Phase 3 exit evidence captured in `docs/audits/phase3-exit-evidence-2026-02-22.md`; all 10/10 Phase 3 base tasks and mandatory hardening items are complete.
+- Post-merge `main` sanity rerun completed successfully: `pnpm plan:verify:phase3` and `set -a; source .env.local; set +a; pnpm --filter @propertypro/db db:migrate`.
+- Phase 3 closeout branch/worktree (`codex/p3-phase3-closeout`) was cleaned up locally/remotely after merge.
+- Phase 4 kickoff branch created from `origin/main`: `codex/p4-gate4-predeploy-validation`.
 
 ### Progress Snapshot (2026-02-13)
 - P0-03 priority components were refactored to Tailwind utility classes with explicit `dark:` variants in `Button`, `Card`, `Badge`, and `NavRail`, with updated component tests.
@@ -417,6 +424,7 @@ No `Partial` findings were identified in this closeout pass.
 - Rate limiting returns 429 correctly
 
 **GATE 4: Pre-Deployment Verification (after Phase 4 security tasks)**
+- Status: Kickoff started (2026-02-22) — `main` post-merge pre-deploy baseline checks completed; formal Gate 4 sign-off remains blocked until Phase 4 hardening/security tasks finish
 - RLS policies enabled and tested on all tables
 - RBAC matrix has 100% test coverage (every role × community_type × resource combination)
 - Integration test suite passes with >80% code coverage
@@ -443,8 +451,8 @@ No `Partial` findings were identified in this closeout pass.
 |-----------|--------|
 | Phase 1 feature APIs and UX flows | IMPLEMENTED (Gate 2 complete) |
 | Phase 2 multi-tenant product workflows (subdomain + provisioning + billing) | IMPLEMENTED (16/16 complete; Gate 3 signed off 2026-02-21) |
-| Phase 3 PM/mobile vertical features | NOT STARTED |
-| Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | NOT STARTED |
+| Phase 3 PM/mobile vertical features | IMPLEMENTED (10/10 complete; exit verification recorded 2026-02-22) |
+| Phase 4 hardening deliverables (RLS, RBAC audit, CI/CD, deployment, load testing) | IN PROGRESS (planning/kickoff; Gate 4 pre-deploy baseline started 2026-02-22) |
 
 ### External Service Prerequisites (MUST be set up before Phase 0)
 1. **Supabase project** — Project URL, anon key, service role key, DATABASE_URL (pooled), DIRECT_URL (direct)
@@ -755,9 +763,17 @@ No downstream phase is expected to conflict with the current P0-06/P0-07/P0-08 h
 
 ## Phase 3 Execution Readiness (2026-02-21)
 
-- **Status:** In progress kickoff (0/10 base tasks complete; pre-phase hardening started)
+- **Status:** Complete on `main` (10/10 base tasks complete; hardening and Phase 3 exit verification complete 2026-02-22)
 - **Execution Source of Truth:** `PHASE3_EXECUTION_PLAN.md`
-- **Tracking Note:** Phase 3 milestone logging, hardening progression, and batch sequencing are maintained in `PHASE3_EXECUTION_PLAN.md`.
+- **Tracking Note:** Phase 3 milestone logging, hardening progression, batch sequencing, and exit verification/handoff milestones are maintained in `PHASE3_EXECUTION_PLAN.md` (including the 2026-02-22 closeout and Gate 4 kickoff baseline).
+
+---
+
+## Phase 4 Execution Readiness (2026-02-22)
+
+- **Status:** Kickoff in progress (formal Gate 4 sign-off pending Phase 4 hardening/security deliverables)
+- **Execution Source of Truth:** `PHASE4_EXECUTION_PLAN.md`
+- **Tracking Note:** Kickoff branch `codex/p4-gate4-predeploy-validation` was created from `origin/main` after Phase 3 closeout merge; pre-deploy baseline checks on `main` (`pnpm plan:verify:phase3`, `db:migrate`) completed before Phase 4 planning/execution starts. Phase 4 batch sequencing and the canonical Gate 4 checklist now live in `PHASE4_EXECUTION_PLAN.md`.
 
 ---
 
@@ -1658,7 +1674,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-45 PM Portfolio Dashboard
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/app/(pm)/dashboard/communities/page.tsx, apps/web/src/components/pm/CommunityCard.tsx, CommunityFilters.tsx, apps/web/src/lib/api/pm-communities.ts
 - **Dependencies:** P0-03, P0-06, P2-40
 - **Blocks:** P3-46, P3-47, P3-54
@@ -1676,7 +1692,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-46 PM Community Switcher
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/app/(pm)/dashboard/[community_id]/page.tsx, apps/web/src/components/pm/CommunitySwitcher.tsx, apps/web/src/lib/api/community-context.ts, apps/web/src/hooks/useSelectedCommunity.ts
 - **Dependencies:** P3-45
 - **Blocks:** P3-54
@@ -1694,7 +1710,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-47 White-Label Branding
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/app/(pm)/settings/branding/page.tsx, apps/web/src/components/pm/BrandingForm.tsx, BrandingPreview.tsx, apps/web/src/lib/api/branding.ts, apps/web/src/lib/services/image-processor.ts
 - **Dependencies:** P3-45, P0-05
 - **Blocks:** P3-54
@@ -1713,7 +1729,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-48 Phone Frame Mobile Preview
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/components/mobile/PhoneFrame.tsx, apps/web/src/app/mobile/layout.tsx, apps/web/src/app/mobile/page.tsx, apps/web/src/app/mobile/documents/page.tsx, apps/web/src/app/mobile/meetings/page.tsx
 - **Dependencies:** P0-03, P1-24, P2-40
 - **Blocks:** P3-49, P3-54
@@ -1731,7 +1747,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-49 Mobile Layouts
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/components/mobile/BottomTabBar.tsx, CompactCard.tsx, apps/web/src/app/mobile/layout.tsx, apps/web/src/styles/mobile.css
 - **Dependencies:** P3-48, P0-02, P0-03
 - **Blocks:** None
@@ -1749,7 +1765,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-50 Maintenance Request Submission
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** packages/db/src/schema/maintenance-requests.ts, apps/web/src/app/(authenticated)/maintenance/submit/page.tsx, apps/web/src/components/maintenance/SubmitForm.tsx, RequestCard.tsx, CommentThread.tsx, apps/web/src/lib/api/maintenance-requests.ts
 - **Dependencies:** P0-05, P0-06, P0-03
 - **Blocks:** P3-51
@@ -1769,7 +1785,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-51 Maintenance Request Admin
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/maintenance/inbox/page.tsx, apps/web/src/components/maintenance/AdminInbox.tsx, AssignmentModal.tsx, StatusUpdateForm.tsx, apps/web/src/lib/api/admin-maintenance.ts
 - **Dependencies:** P3-50
 - **Blocks:** None
@@ -1788,7 +1804,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-52 Contract & Vendor Tracking
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** packages/db/src/schema/contracts.ts, apps/web/src/app/(authenticated)/contracts/page.tsx, apps/web/src/components/contracts/ContractForm.tsx, ContractTable.tsx, BidTracker.tsx, apps/web/src/lib/api/contracts.ts
 - **Dependencies:** P0-05, P0-06
 - **Blocks:** None
@@ -1806,7 +1822,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-53 Audit Trail Viewer
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (implemented, tested, and merged; see `PHASE3_EXECUTION_PLAN.md` milestones and Phase 3 exit evidence)
 - **Files to Create/Modify:** apps/web/src/app/(authenticated)/audit-trail/page.tsx, apps/web/src/components/audit/AuditTrailViewer.tsx, AuditFilters.tsx, AuditEntry.tsx, apps/web/src/lib/api/audit-trail.ts
 - **Dependencies:** P1-27
 - **Blocks:** None
@@ -1825,7 +1841,7 @@ active → past_due → canceled → expired
 
 ### Task: P3-54 Performance Optimization
 - **Phase:** 3
-- **Status:** Not Started
+- **Status:** Complete on `main` (final performance closeout verification passed; see `PHASE3_EXECUTION_PLAN.md` Batch F milestone)
 - **Files to Create/Modify:** apps/web/src/lib/performance/vitals-monitor.ts, apps/web/next.config.ts (update), apps/web/src/middleware.ts (update), component refactors for dynamic imports
 - **Dependencies:** P3-45, P3-46, P3-47, P3-48
 - **Blocks:** P4-63
