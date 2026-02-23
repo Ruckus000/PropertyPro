@@ -545,12 +545,12 @@ describe('Route-level RBAC Enforcement', () => {
   });
 
   describe('ELEVATED_DOCUMENT_ROLES set', () => {
-    for (const role of ['owner', 'board_member', 'board_president', 'property_manager_admin'] as CommunityRole[]) {
+    for (const role of ['board_member', 'board_president', 'property_manager_admin'] as CommunityRole[]) {
       it(`${role} is elevated`, () => {
         expect(ELEVATED_DOCUMENT_ROLES.has(role)).toBe(true);
       });
     }
-    for (const role of ['tenant', 'cam', 'site_manager'] as CommunityRole[]) {
+    for (const role of ['owner', 'tenant', 'cam', 'site_manager'] as CommunityRole[]) {
       it(`${role} is not elevated`, () => {
         expect(ELEVATED_DOCUMENT_ROLES.has(role)).toBe(false);
       });

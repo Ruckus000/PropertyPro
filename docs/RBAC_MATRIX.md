@@ -29,7 +29,7 @@ Access levels: `none` | `read` | `write` | `own`
 
 | Resource | owner | tenant | board_member | board_president | cam | pma |
 |----------|-------|--------|--------------|-----------------|-----|-----|
-| documents | write | read | write | write | read | write |
+| documents | read | read | write | write | read | write |
 | meetings | read | read | write | write | write | write |
 | announcements | read | read | write | write | write | write |
 | residents | read | read | write | write | write | write |

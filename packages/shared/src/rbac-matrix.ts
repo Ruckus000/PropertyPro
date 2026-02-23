@@ -71,9 +71,10 @@ export const ADMIN_ROLES: ReadonlySet<CommunityRole> = new Set([
   'property_manager_admin',
 ]);
 
-/** Roles that get elevated document access (all categories + write) */
+/** Roles that get write access to documents in the RBAC matrix.
+ *  Note: category *visibility* is controlled separately by ELEVATED_ROLES
+ *  in access-policies.ts (owner sees all categories but only reads). */
 export const ELEVATED_DOCUMENT_ROLES: ReadonlySet<CommunityRole> = new Set([
-  'owner',
   'board_member',
   'board_president',
   'property_manager_admin',
