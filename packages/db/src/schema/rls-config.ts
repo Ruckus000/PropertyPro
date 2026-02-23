@@ -9,7 +9,7 @@ export type RlsPolicyFamily =
   | 'tenant_crud'              // All 4 ops gated on community membership
   | 'tenant_append_only'       // SELECT + INSERT only; UPDATE/DELETE blocked at RLS level
   | 'tenant_admin_write'       // SELECT on membership; INSERT/UPDATE/DELETE require admin-tier role
-  | 'tenant_user_scoped'       // SELECT/UPDATE scoped to auth.uid() for non-admins; admin-tier sees all; INSERT/DELETE on community membership
+  | 'tenant_user_scoped'       // SELECT/UPDATE/DELETE scoped to auth.uid() for non-admins; admin-tier sees all; INSERT uses community-membership check (generic pp_tenant_insert) unless a bespoke insert policy replaces it
   | 'tenant_member_configurable' // SELECT on membership; INSERT/UPDATE/DELETE gated on community_settings JSONB (admin-tier always allowed; members allowed when setting is absent or 'all_members')
   | 'service_only'             // All ops require pp_rls_is_privileged()
   | 'audit_log_restricted';    // SELECT requires admin-tier role; INSERT requires privilege
@@ -128,6 +128,12 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // Hardcoded intentionally — if you add or remove a table from RLS_TENANT_TABLES,
 // you MUST update this number. This makes validateRlsConfigInvariant() a real
 // regression guard rather than a tautology.
+//
+// WHY NOT derive this dynamically from RLS_TENANT_TABLES.length?
+// A dynamic check (expected === actual === length) would always pass trivially
+// and would never catch accidental additions or removals — it would be comparing
+// the array to itself. The hardcoded constant forces a human to consciously
+// acknowledge the change, which is the entire point of the guard.
 export const RLS_EXPECTED_TENANT_TABLE_COUNT = 21;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];

@@ -1328,9 +1328,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
           ].sort();
           break;
         case 'tenant_user_scoped':
-          // All four operations have bespoke per-table policies for user-scoped tables.
-          // maintenance_requests: SELECT/UPDATE/DELETE scoped to submitted_by_id; INSERT is generic.
-          // notification_preferences: SELECT/UPDATE/INSERT/DELETE all scoped to user_id.
+          // notification_preferences: all four ops are bespoke and user_id-scoped.
+          //   SELECT/UPDATE (0025) and INSERT/DELETE (0026) all use pp_notification_preferences_*
+          //   policies that restrict to user_id = auth.uid() OR admin-tier (pp_rls_can_read_audit_log).
+          // maintenance_requests: SELECT/UPDATE/DELETE are bespoke and submitted_by_id-scoped;
+          //   INSERT retains the generic pp_tenant_insert (community-membership check only).
           if (entry.tableName === 'notification_preferences') {
             expectedPolicies = [
               `pp_${entry.tableName}_delete`,

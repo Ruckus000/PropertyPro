@@ -124,6 +124,21 @@ DECLARE
   table_name text;
 BEGIN
   -- Tenant CRUD tables: community members can operate only within their communities.
+  --
+  -- NOTE: The generic pp_tenant_insert/update/delete policies applied here are
+  -- intentional baseline scaffolding. Several tables in this list receive more
+  -- restrictive, bespoke policies in subsequent migrations (0021–0026) that DROP
+  -- these generic policies and replace them with per-table variants. This layered
+  -- approach is safe because:
+  --   1. Each subsequent migration is idempotent (DROP IF EXISTS + CREATE).
+  --   2. Migrations are applied atomically in sequence, never out of order.
+  --   3. The generic policies always provide community-membership isolation as a
+  --      minimum floor, never a security regression relative to no RLS at all.
+  -- Tables hardened further in 0021–0026:
+  --   user_roles, maintenance_comments, onboarding_wizard_state, documents,
+  --   invitations, compliance_checklist_items, contract_bids, contracts, leases,
+  --   units, document_categories, meetings, meeting_documents,
+  --   maintenance_requests, notification_preferences.
   FOR table_name IN
     SELECT unnest(ARRAY[
       'announcements',
