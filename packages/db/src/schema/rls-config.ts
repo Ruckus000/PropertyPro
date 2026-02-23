@@ -72,12 +72,12 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'maintenance_comments',
     policyFamily: 'tenant_append_only',
-    notes: 'Append-only: UPDATE/DELETE dropped at RLS level, consistent with scoped-client APPEND_ONLY_TABLES.',
+    notes: 'Append-only: UPDATE/DELETE dropped at RLS level, consistent with scoped-client APPEND_ONLY_TABLES. INSERT (pp_maintenance_comments_insert) requires the commenter to be authorized to view the associated request: admin-tier or the original submitter (submitted_by_id = auth.uid() on the parent maintenance_request).',
   },
   {
     tableName: 'maintenance_requests',
     policyFamily: 'tenant_user_scoped',
-    notes: 'SELECT scoped to own rows for non-admin actors (submitted_by_id = auth.uid()); admin-tier roles see all community requests. INSERT/UPDATE/DELETE remain on community membership (pp_tenant_*). Mirrors app-layer role-based filtering in the maintenance requests route.',
+    notes: 'SELECT scoped to own rows for non-admin actors (submitted_by_id = auth.uid()); admin-tier roles see all community requests. UPDATE and DELETE (pp_maintenance_requests_update/delete) are also user-scoped: only the submitter or admin-tier may mutate a request. INSERT retains community-scoped pp_tenant_insert.',
   },
   {
     tableName: 'meeting_documents',
@@ -93,12 +93,12 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'notification_preferences',
     policyFamily: 'tenant_user_scoped',
-    notes: 'SELECT and UPDATE scoped to own rows (user_id = auth.uid()). INSERT and DELETE retain community-scoped pp_tenant_* policies. Mirrors app-layer user-id-scoped reads/writes in the notification-preferences route.',
+    notes: 'All four operations scoped to own rows (user_id = auth.uid()) for non-privileged actors. SELECT and UPDATE (pp_notification_preferences_select/update) were hardened in 0025. INSERT and DELETE (pp_notification_preferences_insert/delete) hardened in 0026 to prevent IDOR. Admin-tier roles retain full access via pp_rls_is_privileged() / pp_rls_can_read_audit_log().',
   },
   {
     tableName: 'onboarding_wizard_state',
-    policyFamily: 'tenant_crud',
-    notes: 'Community-shared wizard state: a single row per (community, wizardType) shared across all admins. No per-user scoping needed. Mutations are admin-gated at the app layer via requireMutationAuthorization (site_manager / property_manager_admin only).',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Community-shared wizard state: a single row per (community, wizardType) shared across all admins. All writes (INSERT/UPDATE/DELETE) restricted to admin-tier roles (pp_rls_can_read_audit_log) at the DB layer, hardened in 0026. SELECT remains open to all community members (pp_tenant_select).',
   },
   { tableName: 'provisioning_jobs', policyFamily: 'service_only' },
   {

@@ -10,8 +10,10 @@ import { communities } from '../src/schema/communities';
 import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { demoSeedRegistry } from '../src/schema/demo-seed-registry';
 import { documents } from '../src/schema/documents';
+import { maintenanceComments } from '../src/schema/maintenance-comments';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
 import { notificationPreferences } from '../src/schema/notification-preferences';
+import { onboardingWizardState } from '../src/schema/onboarding-wizard-state';
 import { RLS_TENANT_TABLES, RLS_TENANT_TABLE_NAMES, validateRlsConfigInvariant } from '../src/schema/rls-config';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
@@ -36,6 +38,7 @@ interface SeedData {
   tenantBSameCommAMaintenanceRequestId: number;
   tenantANotifPrefId: number;
   tenantBSameCommANotifPrefId: number;
+  communityAOnboardingWizardStateId: number;
   filePrefix: string;
   auditResourcePrefix: string;
 }
@@ -289,6 +292,21 @@ describeDb('P4-55 RLS policies (integration)', () => {
       throw new Error('Failed to seed notification preferences for RLS integration tests');
     }
 
+    // Seed onboarding wizard state for community A (admin-write restriction test).
+    const [wizardStateA] = await db
+      .insert(onboardingWizardState)
+      .values({
+        communityId: communityA.id,
+        wizardType: 'apartment',
+        status: 'in_progress',
+        stepData: {},
+      })
+      .returning({ id: onboardingWizardState.id });
+
+    if (!wizardStateA) {
+      throw new Error('Failed to seed onboarding wizard state for RLS integration tests');
+    }
+
     seed = {
       runTag,
       communityAId: communityA.id,
@@ -304,6 +322,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       tenantBSameCommAMaintenanceRequestId: maintenanceRequestBSameCommA.id,
       tenantANotifPrefId: notifPrefA.id,
       tenantBSameCommANotifPrefId: notifPrefBSameCommA.id,
+      communityAOnboardingWizardStateId: wizardStateA.id,
       filePrefix,
       auditResourcePrefix,
     };
@@ -358,6 +377,10 @@ describeDb('P4-55 RLS policies (integration)', () => {
             seed.tenantBSameCommANotifPrefId,
           ]),
         );
+
+      await db
+        .delete(onboardingWizardState)
+        .where(inArray(onboardingWizardState.id, [seed.communityAOnboardingWizardStateId]));
 
       // maintenance_requests support soft-delete but hard-delete is fine for test data.
       await db
@@ -908,6 +931,293 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
+  describe('Issue 1 (0026): maintenance_requests IDOR — UPDATE/DELETE hardening', () => {
+    it('non-admin cannot UPDATE another user\'s maintenance request', async () => {
+      // tenantBSameCommAUserId must not be able to update tenantA's request.
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.maintenance_requests
+        set status = 'in_progress'
+        where id = ${seed.tenantAMaintenanceRequestId}
+        returning id
+      `;
+      expect(updated).toHaveLength(0);
+    });
+
+    it('non-admin cannot DELETE another user\'s maintenance request', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      const deleted = await authSql<{ id: number }[]>`
+        delete from public.maintenance_requests
+        where id = ${seed.tenantAMaintenanceRequestId}
+        returning id
+      `;
+      expect(deleted).toHaveLength(0);
+
+      // Verify row still exists.
+      await resetSession(authSql);
+      const check = await adminSql<{ id: number }[]>`
+        select id from public.maintenance_requests
+        where id = ${seed.tenantAMaintenanceRequestId}
+      `;
+      expect(check).toHaveLength(1);
+    });
+
+    it('request owner can UPDATE their own maintenance request', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.maintenance_requests
+        set status = 'in_progress'
+        where id = ${seed.tenantAMaintenanceRequestId}
+        returning id
+      `;
+      expect(updated).toHaveLength(1);
+
+      // Restore original status.
+      await adminSql`
+        update public.maintenance_requests
+        set status = 'open'
+        where id = ${seed.tenantAMaintenanceRequestId}
+      `;
+    });
+
+    it('admin-tier can UPDATE any maintenance request in the community', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.maintenance_requests
+        set status = 'in_progress'
+        where id = ${seed.tenantAMaintenanceRequestId}
+        returning id
+      `;
+      expect(updated).toHaveLength(1);
+
+      // Restore.
+      await adminSql`
+        update public.maintenance_requests
+        set status = 'open'
+        where id = ${seed.tenantAMaintenanceRequestId}
+      `;
+    });
+  });
+
+  describe('Issue 2 (0026): notification_preferences IDOR — INSERT/DELETE hardening', () => {
+    it('user cannot INSERT notification_preferences for another user', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      // Attempt to insert a row with user_id belonging to tenantA (not the authenticated user).
+      await expect(
+        authSql`
+          insert into public.notification_preferences (user_id, community_id, email_frequency)
+          values (${seed.tenantAUserId}, ${seed.communityAId}, 'weekly')
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('user can INSERT their own notification_preferences row', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      const inserted = await authSql<{ id: number }[]>`
+        insert into public.notification_preferences (user_id, community_id, email_frequency)
+        values (${seed.tenantBSameCommAUserId}, ${seed.communityAId}, 'weekly')
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+
+      // Cleanup.
+      if (inserted[0]) {
+        await adminSql`delete from public.notification_preferences where id = ${inserted[0].id}`;
+      }
+    });
+
+    it('user cannot DELETE another user\'s notification_preferences', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      const deleted = await authSql<{ id: number }[]>`
+        delete from public.notification_preferences
+        where id = ${seed.tenantANotifPrefId}
+        returning id
+      `;
+      expect(deleted).toHaveLength(0);
+
+      // Verify row still exists.
+      await resetSession(authSql);
+      const check = await adminSql<{ id: number }[]>`
+        select id from public.notification_preferences
+        where id = ${seed.tenantANotifPrefId}
+      `;
+      expect(check).toHaveLength(1);
+    });
+  });
+
+  describe('Issue 3 (0026): onboarding_wizard_state write access restriction', () => {
+    it('tenant role cannot UPDATE onboarding_wizard_state', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.onboarding_wizard_state
+        set status = 'completed'
+        where id = ${seed.communityAOnboardingWizardStateId}
+        returning id
+      `;
+      expect(updated).toHaveLength(0);
+    });
+
+    it('tenant role cannot INSERT into onboarding_wizard_state', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      await expect(
+        authSql`
+          insert into public.onboarding_wizard_state (community_id, wizard_type, status, step_data)
+          values (${seed.communityAId}, 'condo', 'in_progress', '{}')
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('admin-tier role can UPDATE onboarding_wizard_state', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.onboarding_wizard_state
+        set status = 'completed'
+        where id = ${seed.communityAOnboardingWizardStateId}
+        returning id
+      `;
+      expect(updated).toHaveLength(1);
+
+      // Restore.
+      await adminSql`
+        update public.onboarding_wizard_state
+        set status = 'in_progress'
+        where id = ${seed.communityAOnboardingWizardStateId}
+      `;
+    });
+  });
+
+  describe('Issue 4 (0026): maintenance_comments INSERT — must be authorized to view request', () => {
+    it('user cannot INSERT a comment on a request they did not submit', async () => {
+      // tenantBSameCommAUserId tries to comment on tenantA's request.
+      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+
+      await expect(
+        authSql`
+          insert into public.maintenance_comments (community_id, request_id, user_id, text)
+          values (
+            ${seed.communityAId},
+            ${seed.tenantAMaintenanceRequestId},
+            ${seed.tenantBSameCommAUserId},
+            'unauthorized comment attempt'
+          )
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('request owner can INSERT a comment on their own request', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const inserted = await authSql<{ id: number }[]>`
+        insert into public.maintenance_comments (community_id, request_id, user_id, text)
+        values (
+          ${seed.communityAId},
+          ${seed.tenantAMaintenanceRequestId},
+          ${seed.tenantAUserId},
+          'owner comment'
+        )
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+
+      // Cleanup (use admin — append-only at RLS so we need a privileged delete).
+      if (inserted[0]) {
+        await adminSql`delete from public.maintenance_comments where id = ${inserted[0].id}`;
+      }
+    });
+
+    it('admin-tier can INSERT a comment on any request in the community', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const inserted = await authSql<{ id: number }[]>`
+        insert into public.maintenance_comments (community_id, request_id, user_id, text)
+        values (
+          ${seed.communityAId},
+          ${seed.tenantAMaintenanceRequestId},
+          ${seed.adminAUserId},
+          'admin comment'
+        )
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+
+      if (inserted[0]) {
+        await adminSql`delete from public.maintenance_comments where id = ${inserted[0].id}`;
+      }
+    });
+  });
+
+  describe('Issue 5 (0026): communities table RLS', () => {
+    it('community member can SELECT their own community row', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.communities
+        where id = ${seed.communityAId}
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).toBe(seed.communityAId);
+    });
+
+    it('community member cannot SELECT another community row', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.communities
+        where id = ${seed.communityBId}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('community member cannot SELECT stripe billing fields of another community', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      // A SELECT * should return at most 1 row (own community only).
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.communities
+        where id in (${seed.communityAId}, ${seed.communityBId})
+      `;
+      expect(rows.every((r) => r.id === seed.communityAId)).toBe(true);
+      expect(rows.some((r) => r.id === seed.communityBId)).toBe(false);
+    });
+
+    it('authenticated user cannot INSERT a community directly', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      await expect(
+        authSql`
+          insert into public.communities (name, slug, community_type, timezone)
+          values ('Unauthorized Community', 'unauth-community', 'condo_718', 'America/New_York')
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('verifies communities policies exist in pg_policies', async () => {
+      const rows = await adminSql<{ policyname: string }[]>`
+        select policyname
+        from pg_policies
+        where schemaname = 'public' and tablename = 'communities'
+        order by policyname
+      `;
+      const policyNames = rows.map((r) => r.policyname).sort();
+      expect(policyNames).toEqual([
+        'pp_communities_delete',
+        'pp_communities_insert',
+        'pp_communities_select',
+        'pp_communities_update',
+      ]);
+    });
+  });
+
   it('verifies policy presence in pg_policies for every tenant table and family', async () => {
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
       select schemaname, tablename, policyname
@@ -937,11 +1247,12 @@ describeDb('P4-55 RLS policies (integration)', () => {
           ];
           break;
         case 'tenant_append_only':
-          // UPDATE and DELETE dropped at RLS level (consistent with scoped-client APPEND_ONLY_TABLES)
+          // UPDATE and DELETE dropped at RLS level (consistent with scoped-client APPEND_ONLY_TABLES).
+          // INSERT is bespoke (pp_{tableName}_insert) to enforce viewer-authorization on comments.
           expectedPolicies = [
-            'pp_tenant_insert',
+            `pp_${entry.tableName}_insert`,
             'pp_tenant_select',
-          ];
+          ].sort();
           break;
         case 'service_only':
           expectedPolicies = [
@@ -965,23 +1276,23 @@ describeDb('P4-55 RLS policies (integration)', () => {
           ].sort();
           break;
         case 'tenant_user_scoped':
-          // SELECT scoped to auth.uid() for non-admins (bespoke pp_{tableName}_select).
-          // notification_preferences also has a bespoke pp_{tableName}_update.
-          // INSERT and DELETE retain generic pp_tenant_* policies.
+          // All four operations have bespoke per-table policies for user-scoped tables.
+          // maintenance_requests: SELECT/UPDATE/DELETE scoped to submitted_by_id; INSERT is generic.
+          // notification_preferences: SELECT/UPDATE/INSERT/DELETE all scoped to user_id.
           if (entry.tableName === 'notification_preferences') {
             expectedPolicies = [
+              `pp_${entry.tableName}_delete`,
+              `pp_${entry.tableName}_insert`,
               `pp_${entry.tableName}_select`,
               `pp_${entry.tableName}_update`,
-              'pp_tenant_delete',
-              'pp_tenant_insert',
             ].sort();
           } else {
-            // maintenance_requests: UPDATE is still generic (admin-tier app-layer gate handles it)
+            // maintenance_requests: INSERT retains generic pp_tenant_insert.
             expectedPolicies = [
+              `pp_${entry.tableName}_delete`,
               `pp_${entry.tableName}_select`,
-              'pp_tenant_delete',
+              `pp_${entry.tableName}_update`,
               'pp_tenant_insert',
-              'pp_tenant_update',
             ].sort();
           }
           break;

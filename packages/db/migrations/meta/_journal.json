@@ -183,6 +183,13 @@
       "when": 1772600000000,
       "tag": "0025_p4_55f_community_settings_and_user_scoped_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772700000000,
+      "tag": "0026_p4_55g_rls_idor_hardening",
+      "breakpoints": true
     }
   ]
 }

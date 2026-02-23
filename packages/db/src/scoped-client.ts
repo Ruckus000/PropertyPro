@@ -89,6 +89,11 @@ function hasUpdatedAtColumn(
 /** The database instance type (Drizzle postgres-js). */
 type DbInstance = typeof defaultDb;
 
+/** Minimal interface for transaction wrapping — preserves the cast-through-unknown convention. */
+type DbWithTransaction = {
+  transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
+};
+
 /**
  * Drizzle's generic parameter for table shapes is too deep for a generic
  * wrapper. These helpers cast through `unknown` once — backed by runtime
@@ -260,33 +265,30 @@ export function createScopedClient(
     },
 
     async insert(table, data) {
-      // @invariant: set_config must precede every INSERT so the
-      // pp_rls_enforce_tenant_community_id trigger can validate community_id
-      // for non-privileged sessions. Transaction-local (true) prevents the
-      // value from leaking across pooled connections via Supavisor.
-      await database.execute(
-        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-      );
-
       const columns = getTableColumns(table) as ColumnRecord;
       const requiresCommunityId = hasCommunityIdColumn(columns);
 
-      if (Array.isArray(data)) {
-        const insertDataArray = data.map(item => {
-          const newItem = { ...item };
-          if (requiresCommunityId) {
-            newItem['communityId'] = ctx.communityId;
-          }
-          return newItem;
-        });
-        return execInsert(database, table, insertDataArray);
-      } else {
-        const insertData = { ...data };
+      const preparePayload = (item: Record<string, unknown>) => {
+        const newItem = { ...item };
         if (requiresCommunityId) {
-          insertData['communityId'] = ctx.communityId;
+          newItem['communityId'] = ctx.communityId;
         }
-        return execInsert(database, table, insertData);
-      }
+        return newItem;
+      };
+
+      const insertData = Array.isArray(data) ? data.map(preparePayload) : preparePayload(data as Record<string, unknown>);
+
+      // @invariant: set_config must run in the same transaction as the INSERT so
+      // the pp_rls_enforce_tenant_community_id trigger reads the correct community_id.
+      // Wrapping in database.transaction() guarantees connection affinity even
+      // when Supavisor is operating in transaction mode. The true (transaction-local)
+      // flag ensures the setting resets automatically on commit/rollback.
+      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
+        await (tx as unknown as DbInstance).execute(
+          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+        );
+        return execInsert(tx as unknown as DbInstance, table, insertData);
+      });
     },
 
     async update(table, data, additionalWhere?) {
@@ -296,14 +298,6 @@ export function createScopedClient(
           `Table "${updateTableName}" is append-only. UPDATE operations are not permitted.`,
         );
       }
-
-      // @invariant: set_config must precede every UPDATE so the
-      // pp_rls_enforce_tenant_community_id trigger can validate community_id
-      // for non-privileged sessions. Transaction-local (true) prevents the
-      // value from leaking across pooled connections via Supavisor.
-      await database.execute(
-        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-      );
 
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
@@ -320,7 +314,16 @@ export function createScopedClient(
         updateData['updatedAt'] = new Date();
       }
 
-      return execUpdate(database, table, updateData, combineFilters(filters));
+      const whereClause = combineFilters(filters);
+
+      // @invariant: set_config must run in the same transaction as the UPDATE so
+      // the pp_rls_enforce_tenant_community_id trigger reads the correct community_id.
+      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
+        await (tx as unknown as DbInstance).execute(
+          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+        );
+        return execUpdate(tx as unknown as DbInstance, table, updateData, whereClause);
+      });
     },
 
     async softDelete(table, additionalWhere?) {
@@ -332,14 +335,6 @@ export function createScopedClient(
           `Table "${tableName}" is append-only. DELETE operations are not permitted.`,
         );
       }
-
-      // @invariant: set_config must precede every UPDATE (soft-delete sets deletedAt via UPDATE)
-      // so the pp_rls_enforce_tenant_community_id trigger can validate community_id
-      // for non-privileged sessions. Transaction-local (true) prevents the
-      // value from leaking across pooled connections via Supavisor.
-      await database.execute(
-        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-      );
 
       if (!hasDeletedAtColumn(columns)) {
         throw new Error(
@@ -363,7 +358,17 @@ export function createScopedClient(
         setData['updatedAt'] = new Date();
       }
 
-      return execUpdate(database, table, setData, combineFilters(filters));
+      const whereClause = combineFilters(filters);
+
+      // @invariant: set_config must run in the same transaction as the UPDATE
+      // (soft-delete sets deletedAt via UPDATE) so the pp_rls_enforce_tenant_community_id
+      // trigger reads the correct community_id.
+      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
+        await (tx as unknown as DbInstance).execute(
+          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+        );
+        return execUpdate(tx as unknown as DbInstance, table, setData, whereClause);
+      });
     },
 
     async hardDelete(table, additionalWhere?) {
