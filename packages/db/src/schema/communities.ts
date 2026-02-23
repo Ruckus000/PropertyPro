@@ -22,6 +22,22 @@ export const communities = pgTable('communities', {
   /** P3-47: White-label branding settings. Shape: { primaryColor?, secondaryColor?, logoPath? }.
    *  branding->>'logoPath' supersedes logo_path when present (migration window compatibility). */
   branding: jsonb('branding'),
+  /** P4-55f: Per-community write-restriction settings for configurable-write tables.
+   *  Absent key or 'all_members' = open writes (default, backward-compatible).
+   *  'admin_only' = only admin-tier roles (board_member, board_president, cam,
+   *  site_manager, property_manager_admin) may INSERT/UPDATE/DELETE.
+   *  Enforced at RLS level via pp_rls_community_allows_member_writes(). */
+  communitySettings: jsonb('community_settings')
+    .$type<{
+      announcementsWriteLevel?: 'all_members' | 'admin_only';
+      meetingsWriteLevel?: 'all_members' | 'admin_only';
+      meetingDocumentsWriteLevel?: 'all_members' | 'admin_only';
+      unitsWriteLevel?: 'all_members' | 'admin_only';
+      leasesWriteLevel?: 'all_members' | 'admin_only';
+      documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
+    }>()
+    .notNull()
+    .default({}),
   stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),

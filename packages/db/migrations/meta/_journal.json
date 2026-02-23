@@ -141,6 +141,62 @@
       "when": 1772000000000,
       "tag": "0019_contracts_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772100000000,
+      "tag": "0020_p4_55_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772200000000,
+      "tag": "0021_p4_55b_user_roles_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772300000000,
+      "tag": "0022_p4_55c_maintenance_comments_and_user_roles_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1772400000000,
+      "tag": "0023_p4_55d_admin_write_tables_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772500000000,
+      "tag": "0024_p4_55e_documents_invitations_admin_write",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772600000000,
+      "tag": "0025_p4_55f_community_settings_and_user_scoped_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772700000000,
+      "tag": "0026_p4_55g_rls_idor_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1772800000000,
+      "tag": "0027_p4_55h_rls_force_all_tenant_tables",
+      "breakpoints": true
     }
   ]
 }

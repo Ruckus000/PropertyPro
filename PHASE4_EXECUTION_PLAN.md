@@ -212,7 +212,11 @@ Recommended pre-signoff command bundle (to finalize when Batch D/E land):
 pnpm lint
 pnpm typecheck
 pnpm test
-set -a; source .env.local; set +a; pnpm test:integration:preflight -- --coverage
+set -a; source .env.local; set +a
+pnpm --filter @propertypro/db db:migrate
+pnpm seed:verify
+pnpm --filter @propertypro/db test:integration
+pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
 pnpm audit --audit-level=high
 ```
 
@@ -228,6 +232,42 @@ Every Phase 4 task must satisfy:
 - [ ] Drizzle migration history (`meta/_journal.json` + snapshots) remains in lockstep.
 - [ ] RLS changes are additive/reviewable and tested against both tenant and service-role access paths.
 - [ ] Compliance-relevant mutations continue to call `logAuditEvent`.
+
+---
+
+## Phase 4 Exit Verification (Internal)
+
+Run when all Phase 4 base tasks and Gate 4 evidence items are complete:
+- [ ] 10/10 base Phase 4 tasks complete in this file.
+- [ ] `pnpm build` clean.
+- [ ] `pnpm typecheck` clean.
+- [ ] `pnpm lint` clean.
+- [ ] `pnpm test` clean.
+- [ ] `set -a; source .env.local; set +a` env preload completed for integration/audit commands.
+- [ ] `pnpm --filter @propertypro/db db:migrate` clean.
+- [ ] `pnpm seed:verify` clean.
+- [ ] `pnpm --filter @propertypro/db test:integration` clean.
+- [ ] `pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage` clean (`apps/web/src` coverage evidence for `P4-58`).
+- [ ] `pnpm plan:verify:phase4` clean.
+- [ ] `pnpm perf:check` clean.
+- [ ] `pnpm audit --audit-level=high` clean.
+- [ ] Evidence artifact captured under `docs/audits/` with timestamped command outputs and Gate 4 checklist sign-off evidence.
+
+Evidence commands:
+```bash
+pnpm build
+pnpm typecheck
+pnpm lint
+pnpm test
+set -a; source .env.local; set +a
+pnpm --filter @propertypro/db db:migrate
+pnpm seed:verify
+pnpm --filter @propertypro/db test:integration
+pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
+pnpm plan:verify:phase4
+pnpm perf:check
+pnpm audit --audit-level=high
+```
 
 ---
 
