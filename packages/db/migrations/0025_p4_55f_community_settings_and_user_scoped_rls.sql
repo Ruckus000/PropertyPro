@@ -158,14 +158,20 @@ CREATE POLICY "pp_notification_preferences_update"
 ON "public"."notification_preferences"
 FOR UPDATE
 USING (
-  auth.uid() IS NOT NULL
-  AND "user_id" = auth.uid()
-  AND "public"."pp_rls_can_access_community"("community_id")
+  "public"."pp_rls_is_privileged"()
+  OR (
+    auth.uid() IS NOT NULL
+    AND "user_id" = auth.uid()
+    AND "public"."pp_rls_can_access_community"("community_id")
+  )
 )
 WITH CHECK (
-  auth.uid() IS NOT NULL
-  AND "user_id" = auth.uid()
-  AND "public"."pp_rls_can_access_community"("community_id")
+  "public"."pp_rls_is_privileged"()
+  OR (
+    auth.uid() IS NOT NULL
+    AND "user_id" = auth.uid()
+    AND "public"."pp_rls_can_access_community"("community_id")
+  )
 );
 --> statement-breakpoint
 
