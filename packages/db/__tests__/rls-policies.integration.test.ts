@@ -639,6 +639,13 @@ describeDb('P4-55 RLS policies (integration)', () => {
             'pp_tenant_update',
           ];
           break;
+        case 'tenant_append_only':
+          // UPDATE and DELETE dropped at RLS level (consistent with scoped-client APPEND_ONLY_TABLES)
+          expectedPolicies = [
+            'pp_tenant_insert',
+            'pp_tenant_select',
+          ];
+          break;
         case 'service_only':
           expectedPolicies = [
             'pp_service_delete',
@@ -651,11 +658,13 @@ describeDb('P4-55 RLS policies (integration)', () => {
           expectedPolicies = ['pp_audit_insert', 'pp_audit_select'];
           break;
         case 'tenant_admin_write':
+          // SELECT on community membership; INSERT/UPDATE/DELETE require admin-tier role.
+          // Write policy names are table-specific (pp_{tableName}_*) to allow per-table hardening.
           expectedPolicies = [
-            'pp_tenant_delete',
             'pp_tenant_select',
-            'pp_user_roles_insert',
-            'pp_user_roles_update',
+            `pp_${entry.tableName}_delete`,
+            `pp_${entry.tableName}_insert`,
+            `pp_${entry.tableName}_update`,
           ];
           break;
         default:
