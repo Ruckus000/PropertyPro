@@ -50,11 +50,15 @@ const {
   const mockFrom = vi.fn().mockReturnValue({ where: mockWhereOnSelect });
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
+  // transaction executes its callback immediately with the same mock db,
+  // so insert/update/softDelete transaction wrappers work without a real connection.
   const mockDb = {
     select: mockSelect,
     insert: mockInsertInto,
     update: vi.fn().mockReturnValue({ set: mockSet }),
     delete: mockDeleteFrom,
+    execute: vi.fn().mockResolvedValue([]),
+    transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb)),
   };
 
   return {
@@ -97,6 +101,8 @@ beforeEach(() => {
   mockWhereOnUpdate.mockReturnValue({ returning: mockReturning });
   mockDeleteFrom.mockReturnValue({ where: mockWhereOnDelete, returning: mockReturning });
   mockWhereOnDelete.mockReturnValue({ returning: mockReturning });
+  mockDb.execute.mockResolvedValue([]);
+  mockDb.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb));
 });
 
 // ---------------------------------------------------------------------------

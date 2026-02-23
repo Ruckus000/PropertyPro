@@ -114,7 +114,7 @@ export const RLS_TENANT_TABLES = [
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
-  { tableName: 'communities', reason: 'Global tenant registry (no community_id column)' },
+  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case' },
   { tableName: 'users', reason: 'Global identity mirror (no community_id column)' },
   { tableName: 'pending_signups', reason: 'Pre-provisioning flow, not community-scoped yet' },
   { tableName: 'stripe_webhook_events', reason: 'Global billing webhook log' },
@@ -125,7 +125,10 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
   (entry) => entry.tableName,
 );
 
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = RLS_TENANT_TABLES.length;
+// Hardcoded intentionally — if you add or remove a table from RLS_TENANT_TABLES,
+// you MUST update this number. This makes validateRlsConfigInvariant() a real
+// regression guard rather than a tautology.
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 21;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

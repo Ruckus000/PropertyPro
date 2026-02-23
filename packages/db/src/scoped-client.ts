@@ -58,6 +58,13 @@ const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'maintenance_comments',
 ]);
 
+/**
+ * The communities table is the root tenant entity.
+ * It has no communityId foreign-key column — isolation is enforced
+ * on its own `id` column (id = communityId) as a ScopedClient special case.
+ */
+const COMMUNITIES_TABLE_NAME = 'communities';
+
 // ---------------------------------------------------------------------------
 // Column detection helpers
 // ---------------------------------------------------------------------------
@@ -80,6 +87,12 @@ function hasUpdatedAtColumn(
   columns: ColumnRecord,
 ): columns is ColumnRecord & { updatedAt: PgColumn } {
   return 'updatedAt' in columns;
+}
+
+function hasIdColumn(
+  columns: ColumnRecord,
+): columns is ColumnRecord & { id: PgColumn } {
+  return 'id' in columns;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +180,12 @@ function buildScopeFilters(
   const tableName = getTableName(table as unknown as Table);
   const filters: SQL[] = [];
 
-  if (hasCommunityIdColumn(columns)) {
+  if (tableName === COMMUNITIES_TABLE_NAME) {
+    // Root tenant entity — isolation enforced on id, not community_id
+    if (hasIdColumn(columns)) {
+      filters.push(eq(columns.id, communityId));
+    }
+  } else if (hasCommunityIdColumn(columns)) {
     filters.push(eq(columns.communityId, communityId));
   }
 
@@ -342,10 +360,15 @@ export function createScopedClient(
         );
       }
 
-      // Build scoping filters (community_id only — don't add deleted_at IS NULL
+      // Build scoping filters (tenant isolation only — don't add deleted_at IS NULL
       // since we're setting it, and we should be able to re-soft-delete)
       const filters: SQL[] = [];
-      if (hasCommunityIdColumn(columns)) {
+      if (tableName === COMMUNITIES_TABLE_NAME) {
+        // Root tenant entity — isolation enforced on id, not community_id
+        if (hasIdColumn(columns)) {
+          filters.push(eq(columns.id, ctx.communityId));
+        }
+      } else if (hasCommunityIdColumn(columns)) {
         filters.push(eq(columns.communityId, ctx.communityId));
       }
       if (additionalWhere) {
