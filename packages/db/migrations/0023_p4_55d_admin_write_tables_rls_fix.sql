@@ -12,11 +12,13 @@
 --     site_manager, property_manager_admin) via requireAdminRole in contracts route.
 --   contracts — same ADMIN_ROLES restriction via requireAdminRole.
 --
--- Tables intentionally kept as tenant_crud (not elevated):
---   leases — no role guard by design; any community member in an apartment community
---     may manage leases (site managers create leases for tenants).
---   units — import-residents route allows any community member to insert units as part
---     of the resident import flow; elevating would break that endpoint.
+-- Tables intentionally kept as tenant_crud in this migration (not elevated here):
+--   leases — kept open by default; migration 0025 adds per-community configurable write
+--     restriction via community_settings.leasesWriteLevel ('all_members' | 'admin_only').
+--   units  — import-residents route requires open INSERT; migration 0025 adds per-community
+--     configurable write restriction via community_settings.unitsWriteLevel.
+--   Operators wanting admin-only writes for these tables should set the appropriate
+--   community_settings key after migration 0025 is applied.
 --
 -- Policy naming convention: pp_{table_name}_insert/update/delete for bespoke
 -- admin-write policies, pp_tenant_select retained for SELECT (community membership).
