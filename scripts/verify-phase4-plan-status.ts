@@ -169,7 +169,12 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
   if (signoffBundleStart === -1) {
     errors.push('PHASE4_EXECUTION_PLAN.md: missing recommended pre-signoff command bundle.');
   } else {
-    const signoffWindow = lines.slice(signoffBundleStart, signoffBundleStart + 32).join('\n');
+    const signoffBundleEnd = lines.findIndex(
+      (line, index) => index > signoffBundleStart && line.trim() === '---',
+    );
+    const signoffWindow = lines
+      .slice(signoffBundleStart, signoffBundleEnd > -1 ? signoffBundleEnd : lines.length)
+      .join('\n');
     if (signoffWindow.includes('set -a; source .env.local; set +a')) {
       errors.push(
         'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must use `scripts/with-env-local.sh` instead of raw inline `.env.local` sourcing.',
@@ -205,7 +210,10 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
   if (exitSectionStart === -1) {
     errors.push('PHASE4_EXECUTION_PLAN.md: missing "## Phase 4 Exit Verification (Internal)" section.');
   } else {
-    const exitSection = lines.slice(exitSectionStart, exitSectionStart + 100).join('\n');
+    const exitSectionEnd = lines.findIndex((line, index) => index > exitSectionStart && line.trim() === '---');
+    const exitSection = lines
+      .slice(exitSectionStart, exitSectionEnd > -1 ? exitSectionEnd : lines.length)
+      .join('\n');
     if (exitSection.includes('set -a; source .env.local; set +a')) {
       errors.push(
         'PHASE4_EXECUTION_PLAN.md: Phase 4 exit verification must use `scripts/with-env-local.sh` instead of raw inline `.env.local` sourcing.',
