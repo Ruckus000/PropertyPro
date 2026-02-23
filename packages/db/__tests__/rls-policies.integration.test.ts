@@ -350,7 +350,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   it('auto-scopes forged inserts to the active tenant context', async () => {
-    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    // Use adminAUserId (board_member) — documents is now tenant_admin_write and
+    // requires pp_rls_can_read_audit_log() for INSERT. Tenant-tier actors are
+    // blocked at the DB level; admin-tier actors may insert and have their
+    // community_id rewritten by the pp_rls_enforce_tenant_community_id trigger.
+    await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
 
     const forgedFileName = `${seed.filePrefix}forged-${randomUUID().slice(0, 8)}.pdf`;
     const inserted = await authSql<{ id: number; community_id: number; file_name: string }[]>`

@@ -155,6 +155,27 @@
       "when": 1772200000000,
       "tag": "0021_p4_55b_user_roles_rls_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772300000000,
+      "tag": "0022_p4_55c_maintenance_comments_and_user_roles_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1772400000000,
+      "tag": "0023_p4_55d_admin_write_tables_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772500000000,
+      "tag": "0024_p4_55e_documents_invitations_admin_write",
+      "breakpoints": true
     }
   ]
 }

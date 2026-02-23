@@ -26,6 +26,7 @@ import {
   and,
   getTableColumns,
   getTableName,
+  sql,
 } from 'drizzle-orm';
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
@@ -259,6 +260,14 @@ export function createScopedClient(
     },
 
     async insert(table, data) {
+      // @invariant: set_config must precede every INSERT so the
+      // pp_rls_enforce_tenant_community_id trigger can validate community_id
+      // for non-privileged sessions. Transaction-local (true) prevents the
+      // value from leaking across pooled connections via Supavisor.
+      await database.execute(
+        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+      );
+
       const columns = getTableColumns(table) as ColumnRecord;
       const requiresCommunityId = hasCommunityIdColumn(columns);
 
@@ -288,6 +297,14 @@ export function createScopedClient(
         );
       }
 
+      // @invariant: set_config must precede every UPDATE so the
+      // pp_rls_enforce_tenant_community_id trigger can validate community_id
+      // for non-privileged sessions. Transaction-local (true) prevents the
+      // value from leaking across pooled connections via Supavisor.
+      await database.execute(
+        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+      );
+
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
         filters.push(additionalWhere);
@@ -315,6 +332,14 @@ export function createScopedClient(
           `Table "${tableName}" is append-only. DELETE operations are not permitted.`,
         );
       }
+
+      // @invariant: set_config must precede every UPDATE (soft-delete sets deletedAt via UPDATE)
+      // so the pp_rls_enforce_tenant_community_id trigger can validate community_id
+      // for non-privileged sessions. Transaction-local (true) prevents the
+      // value from leaking across pooled connections via Supavisor.
+      await database.execute(
+        sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
+      );
 
       if (!hasDeletedAtColumn(columns)) {
         throw new Error(

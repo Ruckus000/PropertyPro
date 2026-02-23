@@ -44,8 +44,16 @@ export const RLS_TENANT_TABLES = [
   },
   { tableName: 'demo_seed_registry', policyFamily: 'service_only' },
   { tableName: 'document_categories', policyFamily: 'tenant_crud' },
-  { tableName: 'documents', policyFamily: 'tenant_crud' },
-  { tableName: 'invitations', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'documents',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in document routes.',
+  },
+  {
+    tableName: 'invitations',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Writes restricted to ADMIN_ROLES via requireAdminRole in invitations route.',
+  },
   { tableName: 'leases', policyFamily: 'tenant_crud' },
   {
     tableName: 'maintenance_comments',
@@ -79,7 +87,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
   (entry) => entry.tableName,
 );
 
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 21;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = RLS_TENANT_TABLES.length;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
