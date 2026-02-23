@@ -6,11 +6,13 @@
  */
 
 export type RlsPolicyFamily =
-  | 'tenant_crud'           // All 4 ops gated on community membership
-  | 'tenant_append_only'    // SELECT + INSERT only; UPDATE/DELETE blocked at RLS level
-  | 'tenant_admin_write'    // SELECT on membership; INSERT/UPDATE/DELETE require admin-tier role
-  | 'service_only'          // All ops require pp_rls_is_privileged()
-  | 'audit_log_restricted'; // SELECT requires admin-tier role; INSERT requires privilege
+  | 'tenant_crud'              // All 4 ops gated on community membership
+  | 'tenant_append_only'       // SELECT + INSERT only; UPDATE/DELETE blocked at RLS level
+  | 'tenant_admin_write'       // SELECT on membership; INSERT/UPDATE/DELETE require admin-tier role
+  | 'tenant_user_scoped'       // SELECT/UPDATE scoped to auth.uid() for non-admins; admin-tier sees all; INSERT/DELETE on community membership
+  | 'tenant_member_configurable' // SELECT on membership; INSERT/UPDATE/DELETE gated on community_settings JSONB (admin-tier always allowed; members allowed when setting is absent or 'all_members')
+  | 'service_only'             // All ops require pp_rls_is_privileged()
+  | 'audit_log_restricted';    // SELECT requires admin-tier role; INSERT requires privilege
 
 export interface RlsTenantTableConfig {
   tableName: string;
@@ -25,7 +27,11 @@ export interface RlsGlobalTableExclusion {
 
 export const RLS_TENANT_TABLES = [
   { tableName: 'announcement_delivery_log', policyFamily: 'service_only' },
-  { tableName: 'announcements', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'announcements',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable per-community via community_settings.announcementsWriteLevel. Default (absent or all_members): any community member may write. admin_only: only admin-tier roles may write. SELECT remains open to all community members.',
+  },
   { tableName: 'compliance_audit_log', policyFamily: 'audit_log_restricted' },
   {
     tableName: 'compliance_checklist_items',
@@ -43,7 +49,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
   },
   { tableName: 'demo_seed_registry', policyFamily: 'service_only' },
-  { tableName: 'document_categories', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'document_categories',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable via community_settings.documentCategoriesWriteLevel. No standalone write API endpoint exists today; writes occur only through onboarding. admin_only setting allows communities to prevent ad-hoc category creation.',
+  },
   {
     tableName: 'documents',
     policyFamily: 'tenant_admin_write',
@@ -54,20 +64,48 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_admin_write',
     notes: 'Writes restricted to ADMIN_ROLES via requireAdminRole in invitations route.',
   },
-  { tableName: 'leases', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'leases',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable via community_settings.leasesWriteLevel. Apartment-only feature. Communities may restrict lease mutations to admin-tier roles for financial integrity.',
+  },
   {
     tableName: 'maintenance_comments',
     policyFamily: 'tenant_append_only',
     notes: 'Append-only: UPDATE/DELETE dropped at RLS level, consistent with scoped-client APPEND_ONLY_TABLES.',
   },
-  { tableName: 'maintenance_requests', policyFamily: 'tenant_crud' },
-  { tableName: 'meeting_documents', policyFamily: 'tenant_crud' },
-  { tableName: 'meetings', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'maintenance_requests',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'SELECT scoped to own rows for non-admin actors (submitted_by_id = auth.uid()); admin-tier roles see all community requests. INSERT/UPDATE/DELETE remain on community membership (pp_tenant_*). Mirrors app-layer role-based filtering in the maintenance requests route.',
+  },
+  {
+    tableName: 'meeting_documents',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable via community_settings.meetingDocumentsWriteLevel. Coupled with meetings write-level in practice.',
+  },
+  {
+    tableName: 'meetings',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable via community_settings.meetingsWriteLevel. Condo/HOA-only feature (apartments excluded by requireMeetingsEnabled()). Communities may restrict meeting management to admin-tier roles.',
+  },
   { tableName: 'notification_digest_queue', policyFamily: 'service_only' },
-  { tableName: 'notification_preferences', policyFamily: 'tenant_crud' },
-  { tableName: 'onboarding_wizard_state', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'notification_preferences',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'SELECT and UPDATE scoped to own rows (user_id = auth.uid()). INSERT and DELETE retain community-scoped pp_tenant_* policies. Mirrors app-layer user-id-scoped reads/writes in the notification-preferences route.',
+  },
+  {
+    tableName: 'onboarding_wizard_state',
+    policyFamily: 'tenant_crud',
+    notes: 'Community-shared wizard state: a single row per (community, wizardType) shared across all admins. No per-user scoping needed. Mutations are admin-gated at the app layer via requireMutationAuthorization (site_manager / property_manager_admin only).',
+  },
   { tableName: 'provisioning_jobs', policyFamily: 'service_only' },
-  { tableName: 'units', policyFamily: 'tenant_crud' },
+  {
+    tableName: 'units',
+    policyFamily: 'tenant_member_configurable',
+    notes: 'Writes configurable via community_settings.unitsWriteLevel. Units are community inventory; communities may restrict creation/modification to admin-tier roles.',
+  },
   {
     tableName: 'user_roles',
     policyFamily: 'tenant_admin_write',

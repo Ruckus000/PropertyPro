@@ -10,6 +10,8 @@ import { communities } from '../src/schema/communities';
 import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { demoSeedRegistry } from '../src/schema/demo-seed-registry';
 import { documents } from '../src/schema/documents';
+import { maintenanceRequests } from '../src/schema/maintenance-requests';
+import { notificationPreferences } from '../src/schema/notification-preferences';
 import { RLS_TENANT_TABLES, RLS_TENANT_TABLE_NAMES, validateRlsConfigInvariant } from '../src/schema/rls-config';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
@@ -25,10 +27,15 @@ interface SeedData {
   communityBId: number;
   adminAUserId: string;
   tenantAUserId: string;
+  tenantBSameCommAUserId: string;
   adminBUserId: string;
   communityADocumentId: number;
   communityBDocumentId: number;
   communityAAnnouncementId: number;
+  tenantAMaintenanceRequestId: number;
+  tenantBSameCommAMaintenanceRequestId: number;
+  tenantANotifPrefId: number;
+  tenantBSameCommANotifPrefId: number;
   filePrefix: string;
   auditResourcePrefix: string;
 }
@@ -104,6 +111,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
     const adminAUserId = randomUUID();
     const tenantAUserId = randomUUID();
+    // Second tenant in community A — used to verify IDOR: tenantA must not see tenantBSameCommA's rows.
+    const tenantBSameCommAUserId = randomUUID();
     const adminBUserId = randomUUID();
 
     await db.insert(users).values([
@@ -116,6 +125,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
         id: tenantAUserId,
         email: `${runTag}-tenant-a@example.com`,
         fullName: `RLS Tenant A ${runTag}`,
+      },
+      {
+        id: tenantBSameCommAUserId,
+        email: `${runTag}-tenant-b-comm-a@example.com`,
+        fullName: `RLS Tenant B CommA ${runTag}`,
       },
       {
         id: adminBUserId,
@@ -133,6 +147,12 @@ describeDb('P4-55 RLS policies (integration)', () => {
       },
       {
         userId: tenantAUserId,
+        communityId: communityA.id,
+        role: 'tenant',
+        unitId: null,
+      },
+      {
+        userId: tenantBSameCommAUserId,
         communityId: communityA.id,
         role: 'tenant',
         unitId: null,
@@ -215,16 +235,75 @@ describeDb('P4-55 RLS policies (integration)', () => {
       throw new Error('Failed to seed announcement for RLS integration tests');
     }
 
+    // Seed maintenance requests for IDOR test: one per tenant in community A.
+    const [maintenanceRequestA] = await db
+      .insert(maintenanceRequests)
+      .values({
+        communityId: communityA.id,
+        submittedById: tenantAUserId,
+        title: `RLS MR TenantA ${runTag}`,
+        description: 'Tenants A maintenance request for RLS IDOR test',
+        status: 'open',
+        priority: 'normal',
+        category: 'general',
+      })
+      .returning({ id: maintenanceRequests.id });
+
+    const [maintenanceRequestBSameCommA] = await db
+      .insert(maintenanceRequests)
+      .values({
+        communityId: communityA.id,
+        submittedById: tenantBSameCommAUserId,
+        title: `RLS MR TenantBCommA ${runTag}`,
+        description: 'Tenant B (same community A) maintenance request for RLS IDOR test',
+        status: 'open',
+        priority: 'normal',
+        category: 'general',
+      })
+      .returning({ id: maintenanceRequests.id });
+
+    if (!maintenanceRequestA || !maintenanceRequestBSameCommA) {
+      throw new Error('Failed to seed maintenance requests for RLS integration tests');
+    }
+
+    // Seed notification preferences for IDOR test: one per tenant in community A.
+    const [notifPrefA] = await db
+      .insert(notificationPreferences)
+      .values({
+        userId: tenantAUserId,
+        communityId: communityA.id,
+        emailFrequency: 'immediate',
+      })
+      .returning({ id: notificationPreferences.id });
+
+    const [notifPrefBSameCommA] = await db
+      .insert(notificationPreferences)
+      .values({
+        userId: tenantBSameCommAUserId,
+        communityId: communityA.id,
+        emailFrequency: 'daily',
+      })
+      .returning({ id: notificationPreferences.id });
+
+    if (!notifPrefA || !notifPrefBSameCommA) {
+      throw new Error('Failed to seed notification preferences for RLS integration tests');
+    }
+
     seed = {
       runTag,
       communityAId: communityA.id,
       communityBId: communityB.id,
       adminAUserId,
       tenantAUserId,
+      tenantBSameCommAUserId,
       adminBUserId,
       communityADocumentId: documentA.id,
       communityBDocumentId: documentB.id,
       communityAAnnouncementId: announcementA.id,
+      tenantAMaintenanceRequestId: maintenanceRequestA.id,
+      tenantBSameCommAMaintenanceRequestId: maintenanceRequestBSameCommA.id,
+      tenantANotifPrefId: notifPrefA.id,
+      tenantBSameCommANotifPrefId: notifPrefBSameCommA.id,
       filePrefix,
       auditResourcePrefix,
     };
@@ -270,11 +349,36 @@ describeDb('P4-55 RLS policies (integration)', () => {
         .delete(announcements)
         .where(inArray(announcements.id, [seed.communityAAnnouncementId]));
 
+      // notification_preferences have no soft-delete; hard-delete is safe.
+      await db
+        .delete(notificationPreferences)
+        .where(
+          inArray(notificationPreferences.id, [
+            seed.tenantANotifPrefId,
+            seed.tenantBSameCommANotifPrefId,
+          ]),
+        );
+
+      // maintenance_requests support soft-delete but hard-delete is fine for test data.
+      await db
+        .delete(maintenanceRequests)
+        .where(
+          inArray(maintenanceRequests.id, [
+            seed.tenantAMaintenanceRequestId,
+            seed.tenantBSameCommAMaintenanceRequestId,
+          ]),
+        );
+
       await db
         .delete(userRoles)
         .where(
           and(
-            inArray(userRoles.userId, [seed.adminAUserId, seed.tenantAUserId, seed.adminBUserId]),
+            inArray(userRoles.userId, [
+              seed.adminAUserId,
+              seed.tenantAUserId,
+              seed.tenantBSameCommAUserId,
+              seed.adminBUserId,
+            ]),
             inArray(userRoles.communityId, [seed.communityAId, seed.communityBId]),
           ),
         );
@@ -290,7 +394,14 @@ describeDb('P4-55 RLS policies (integration)', () => {
       try {
         await db
           .delete(users)
-          .where(inArray(users.id, [seed.adminAUserId, seed.tenantAUserId, seed.adminBUserId]));
+          .where(
+            inArray(users.id, [
+              seed.adminAUserId,
+              seed.tenantAUserId,
+              seed.tenantBSameCommAUserId,
+              seed.adminBUserId,
+            ]),
+          );
       } catch {
         // tolerate FK-restricted cleanup when audit rows were written
       }
@@ -504,6 +615,188 @@ describeDb('P4-55 RLS policies (integration)', () => {
     expect(communitiesVisible.has(seed.communityBId)).toBe(true);
   });
 
+  describe('tenant_user_scoped policy coverage', () => {
+    it('restricts maintenance_requests SELECT to own rows for non-admin actors', async () => {
+      // tenantAUserId should see only their own request, not tenantBSameCommA's request.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number; submitted_by_id: string }[]>`
+        select id, submitted_by_id
+        from public.maintenance_requests
+        where id in (
+          ${seed.tenantAMaintenanceRequestId},
+          ${seed.tenantBSameCommAMaintenanceRequestId}
+        )
+        order by id
+      `;
+
+      expect(rows.every((row) => row.submitted_by_id === seed.tenantAUserId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantAMaintenanceRequestId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantBSameCommAMaintenanceRequestId)).toBe(false);
+    });
+
+    it('allows admin-tier actor to SELECT all maintenance_requests in community', async () => {
+      // adminAUserId (board_member) should see both requests in community A.
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number }[]>`
+        select id
+        from public.maintenance_requests
+        where id in (
+          ${seed.tenantAMaintenanceRequestId},
+          ${seed.tenantBSameCommAMaintenanceRequestId}
+        )
+        order by id
+      `;
+
+      expect(rows.some((row) => row.id === seed.tenantAMaintenanceRequestId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantBSameCommAMaintenanceRequestId)).toBe(true);
+    });
+
+    it('restricts notification_preferences SELECT to own row for any actor', async () => {
+      // tenantAUserId should see only their own preferences, not tenantBSameCommA's.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number; user_id: string }[]>`
+        select id, user_id
+        from public.notification_preferences
+        where id in (${seed.tenantANotifPrefId}, ${seed.tenantBSameCommANotifPrefId})
+        order by id
+      `;
+
+      expect(rows.every((row) => row.user_id === seed.tenantAUserId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantANotifPrefId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantBSameCommANotifPrefId)).toBe(false);
+    });
+
+    it('blocks actor from UPDATing another user notification_preferences', async () => {
+      // tenantAUserId must not be able to UPDATE tenantBSameCommA's preferences.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.notification_preferences
+        set email_frequency = 'weekly'
+        where id = ${seed.tenantBSameCommANotifPrefId}
+        returning id
+      `;
+      expect(updated).toHaveLength(0);
+
+      // Verify the row was not changed.
+      await resetSession(authSql);
+      const check = await adminSql<{ email_frequency: string }[]>`
+        select email_frequency from public.notification_preferences
+        where id = ${seed.tenantBSameCommANotifPrefId}
+      `;
+      expect(check[0]?.email_frequency).toBe('daily');
+    });
+  });
+
+  describe('tenant_member_configurable policy coverage', () => {
+    it('allows member write on announcements when community_settings does not restrict', async () => {
+      // Community A has default settings ({}), so member writes are permitted.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const inserted = await authSql<{ id: number }[]>`
+        insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
+        values (
+          ${seed.communityAId},
+          ${`RLS Configurable Test ${seed.runTag}`},
+          'Member write test',
+          'all',
+          false,
+          ${seed.tenantAUserId}
+        )
+        returning id
+      `;
+      expect(inserted).toHaveLength(1);
+
+      // Cleanup
+      if (inserted[0]) {
+        await adminSql`delete from public.announcements where id = ${inserted[0].id}`;
+      }
+    });
+
+    it('blocks member write on announcements when community_settings restricts to admin_only', async () => {
+      // Set announcementsWriteLevel = admin_only for community A.
+      await adminSql`
+        update public.communities
+        set community_settings = jsonb_set(
+          coalesce(community_settings, '{}'),
+          '{announcementsWriteLevel}',
+          '"admin_only"'
+        )
+        where id = ${seed.communityAId}
+      `;
+
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      try {
+        await authSql`
+          insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
+          values (
+            ${seed.communityAId},
+            ${`RLS Restricted Test ${seed.runTag}`},
+            'Should be blocked',
+            'all',
+            false,
+            ${seed.tenantAUserId}
+          )
+        `;
+        expect.fail('Non-admin INSERT on admin_only announcements should have been blocked');
+      } catch (error: unknown) {
+        expect((error as { code?: string }).code).toBe('42501');
+      } finally {
+        // Always restore the setting so other tests are not affected.
+        await adminSql`
+          update public.communities
+          set community_settings = community_settings - 'announcementsWriteLevel'
+          where id = ${seed.communityAId}
+        `;
+      }
+    });
+
+    it('allows admin-tier write on announcements even when community_settings restricts members', async () => {
+      // Set announcementsWriteLevel = admin_only for community A.
+      await adminSql`
+        update public.communities
+        set community_settings = jsonb_set(
+          coalesce(community_settings, '{}'),
+          '{announcementsWriteLevel}',
+          '"admin_only"'
+        )
+        where id = ${seed.communityAId}
+      `;
+
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      let insertedId: number | undefined;
+      try {
+        const inserted = await authSql<{ id: number }[]>`
+          insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
+          values (
+            ${seed.communityAId},
+            ${`RLS Admin Write Test ${seed.runTag}`},
+            'Admin write should succeed',
+            'all',
+            false,
+            ${seed.adminAUserId}
+          )
+          returning id
+        `;
+        expect(inserted).toHaveLength(1);
+        insertedId = inserted[0]?.id;
+      } finally {
+        // Restore setting and clean up inserted row.
+        await adminSql`
+          update public.communities
+          set community_settings = community_settings - 'announcementsWriteLevel'
+          where id = ${seed.communityAId}
+        `;
+        if (insertedId !== undefined) {
+          await adminSql`delete from public.announcements where id = ${insertedId}`;
+        }
+      }
+    });
+  });
+
   describe('service_only table coverage', () => {
     it('blocks authenticated SELECT on service_only tables', async () => {
       await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
@@ -669,7 +962,38 @@ describeDb('P4-55 RLS policies (integration)', () => {
             `pp_${entry.tableName}_delete`,
             `pp_${entry.tableName}_insert`,
             `pp_${entry.tableName}_update`,
-          ];
+          ].sort();
+          break;
+        case 'tenant_user_scoped':
+          // SELECT scoped to auth.uid() for non-admins (bespoke pp_{tableName}_select).
+          // notification_preferences also has a bespoke pp_{tableName}_update.
+          // INSERT and DELETE retain generic pp_tenant_* policies.
+          if (entry.tableName === 'notification_preferences') {
+            expectedPolicies = [
+              `pp_${entry.tableName}_select`,
+              `pp_${entry.tableName}_update`,
+              'pp_tenant_delete',
+              'pp_tenant_insert',
+            ].sort();
+          } else {
+            // maintenance_requests: UPDATE is still generic (admin-tier app-layer gate handles it)
+            expectedPolicies = [
+              `pp_${entry.tableName}_select`,
+              'pp_tenant_delete',
+              'pp_tenant_insert',
+              'pp_tenant_update',
+            ].sort();
+          }
+          break;
+        case 'tenant_member_configurable':
+          // SELECT on community membership (pp_tenant_select retained).
+          // INSERT/UPDATE/DELETE are bespoke per-table policies that consult community_settings.
+          expectedPolicies = [
+            `pp_${entry.tableName}_delete`,
+            `pp_${entry.tableName}_insert`,
+            `pp_${entry.tableName}_update`,
+            'pp_tenant_select',
+          ].sort();
           break;
         default:
           throw new Error(`Unhandled policy family: ${entry.policyFamily as string}`);
