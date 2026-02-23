@@ -190,6 +190,13 @@
       "when": 1772700000000,
       "tag": "0026_p4_55g_rls_idor_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1772800000000,
+      "tag": "0027_p4_55h_rls_force_all_tenant_tables",
+      "breakpoints": true
     }
   ]
 }

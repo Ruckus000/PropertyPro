@@ -21,6 +21,7 @@ These are the persistent "signs next to the slide" — accumulated warnings and 
 - **Driver selection:** Use `postgres-js` driver, NOT `node-postgres`. The latter is incompatible with PgBouncer.
 - **Never modify production schema manually:** All schema changes must go through Drizzle Kit migrations. Disable Supabase's migration UI entirely.
 - **Scoped query builder auto-injection:** The scoped query builder must automatically inject `community_id` filter AND `deleted_at IS NULL` on every query.
+- **Server-only writes enforced at DB layer:** The `pp_rls_enforce_tenant_community_id` trigger (migration 0020) raises `42501` on any non-privileged INSERT/UPDATE that lacks `app.current_community_id` in the session context. Only `postgres`, `service_role`, and `supabase_admin` bypass it. All app writes must go through the server-side scoped client (`createScopedClient()`), which sets `SET LOCAL app.current_community_id = ?` before executing. Direct browser-to-Supabase writes will be blocked by this trigger even if RLS policies pass — this is intentional.
 - **Compliance audit log is append-only:** `compliance_audit_log` is excluded from soft-delete filtering — it's append-only and never deleted.
 
 ---
