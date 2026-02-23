@@ -26,7 +26,6 @@ import {
   and,
   getTableColumns,
   getTableName,
-  sql,
 } from 'drizzle-orm';
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
@@ -101,11 +100,6 @@ function hasIdColumn(
 
 /** The database instance type (Drizzle postgres-js). */
 type DbInstance = typeof defaultDb;
-
-/** Minimal interface for transaction wrapping — preserves the cast-through-unknown convention. */
-type DbWithTransaction = {
-  transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
-};
 
 /**
  * Drizzle's generic parameter for table shapes is too deep for a generic
@@ -296,17 +290,11 @@ export function createScopedClient(
 
       const insertData = Array.isArray(data) ? data.map(preparePayload) : preparePayload(data as Record<string, unknown>);
 
-      // @invariant: set_config must run in the same transaction as the INSERT so
-      // the pp_rls_enforce_tenant_community_id trigger reads the correct community_id.
-      // Wrapping in database.transaction() guarantees connection affinity even
-      // when Supavisor is operating in transaction mode. The true (transaction-local)
-      // flag ensures the setting resets automatically on commit/rollback.
-      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
-        await (tx as unknown as DbInstance).execute(
-          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-        );
-        return execInsert(tx as unknown as DbInstance, table, insertData);
-      });
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execInsert(database, table, insertData);
     },
 
     async update(table, data, additionalWhere?) {
@@ -334,14 +322,11 @@ export function createScopedClient(
 
       const whereClause = combineFilters(filters);
 
-      // @invariant: set_config must run in the same transaction as the UPDATE so
-      // the pp_rls_enforce_tenant_community_id trigger reads the correct community_id.
-      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
-        await (tx as unknown as DbInstance).execute(
-          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-        );
-        return execUpdate(tx as unknown as DbInstance, table, updateData, whereClause);
-      });
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execUpdate(database, table, updateData, whereClause);
     },
 
     async softDelete(table, additionalWhere?) {
@@ -383,15 +368,11 @@ export function createScopedClient(
 
       const whereClause = combineFilters(filters);
 
-      // @invariant: set_config must run in the same transaction as the UPDATE
-      // (soft-delete sets deletedAt via UPDATE) so the pp_rls_enforce_tenant_community_id
-      // trigger reads the correct community_id.
-      return (database as unknown as DbWithTransaction).transaction(async (tx) => {
-        await (tx as unknown as DbInstance).execute(
-          sql`SELECT set_config('app.current_community_id', ${ctx.communityId.toString()}, true)`,
-        );
-        return execUpdate(tx as unknown as DbInstance, table, setData, whereClause);
-      });
+      // The app server always connects as a privileged role (postgres / service_role).
+      // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
+      // never reads app.current_community_id, so set_config overhead is unnecessary.
+      // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
+      return execUpdate(database, table, setData, whereClause);
     },
 
     async hardDelete(table, additionalWhere?) {

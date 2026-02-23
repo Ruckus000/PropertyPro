@@ -114,7 +114,7 @@ export const RLS_TENANT_TABLES = [
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
-  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case' },
+  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply' },
   { tableName: 'users', reason: 'Global identity mirror (no community_id column)' },
   { tableName: 'pending_signups', reason: 'Pre-provisioning flow, not community-scoped yet' },
   { tableName: 'stripe_webhook_events', reason: 'Global billing webhook log' },

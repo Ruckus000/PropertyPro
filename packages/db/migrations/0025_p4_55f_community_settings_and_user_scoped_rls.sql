@@ -148,8 +148,11 @@ USING (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
-    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
+    AND (
+      "public"."pp_rls_can_read_audit_log"("community_id")
+      OR "user_id" = auth.uid()
+    )
   )
 );
 --> statement-breakpoint
@@ -161,16 +164,22 @@ USING (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
-    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
+    AND (
+      "public"."pp_rls_can_read_audit_log"("community_id")
+      OR "user_id" = auth.uid()
+    )
   )
 )
 WITH CHECK (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
-    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
+    AND (
+      "public"."pp_rls_can_read_audit_log"("community_id")
+      OR "user_id" = auth.uid()
+    )
   )
 );
 --> statement-breakpoint

@@ -114,8 +114,11 @@ WITH CHECK (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
-    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
+    AND (
+      "public"."pp_rls_can_read_audit_log"("community_id")
+      OR "user_id" = auth.uid()
+    )
   )
 );
 --> statement-breakpoint
@@ -128,8 +131,11 @@ USING (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
-    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
+    AND (
+      "public"."pp_rls_can_read_audit_log"("community_id")
+      OR "user_id" = auth.uid()
+    )
   )
 );
 --> statement-breakpoint
@@ -182,7 +188,8 @@ DROP POLICY IF EXISTS "pp_tenant_insert" ON "public"."maintenance_comments";
 DROP POLICY IF EXISTS "pp_maintenance_comments_insert" ON "public"."maintenance_comments";
 --> statement-breakpoint
 
--- INSERT: user must be able to view the associated request (admin-tier or submitter).
+-- INSERT: user must be able to view the associated request (admin-tier or submitter)
+-- and the inserted user_id must match auth.uid() to prevent comment attribution fraud.
 -- The EXISTS subquery reads maintenance_requests unscoped because INSERT policies
 -- evaluate the NEW row — "request_id" and "community_id" below refer to the
 -- about-to-be-inserted row's columns.
@@ -193,6 +200,7 @@ WITH CHECK (
   "public"."pp_rls_is_privileged"()
   OR (
     auth.uid() IS NOT NULL
+    AND "user_id" = auth.uid()
     AND "public"."pp_rls_can_access_community"("community_id")
     AND (
       "public"."pp_rls_can_read_audit_log"("community_id")
@@ -212,28 +220,11 @@ WITH CHECK (
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Issue 5: communities — enable RLS and add per-community row policies
 -- ─────────────────────────────────────────────────────────────────────────────
--- Helper: check community membership without hitting user_roles RLS (SECURITY DEFINER
--- executes as the function owner, bypassing RLS on user_roles to prevent recursion).
--- Mirrors pp_rls_has_community_membership but keys off the communities.id column
--- rather than a community_id FK column.
-CREATE OR REPLACE FUNCTION "public"."pp_rls_user_is_community_member"(target_community_id bigint)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public, auth, pg_catalog
-AS $$
-  SELECT CASE
-    WHEN "public"."pp_rls_is_privileged"() THEN true
-    WHEN auth.uid() IS NULL THEN false
-    ELSE EXISTS (
-      SELECT 1
-      FROM "public"."user_roles" ur
-      WHERE ur.user_id = auth.uid()
-        AND ur.community_id = target_community_id
-    )
-  END;
-$$;
+-- pp_rls_user_is_community_member was identical body-for-body to pp_rls_has_community_membership
+-- (defined in 0020, re-created in 0025). The call-site distinction (keying off communities.id
+-- vs a community_id FK) does not require a separate function — pp_rls_has_community_membership
+-- accepts any bigint argument. Drop the duplicate to keep the function namespace clean.
+DROP FUNCTION IF EXISTS "public"."pp_rls_user_is_community_member"(bigint);
 --> statement-breakpoint
 
 ALTER TABLE "public"."communities" ENABLE ROW LEVEL SECURITY;
@@ -257,7 +248,7 @@ DROP POLICY IF EXISTS "pp_communities_delete" ON "public"."communities";
 CREATE POLICY "pp_communities_select"
 ON "public"."communities"
 FOR SELECT
-USING ("public"."pp_rls_user_is_community_member"("id"));
+USING ("public"."pp_rls_has_community_membership"("id"));
 --> statement-breakpoint
 
 -- INSERT: only privileged roles (service_role / postgres) may provision communities.
@@ -275,14 +266,14 @@ FOR UPDATE
 USING (
   "public"."pp_rls_is_privileged"()
   OR (
-    "public"."pp_rls_user_is_community_member"("id")
+    "public"."pp_rls_has_community_membership"("id")
     AND "public"."pp_rls_can_read_audit_log"("id")
   )
 )
 WITH CHECK (
   "public"."pp_rls_is_privileged"()
   OR (
-    "public"."pp_rls_user_is_community_member"("id")
+    "public"."pp_rls_has_community_membership"("id")
     AND "public"."pp_rls_can_read_audit_log"("id")
   )
 );

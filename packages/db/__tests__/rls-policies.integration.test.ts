@@ -712,6 +712,41 @@ describeDb('P4-55 RLS policies (integration)', () => {
       `;
       expect(check[0]?.email_frequency).toBe('daily');
     });
+
+    it('allows admin-tier actor to SELECT another user notification_preferences', async () => {
+      // adminAUserId (board_member) should see both tenantA and tenantBSameCommA preferences.
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const rows = await authSql<{ id: number; user_id: string }[]>`
+        select id, user_id
+        from public.notification_preferences
+        where id in (${seed.tenantANotifPrefId}, ${seed.tenantBSameCommANotifPrefId})
+        order by id
+      `;
+
+      expect(rows.some((row) => row.id === seed.tenantANotifPrefId)).toBe(true);
+      expect(rows.some((row) => row.id === seed.tenantBSameCommANotifPrefId)).toBe(true);
+    });
+
+    it('allows admin-tier actor to UPDATE another user notification_preferences', async () => {
+      // adminAUserId (board_member) should be able to UPDATE tenantBSameCommA's preferences.
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+
+      const updated = await authSql<{ id: number }[]>`
+        update public.notification_preferences
+        set email_frequency = 'weekly'
+        where id = ${seed.tenantBSameCommANotifPrefId}
+        returning id
+      `;
+      expect(updated).toHaveLength(1);
+
+      // Restore original value.
+      await adminSql`
+        update public.notification_preferences
+        set email_frequency = 'daily'
+        where id = ${seed.tenantBSameCommANotifPrefId}
+      `;
+    });
   });
 
   describe('tenant_member_configurable policy coverage', () => {
@@ -1097,6 +1132,23 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   describe('Issue 4 (0026): maintenance_comments INSERT — must be authorized to view request', () => {
+    it('user cannot INSERT a maintenance_comment with a spoofed user_id', async () => {
+      // tenantAUserId (who owns the request) tries to attribute the comment to adminAUserId.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      await expect(
+        authSql`
+          insert into public.maintenance_comments (community_id, request_id, user_id, text)
+          values (
+            ${seed.communityAId},
+            ${seed.tenantAMaintenanceRequestId},
+            ${seed.adminAUserId},
+            'spoofed attribution attempt'
+          )
+        `,
+      ).rejects.toThrow();
+    });
+
     it('user cannot INSERT a comment on a request they did not submit', async () => {
       // tenantBSameCommAUserId tries to comment on tenantA's request.
       await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
