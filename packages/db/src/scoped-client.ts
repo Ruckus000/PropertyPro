@@ -36,6 +36,29 @@ import { db as defaultDb } from './drizzle';
 export type { ScopedClient } from './types/scoped-client';
 
 // ---------------------------------------------------------------------------
+// Error classes
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown when a mutation (update / softDelete / hardDelete) is attempted on a
+ * table that produces no scope filter — i.e. the table has no communityId
+ * column and is not the communities root entity. Without a WHERE clause the
+ * operation would affect ALL rows in the table, which is never correct through
+ * the scoped client. Pass an explicit additionalWhere, or use the unsafe
+ * escape-hatch for truly global tables (users, stripe_webhook_events, etc.).
+ */
+export class UnscopedMutationError extends Error {
+  constructor(operation: string, tableName: string) {
+    super(
+      `Unscoped ${operation} attempted on table "${tableName}". ` +
+      `The table has no communityId column and is not the communities root entity. ` +
+      `Pass an explicit additionalWhere clause or use the unsafe escape-hatch for global tables.`,
+    );
+    this.name = 'UnscopedMutationError';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Table exemption registry
 // ---------------------------------------------------------------------------
 
@@ -200,6 +223,21 @@ function combineFilters(filters: SQL[]): SQL | undefined {
   return and(...filters);
 }
 
+/**
+ * Returns true when the table will receive a tenant-isolation WHERE condition
+ * from the scoped client — either via a communityId FK column or the
+ * communities root-entity special-case (scoped on id).
+ * Tables that return false (e.g. users, stripe_webhook_events) are not
+ * tenant-scoped and must not be mutated without an explicit additionalWhere.
+ */
+function hasTenantIsolation(
+  table: PgTable<TableConfig>,
+): boolean {
+  const columns = getTableColumns(table) as ColumnRecord;
+  const tableName = getTableName(table as unknown as Table);
+  return tableName === COMMUNITIES_TABLE_NAME || hasCommunityIdColumn(columns);
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -304,6 +342,9 @@ export function createScopedClient(
           `Table "${updateTableName}" is append-only. UPDATE operations are not permitted.`,
         );
       }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('update', updateTableName);
+      }
 
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
@@ -337,6 +378,9 @@ export function createScopedClient(
         throw new Error(
           `Table "${tableName}" is append-only. DELETE operations are not permitted.`,
         );
+      }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('softDelete', tableName);
       }
 
       if (!hasDeletedAtColumn(columns)) {
@@ -381,6 +425,9 @@ export function createScopedClient(
         throw new Error(
           `Table "${hardDeleteTableName}" is append-only. DELETE operations are not permitted.`,
         );
+      }
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('hardDelete', hardDeleteTableName);
       }
 
       const filters = buildScopeFilters(table, ctx.communityId);

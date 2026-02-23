@@ -75,12 +75,14 @@ vi.mock('../src/drizzle', () => ({
 }));
 
 // Now import createScopedClient AFTER the mock is set up
-const { createScopedClient, isSoftDeleteExempt } = await import('../src/scoped-client');
+const { createScopedClient, isSoftDeleteExempt, UnscopedMutationError } = await import('../src/scoped-client');
 
 // Import schema tables for testing
 const { units } = await import('../src/schema/units');
 const { userRoles } = await import('../src/schema/user-roles');
 const { communities } = await import('../src/schema/communities');
+// Global table fixture: users has no communityId column (id is UUID PK, not community_id FK)
+const { users } = await import('../src/schema/users');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -309,6 +311,54 @@ describe('createScopedClient', () => {
       expect(mockWhereOnDelete).toHaveBeenCalled();
       const whereArg = mockWhereOnDelete.mock.calls[0]?.[0];
       expect(whereArg).toBeDefined();
+    });
+  });
+});
+
+describe('unscoped mutation guard', () => {
+  // users has no communityId and is not the communities root entity —
+  // so buildScopeFilters returns [] and combineFilters returns undefined
+  // unless additionalWhere is supplied.
+
+  describe('update', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      await expect(client.update(users, { fullName: 'Test' })).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const client = createScopedClient(42);
+      // sql`true` is a valid non-undefined SQL expression — enough to satisfy the guard
+      const { sql } = await import('drizzle-orm');
+      await expect(client.update(users, { fullName: 'Test' }, sql`true`)).resolves.not.toThrow();
+    });
+  });
+
+  describe('softDelete', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      // users HAS deletedAt, so the "no deletedAt" guard won't fire first;
+      // the unscoped guard should fire instead.
+      await expect(client.softDelete(users)).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const { sql } = await import('drizzle-orm');
+      const client = createScopedClient(42);
+      await expect(client.softDelete(users, sql`true`)).resolves.not.toThrow();
+    });
+  });
+
+  describe('hardDelete', () => {
+    it('throws UnscopedMutationError when table has no communityId and no additionalWhere', async () => {
+      const client = createScopedClient(42);
+      await expect(client.hardDelete(users)).rejects.toThrow(UnscopedMutationError);
+    });
+
+    it('does not throw when additionalWhere provides a scope', async () => {
+      const { sql } = await import('drizzle-orm');
+      const client = createScopedClient(42);
+      await expect(client.hardDelete(users, sql`true`)).resolves.not.toThrow();
     });
   });
 });
