@@ -328,12 +328,22 @@ function validateIntegrationTestFormat(ctx: ValidationContext, errors: Validatio
     const cmdSection = ctx.claudeMd.match(/```bash(.*?)pnpm test:integration:preflight(.*?)```/s);
     if (cmdSection) {
       const fullBlock = cmdSection[0];
-      if (!fullBlock.includes('set -a') && !fullBlock.includes('source .env.local')) {
+      const hasHelperWrapper = fullBlock.includes('scripts/with-env-local.sh');
+      const hasLegacyInlineEnvLoad = fullBlock.includes('set -a') && fullBlock.includes('source .env.local');
+
+      if (!hasHelperWrapper && !hasLegacyInlineEnvLoad) {
         errors.push({
           file: 'CLAUDE.md',
           severity: 'warning',
-          message: 'Integration test command missing environment variable loading pattern',
-          suggestion: 'Add "set -a; source .env.local; set +a" before pnpm test:integration:preflight',
+          message: 'Integration test command missing local env-loading wrapper/pattern',
+          suggestion: 'Prefer "scripts/with-env-local.sh pnpm test:integration:preflight" for env-dependent integration commands',
+        });
+      } else if (hasLegacyInlineEnvLoad && !hasHelperWrapper) {
+        errors.push({
+          file: 'CLAUDE.md',
+          severity: 'warning',
+          message: 'Legacy inline .env.local loading pattern detected; prefer the shared helper wrapper',
+          suggestion: 'Replace inline env loading with "scripts/with-env-local.sh ..." in forward-looking command examples',
         });
       }
     }

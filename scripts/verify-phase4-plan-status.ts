@@ -170,14 +170,38 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
     errors.push('PHASE4_EXECUTION_PLAN.md: missing recommended pre-signoff command bundle.');
   } else {
     const signoffWindow = lines.slice(signoffBundleStart, signoffBundleStart + 32).join('\n');
+    if (signoffWindow.includes('set -a; source .env.local; set +a')) {
+      errors.push(
+        'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must use `scripts/with-env-local.sh` instead of raw inline `.env.local` sourcing.',
+      );
+    }
     if (signoffWindow.includes('pnpm test:integration:preflight -- --coverage')) {
       errors.push(
         'PHASE4_EXECUTION_PLAN.md: avoid `pnpm test:integration:preflight -- --coverage`; `--coverage` only reaches the final chained command.',
       );
     }
+    if (!signoffWindow.includes('scripts/with-env-local.sh pnpm --filter @propertypro/db db:migrate')) {
+      errors.push(
+        'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must run DB migrate via `scripts/with-env-local.sh`.',
+      );
+    }
+    if (!signoffWindow.includes('scripts/with-env-local.sh pnpm --filter @propertypro/db test:integration')) {
+      errors.push(
+        'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must run DB integration tests via `scripts/with-env-local.sh`.',
+      );
+    }
     if (!signoffWindow.includes('pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage')) {
       errors.push(
         'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must include explicit web integration coverage command.',
+      );
+    }
+    if (
+      !signoffWindow.includes(
+        'scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage',
+      )
+    ) {
+      errors.push(
+        'PHASE4_EXECUTION_PLAN.md: pre-signoff command bundle must run web integration coverage via `scripts/with-env-local.sh`.',
       );
     }
   }
@@ -187,6 +211,14 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
     errors.push('PHASE4_EXECUTION_PLAN.md: missing "## Phase 4 Exit Verification (Internal)" section.');
   } else {
     const exitSection = lines.slice(exitSectionStart, exitSectionStart + 100).join('\n');
+    if (exitSection.includes('set -a; source .env.local; set +a')) {
+      errors.push(
+        'PHASE4_EXECUTION_PLAN.md: Phase 4 exit verification must use `scripts/with-env-local.sh` instead of raw inline `.env.local` sourcing.',
+      );
+    }
+    if (!exitSection.includes('scripts/with-env-local.sh')) {
+      errors.push('PHASE4_EXECUTION_PLAN.md: exit verification must reference `scripts/with-env-local.sh`.');
+    }
     if (!exitSection.includes('pnpm plan:verify:phase4')) {
       errors.push('PHASE4_EXECUTION_PLAN.md: exit verification must include `pnpm plan:verify:phase4`.');
     }

@@ -212,11 +212,10 @@ Recommended pre-signoff command bundle (to finalize when Batch D/E land):
 pnpm lint
 pnpm typecheck
 pnpm test
-set -a; source .env.local; set +a
-pnpm --filter @propertypro/db db:migrate
-pnpm seed:verify
-pnpm --filter @propertypro/db test:integration
-pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
+scripts/with-env-local.sh pnpm --filter @propertypro/db db:migrate
+scripts/with-env-local.sh pnpm seed:verify
+scripts/with-env-local.sh pnpm --filter @propertypro/db test:integration
+scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
 pnpm audit --audit-level=high
 ```
 
@@ -243,7 +242,7 @@ Run when all Phase 4 base tasks and Gate 4 evidence items are complete:
 - [ ] `pnpm typecheck` clean.
 - [ ] `pnpm lint` clean.
 - [ ] `pnpm test` clean.
-- [ ] `set -a; source .env.local; set +a` env preload completed for integration/audit commands.
+- [ ] Env-dependent verification commands run via `scripts/with-env-local.sh` (local verification wrapper).
 - [ ] `pnpm --filter @propertypro/db db:migrate` clean.
 - [ ] `pnpm seed:verify` clean.
 - [ ] `pnpm --filter @propertypro/db test:integration` clean.
@@ -259,11 +258,10 @@ pnpm build
 pnpm typecheck
 pnpm lint
 pnpm test
-set -a; source .env.local; set +a
-pnpm --filter @propertypro/db db:migrate
-pnpm seed:verify
-pnpm --filter @propertypro/db test:integration
-pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
+scripts/with-env-local.sh pnpm --filter @propertypro/db db:migrate
+scripts/with-env-local.sh pnpm seed:verify
+scripts/with-env-local.sh pnpm --filter @propertypro/db test:integration
+scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts --coverage
 pnpm plan:verify:phase4
 pnpm perf:check
 pnpm audit --audit-level=high

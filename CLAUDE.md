@@ -174,12 +174,11 @@ pnpm build
 # Run unit tests
 pnpm test
 
-# Run integration tests (requires DATABASE_URL)
-set -a; source .env.local; set +a
-pnpm exec vitest run --config apps/web/vitest.integration.config.ts
+# Run integration tests (requires DATABASE_URL via .env.local loaded by helper)
+scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts
 
 # Run full integration preflight (migrations + seed verify + tests)
-set -a; source .env.local; set +a; pnpm test:integration:preflight
+scripts/with-env-local.sh pnpm test:integration:preflight
 
 # Performance budget check
 pnpm perf:check
