@@ -158,6 +158,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllGlobals();
     if (state) await teardownTestKit(state);
   });
 
