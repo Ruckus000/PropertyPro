@@ -63,6 +63,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
   const membership = await requireCommunityMembership(communityId, userId);
   requireCondoCommunity(membership.communityType);
+  requirePermission(membership.role, membership.communityType, 'compliance', 'read');
 
   const scoped = createScopedClient(communityId);
 

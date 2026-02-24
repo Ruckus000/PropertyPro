@@ -125,6 +125,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireMeetingsEnabled(membership.communityType);
+  requirePermission(membership.role, membership.communityType, 'meetings', 'read');
 
   const scoped = createScopedClient(communityId);
 

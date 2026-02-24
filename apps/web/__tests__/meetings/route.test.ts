@@ -462,6 +462,21 @@ describe('p1-16 meetings route', () => {
     expect(queueNotificationMock).not.toHaveBeenCalled();
   });
 
+  it('GET returns 403 for invalid role/community combo via RBAC read guard', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'session-user-1',
+      communityId: 42,
+      role: 'site_manager',
+      communityType: 'condo_718',
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(createScopedClientMock).not.toHaveBeenCalled();
+  });
+
   it('POST rejects unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 

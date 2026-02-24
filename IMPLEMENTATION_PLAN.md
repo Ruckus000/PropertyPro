@@ -1863,7 +1863,7 @@ active → past_due → canceled → expired
 
 ### Task: P4-55 Row-Level Security
 - **Phase:** 4
-- **Status:** Not Started
+- **Status:** Complete on `main` (merged via PR #14, commit `05a5691`; follow-up RLS fix migrations also landed on `main`)
 - **Files to Create/Modify:** packages/db/migrations/XXXX_add_rls_policies.sql, packages/db/src/schema/rls-config.ts, apps/web/__tests__/rls-validation.test.ts
 - **Dependencies:** P0-06, P2-43
 - **Blocks:** P4-56
@@ -1889,7 +1889,7 @@ active → past_due → canceled → expired
 
 ### Task: P4-56 Security Audit
 - **Phase:** 4
-- **Status:** Not Started
+- **Status:** Complete on `main` (merged via PR #16, commit `c7ecd3c`; CORS/CSP/security headers, Zod validation baseline, error sanitization, and `docs/SECURITY_AUDIT.md`)
 - **Files to Create/Modify:** docs/SECURITY_AUDIT.md, apps/web/src/middleware.ts (CORS, CSP headers), apps/web/src/lib/validation/zod-schemas.ts
 - **Dependencies:** P4-55
 - **Blocks:** P4-57
@@ -1909,7 +1909,7 @@ active → past_due → canceled → expired
 
 ### Task: P4-57 RBAC Audit
 - **Phase:** 4
-- **Status:** Not Started
+- **Status:** Complete on feature branch `codex/p4-57-rbac-audit` (declarative RBAC matrix/docs, exhaustive matrix tests, and route-level `read` guard fixes for `residents GET`, `compliance GET`, and `meetings GET` are complete; pending merge to `main`)
 - **Files to Create/Modify:** apps/web/src/lib/db/access-control.ts, apps/web/__tests__/rbac.test.ts, docs/RBAC_MATRIX.md
 - **Dependencies:** P4-56, P1-25
 - **Blocks:** P4-58

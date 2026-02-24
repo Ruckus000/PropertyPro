@@ -359,6 +359,20 @@ describe('p1-09 compliance route', () => {
     expect(json.data[0]?.status).toBe('overdue');
   });
 
+  it('GET returns 403 for condo tenant (RBAC compliance.read denied)', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      role: 'tenant',
+      communityType: 'condo_718',
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/compliance?communityId=55');
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(createScopedClientMock).not.toHaveBeenCalled();
+    expect(scopedQueryMock).not.toHaveBeenCalled();
+  });
+
   it('POST rejects unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
