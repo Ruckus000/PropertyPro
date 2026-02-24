@@ -94,9 +94,14 @@ export function buildSecurityHeaders(): Record<string, string> {
  * until nonce-based CSP is implemented (tracked as a future hardening item).
  */
 export function buildCspHeader(): string {
-  const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
-    ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
-    : '*.supabase.co';
+  let supabaseHost: string;
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    supabaseHost = url ? new URL(url).host : '*.supabase.co';
+  } catch {
+    console.error('Invalid NEXT_PUBLIC_SUPABASE_URL for CSP, falling back to wildcard.');
+    supabaseHost = '*.supabase.co';
+  }
 
   const directives = [
     "default-src 'self'",
