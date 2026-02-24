@@ -1,8 +1,12 @@
 name: Deploy
 
 on:
-  push:
+  # Production deploy only after CI passes on main
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
+  # Preview deploys on PRs (CI gated via branch protection required checks)
   pull_request:
     branches: [main]
 
@@ -13,7 +17,9 @@ concurrency:
 jobs:
   deploy-production:
     name: Deploy to Production
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: production
 
