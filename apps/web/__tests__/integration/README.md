@@ -90,7 +90,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (state) await teardownTestKit(state);
+  if (state) {
+    await teardownTestKit(state);
+  }
 });
 
 it('my test', async () => {

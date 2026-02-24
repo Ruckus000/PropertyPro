@@ -157,7 +157,9 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // ---------------------------------------------------------------------------

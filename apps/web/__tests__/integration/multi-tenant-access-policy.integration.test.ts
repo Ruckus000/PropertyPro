@@ -68,6 +68,7 @@ interface RouteModules {
 // ---------------------------------------------------------------------------
 
 const CONDO_CATEGORIES = ['declaration', 'rules', 'inspection_reports', 'meeting_minutes', 'announcements'] as const;
+const HOA_CATEGORIES = ['declaration', 'rules', 'inspection_reports', 'meeting_minutes', 'announcements'] as const;
 const APARTMENT_CATEGORIES = ['rules', 'lease_docs', 'community_handbook', 'move_in_out_docs', 'announcements', 'maintenance_records'] as const;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,45 @@ async function seedCategoriesAndDocuments(kit: TestKitState): Promise<void> {
     searchText: `${SENTINEL_PREFIX}uncategorized_A`,
   });
 
+  // Community B (hoa_720)
+  const communityB = requireCommunity(kit, 'communityB');
+  const actorB = requireUser(kit, 'actorB');
+  const scopedB = kit.dbModule.createScopedClient(communityB.id);
+  categoryIds['communityB'] = {};
+
+  for (const catName of HOA_CATEGORIES) {
+    const [catRow] = await scopedB.insert(kit.dbModule.documentCategories, {
+      name: catName,
+      description: `${catName} category for HOA testing`,
+      isSystem: false,
+    });
+    const catId = readNumberField(requireInsertedRow(catRow, catName), 'id');
+    categoryIds['communityB'][catName] = catId;
+
+    await scopedB.insert(kit.dbModule.documents, {
+      title: `${catName} Doc ${kit.runSuffix}`,
+      filePath: `communities/${communityB.id}/documents/${catName}-${kit.runSuffix}.pdf`,
+      fileName: `${catName}-${kit.runSuffix}.pdf`,
+      fileSize: 1024,
+      mimeType: 'application/pdf',
+      uploadedBy: actorB.id,
+      categoryId: catId,
+      searchText: `${SENTINEL_PREFIX}${catName}_B`,
+    });
+  }
+
+  // Uncategorized doc in community B
+  await scopedB.insert(kit.dbModule.documents, {
+    title: `Uncategorized Doc B ${kit.runSuffix}`,
+    filePath: `communities/${communityB.id}/documents/uncategorized-b-${kit.runSuffix}.pdf`,
+    fileName: `uncategorized-b-${kit.runSuffix}.pdf`,
+    fileSize: 1024,
+    mimeType: 'application/pdf',
+    uploadedBy: actorB.id,
+    categoryId: null,
+    searchText: `${SENTINEL_PREFIX}uncategorized_B`,
+  });
+
   // Community C (apartment)
   const communityC = requireCommunity(kit, 'communityC');
   const actorC = requireUser(kit, 'actorC');
@@ -198,7 +238,8 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
     // actorB (for cross-tenant tests)
     const neededUsers: MultiTenantUserKey[] = [
       'actorA', 'actorB', 'actorC',
-      'tenantA', 'camA',
+      'tenantA', 'camA', 'ownerA',
+      'ownerB', 'tenantB', 'camB',
       'tenantC', 'siteManagerC',
     ];
 
@@ -206,14 +247,21 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       neededUsers.includes(u.key),
     );
 
-    // Seed units for tenant users
+    // Seed units for tenant/owner users
     const communityA = requireCommunity(state, 'communityA');
+    const communityB = requireCommunity(state, 'communityB');
     const communityC = requireCommunity(state, 'communityC');
     const scopedA = state.dbModule.createScopedClient(communityA.id);
+    const scopedB = state.dbModule.createScopedClient(communityB.id);
     const scopedC = state.dbModule.createScopedClient(communityC.id);
 
     const [unitA] = await scopedA.insert(state.dbModule.units, {
       unitNumber: `P243-A-${state.runSuffix}`,
+      building: null,
+      floor: null,
+    });
+    const [unitB] = await scopedB.insert(state.dbModule.units, {
+      unitNumber: `P243-B-${state.runSuffix}`,
       building: null,
       floor: null,
     });
@@ -224,10 +272,14 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
     });
 
     const unitAId = readNumberField(requireInsertedRow(unitA, 'unitA'), 'id');
+    const unitBId = readNumberField(requireInsertedRow(unitB, 'unitB'), 'id');
     const unitCId = readNumberField(requireInsertedRow(unitC, 'unitC'), 'id');
 
     const unitMap = new Map<MultiTenantUserKey, number>([
       ['tenantA', unitAId],
+      ['ownerA', unitAId],
+      ['ownerB', unitBId],
+      ['tenantB', unitBId],
       ['tenantC', unitCId],
     ]);
 
@@ -250,7 +302,9 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
   });
 
   afterAll(async () => {
-    if (state) await teardownTestKit(state);
+    if (state) {
+      await teardownTestKit(state);
+    }
   });
 
   // =========================================================================
@@ -259,7 +313,7 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
 
   async function getDocumentCategoryNames(
     actor: MultiTenantUserKey,
-    communityKey: 'communityA' | 'communityC',
+    communityKey: 'communityA' | 'communityB' | 'communityC',
   ): Promise<{ titles: string[]; categoryIds: Array<number | null> }> {
     const kit = requireState();
     const appRoutes = requireRoutes();
@@ -471,5 +525,73 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       expect(text).not.toContain(`${SENTINEL_PREFIX}move_in_out_docs`);
       expect(text).not.toContain(`${SENTINEL_PREFIX}uncategorized`);
     }
+  });
+
+  // =========================================================================
+  // P4-58 expansion: Owner role (elevated) — condo + HOA
+  // =========================================================================
+
+  it('owner in condo_718 sees ALL categories + uncategorized (elevated)', async () => {
+    const { titles } = await getDocumentCategoryNames('ownerA', 'communityA');
+    const suffix = requireState().runSuffix;
+
+    for (const cat of CONDO_CATEGORIES) {
+      expect(titles).toContain(`${cat} Doc ${suffix}`);
+    }
+    expect(titles).toContain(`Uncategorized Doc A ${suffix}`);
+  });
+
+  // =========================================================================
+  // P4-58 expansion: HOA (communityB) coverage
+  // =========================================================================
+
+  it('board_president in hoa_720 sees ALL categories + uncategorized', async () => {
+    const { titles } = await getDocumentCategoryNames('actorB', 'communityB');
+    const suffix = requireState().runSuffix;
+
+    for (const cat of HOA_CATEGORIES) {
+      expect(titles).toContain(`${cat} Doc ${suffix}`);
+    }
+    expect(titles).toContain(`Uncategorized Doc B ${suffix}`);
+  });
+
+  it('owner in hoa_720 sees ALL categories + uncategorized (elevated)', async () => {
+    const { titles } = await getDocumentCategoryNames('ownerB', 'communityB');
+    const suffix = requireState().runSuffix;
+
+    for (const cat of HOA_CATEGORIES) {
+      expect(titles).toContain(`${cat} Doc ${suffix}`);
+    }
+    expect(titles).toContain(`Uncategorized Doc B ${suffix}`);
+  });
+
+  it('tenant in hoa_720 sees only declaration, rules, inspection_reports', async () => {
+    const { titles } = await getDocumentCategoryNames('tenantB', 'communityB');
+    const suffix = requireState().runSuffix;
+
+    // Should see
+    expect(titles).toContain(`declaration Doc ${suffix}`);
+    expect(titles).toContain(`rules Doc ${suffix}`);
+    expect(titles).toContain(`inspection_reports Doc ${suffix}`);
+
+    // Should NOT see
+    expect(titles).not.toContain(`meeting_minutes Doc ${suffix}`);
+    expect(titles).not.toContain(`announcements Doc ${suffix}`);
+    expect(titles).not.toContain(`Uncategorized Doc B ${suffix}`);
+  });
+
+  it('cam in hoa_720 sees only rules, inspection_reports, announcements, meeting_minutes', async () => {
+    const { titles } = await getDocumentCategoryNames('camB', 'communityB');
+    const suffix = requireState().runSuffix;
+
+    // Should see
+    expect(titles).toContain(`rules Doc ${suffix}`);
+    expect(titles).toContain(`inspection_reports Doc ${suffix}`);
+    expect(titles).toContain(`announcements Doc ${suffix}`);
+    expect(titles).toContain(`meeting_minutes Doc ${suffix}`);
+
+    // Should NOT see
+    expect(titles).not.toContain(`declaration Doc ${suffix}`);
+    expect(titles).not.toContain(`Uncategorized Doc B ${suffix}`);
   });
 });

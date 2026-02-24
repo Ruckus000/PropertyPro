@@ -11,7 +11,13 @@ export type MultiTenantUserKey =
   | 'actorC'
   | 'tenantC'
   | 'siteManagerA'
-  | 'siteManagerC';
+  | 'siteManagerC'
+  | 'ownerA'
+  | 'pmaA'
+  | 'ownerB'
+  | 'tenantB'
+  | 'camB'
+  | 'pmaB';
 
 export interface MultiTenantUserFixture {
   key: MultiTenantUserKey;
@@ -22,6 +28,7 @@ export interface MultiTenantUserFixture {
 }
 
 export const MULTI_TENANT_USERS: readonly MultiTenantUserFixture[] = [
+  // ── communityA (condo_718) ──────────────────────────────────────────
   {
     key: 'actorA',
     communityKey: 'communityA',
@@ -30,25 +37,11 @@ export const MULTI_TENANT_USERS: readonly MultiTenantUserFixture[] = [
     fullName: 'P2-43 Actor A',
   },
   {
-    key: 'actorB',
-    communityKey: 'communityB',
-    role: 'board_president',
-    emailPrefix: 'p243-actor-b',
-    fullName: 'P2-43 Actor B',
-  },
-  {
     key: 'residentA',
     communityKey: 'communityA',
     role: 'board_member',
     emailPrefix: 'p243-resident-a',
     fullName: 'P2-43 Resident A',
-  },
-  {
-    key: 'residentB',
-    communityKey: 'communityB',
-    role: 'board_member',
-    emailPrefix: 'p243-resident-b',
-    fullName: 'P2-43 Resident B',
   },
   {
     key: 'tenantA',
@@ -71,6 +64,64 @@ export const MULTI_TENANT_USERS: readonly MultiTenantUserFixture[] = [
     emailPrefix: 'p243-sitemgr-a',
     fullName: 'P2-43 Site Mgr A',
   },
+  {
+    key: 'ownerA',
+    communityKey: 'communityA',
+    role: 'owner',
+    emailPrefix: 'p457-owner-a',
+    fullName: 'P4-57 Owner A',
+  },
+  {
+    key: 'pmaA',
+    communityKey: 'communityA',
+    role: 'property_manager_admin',
+    emailPrefix: 'p457-pma-a',
+    fullName: 'P4-57 PMA A',
+  },
+  // ── communityB (hoa_720) ────────────────────────────────────────────
+  {
+    key: 'actorB',
+    communityKey: 'communityB',
+    role: 'board_president',
+    emailPrefix: 'p243-actor-b',
+    fullName: 'P2-43 Actor B',
+  },
+  {
+    key: 'residentB',
+    communityKey: 'communityB',
+    role: 'board_member',
+    emailPrefix: 'p243-resident-b',
+    fullName: 'P2-43 Resident B',
+  },
+  {
+    key: 'ownerB',
+    communityKey: 'communityB',
+    role: 'owner',
+    emailPrefix: 'p457-owner-b',
+    fullName: 'P4-57 Owner B',
+  },
+  {
+    key: 'tenantB',
+    communityKey: 'communityB',
+    role: 'tenant',
+    emailPrefix: 'p457-tenant-b',
+    fullName: 'P4-57 Tenant B',
+  },
+  {
+    key: 'camB',
+    communityKey: 'communityB',
+    role: 'cam',
+    emailPrefix: 'p457-cam-b',
+    fullName: 'P4-57 CAM B',
+  },
+  {
+    key: 'pmaB',
+    communityKey: 'communityB',
+    role: 'property_manager_admin',
+    emailPrefix: 'p457-pma-b',
+    fullName: 'P4-57 PMA B',
+  },
+  // ── communityC (apartment) ──────────────────────────────────────────
   {
     key: 'actorC',
     communityKey: 'communityC',

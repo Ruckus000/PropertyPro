@@ -9,49 +9,18 @@
  * - Board-over-owner precedence when both apply
  */
 
-export const COMMUNITY_TYPES = ["condo_718", "hoa_720", "apartment"] as const;
-export type CommunityType = (typeof COMMUNITY_TYPES)[number];
-
-/**
- * Canonical community-scoped roles per ADR-001.
- * Note: platform_admin is system-scoped (not in user_roles); auditor deferred to v2.
- */
-export const COMMUNITY_ROLES = [
-  "owner",
-  "tenant",
-  "board_member",
-  "board_president",
-  "cam",
-  "site_manager",
-  "property_manager_admin",
-] as const;
-export type CommunityRole = (typeof COMMUNITY_ROLES)[number];
-
-/** @deprecated Use COMMUNITY_ROLES instead. Kept for migration compatibility. */
-export const USER_ROLES = COMMUNITY_ROLES;
-/** @deprecated Use CommunityRole instead. Kept for migration compatibility. */
-export type UserRole = CommunityRole;
-
-/**
- * Community-type role constraints per ADR-001.
- */
-export const ROLE_COMMUNITY_CONSTRAINTS: Record<CommunityType, readonly CommunityRole[]> = {
-  condo_718: ["owner", "tenant", "board_member", "board_president", "cam", "property_manager_admin"],
-  hoa_720: ["owner", "tenant", "board_member", "board_president", "cam", "property_manager_admin"],
-  apartment: ["tenant", "site_manager", "property_manager_admin"],
-} as const;
-
-/**
- * Derived permission profiles mapped from canonical roles per ADR-001.
- * These are derived mappings, not canonical roles.
- */
-export const PERMISSION_PROFILE_MAP = {
-  portfolio_admin: ["property_manager_admin"],
-  community_admin: ["board_president", "cam", "site_manager"],
-  community_editor: ["board_member"],
-  resident_owner: ["owner"],
-  resident_tenant: ["tenant"],
-} as const;
+// Re-export core role/community-type constants from roles.ts
+// (extracted to break circular dependency with rbac-matrix.ts)
+export {
+  COMMUNITY_TYPES,
+  type CommunityType,
+  COMMUNITY_ROLES,
+  type CommunityRole,
+  USER_ROLES,
+  type UserRole,
+  ROLE_COMMUNITY_CONSTRAINTS,
+  PERMISSION_PROFILE_MAP,
+} from './roles';
 
 export * from './branding';
 export * from './compliance/templates';
@@ -60,3 +29,4 @@ export * from './features';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
+export * from './rbac-matrix';
