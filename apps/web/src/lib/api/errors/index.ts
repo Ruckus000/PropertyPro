@@ -1,4 +1,5 @@
 export { AppError } from './AppError';
+export { BadRequestError } from './BadRequestError';
 export { ValidationError } from './ValidationError';
 export { UnauthorizedError } from './UnauthorizedError';
 export { ForbiddenError } from './ForbiddenError';
