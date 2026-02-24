@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (2/10 base Phase 4 tasks complete; `P4-55` and `P4-56` merged, Batch A complete)
+**Status:** In progress on `main` (3/10 base Phase 4 tasks complete; `P4-55` through `P4-57` merged, Batch B in progress)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -18,11 +18,12 @@ Milestones:
 - [2026-02-22] Phase 4 execution branch/workstream initialized (`codex/p4-gate4-predeploy-validation`) - created canonical Phase 4 tracker, updated implementation status snapshots, and recorded Gate 4 pre-deployment kickoff baseline after Phase 3 closeout merge (`90d6e17`).
 - [2026-02-24] `P4-55` complete - Row-Level Security policies, coverage config, and integration validation merged on `main` via PR #14 (`05a5691`).
 - [2026-02-24] `P4-56` complete - Security audit baseline established: CORS restriction, CSP headers, security response headers, Zod input validation, sanitized error responses, BadRequestError error class, dependency scan documented. Security audit doc at `docs/SECURITY_AUDIT.md`. All 1419 tests passing on branch `codex/p4-56-security-audit`.
+- [2026-02-24] `P4-57` complete - RBAC audit baseline merged on `main` via PR #17 (`9953858`); post-merge read-guard remediations landed in `b8185be`: declarative role-permission matrix/docs, exhaustive RBAC matrix tests, and route-level `read` guard fixes for `residents GET`, `compliance GET`, and `meetings GET`. Targeted RBAC/route suites: 488 tests passed on branch `codex/p4-57-rbac-audit`.
 
 Current cursor:
-- 2/10 base Phase 4 tasks complete (`P4-55` and `P4-56` merged; `P4-57` through `P4-64` remaining).
-- Batch A complete. Batch B begins with `P4-57` RBAC Audit.
-- Next: `P4-57` RBAC Audit — declarative role-permission matrix, `checkPermission()` utility, full test coverage for every role × community_type × resource combination.
+- 3/10 base Phase 4 tasks complete (`P4-55` through `P4-57` merged; `P4-58` through `P4-64` remaining).
+- Batch A complete. Batch B in progress (`P4-57` RBAC Audit complete; `P4-58` Integration Tests next).
+- Next: `P4-58` Integration Tests — signup/provisioning, document lifecycle, compliance flow, role isolation, and >80% coverage evidence.
 
 ---
 
@@ -39,9 +40,9 @@ Current cursor:
 Completed base Phase 4 tasks on `main`:
 - `P4-55` Row-Level Security
 - `P4-56` Security Audit
+- `P4-57` RBAC Audit
 
 Remaining base Phase 4 tasks:
-- `P4-57` RBAC Audit
 - `P4-58` Integration Tests
 - `P4-59` CI/CD Pipeline
 - `P4-60` Production Deployment
@@ -50,7 +51,7 @@ Remaining base Phase 4 tasks:
 - `P4-63` Accessibility Audit
 - `P4-64` Data Export
 
-Count check: 2 completed + 8 remaining = 10 base tasks.
+Count check: 3 completed + 7 remaining = 10 base tasks.
 
 ---
 

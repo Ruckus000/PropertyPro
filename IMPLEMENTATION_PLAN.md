@@ -1909,7 +1909,7 @@ active → past_due → canceled → expired
 
 ### Task: P4-57 RBAC Audit
 - **Phase:** 4
-- **Status:** Complete on feature branch `codex/p4-57-rbac-audit` (declarative RBAC matrix/docs, exhaustive matrix tests, and route-level `read` guard fixes for `residents GET`, `compliance GET`, and `meetings GET` are complete; pending merge to `main`)
+- **Status:** Complete on `main` (merged via PR #17, commit `9953858`; post-merge read-guard remediations for `residents GET`, `compliance GET`, and `meetings GET` landed in commit `b8185be`; declarative RBAC matrix/docs and exhaustive matrix tests are in place)
 - **Files to Create/Modify:** apps/web/src/lib/db/access-control.ts, apps/web/__tests__/rbac.test.ts, docs/RBAC_MATRIX.md
 - **Dependencies:** P4-56, P1-25
 - **Blocks:** P4-58
