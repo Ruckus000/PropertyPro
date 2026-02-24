@@ -12,7 +12,7 @@
  *   scripts/with-env-local.sh pnpm reset:demo
  */
 import { pathToFileURL } from 'node:url';
-import { sql } from '@propertypro/db/filters';
+import { inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -101,10 +101,13 @@ async function validateDeletionOrder(): Promise<void> {
 
 async function resolveDemoCommunityIds(): Promise<number[]> {
   const slugs = DEMO_COMMUNITIES.map((c) => c.slug);
+  if (slugs.length === 0) {
+    return [];
+  }
   const rows = await db
-    .select({ id: communities.id, slug: communities.slug })
+    .select({ id: communities.id })
     .from(communities)
-    .where(sql`${communities.slug} IN (${sql.join(slugs.map((s) => sql`${s}`), sql`, `)})`);
+    .where(inArray(communities.slug, slugs));
 
   return rows.map((r) => r.id);
 }

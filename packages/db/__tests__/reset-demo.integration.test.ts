@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, inArray, sql as drizzleSql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
@@ -89,7 +89,6 @@ describeDb('demo reset integration', () => {
       .select()
       .from(communities)
       .where(inArray(communities.slug, [...DEMO_SLUGS]));
-    const communityIds = seededCommunities.map((c) => c.id);
 
     // Each community should have exactly the expected count (no stale duplicates)
     for (const community of seededCommunities) {
