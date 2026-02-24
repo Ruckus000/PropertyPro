@@ -16,6 +16,14 @@ const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
+/**
+ * Maximum documents seeded per community. Derived from seed-demo.ts:
+ *   sunset-condos: 1 doc, palm-shores-hoa: 1 doc, sunset-ridge-apartments: 2 docs.
+ * Upper bound kept slightly above the current max to tolerate minor seed additions
+ * without requiring a test update.
+ */
+const MAX_DOCS_PER_COMMUNITY = 5;
+
 describeDb('demo reset integration', () => {
   let sql: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
@@ -91,7 +99,7 @@ describeDb('demo reset integration', () => {
         .where(eq(documents.communityId, community.id));
       // After a clean reset + re-seed, doc count should match a fresh seed
       expect(docs.length).toBeGreaterThanOrEqual(1);
-      expect(docs.length).toBeLessThanOrEqual(10);
+      expect(docs.length).toBeLessThanOrEqual(MAX_DOCS_PER_COMMUNITY);
     }
   }, 180_000);
 });
