@@ -17,12 +17,14 @@ const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
 /**
- * Maximum documents seeded per community. Derived from seed-demo.ts:
- *   sunset-condos: 1 doc, palm-shores-hoa: 1 doc, sunset-ridge-apartments: 2 docs.
- * Upper bound kept slightly above the current max to tolerate minor seed additions
- * without requiring a test update.
+ * Exact document counts seeded per community by seed-demo.ts.
+ * Used to detect both orphaned duplicates and missing data after reset.
  */
-const MAX_DOCS_PER_COMMUNITY = 5;
+const EXPECTED_DOCS_PER_SLUG: Record<string, number> = {
+  'sunset-condos': 1,           // sunset-bylaws.pdf
+  'palm-shores-hoa': 1,         // palm-budget.pdf
+  'sunset-ridge-apartments': 2, // sunsetridge-rules.pdf, sunsetridge-move-in.pdf
+};
 
 describeDb('demo reset integration', () => {
   let sql: ReturnType<typeof postgres>;
@@ -90,15 +92,15 @@ describeDb('demo reset integration', () => {
       .from(communities)
       .where(inArray(communities.slug, [...DEMO_SLUGS]));
 
-    // Each community should have exactly the expected count (no stale duplicates)
+    // Each community should have exactly the seeded count (no stale duplicates)
     for (const community of seededCommunities) {
       const docs = await db
         .select()
         .from(documents)
         .where(eq(documents.communityId, community.id));
-      // After a clean reset + re-seed, doc count should match a fresh seed
-      expect(docs.length).toBeGreaterThanOrEqual(1);
-      expect(docs.length).toBeLessThanOrEqual(MAX_DOCS_PER_COMMUNITY);
+      const expected = EXPECTED_DOCS_PER_SLUG[community.slug];
+      expect(expected, `No expected doc count for slug "${community.slug}"`).toBeDefined();
+      expect(docs.length).toBe(expected);
     }
   }, 180_000);
 });
