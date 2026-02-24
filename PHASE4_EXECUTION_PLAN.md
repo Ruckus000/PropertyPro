@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (3/10 base Phase 4 tasks complete; `P4-55` through `P4-57` merged, Batch B in progress)
+**Status:** In progress on `main` (5/10 base Phase 4 tasks complete; Batches A+B complete, Batch C 1/3)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -18,12 +18,16 @@ Milestones:
 - [2026-02-22] Phase 4 execution branch/workstream initialized (`codex/p4-gate4-predeploy-validation`) - created canonical Phase 4 tracker, updated implementation status snapshots, and recorded Gate 4 pre-deployment kickoff baseline after Phase 3 closeout merge (`90d6e17`).
 - [2026-02-24] `P4-55` complete - Row-Level Security policies, coverage config, and integration validation merged on `main` via PR #14 (`05a5691`).
 - [2026-02-24] `P4-56` complete - Security audit baseline established: CORS restriction, CSP headers, security response headers, Zod input validation, sanitized error responses, BadRequestError error class, dependency scan documented. Security audit doc at `docs/SECURITY_AUDIT.md`. All 1419 tests passing on branch `codex/p4-56-security-audit`.
-- [2026-02-24] `P4-57` complete - RBAC audit baseline merged on `main` via PR #17 (`9953858`); post-merge read-guard remediations landed in `b8185be`: declarative role-permission matrix/docs, exhaustive RBAC matrix tests, and route-level `read` guard fixes for `residents GET`, `compliance GET`, and `meetings GET`. Targeted RBAC/route suites: 488 tests passed on branch `codex/p4-57-rbac-audit`.
+- [2026-02-24] `P4-57` complete - Declarative RBAC matrix (7 roles × 3 community types × 9 resources × 2 actions = 378 cells) with route-level enforcement and read guards. Merged on `main` via PR #17 (`9953858`) with followup fix (`b8185be`). Docs at `docs/RBAC_MATRIX.md`.
+- [2026-02-24] `P4-58` complete - Integration tests for critical user flows: compliance lifecycle, meeting deadlines, document upload, announcements CRUD. Merged on `main` via PR #18 (`a52e216`).
+- [2026-02-24] `P4-61` complete (out-of-sequence from Batch C) - Idempotent demo reset script with FK-safe deletion across 21 tenant tables, Supabase Auth cleanup, nightly cron via GitHub Actions. Merged on `main` via PR #20 (`d587692`).
 
 Current cursor:
-- 3/10 base Phase 4 tasks complete (`P4-55` through `P4-57` merged; `P4-58` through `P4-64` remaining).
-- Batch A complete. Batch B in progress (`P4-57` RBAC Audit complete; `P4-58` Integration Tests next).
-- Next: `P4-58` Integration Tests — signup/provisioning, document lifecycle, compliance flow, role isolation, and >80% coverage evidence.
+- 5/10 base Phase 4 tasks complete (`P4-55`, `P4-56`, `P4-57`, `P4-58`, `P4-61` merged; `P4-59`, `P4-60`, `P4-62`, `P4-63`, `P4-64` remaining).
+- Batches A and B complete. Batch C is 1/3 (`P4-61` done; `P4-63` and `P4-64` pending).
+- Critical path: `P4-59` CI/CD Pipeline → `P4-60` Production Deployment → `P4-62` Load Testing → Gate 4 sign-off.
+- `P4-63` (Accessibility) and `P4-64` (Data Export) can run in parallel with Batch D.
+- Next: Begin Batch C remainder (`P4-63`, `P4-64`) and/or Batch D (`P4-59` CI/CD Pipeline).
 
 ---
 
@@ -41,17 +45,17 @@ Completed base Phase 4 tasks on `main`:
 - `P4-55` Row-Level Security
 - `P4-56` Security Audit
 - `P4-57` RBAC Audit
+- `P4-58` Integration Tests
+- `P4-61` Demo Reset Script
 
 Remaining base Phase 4 tasks:
-- `P4-58` Integration Tests
 - `P4-59` CI/CD Pipeline
 - `P4-60` Production Deployment
-- `P4-61` Demo Reset Script
 - `P4-62` Load Testing
 - `P4-63` Accessibility Audit
 - `P4-64` Data Export
 
-Count check: 3 completed + 7 remaining = 10 base tasks.
+Count check: 5 completed + 5 remaining = 10 base tasks.
 
 ---
 
@@ -205,10 +209,10 @@ Batch-specific gate checks:
 ## Gate 4 Checklist (Canonical Owner)
 
 Formal Gate 4 sign-off requires all of the following:
-- [ ] RLS policies enabled and tested on all tenant-scoped tables (`P4-55`)
-- [ ] RBAC matrix has 100% test coverage across role × community_type × resource combinations (`P4-57`)
-- [ ] Integration test suite passes with >80% code coverage (`P4-58`)
-- [ ] Dependency scan reports no critical/high vulnerabilities (`P4-56`)
+- [x] RLS policies enabled and tested on all tenant-scoped tables (`P4-55`) — PR #14, `05a5691`
+- [x] RBAC matrix has 100% test coverage across role × community_type × resource combinations (`P4-57`) — PR #17, 378 cells covered
+- [x] Integration test suite passes with >80% code coverage (`P4-58`) — PR #18, 4 flow suites
+- [x] Dependency scan reports no critical/high vulnerabilities (`P4-56`) — PR #16, 3 dev-only findings
 - [ ] Accessibility audit passes WCAG 2.1 AA baseline (`P4-63`)
 - [ ] Merge-gate verification commands and evidence are captured in a timestamped artifact under `docs/audits/`
 
