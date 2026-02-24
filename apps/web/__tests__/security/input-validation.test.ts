@@ -135,7 +135,7 @@ describe('P4-56 / Meetings POST input validation', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when required create fields are missing', async () => {
+  it('returns 422 when required create fields are missing', async () => {
     const { POST } = await import('../../src/app/api/v1/meetings/route');
 
     const req = new NextRequest('http://localhost/api/v1/meetings', {

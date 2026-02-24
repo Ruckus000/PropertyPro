@@ -18,7 +18,7 @@ import {
 } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -183,12 +183,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const rawCommunityId = searchParams.get('communityId');
   if (!rawCommunityId) {
-    throw new ValidationError('communityId query parameter is required');
+    throw new BadRequestError('communityId query parameter is required');
   }
 
   const parsedCommunityId = Number(rawCommunityId);
   if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
+    throw new BadRequestError('communityId must be a positive integer');
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
@@ -203,7 +203,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (rawLimit !== null) {
     const parsedLimit = Number(rawLimit);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE) {
-      throw new ValidationError(
+      throw new BadRequestError(
         `limit must be an integer between 1 and ${MAX_PAGE_SIZE}`,
       );
     }
@@ -240,7 +240,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (cursor) {
     const decoded = decodeCursor(cursor);
     if (!decoded) {
-      throw new ValidationError('Invalid cursor value');
+      throw new BadRequestError('Invalid cursor value');
     }
     // Compound cursor: (created_at, id) < (cursor.createdAt, cursor.id) in DESC order
     conditions.push(
