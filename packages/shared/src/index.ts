@@ -56,6 +56,7 @@ export const PERMISSION_PROFILE_MAP = {
 export * from './branding';
 export * from './compliance/templates';
 export * from './access-policies';
+export * from './rbac-matrix';
 export * from './features';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';

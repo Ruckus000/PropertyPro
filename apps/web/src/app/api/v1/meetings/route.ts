@@ -21,7 +21,7 @@ import {
 import { and, eq } from '@propertypro/db/filters';
 import { type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
+import { BadRequestError, UnprocessableEntityError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -35,6 +35,7 @@ import {
 import { queueNotification } from '@/lib/services/notification-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -114,12 +115,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawCommunityId = searchParams.get('communityId');
   if (!rawCommunityId) {
-    throw new ValidationError('communityId query parameter is required');
+    throw new BadRequestError('communityId query parameter is required');
   }
 
   const parsedCommunityId = Number(rawCommunityId);
   if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
+    throw new BadRequestError('communityId must be a positive integer');
   }
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -160,7 +161,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const rawCommunityId = body['communityId'];
   const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
   if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
+    throw new BadRequestError('communityId must be a positive integer');
   }
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const normalizedBody = { ...body, communityId };
@@ -168,6 +169,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireMeetingsEnabled(membership.communityType);
+  requirePermission(membership.role, membership.communityType, 'meetings', 'write');
   await requireActiveSubscriptionForMutation(communityId);
 
   if (action === 'update') return handleUpdate(normalizedBody, actorUserId);
@@ -184,7 +186,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 async function handleCreate(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
   const parsed = createMeetingSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid meeting data', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid meeting data', { fields: formatZodErrors(parsed.error) });
   }
   const { communityId, ...data } = parsed.data;
   const scoped = createScopedClient(communityId);
@@ -264,7 +266,7 @@ async function handleCreate(body: Record<string, unknown>, actorUserId: string):
 async function handleUpdate(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
   const parsed = updateMeetingSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid update data', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid update data', { fields: formatZodErrors(parsed.error) });
   }
   const { id, communityId, ...fields } = parsed.data;
   const scoped = createScopedClient(communityId);
@@ -316,7 +318,7 @@ async function handleUpdate(body: Record<string, unknown>, actorUserId: string):
 async function handleDelete(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
   const parsed = deleteMeetingSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid delete data', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid delete data', { fields: formatZodErrors(parsed.error) });
   }
   const { id, communityId } = parsed.data;
   const scoped = createScopedClient(communityId);
@@ -337,7 +339,7 @@ async function handleDelete(body: Record<string, unknown>, actorUserId: string):
 async function handleAttach(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
   const parsed = attachDocSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid attachment data', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid attachment data', { fields: formatZodErrors(parsed.error) });
   }
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);
@@ -374,7 +376,7 @@ async function handleAttach(body: Record<string, unknown>, actorUserId: string):
 async function handleDetach(body: Record<string, unknown>, actorUserId: string): Promise<NextResponse> {
   const parsed = detachDocSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid detach data', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid detach data', { fields: formatZodErrors(parsed.error) });
   }
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);

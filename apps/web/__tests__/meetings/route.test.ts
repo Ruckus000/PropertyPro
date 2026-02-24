@@ -24,7 +24,7 @@ const {
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({
     userId: 'session-user-1',
     communityId: 42,
-    role: 'owner',
+    role: 'board_member',
     communityType: 'condo_718',
   }),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
@@ -66,7 +66,7 @@ describe('p1-16 meetings route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'session-user-1',
       communityId: 42,
-      role: 'owner',
+      role: 'board_member',
       communityType: 'condo_718',
     });
 

@@ -18,24 +18,12 @@ import {
 } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Roles allowed to view the audit trail (community admins). */
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+import { requirePermission } from '@/lib/db/access-control';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -68,12 +56,6 @@ function isSensitiveKey(key: string): boolean {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function requireAdminRole(role: string): void {
-  if (!ADMIN_ROLES.has(role)) {
-    throw new ForbiddenError('Only community administrators can view the audit trail');
-  }
-}
 
 interface AuditLogRow {
   id: number;
@@ -201,17 +183,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const rawCommunityId = searchParams.get('communityId');
   if (!rawCommunityId) {
-    throw new ValidationError('communityId query parameter is required');
+    throw new BadRequestError('communityId query parameter is required');
   }
 
   const parsedCommunityId = Number(rawCommunityId);
   if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
+    throw new BadRequestError('communityId must be a positive integer');
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'audit', 'read');
 
   // --- Cursor-based pagination params (validated before DB query) ---
   const cursor = searchParams.get('cursor');
@@ -221,7 +203,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (rawLimit !== null) {
     const parsedLimit = Number(rawLimit);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE) {
-      throw new ValidationError(
+      throw new BadRequestError(
         `limit must be an integer between 1 and ${MAX_PAGE_SIZE}`,
       );
     }
@@ -258,7 +240,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (cursor) {
     const decoded = decodeCursor(cursor);
     if (!decoded) {
-      throw new ValidationError('Invalid cursor value');
+      throw new BadRequestError('Invalid cursor value');
     }
     // Compound cursor: (created_at, id) < (cursor.createdAt, cursor.id) in DESC order
     conditions.push(
