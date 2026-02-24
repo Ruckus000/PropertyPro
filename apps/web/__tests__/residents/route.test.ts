@@ -56,7 +56,7 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
-import { POST } from '../../src/app/api/v1/residents/route';
+import { GET, POST } from '../../src/app/api/v1/residents/route';
 
 describe('p1-18 residents route', () => {
   beforeEach(() => {
@@ -211,5 +211,21 @@ describe('p1-18 residents route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(403);
+  });
+
+  it('GET returns 403 for apartment tenant (RBAC residents.read denied)', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'actor-1',
+      communityId: 42,
+      role: 'tenant',
+      communityType: 'apartment',
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/residents?communityId=42');
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(createScopedClientMock).not.toHaveBeenCalled();
+    expect(scopedQueryMock).not.toHaveBeenCalled();
   });
 });

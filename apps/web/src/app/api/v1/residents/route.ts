@@ -89,7 +89,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
-  await requireCommunityMembership(communityId, actorUserId);
+  const membership = await requireCommunityMembership(communityId, actorUserId);
+  requirePermission(membership.role, membership.communityType, 'residents', 'read');
   const scoped = createScopedClient(communityId);
 
   // Optional role filters pushed to the DB — avoids fetching and discarding unneeded rows
