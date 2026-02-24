@@ -21,11 +21,15 @@ jobs:
       github.event_name == 'workflow_run'
       && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
+    permissions:
+      contents: read
 
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
       - name: Checkout
@@ -46,22 +50,24 @@ jobs:
         run: pnpm add -g vercel@latest
 
       - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production
 
       - name: Build project
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod
 
       - name: Deploy to production
         id: deploy
         run: |
-          DEPLOYMENT_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt --prod)
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
       - name: Smoke test
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          echo "Verifying deployment at ${{ steps.deploy.outputs.url }}"
+          echo "Verifying deployment at $DEPLOY_URL"
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.deploy.outputs.url }}" || true)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL" || true)
             if [ "$STATUS" = "200" ]; then
               echo "Smoke test passed (HTTP $STATUS)"
               exit 0
@@ -76,11 +82,16 @@ jobs:
     name: Deploy PR Preview
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: preview
+    permissions:
+      contents: read
+      pull-requests: write
 
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
       - name: Checkout
@@ -101,22 +112,24 @@ jobs:
         run: pnpm add -g vercel@latest
 
       - name: Pull Vercel environment
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview
 
       - name: Build project
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build
 
       - name: Deploy preview
         id: deploy
         run: |
-          DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt)
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on PR
         uses: actions/github-script@v7
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         with:
           script: |
-            const url = '${{ steps.deploy.outputs.url }}';
+            const url = process.env.DEPLOY_URL;
             const body = `### Preview Deployment\n\nDeployed to: ${url}`;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
