@@ -38,11 +38,12 @@ export function LoginForm({ returnTo }: LoginFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
         <input
           type="email"
+          autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -53,6 +54,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
         <span className="mb-1 block text-sm font-medium text-gray-700">Password</span>
         <input
           type="password"
+          autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"

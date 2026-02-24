@@ -8,7 +8,7 @@ export default function MarketingLandingPage() {
   return (
     <div className="min-h-screen bg-white">
       <MarketingNav />
-      <main>
+      <main id="main-content">
         <HeroSection />
         <FeaturesSection />
         <ComplianceUrgencySection />

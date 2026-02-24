@@ -57,7 +57,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const data = await loadDashboardData(context.communityId, userId);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+    <main id="main-content" className="mx-auto max-w-6xl space-y-6 px-6 py-8">
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">
         <DashboardAnnouncements items={data.announcements} />
