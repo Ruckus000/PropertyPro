@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** Kickoff in progress (0/10 base Phase 4 tasks complete; Gate 4 is the active formal milestone)
+**Status:** In progress on `main` (1/10 base Phase 4 tasks complete; `P4-55` merged, Batch A in progress)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -16,11 +16,12 @@ Rules:
 
 Milestones:
 - [2026-02-22] Phase 4 execution branch/workstream initialized (`codex/p4-gate4-predeploy-validation`) - created canonical Phase 4 tracker, updated implementation status snapshots, and recorded Gate 4 pre-deployment kickoff baseline after Phase 3 closeout merge (`90d6e17`).
+- [2026-02-24] `P4-55` complete - Row-Level Security policies, coverage config, and integration validation merged on `main` via PR #14 (`05a5691`).
 
 Current cursor:
-- 0/10 base Phase 4 tasks complete (`P4-55` through `P4-64`).
+- 1/10 base Phase 4 tasks complete (`P4-55` merged; `P4-56` through `P4-64` remaining).
 - Gate 4 pre-deployment validation is the active milestone; kickoff baseline checks on `main` are complete (Phase 3 plan verifier + DB migrate).
-- Next: Execute Batch A (`P4-55`, `P4-56`) and establish the DB/application security baseline for Gate 4.
+- Next: Continue Batch A with `P4-56` Security Audit and establish the application security baseline for Gate 4.
 
 ---
 
@@ -34,8 +35,10 @@ Current cursor:
 
 ## Phase 4 Scope Snapshot
 
-Phase 4 base tasks:
+Completed base Phase 4 tasks on `main`:
 - `P4-55` Row-Level Security
+
+Remaining base Phase 4 tasks:
 - `P4-56` Security Audit
 - `P4-57` RBAC Audit
 - `P4-58` Integration Tests
@@ -46,7 +49,7 @@ Phase 4 base tasks:
 - `P4-63` Accessibility Audit
 - `P4-64` Data Export
 
-Count check: 0 completed + 10 remaining = 10 base tasks.
+Count check: 1 completed + 9 remaining = 10 base tasks.
 
 ---
 
