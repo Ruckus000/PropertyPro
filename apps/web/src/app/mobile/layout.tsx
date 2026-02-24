@@ -54,7 +54,7 @@ export default async function MobileLayout({ children, searchParams }: MobileLay
 
   return (
     <div className="mobile-shell">
-      <main className="mobile-content">{children}</main>
+      <main id="main-content" className="mobile-content">{children}</main>
       <BottomTabBar features={features} communityId={communityId} />
     </div>
   );

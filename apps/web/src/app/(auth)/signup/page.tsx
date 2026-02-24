@@ -30,7 +30,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const verified = pickFirst(params.verified) === '1';
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-12">
+    <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-12">
       <div className="mx-auto w-full max-w-3xl space-y-5">
         <div className="text-center">
           <h1 className="text-3xl font-semibold text-gray-900">Start Your PropertyPro Signup</h1>

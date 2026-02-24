@@ -144,13 +144,13 @@ export function SignupForm({
       ) : null}
 
       {errorMessage ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
           {errorMessage}
         </div>
       ) : null}
 
       {successResult ? (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
           {successResult.message}
         </div>
       ) : null}
@@ -171,6 +171,7 @@ export function SignupForm({
           <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
           <input
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -183,6 +184,7 @@ export function SignupForm({
         <span className="mb-1 block text-sm font-medium text-gray-700">Password</span>
         <input
           type="password"
+          autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -249,13 +251,14 @@ export function SignupForm({
 
       <div>
         <h2 className="mb-2 text-sm font-medium text-gray-700">Plan Selection</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Plan selection">
           {plans.map((plan) => {
             const selected = plan.id === planKey;
             return (
               <button
                 key={plan.id}
                 type="button"
+                aria-pressed={selected}
                 onClick={() => setPlanKey(plan.id)}
                 disabled={isSubmitting}
                 className={`rounded-md border p-3 text-left transition-colors ${

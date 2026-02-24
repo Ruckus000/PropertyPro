@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (5/10 base Phase 4 tasks complete; Batches A+B complete, Batch C 1/3)
+**Status:** In progress on `main` (7/10 base Phase 4 tasks complete; Batches A+B+C complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -21,13 +21,14 @@ Milestones:
 - [2026-02-24] `P4-57` complete - Declarative RBAC matrix (7 roles × 3 community types × 9 resources × 2 actions = 378 cells) with route-level enforcement and read guards. Merged on `main` via PR #17 (`9953858`) with followup fix (`b8185be`). Docs at `docs/RBAC_MATRIX.md`.
 - [2026-02-24] `P4-58` complete - Integration tests for critical user flows: compliance lifecycle, meeting deadlines, document upload, announcements CRUD. Merged on `main` via PR #18 (`a52e216`).
 - [2026-02-24] `P4-61` complete (out-of-sequence from Batch C) - Idempotent demo reset script with FK-safe deletion across 21 tenant tables, Supabase Auth cleanup, nightly cron via GitHub Actions. Merged on `main` via PR #20 (`d587692`).
+- [2026-02-24] `P4-63` complete - WCAG 2.1 AA accessibility audit: axe-core automated testing (9 tests), ARIA role/attribute fixes on forms, skip-to-content navigation, landmark IDs. Docs at `docs/ACCESSIBILITY.md`. Branch `codex/p4-63-64-batch-c`, PR #21 (`9ab3f89`).
+- [2026-02-24] `P4-64` complete - Community data export: ZIP of 4 CSVs (residents, documents, maintenance requests, announcements) via streaming archiver. GET `/api/v1/export` with RBAC (settings/read), export UI at `/settings/export`, 21 unit tests. Branch `codex/p4-63-64-batch-c`, PR #21 (`9ab3f89`).
 
 Current cursor:
-- 5/10 base Phase 4 tasks complete (`P4-55`, `P4-56`, `P4-57`, `P4-58`, `P4-61` merged; `P4-59`, `P4-60`, `P4-62`, `P4-63`, `P4-64` remaining).
-- Batches A and B complete. Batch C is 1/3 (`P4-61` done; `P4-63` and `P4-64` pending).
+- 7/10 base Phase 4 tasks complete (`P4-55`, `P4-56`, `P4-57`, `P4-58`, `P4-61`, `P4-63`, `P4-64` merged; `P4-59`, `P4-60`, `P4-62` remaining).
+- Batches A, B, and C complete.
 - Critical path: `P4-59` CI/CD Pipeline → `P4-60` Production Deployment → `P4-62` Load Testing → Gate 4 sign-off.
-- `P4-63` (Accessibility) and `P4-64` (Data Export) can run in parallel with Batch D.
-- Next: Begin Batch C remainder (`P4-63`, `P4-64`) and/or Batch D (`P4-59` CI/CD Pipeline).
+- Next: Begin Batch D (`P4-59` CI/CD Pipeline, `P4-60` Production Deployment).
 
 ---
 
@@ -47,15 +48,15 @@ Completed base Phase 4 tasks on `main`:
 - `P4-57` RBAC Audit
 - `P4-58` Integration Tests
 - `P4-61` Demo Reset Script
+- `P4-63` Accessibility Audit
+- `P4-64` Data Export
 
 Remaining base Phase 4 tasks:
 - `P4-59` CI/CD Pipeline
 - `P4-60` Production Deployment
 - `P4-62` Load Testing
-- `P4-63` Accessibility Audit
-- `P4-64` Data Export
 
-Count check: 5 completed + 5 remaining = 10 base tasks.
+Count check: 7 completed + 3 remaining = 10 base tasks.
 
 ---
 
@@ -213,7 +214,7 @@ Formal Gate 4 sign-off requires all of the following:
 - [x] RBAC matrix has 100% test coverage across role × community_type × resource combinations (`P4-57`) — PR #17, 378 cells covered
 - [x] Integration test suite passes with >80% code coverage (`P4-58`) — PR #18, 4 flow suites
 - [x] Dependency scan reports no critical/high vulnerabilities (`P4-56`) — PR #16, 3 dev-only findings
-- [ ] Accessibility audit passes WCAG 2.1 AA baseline (`P4-63`)
+- [x] Accessibility audit passes WCAG 2.1 AA baseline (`P4-63`) — branch `codex/p4-63-64-batch-c`, 9 axe-core tests, docs at `docs/ACCESSIBILITY.md`
 - [ ] Merge-gate verification commands and evidence are captured in a timestamped artifact under `docs/audits/`
 
 Recommended pre-signoff command bundle (to finalize when Batch D/E land):

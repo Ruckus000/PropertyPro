@@ -131,7 +131,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         {fieldErrors['title'] && (
-          <p className="mt-1 text-xs text-red-600">{fieldErrors['title']}</p>
+          <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors['title']}</p>
         )}
       </div>
 
@@ -148,7 +148,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         {fieldErrors['description'] && (
-          <p className="mt-1 text-xs text-red-600">{fieldErrors['description']}</p>
+          <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors['description']}</p>
         )}
       </div>
 
@@ -191,10 +191,11 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">
+        <label htmlFor="mr-photos" className="block text-sm font-medium text-gray-700">
           Photos (max 5)
         </label>
         <input
+          id="mr-photos"
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif"
           multiple
@@ -220,7 +221,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       </div>
 
       {serverError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</p>
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p>
       )}
 
       <button

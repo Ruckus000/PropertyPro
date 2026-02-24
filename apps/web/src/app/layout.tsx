@@ -13,7 +13,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:px-4 focus:py-2 focus:text-blue-600 focus:underline"
+        >
+          Skip to main content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
