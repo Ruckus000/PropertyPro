@@ -161,12 +161,14 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const createdMeeting = getJson.data.find(
       (m) => m['title'] === `Board Meeting ${kit.runSuffix}`,
     );
-    expect(createdMeeting).toBeDefined();
+    if (!createdMeeting) throw new Error('Board meeting not found');
 
     // Board meeting notice deadline: 2 days before, adjusted for weekends
-    const deadlines = createdMeeting!['deadlines'] as Record<string, string>;
+    const deadlines = createdMeeting['deadlines'] as Record<string, string>;
     expect(deadlines).toHaveProperty('noticePostBy');
+    expect(typeof deadlines['noticePostBy']).toBe('string');
     expect(deadlines).toHaveProperty('minutesPostBy');
+    expect(typeof deadlines['minutesPostBy']).toBe('string');
 
     const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 2));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
@@ -201,9 +203,9 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     );
     const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
     const meeting = getJson.data.find((m) => m['title'] === `Annual Meeting ${kit.runSuffix}`);
-    expect(meeting).toBeDefined();
+    if (!meeting) throw new Error('Annual meeting not found');
 
-    const deadlines = meeting!['deadlines'] as Record<string, string>;
+    const deadlines = meeting['deadlines'] as Record<string, string>;
     const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 14));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
@@ -227,10 +229,10 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const meeting = getJson.data.find((m) =>
       (m['title'] as string).includes(kit.runSuffix),
     );
-    expect(meeting).toBeDefined();
+    if (!meeting) throw new Error('Meeting not found');
 
-    const startsAt = new Date(meeting!['startsAt'] as string);
-    const deadlines = meeting!['deadlines'] as Record<string, string>;
+    const startsAt = new Date(meeting['startsAt'] as string);
+    const deadlines = meeting['deadlines'] as Record<string, string>;
     const expectedMinutesBy = adjustWeekendForward(addDays(startsAt, 30));
     const actualMinutesBy = new Date(deadlines['minutesPostBy']);
     expect(isSameDay(actualMinutesBy, expectedMinutesBy)).toBe(true);
@@ -253,9 +255,9 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const meeting = getJson.data.find((m) =>
       (m['title'] as string).includes(`Board Meeting ${kit.runSuffix}`),
     );
-    expect(meeting).toBeDefined();
+    if (!meeting) throw new Error('Meeting not found for update');
 
-    const meetingId = meeting!['id'] as number;
+    const meetingId = meeting['id'] as number;
     const updateResponse = await route.POST(
       jsonRequest(apiUrl('/api/v1/meetings'), 'POST', {
         action: 'update',

@@ -132,8 +132,11 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
     // Each item should have expected fields
     const firstItem = json.data[0];
     expect(firstItem).toHaveProperty('templateKey');
+    expect(typeof firstItem['templateKey']).toBe('string');
     expect(firstItem).toHaveProperty('title');
+    expect(typeof firstItem['title']).toBe('string');
     expect(firstItem).toHaveProperty('statuteReference');
+    expect(typeof firstItem['statuteReference']).toBe('string');
     expect(firstItem).toHaveProperty('documentId');
     expect(firstItem['documentId']).toBeNull();
   });

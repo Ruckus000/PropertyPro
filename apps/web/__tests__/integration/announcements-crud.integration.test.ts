@@ -27,6 +27,7 @@ import {
   apiUrl,
   jsonRequest,
   parseJson,
+  readNumberField,
   requireDatabaseUrlInCI,
   getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
@@ -137,7 +138,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     expect(json.data['title']).toBe(`Test Announcement ${kit.runSuffix}`);
     expect(json.data['audience']).toBe('all');
     expect(json.data['isPinned']).toBe(false);
-    createdAnnouncementId = json.data['id'] as number;
+    createdAnnouncementId = readNumberField(json.data, 'id');
   });
 
   // =========================================================================

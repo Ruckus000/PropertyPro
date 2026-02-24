@@ -277,11 +277,11 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     );
     const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
     const pngDoc = getJson.data.find((d) => d['title'] === `PNG Test Doc ${kit.runSuffix}`);
-    expect(pngDoc).toBeDefined();
+    if (!pngDoc) throw new Error('PNG document not found for deletion');
 
     const response = await route.DELETE(
       new NextRequest(
-        apiUrl(`/api/v1/documents?id=${pngDoc!['id']}&communityId=${communityA.id}`),
+        apiUrl(`/api/v1/documents?id=${pngDoc['id']}&communityId=${communityA.id}`),
         { method: 'DELETE' },
       ),
     );
