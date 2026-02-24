@@ -11,7 +11,7 @@
  *   7. Minutes posting deadline = 30 days after meeting
  */
 import { NextRequest } from 'next/server';
-import { subDays, addDays, isWeekend, nextMonday, startOfDay } from 'date-fns';
+import { subDays, addDays, isWeekend, isSameDay, nextMonday, startOfDay } from 'date-fns';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -30,13 +30,13 @@ import {
   parseJson,
   readNumberField,
   requireInsertedRow,
+  requireDatabaseUrlInCI,
+  getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
 
-if (process.env.CI && !process.env.DATABASE_URL) {
-  throw new Error('Meeting deadlines integration tests require DATABASE_URL in CI');
-}
+requireDatabaseUrlInCI('Meeting deadlines integration tests');
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = getDescribeDb();
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -170,10 +170,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
 
     const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 2));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
-    // Compare dates (ignoring time precision differences)
-    expect(actualNoticeBy.toISOString().slice(0, 10)).toBe(
-      expectedNoticeBy.toISOString().slice(0, 10),
-    );
+    expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
 
   // =========================================================================
@@ -209,9 +206,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const deadlines = meeting!['deadlines'] as Record<string, string>;
     const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 14));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
-    expect(actualNoticeBy.toISOString().slice(0, 10)).toBe(
-      expectedNoticeBy.toISOString().slice(0, 10),
-    );
+    expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
 
   // =========================================================================
@@ -238,9 +233,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const deadlines = meeting!['deadlines'] as Record<string, string>;
     const expectedMinutesBy = adjustWeekendForward(addDays(startsAt, 30));
     const actualMinutesBy = new Date(deadlines['minutesPostBy']);
-    expect(actualMinutesBy.toISOString().slice(0, 10)).toBe(
-      expectedMinutesBy.toISOString().slice(0, 10),
-    );
+    expect(isSameDay(actualMinutesBy, expectedMinutesBy)).toBe(true);
   });
 
   // =========================================================================

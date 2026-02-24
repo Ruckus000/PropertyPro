@@ -24,13 +24,13 @@ import {
   apiUrl,
   jsonRequest,
   parseJson,
+  requireDatabaseUrlInCI,
+  getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
 
-if (process.env.CI && !process.env.DATABASE_URL) {
-  throw new Error('Compliance lifecycle integration tests require DATABASE_URL in CI');
-}
+requireDatabaseUrlInCI('Compliance lifecycle integration tests');
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = getDescribeDb();
 
 // ---------------------------------------------------------------------------
 // Mocks

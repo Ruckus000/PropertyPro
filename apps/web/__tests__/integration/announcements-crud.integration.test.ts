@@ -27,13 +27,13 @@ import {
   apiUrl,
   jsonRequest,
   parseJson,
+  requireDatabaseUrlInCI,
+  getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
 
-if (process.env.CI && !process.env.DATABASE_URL) {
-  throw new Error('Announcements CRUD integration tests require DATABASE_URL in CI');
-}
+requireDatabaseUrlInCI('Announcements CRUD integration tests');
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = getDescribeDb();
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -212,10 +212,10 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
     const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
-    if (getJson.data.length > 1) {
-      // First item should be pinned
-      expect(getJson.data[0]['isPinned']).toBe(true);
-    }
+    expect(getJson.data.length).toBeGreaterThan(0);
+    // The created announcement should be pinned and appear first
+    expect(getJson.data[0]['id']).toBe(createdAnnouncementId);
+    expect(getJson.data[0]['isPinned']).toBe(true);
 
     // Unpin
     const unpinResponse = await route.POST(

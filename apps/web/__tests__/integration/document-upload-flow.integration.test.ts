@@ -32,13 +32,13 @@ import {
   parseJson,
   readNumberField,
   requireInsertedRow,
+  requireDatabaseUrlInCI,
+  getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
 
-if (process.env.CI && !process.env.DATABASE_URL) {
-  throw new Error('Document upload flow integration tests require DATABASE_URL in CI');
-}
+requireDatabaseUrlInCI('Document upload flow integration tests');
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = getDescribeDb();
 
 // ---------------------------------------------------------------------------
 // Magic byte constants for test file generation
@@ -313,7 +313,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     );
     const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
     const doc = getJson.data[0];
-    if (!doc) return; // Skip if no docs available
+    expect(doc).toBeDefined();
 
     setActor(kit, 'tenantA');
     const response = await route.DELETE(
