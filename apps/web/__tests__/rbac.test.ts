@@ -5,8 +5,9 @@
  * 1. Exhaustive: programmatically iterate all 378 cells
  *    (7 roles × 3 community types × 9 resources × 2 actions)
  *    and assert checkPermission() matches RBAC_MATRIX.
- * 2. Structural: verify invalid role/community combos → all false.
- * 3. Policy invariants: spot-check critical rules that must never regress.
+ * 2. Policy invariants: spot-check critical rules that must never regress,
+ *    including ROLE_COMMUNITY_CONSTRAINTS consistency (covers all invalid
+ *    role/community-type combinations programmatically).
  *
  * No vi.mock needed — checkPermission is a pure function with no side effects.
  */
@@ -48,36 +49,7 @@ describe('checkPermission — exhaustive RBAC_MATRIX coverage', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Invalid role/community combinations → all false
-// ---------------------------------------------------------------------------
-
-describe('invalid role/community combinations — all resources/actions are false', () => {
-  const invalidCombos: Array<{ role: CommunityRole; communityType: CommunityType }> = [
-    { role: 'site_manager',   communityType: 'condo_718' },
-    { role: 'site_manager',   communityType: 'hoa_720'   },
-    { role: 'owner',          communityType: 'apartment' },
-    { role: 'board_member',   communityType: 'apartment' },
-    { role: 'board_president',communityType: 'apartment' },
-    { role: 'cam',            communityType: 'apartment' },
-  ];
-
-  for (const { role, communityType } of invalidCombos) {
-    describe(`${role} in ${communityType}`, () => {
-      for (const resource of RBAC_RESOURCES) {
-        for (const action of RBAC_ACTIONS) {
-          it(`${resource} / ${action} is false`, () => {
-            expect(
-              checkPermission(role, communityType, resource, action),
-            ).toBe(false);
-          });
-        }
-      }
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// 3. Policy invariants
+// 2. Policy invariants
 // ---------------------------------------------------------------------------
 
 describe('policy invariants', () => {

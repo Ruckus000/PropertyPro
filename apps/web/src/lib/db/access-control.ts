@@ -14,7 +14,7 @@
  */
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import {
-  checkPermission as _checkPermission,
+  checkPermission,
   type RbacResource,
   type RbacAction,
 } from '@propertypro/shared';
@@ -41,7 +41,7 @@ export function requirePermission(
   resource: RbacResource,
   action: RbacAction,
 ): void {
-  if (!_checkPermission(role, communityType, resource, action)) {
+  if (!checkPermission(role, communityType, resource, action)) {
     throw new ForbiddenError(
       `Role '${role}' is not permitted to ${action} ${resource}`,
     );

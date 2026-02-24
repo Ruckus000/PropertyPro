@@ -120,8 +120,8 @@ Legend: **R** = read, **W** = write (create/update/delete), **—** = no access
 | `meetings` (write) | `apps/web/src/app/api/v1/meetings/route.ts` | `requirePermission(..., 'meetings', 'write')` in POST handler |
 | `compliance` (write) | `apps/web/src/app/api/v1/compliance/route.ts` | `requirePermission(..., 'compliance', 'write')` in POST handler |
 | `residents` (write) | `apps/web/src/app/api/v1/residents/route.ts` | `requirePermission(..., 'residents', 'write')` in POST/PATCH/DELETE |
-| `documents` (write) | `apps/web/src/app/api/v1/documents/route.ts` | `isElevatedRole()` from `access-policies.ts` |
-| `maintenance` | `apps/web/src/app/api/v1/maintenance-requests/route.ts` | Role-scoped queries (ADMIN_ROLES/RESIDENT_ROLES split) |
+| `documents` (write) | `apps/web/src/app/api/v1/documents/route.ts` | Legacy: `isElevatedRole()` from `access-policies.ts` (candidate for migration to `requirePermission`) |
+| `maintenance` | `apps/web/src/app/api/v1/maintenance-requests/route.ts` | Legacy: role-scoped queries (ADMIN_ROLES/RESIDENT_ROLES split, candidate for migration to `requirePermission`) |
 
 All routes additionally enforce:
 1. `requireAuthenticatedUserId()` — valid Supabase session (401 if absent)
