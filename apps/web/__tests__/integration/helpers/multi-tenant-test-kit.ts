@@ -284,3 +284,26 @@ export function mapValueOrThrow<K extends string, V>(map: Map<K, V>, key: K, lab
   }
   return value;
 }
+
+// ---------------------------------------------------------------------------
+// Environment helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Asserts that DATABASE_URL is set when running in CI.
+ * Call at module scope in each integration test file so the suite
+ * fails fast rather than silently skipping in CI.
+ */
+export function requireDatabaseUrlInCI(suiteName: string): void {
+  if (process.env.CI && !process.env.DATABASE_URL) {
+    throw new Error(`${suiteName} requires DATABASE_URL in CI`);
+  }
+}
+
+/**
+ * Returns `describe` when DATABASE_URL is set, `describe.skip` otherwise.
+ * Centralises the skip-when-no-DB pattern used by every integration suite.
+ */
+export function getDescribeDb(): typeof describe {
+  return process.env.DATABASE_URL ? describe : describe.skip;
+}
