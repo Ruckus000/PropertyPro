@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** Kickoff in progress (0/10 base Phase 4 tasks complete; Gate 4 is the active formal milestone)
+**Status:** In progress on `main` (2/10 base Phase 4 tasks complete; `P4-55` and `P4-56` merged, Batch A complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -16,11 +16,13 @@ Rules:
 
 Milestones:
 - [2026-02-22] Phase 4 execution branch/workstream initialized (`codex/p4-gate4-predeploy-validation`) - created canonical Phase 4 tracker, updated implementation status snapshots, and recorded Gate 4 pre-deployment kickoff baseline after Phase 3 closeout merge (`90d6e17`).
+- [2026-02-24] `P4-55` complete - Row-Level Security policies, coverage config, and integration validation merged on `main` via PR #14 (`05a5691`).
+- [2026-02-24] `P4-56` complete - Security audit baseline established: CORS restriction, CSP headers, security response headers, Zod input validation, sanitized error responses, BadRequestError error class, dependency scan documented. Security audit doc at `docs/SECURITY_AUDIT.md`. All 1419 tests passing on branch `codex/p4-56-security-audit`.
 
 Current cursor:
-- 0/10 base Phase 4 tasks complete (`P4-55` through `P4-64`).
-- Gate 4 pre-deployment validation is the active milestone; kickoff baseline checks on `main` are complete (Phase 3 plan verifier + DB migrate).
-- Next: Execute Batch A (`P4-55`, `P4-56`) and establish the DB/application security baseline for Gate 4.
+- 2/10 base Phase 4 tasks complete (`P4-55` and `P4-56` merged; `P4-57` through `P4-64` remaining).
+- Batch A complete. Batch B begins with `P4-57` RBAC Audit.
+- Next: `P4-57` RBAC Audit — declarative role-permission matrix, `checkPermission()` utility, full test coverage for every role × community_type × resource combination.
 
 ---
 
@@ -34,9 +36,11 @@ Current cursor:
 
 ## Phase 4 Scope Snapshot
 
-Phase 4 base tasks:
+Completed base Phase 4 tasks on `main`:
 - `P4-55` Row-Level Security
 - `P4-56` Security Audit
+
+Remaining base Phase 4 tasks:
 - `P4-57` RBAC Audit
 - `P4-58` Integration Tests
 - `P4-59` CI/CD Pipeline
@@ -46,7 +50,7 @@ Phase 4 base tasks:
 - `P4-63` Accessibility Audit
 - `P4-64` Data Export
 
-Count check: 0 completed + 10 remaining = 10 base tasks.
+Count check: 2 completed + 8 remaining = 10 base tasks.
 
 ---
 
