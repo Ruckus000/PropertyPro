@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Author:** PropertyPro Engineering
-**Status:** In progress on `main` (7/10 base Phase 4 tasks complete; Batches A+B+C complete)
+**Status:** In progress on `main` (9/10 base Phase 4 tasks complete; Batches A+B+C+D complete)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed, Phase 2 complete with Gate 3 closed, Phase 3 complete with exit verification captured
 
 ---
@@ -23,12 +23,14 @@ Milestones:
 - [2026-02-24] `P4-61` complete (out-of-sequence from Batch C) - Idempotent demo reset script with FK-safe deletion across 21 tenant tables, Supabase Auth cleanup, nightly cron via GitHub Actions. Merged on `main` via PR #20 (`d587692`).
 - [2026-02-24] `P4-63` complete - WCAG 2.1 AA accessibility audit: axe-core automated testing (9 tests), ARIA role/attribute fixes on forms, skip-to-content navigation, landmark IDs. Docs at `docs/ACCESSIBILITY.md`. Branch `codex/p4-63-64-batch-c`, PR #21 (`9ab3f89`).
 - [2026-02-24] `P4-64` complete - Community data export: ZIP of 4 CSVs (residents, documents, maintenance requests, announcements) via streaming archiver. GET `/api/v1/export` with RBAC (settings/read), export UI at `/settings/export`, 21 unit tests. Branch `codex/p4-63-64-batch-c`, PR #21 (`9ab3f89`).
+- [2026-02-24] `P4-59` complete - CI/CD pipeline: unified `ci.yml` (lint → typecheck → test → build, parallel first three stages, build gates on all passing), `deploy.yml` (production deploy on main push with smoke test, PR preview deploys with PR comment). Branch `claude/phase-4-review-wvuYU`.
+- [2026-02-24] `P4-60` complete - Production deployment config: `vercel.json` updated with HSTS header and build commands, deployment runbook at `docs/DEPLOYMENT.md` covering env var inventory, DNS/domain setup, CI/CD pipeline overview, deployment procedures, rollback, and monitoring. Branch `claude/phase-4-review-wvuYU`.
 
 Current cursor:
-- 7/10 base Phase 4 tasks complete (`P4-55`, `P4-56`, `P4-57`, `P4-58`, `P4-61`, `P4-63`, `P4-64` merged; `P4-59`, `P4-60`, `P4-62` remaining).
-- Batches A, B, and C complete.
-- Critical path: `P4-59` CI/CD Pipeline → `P4-60` Production Deployment → `P4-62` Load Testing → Gate 4 sign-off.
-- Next: Begin Batch D (`P4-59` CI/CD Pipeline, `P4-60` Production Deployment).
+- 9/10 base Phase 4 tasks complete (`P4-55`, `P4-56`, `P4-57`, `P4-58`, `P4-59`, `P4-60`, `P4-61`, `P4-63`, `P4-64` merged/complete; `P4-62` remaining).
+- Batches A, B, C, and D complete.
+- Critical path: `P4-62` Load Testing → Gate 4 sign-off.
+- Next: Begin Batch E (`P4-62` Load Testing, Gate 4 evidence consolidation).
 
 ---
 
@@ -47,16 +49,16 @@ Completed base Phase 4 tasks on `main`:
 - `P4-56` Security Audit
 - `P4-57` RBAC Audit
 - `P4-58` Integration Tests
+- `P4-59` CI/CD Pipeline
+- `P4-60` Production Deployment
 - `P4-61` Demo Reset Script
 - `P4-63` Accessibility Audit
 - `P4-64` Data Export
 
 Remaining base Phase 4 tasks:
-- `P4-59` CI/CD Pipeline
-- `P4-60` Production Deployment
 - `P4-62` Load Testing
 
-Count check: 7 completed + 3 remaining = 10 base tasks.
+Count check: 9 completed + 1 remaining = 10 base tasks.
 
 ---
 
