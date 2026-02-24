@@ -22,6 +22,10 @@ const db = createUnscopedClient();
 /**
  * FK-safe deletion order for the 21 tenant-scoped tables.
  * Children before parents to avoid RESTRICT constraint violations.
+ *
+ * IMPORTANT: Keep in sync with packages/db/src/schema/. When adding a new
+ * tenant-scoped table (one with a community_id column), add it here in the
+ * correct position so its children are deleted before it.
  */
 const TENANT_TABLE_DELETION_ORDER = [
   // Phase 1 — leaf tables (no children depend on them)
@@ -89,9 +93,8 @@ async function deleteTenantData(communityIds: number[]): Promise<ResetStats[]> {
       WHERE community_id IN (${idList})
     `);
 
-    const count = typeof result === 'object' && result !== null && 'rowCount' in result
-      ? (result.rowCount as number) ?? 0
-      : 0;
+    // postgres-js uses .count for affected rows, not .rowCount
+    const count = (result as unknown as { count: number | null }).count ?? 0;
 
     stats.push({ table, deleted: count });
   }
@@ -112,6 +115,10 @@ async function deleteSupabaseAuthUsers(): Promise<number> {
   let page = 1;
   const perPage = 200;
 
+  // Collect target user IDs first, then delete — avoids pagination shift
+  // when deleting users while paginating through the list.
+  const toDelete: { id: string; email: string }[] = [];
+
   while (page <= 20) {
     const listed = await admin.auth.admin.listUsers({ page, perPage });
     if (listed.error) {
@@ -122,18 +129,22 @@ async function deleteSupabaseAuthUsers(): Promise<number> {
 
     for (const authUser of listed.data.users) {
       if (authUser.email && demoEmails.has(authUser.email.toLowerCase())) {
-        const { error } = await admin.auth.admin.deleteUser(authUser.id);
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.warn(`[reset-demo] Failed to delete auth user ${authUser.email}:`, error.message);
-        } else {
-          deleted++;
-        }
+        toDelete.push({ id: authUser.id, email: authUser.email });
       }
     }
 
     if (listed.data.users.length < perPage) break;
     page++;
+  }
+
+  for (const { id, email } of toDelete) {
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn(`[reset-demo] Failed to delete auth user ${email}:`, error.message);
+    } else {
+      deleted++;
+    }
   }
 
   return deleted;
@@ -147,9 +158,8 @@ async function deleteDemoUsers(): Promise<number> {
     DELETE FROM users WHERE email IN (${emailList})
   `);
 
-  return typeof result === 'object' && result !== null && 'rowCount' in result
-    ? (result.rowCount as number) ?? 0
-    : 0;
+  // postgres-js uses .count for affected rows, not .rowCount
+  return (result as unknown as { count: number | null }).count ?? 0;
 }
 
 export async function runDemoReset(): Promise<void> {
