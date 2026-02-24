@@ -9,6 +9,7 @@
  * 5. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
  * 6. Forward server-controlled tenant/user headers and strip spoofed inbound values
  * 7. Rate limit API requests to prevent abuse [P2-42]
+ * 8. Apply CORS validation and security response headers [P4-56]
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
@@ -18,6 +19,12 @@ import {
   rateLimitedResponse,
   classifyRoute,
 } from './lib/middleware/rate-limit-config';
+import {
+  isAllowedOrigin,
+  buildCorsHeaders,
+  buildSecurityHeaders,
+  buildCspHeader,
+} from './lib/middleware/security-headers';
 
 /**
  * Routes under (authenticated) that require a valid session.
@@ -102,13 +109,37 @@ function attachResponseCookies(source: NextResponse, target: NextResponse): void
   }
 }
 
-function withTracingAndCookies(
+/**
+ * Finalise a response: copy cookies from the Supabase session response,
+ * stamp X-Request-ID, and apply security/CORS headers. [P4-56]
+ */
+function finaliseResponse(
   source: NextResponse,
   target: NextResponse,
   requestId: string,
+  origin: string | null,
+  isApi: boolean,
 ): NextResponse {
   attachResponseCookies(source, target);
   target.headers.set('X-Request-ID', requestId);
+
+  // CORS headers — only set when origin is in the allowlist
+  const corsHeaders = buildCorsHeaders(origin);
+  for (const [name, value] of Object.entries(corsHeaders)) {
+    target.headers.set(name, value);
+  }
+
+  // Universal security headers
+  const secHeaders = buildSecurityHeaders();
+  for (const [name, value] of Object.entries(secHeaders)) {
+    target.headers.set(name, value);
+  }
+
+  // CSP for page responses only (not JSON API responses)
+  if (!isApi) {
+    target.headers.set('Content-Security-Policy', buildCspHeader());
+  }
+
   return target;
 }
 
@@ -116,22 +147,26 @@ function notFoundResponse(
   request: NextRequest,
   source: NextResponse,
   requestId: string,
+  origin: string | null,
 ): NextResponse {
-  const target = isApiPath(request.nextUrl.pathname)
+  const isApi = isApiPath(request.nextUrl.pathname);
+  const target = isApi
     ? NextResponse.json({ error: 'Not Found' }, { status: 404 })
     : new NextResponse('Not Found', { status: 404 });
-  return withTracingAndCookies(source, target, requestId);
+  return finaliseResponse(source, target, requestId, origin, isApi);
 }
 
 function internalErrorResponse(
   request: NextRequest,
   source: NextResponse,
   requestId: string,
+  origin: string | null,
 ): NextResponse {
-  const target = isApiPath(request.nextUrl.pathname)
+  const isApi = isApiPath(request.nextUrl.pathname);
+  const target = isApi
     ? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     : new NextResponse('Internal Server Error', { status: 500 });
-  return withTracingAndCookies(source, target, requestId);
+  return finaliseResponse(source, target, requestId, origin, isApi);
 }
 
 function readTenantCache(slug: string): number | null | undefined {
@@ -207,13 +242,31 @@ function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Head
  * symbols like [INTERNALS]. We cast through `unknown` at the boundary.
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = request.nextUrl;
+  const origin = request.headers.get('origin');
+  const isApi = isApiPath(pathname);
+
+  // --- CORS preflight — handle before heavier processing [P4-56] ---
+  // OPTIONS requests from browsers trigger preflight checks. Allowed origins
+  // receive CORS headers; all others receive 403 so browsers block the request.
+  if (request.method === 'OPTIONS' && isApi) {
+    if (origin && isAllowedOrigin(origin)) {
+      const preflightHeaders = buildCorsHeaders(origin);
+      const preflightResponse = new NextResponse(null, { status: 204 });
+      for (const [name, value] of Object.entries(preflightHeaders)) {
+        preflightResponse.headers.set(name, value);
+      }
+      return preflightResponse;
+    }
+    return new NextResponse(null, { status: 403 });
+  }
+
   // Refresh Supabase session (reads + writes cookies)
   const { supabase, response } = await createMiddlewareClient(
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
-  const { pathname } = request.nextUrl;
 
   // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
   // For auth and public routes, check rate limit by IP before doing heavier work.
@@ -237,20 +290,20 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
 
     if (tenantContext.isReservedSubdomain) {
-      return notFoundResponse(request, response as unknown as NextResponse, requestId);
+      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin);
     }
 
     if (tenantContext.tenantSlug) {
       try {
         const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
         if (communityId == null) {
-          return notFoundResponse(request, response as unknown as NextResponse, requestId);
+          return notFoundResponse(request, response as unknown as NextResponse, requestId, origin);
         }
         forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
         forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
         forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
       } catch {
-        return internalErrorResponse(request, response as unknown as NextResponse, requestId);
+        return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin);
       }
     }
   }
@@ -283,39 +336,47 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
     if (!user && !isTokenAuthRoute) {
       if (isApiPath(pathname)) {
-        return withTracingAndCookies(
+        return finaliseResponse(
           response as unknown as NextResponse,
           NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
           requestId,
+          origin,
+          isApi,
         );
       }
 
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = '/auth/login';
       loginUrl.searchParams.set('returnTo', buildReturnTo(request));
-      return withTracingAndCookies(
+      return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(loginUrl),
         requestId,
+        origin,
+        isApi,
       );
     }
 
     if (user && !isTokenAuthRoute && !user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
       if (isApiPath(pathname)) {
-        return withTracingAndCookies(
+        return finaliseResponse(
           response as unknown as NextResponse,
           NextResponse.json({ error: 'Email verification required' }, { status: 403 }),
           requestId,
+          origin,
+          isApi,
         );
       }
 
       const verifyUrl = request.nextUrl.clone();
       verifyUrl.pathname = VERIFY_EMAIL_PATH;
       verifyUrl.searchParams.set('returnTo', buildReturnTo(request));
-      return withTracingAndCookies(
+      return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(verifyUrl),
         requestId,
+        origin,
+        isApi,
       );
     }
   }
@@ -334,10 +395,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         if (returnTo) {
           verifyUrl.searchParams.set('returnTo', returnTo);
         }
-        return withTracingAndCookies(
+        return finaliseResponse(
           response as unknown as NextResponse,
           NextResponse.redirect(verifyUrl),
           requestId,
+          origin,
+          isApi,
         );
       }
 
@@ -345,10 +408,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       const destination = request.nextUrl.clone();
       destination.pathname = returnTo || '/dashboard';
       destination.searchParams.delete('returnTo');
-      return withTracingAndCookies(
+      return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(destination),
         requestId,
+        origin,
+        isApi,
       );
     }
   }
@@ -358,10 +423,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       headers: forwardedHeaders,
     },
   });
-  return withTracingAndCookies(
+  return finaliseResponse(
     response as unknown as NextResponse,
     nextResponse,
     requestId,
+    origin,
+    isApi,
   );
 }
 
