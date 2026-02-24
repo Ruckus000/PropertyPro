@@ -296,7 +296,7 @@ export function mapValueOrThrow<K extends string, V>(map: Map<K, V>, key: K, lab
  */
 export function requireDatabaseUrlInCI(suiteName: string): void {
   if (process.env.CI && !process.env.DATABASE_URL) {
-    throw new Error(`${suiteName} require DATABASE_URL in CI`);
+    throw new Error(`${suiteName} requires DATABASE_URL in CI`);
   }
 }
 

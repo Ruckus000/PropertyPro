@@ -9,6 +9,7 @@
  *   5. DELETE soft-deletes document (elevated role only)
  *   6. DELETE by tenant → 403
  *   7. Document search returns documents by searchText
+ *   8. Cross-tenant isolation: actorC cannot see communityA docs
  *
  * Storage is mocked — files are not uploaded to Supabase. The magic bytes
  * validation and DB operations are exercised against the real database.
