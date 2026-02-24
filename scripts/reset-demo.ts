@@ -10,9 +10,10 @@
  *   scripts/with-env-local.sh pnpm reset:demo
  */
 import { pathToFileURL } from 'node:url';
-import { eq, sql } from '@propertypro/db/filters';
+import { sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
 import { runDemoSeed } from './seed-demo';
 
@@ -98,6 +99,46 @@ async function deleteTenantData(communityIds: number[]): Promise<ResetStats[]> {
   return stats;
 }
 
+async function deleteSupabaseAuthUsers(): Promise<number> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    // eslint-disable-next-line no-console
+    console.log('[reset-demo] Supabase credentials not configured — skipping auth user cleanup');
+    return 0;
+  }
+
+  const admin = createAdminClient();
+  const demoEmails = new Set(DEMO_USERS.map((u) => u.email.toLowerCase()));
+  let deleted = 0;
+  let page = 1;
+  const perPage = 200;
+
+  while (page <= 20) {
+    const listed = await admin.auth.admin.listUsers({ page, perPage });
+    if (listed.error) {
+      // eslint-disable-next-line no-console
+      console.warn('[reset-demo] Failed to list auth users:', listed.error.message);
+      break;
+    }
+
+    for (const authUser of listed.data.users) {
+      if (authUser.email && demoEmails.has(authUser.email.toLowerCase())) {
+        const { error } = await admin.auth.admin.deleteUser(authUser.id);
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.warn(`[reset-demo] Failed to delete auth user ${authUser.email}:`, error.message);
+        } else {
+          deleted++;
+        }
+      }
+    }
+
+    if (listed.data.users.length < perPage) break;
+    page++;
+  }
+
+  return deleted;
+}
+
 async function deleteDemoUsers(): Promise<number> {
   const emails = DEMO_USERS.map((u) => u.email.toLowerCase());
   const emailList = sql.join(emails.map((e) => sql`${e}`), sql`, `);
@@ -141,12 +182,17 @@ export async function runDemoReset(): Promise<void> {
     console.log(`[reset-demo] Deleted ${communityIds.length} demo community rows`);
   }
 
-  // Step 4: Delete demo users
+  // Step 4: Delete Supabase Auth users (before DB users to avoid orphans)
+  const authUsersDeleted = await deleteSupabaseAuthUsers();
+  // eslint-disable-next-line no-console
+  console.log(`[reset-demo] Deleted ${authUsersDeleted} Supabase Auth user(s)`);
+
+  // Step 5: Delete demo users from DB
   const usersDeleted = await deleteDemoUsers();
   // eslint-disable-next-line no-console
   console.log(`[reset-demo] Deleted ${usersDeleted} demo user rows`);
 
-  // Step 5: Re-seed
+  // Step 6: Re-seed
   // eslint-disable-next-line no-console
   console.log('[reset-demo] Re-seeding demo data...');
   await runDemoSeed();
