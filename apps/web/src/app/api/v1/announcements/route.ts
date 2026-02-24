@@ -32,6 +32,7 @@ import {
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -120,7 +121,8 @@ export const POST = withErrorHandler(
       const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
 
       const userId = await requireAuthenticatedUserId();
-      await requireCommunityMembership(communityId, userId);
+      const membership = await requireCommunityMembership(communityId, userId);
+      requirePermission(membership.role, membership.communityType, 'announcements', 'write');
       await requireActiveSubscriptionForMutation(communityId);
 
       return { userId, communityId };

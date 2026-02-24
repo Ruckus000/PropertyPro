@@ -28,19 +28,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getContractExpirationAlerts } from '@/lib/services/contract-renewal-alerts';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Roles allowed to manage contracts (community admins). */
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+import { requirePermission } from '@/lib/db/access-control';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -111,12 +99,6 @@ function requireComplianceCommunity(communityType: CommunityType): void {
   const features = getFeaturesForCommunity(communityType);
   if (!features.hasCompliance) {
     throw new ForbiddenError('Contract tracking is only available for condo and HOA communities');
-  }
-}
-
-function requireAdminRole(role: string): void {
-  if (!ADMIN_ROLES.has(role)) {
-    throw new ForbiddenError('Only community administrators can manage contracts');
   }
 }
 
@@ -211,7 +193,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'contracts', 'read');
 
   const scoped = createScopedClient(communityId);
   const contractRows = await scoped.query(contracts);
@@ -284,7 +266,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -361,7 +343,7 @@ async function handleCreateContract(
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -437,7 +419,7 @@ async function handleCreateBid(
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 

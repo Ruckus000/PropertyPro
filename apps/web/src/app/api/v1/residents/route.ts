@@ -33,6 +33,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireCommunityRole, requireCommunityType } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
+import { requirePermission } from '@/lib/db/access-control';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -170,7 +171,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   const { email, fullName, phone, role, unitId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, actorUserId);
+  const actorMembership = await requireCommunityMembership(communityId, actorUserId);
+  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const communityType = await getCommunityType(communityId);
@@ -278,7 +280,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     unitId,
   } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, actorUserId);
+  const actorMembership = await requireCommunityMembership(communityId, actorUserId);
+  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);
@@ -385,7 +388,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   const { userId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, actorUserId);
+  const actorMembership = await requireCommunityMembership(communityId, actorUserId);
+  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);

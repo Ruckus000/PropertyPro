@@ -47,7 +47,11 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/shared', () => ({
-  // meetings route imports CommunityType
+  // meetings route imports CommunityType (type only) — no runtime values needed
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: vi.fn(), // no-op: this test focuses on notification side-effects, not RBAC
 }));
 
 vi.mock('@/lib/api/error-handler', () => ({
@@ -102,7 +106,7 @@ describe('meeting creation triggers notification', () => {
     vi.clearAllMocks();
 
     requireAuthMock.mockResolvedValue('user-1');
-    requireCommunityMembershipMock.mockResolvedValue({ role: 'board_president' });
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'board_president', communityType: 'condo_718' });
     resolveEffectiveMock.mockImplementation((_req: unknown, id: number) => id);
     logAuditEventMock.mockResolvedValue(undefined);
 

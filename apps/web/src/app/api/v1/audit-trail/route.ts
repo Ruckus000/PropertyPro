@@ -18,24 +18,12 @@ import {
 } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Roles allowed to view the audit trail (community admins). */
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+import { requirePermission } from '@/lib/db/access-control';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -68,12 +56,6 @@ function isSensitiveKey(key: string): boolean {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function requireAdminRole(role: string): void {
-  if (!ADMIN_ROLES.has(role)) {
-    throw new ForbiddenError('Only community administrators can view the audit trail');
-  }
-}
 
 interface AuditLogRow {
   id: number;
@@ -211,7 +193,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireAdminRole(membership.role);
+  requirePermission(membership.role, membership.communityType, 'audit', 'read');
 
   // --- Cursor-based pagination params (validated before DB query) ---
   const cursor = searchParams.get('cursor');

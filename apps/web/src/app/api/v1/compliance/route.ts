@@ -16,6 +16,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { requirePermission } from '@/lib/db/access-control';
 import {
   calculateComplianceStatus,
   calculatePostingDeadline,
@@ -110,6 +111,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Feature gate: compliance is only available for condo/HOA communities
   requireCondoCommunity(membership.communityType);
+  requirePermission(membership.role, membership.communityType, 'compliance', 'write');
 
   const scoped = createScopedClient(communityId);
 

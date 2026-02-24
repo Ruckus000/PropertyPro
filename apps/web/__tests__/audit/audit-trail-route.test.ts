@@ -178,14 +178,26 @@ describe('p3-53 audit trail route', () => {
       'board_member',
       'board_president',
       'cam',
-      'site_manager',
       'property_manager_admin',
-    ] as const)('returns 200 for %s role', async (role) => {
+    ] as const)('returns 200 for %s role in condo_718', async (role) => {
       requireCommunityMembershipMock.mockResolvedValue({
         userId: 'session-user-1',
         communityId: 42,
         role,
         communityType: 'condo_718',
+      });
+
+      const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 200 for site_manager role in apartment', async () => {
+      requireCommunityMembershipMock.mockResolvedValue({
+        userId: 'session-user-1',
+        communityId: 42,
+        role: 'site_manager',
+        communityType: 'apartment',
       });
 
       const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');

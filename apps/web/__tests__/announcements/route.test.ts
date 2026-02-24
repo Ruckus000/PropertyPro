@@ -24,7 +24,12 @@ const {
   },
   usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
+    userId: 'session-user-1',
+    communityId: 200,
+    role: 'board_member',
+    communityType: 'condo_718',
+  }),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
 }));
 
