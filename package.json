@@ -12,6 +12,7 @@
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "seed:demo": "tsx scripts/seed-demo.ts",
+    "reset:demo": "tsx scripts/reset-demo.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
     "plan:verify:phase2": "tsx scripts/verify-phase2-plan-status.ts",
     "plan:verify:phase3": "tsx scripts/verify-phase3-plan-status.ts",

@@ -1,0 +1,33 @@
+name: Nightly Demo Reset
+
+on:
+  schedule:
+    # 3:00 AM ET (8:00 AM UTC) daily
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  reset-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run demo reset
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEMO_DEFAULT_PASSWORD: ${{ secrets.DEMO_DEFAULT_PASSWORD }}
+        run: pnpm reset:demo
