@@ -6,12 +6,13 @@ import { ExportButton } from '@/components/settings/export-button';
  * Renders a download button that triggers a ZIP export of community data
  * (residents, documents, maintenance requests, announcements).
  */
-export default function ExportPage({
+export default async function ExportPage({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const raw = searchParams['communityId'];
+  const params = await searchParams;
+  const raw = params['communityId'];
   const communityIdStr = Array.isArray(raw) ? raw[0] : raw;
   const communityId = Number(communityIdStr);
 

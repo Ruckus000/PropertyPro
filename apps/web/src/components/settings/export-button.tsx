@@ -46,7 +46,7 @@ export function ExportButton({ communityId }: ExportButtonProps) {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
     } finally {
