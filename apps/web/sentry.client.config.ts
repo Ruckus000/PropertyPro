@@ -11,4 +11,8 @@ Sentry.init({
 
   // Performance tracing
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+
+  // Session replay
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: process.env.NODE_ENV === 'production' ? 1.0 : 0,
 });
