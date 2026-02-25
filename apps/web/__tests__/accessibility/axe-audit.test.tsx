@@ -172,4 +172,19 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       expect(results).toHaveNoViolations();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Settings components
+  // ---------------------------------------------------------------------------
+
+  describe('Settings components', () => {
+    it('ExportButton has no axe violations', async () => {
+      const { ExportButton } = await import(
+        '@/components/settings/export-button'
+      );
+      const { container } = render(<ExportButton communityId={1} />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+  });
 });

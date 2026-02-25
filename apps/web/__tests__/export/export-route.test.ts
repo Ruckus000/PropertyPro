@@ -192,4 +192,34 @@ describe('GET /api/v1/export', () => {
     const res = await GET(makeRequest(42));
     expect(res.status).toBe(200);
   });
+
+  it('allows board_president role access', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'board_president',
+      communityType: 'condo_718',
+    });
+
+    const res = await GET(makeRequest(42));
+    expect(res.status).toBe(200);
+  });
+
+  it('allows cam role access', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'cam',
+      communityType: 'condo_718',
+    });
+
+    const res = await GET(makeRequest(42));
+    expect(res.status).toBe(200);
+  });
+
+  it('allows site_manager role access for apartment', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'site_manager',
+      communityType: 'apartment',
+    });
+
+    const res = await GET(makeRequest(42));
+    expect(res.status).toBe(200);
+  });
 });

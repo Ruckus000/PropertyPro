@@ -154,6 +154,21 @@ describe('community-export', () => {
       // Should still produce a row, just with empty name/email
       expect(result.rowCount).toBe(1);
     });
+
+    it('handles formula injection in resident fields', async () => {
+      const roleRows = [
+        { userId: 'u1', role: '=HYPERLINK()', unitId: null, createdAt: new Date('2026-01-01') },
+      ];
+      const scoped = makeScopedClient(roleRows);
+      createScopedClientMock.mockReturnValue(scoped);
+
+      makeUnscopedClient([{ id: 'u1', fullName: '+evil', email: 'ok@test.com' }]);
+
+      const result = await exportResidents(1);
+
+      expect(result.content).toContain("'+evil");
+      expect(result.content).toContain("'=HYPERLINK()");
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -215,6 +230,28 @@ describe('community-export', () => {
       expect(result.truncated).toBe(true);
       expect(result.rowCount).toBe(10_000);
     });
+
+    it('handles formula injection in document fields', async () => {
+      const scoped = makeScopedClient([
+        {
+          id: 1,
+          title: '=CMD()',
+          description: '+evil',
+          fileName: 'safe.pdf',
+          fileSize: 100,
+          mimeType: 'application/pdf',
+          categoryId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+
+      const result = await exportDocuments(1);
+
+      expect(result.content).toContain("'=CMD()");
+      expect(result.content).toContain("'+evil");
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -258,6 +295,31 @@ describe('community-export', () => {
 
       expect(result.content).toContain('2026-02-20T14:00:00.000Z');
       expect(result.content).toContain('2026-02-18T09:00:00.000Z');
+    });
+
+    it('handles formula injection in maintenance fields', async () => {
+      const scoped = makeScopedClient([
+        {
+          id: 1,
+          title: '-malicious',
+          description: '@evil',
+          status: 'open',
+          priority: 'low',
+          category: 'other',
+          submittedById: 'u1',
+          assignedToId: null,
+          resolutionDescription: null,
+          resolutionDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+
+      const result = await exportMaintenanceRequests(1);
+
+      expect(result.content).toContain("'-malicious");
+      expect(result.content).toContain("'@evil");
     });
   });
 

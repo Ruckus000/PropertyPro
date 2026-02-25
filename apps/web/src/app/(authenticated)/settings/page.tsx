@@ -13,20 +13,20 @@ export default function SettingsPage({ searchParams }: { searchParams: Record<st
 
   if (!communityId || Number.isNaN(communityId)) {
     return (
-      <div className="p-6">
+      <main id="main-content" className="p-6">
         <h1 className="mb-4 text-xl font-semibold">Settings</h1>
         <p className="text-sm text-gray-600">Provide a communityId to edit preferences.</p>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="p-6">
+    <main id="main-content" className="p-6">
       <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
       <p className="mb-4 text-sm text-gray-600">
         Choose which emails you receive and when they should be delivered.
       </p>
       <NotificationPreferencesForm communityId={communityId} />
-    </div>
+    </main>
   );
 }
