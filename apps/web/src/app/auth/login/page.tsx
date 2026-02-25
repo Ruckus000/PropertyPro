@@ -1,14 +1,9 @@
 import Link from 'next/link';
 import { LoginForm } from '@/components/auth/login-form';
+import { resolveReturnTo } from '@/lib/utils/auth';
 
 interface LoginPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-function resolveReturnTo(value: string | string[] | undefined): string {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  return '/dashboard';
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {

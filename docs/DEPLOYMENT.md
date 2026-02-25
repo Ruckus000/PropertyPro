@@ -106,6 +106,8 @@ Set for **Production** and **Preview** environments unless noted.
 
 **Important:** Set Cloudflare proxy to "DNS only" (grey cloud) for Vercel domains. Vercel manages SSL via Let's Encrypt; Cloudflare proxying can interfere with certificate provisioning.
 
+> **Trade-off:** DNS-only mode bypasses Cloudflare's WAF and DDoS protection for these records. If you need those features, an alternative is to keep the proxy enabled (orange cloud) and set Cloudflare's SSL/TLS mode to **Full (Strict)**. Full (Strict) encrypts traffic end-to-end and avoids certificate conflicts, but requires additional configuration on the Cloudflare side (an Origin CA certificate or a valid cert on the origin). For a simpler setup, DNS-only is the recommended default.
+
 ### 5.3 Email DNS Records (Resend)
 
 | Type | Name | Content |
@@ -189,6 +191,8 @@ DATABASE_URL=<pooled_url> DIRECT_URL=<direct_url> pnpm --filter @propertypro/db 
 ```
 
 **Important:** Always run migrations against the direct connection (port 5432), not the pooled connection (port 6543). The `DIRECT_URL` env var is used by Drizzle for migrations automatically.
+
+> **Note — manual migration risk:** Running migrations as a manual step is intentional (avoids surprise schema changes during automated deploys) but requires discipline. If you miss running a migration after deploying, the app may crash or behave incorrectly due to schema/code mismatch. To automate, you can add a migration step to `deploy.yml` that runs `pnpm --filter @propertypro/db db:migrate` with `DATABASE_URL` and `DIRECT_URL` injected from GitHub Secrets immediately before the Vercel deployment step.
 
 ### 7.4 Rollback
 

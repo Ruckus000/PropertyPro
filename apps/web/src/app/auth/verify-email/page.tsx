@@ -1,13 +1,8 @@
 import Link from 'next/link';
+import { resolveReturnTo } from '@/lib/utils/auth';
 
 interface VerifyEmailPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-function resolveReturnTo(value: string | string[] | undefined): string {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  return '/dashboard';
 }
 
 export default async function VerifyEmailPage({
