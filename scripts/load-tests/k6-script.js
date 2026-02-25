@@ -12,12 +12,17 @@
  *     -e SUPABASE_URL="https://xxx.supabase.co" \
  *     -e SUPABASE_ANON_KEY="eyJ..." \
  *     -e COMMUNITY_ID="1" \
+ *     -e SUPABASE_SERVICE_ROLE_KEY="eyJ..." \
  *     scripts/load-tests/k6-script.js
+ *
+ * The SUPABASE_SERVICE_ROLE_KEY bypasses Supabase auth rate limits during setup.
+ * Without it, repeated runs may hit the per-IP rate limit on password auth.
  */
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
+import encoding from 'k6/encoding';
 
 // ---------------------------------------------------------------------------
 // Environment variables
@@ -26,12 +31,13 @@ import { Counter, Trend } from 'k6/metrics';
 const BASE_URL = __ENV.BASE_URL;
 const SUPABASE_URL = __ENV.SUPABASE_URL;
 const SUPABASE_ANON_KEY = __ENV.SUPABASE_ANON_KEY;
-const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || 'DemoPass123!';
+const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || __ENV.DEMO_DEFAULT_PASSWORD || 'DemoPass123!';
+const SUPABASE_SERVICE_ROLE_KEY = __ENV.SUPABASE_SERVICE_ROLE_KEY;
 const COMMUNITY_ID = __ENV.COMMUNITY_ID;
 
 if (!BASE_URL || !SUPABASE_URL || !SUPABASE_ANON_KEY || !COMMUNITY_ID) {
   throw new Error(
-    'Required env vars: BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, COMMUNITY_ID',
+    'Required env vars: BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, COMMUNITY_ID. Optional: SUPABASE_SERVICE_ROLE_KEY (bypasses auth rate limits), DEMO_PASSWORD',
   );
 }
 
@@ -129,6 +135,15 @@ export function setup() {
   const sessions = {};
   const tokenUrl = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
 
+  // Use service role key if available (bypasses Supabase auth rate limits).
+  // Falls back to the anon key, which is subject to stricter rate limits.
+  const apikey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  if (SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('Using service role key for auth (rate limit bypass)');
+  } else {
+    console.log('Using anon key for auth (subject to rate limits)');
+  }
+
   for (let i = 0; i < DEMO_USERS.length; i++) {
     const email = DEMO_USERS[i];
     const res = http.post(
@@ -137,7 +152,7 @@ export function setup() {
       {
         headers: {
           'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
+          apikey,
         },
       },
     );
@@ -150,7 +165,7 @@ export function setup() {
       authFailures.add(1);
     }
 
-    // 1s delay to stay under 10 req/min auth rate limit (all VUs share one IP)
+    // 1s delay between auth requests
     sleep(1);
   }
 
@@ -178,11 +193,15 @@ function getSession(data) {
 
 /**
  * Build common request headers with auth cookie.
+ *
+ * @supabase/ssr@0.8.0 stores sessions as "base64-" + base64url(sessionJSON).
+ * The middleware reads cookies via request.cookies.getAll() which does NOT
+ * URL-decode values, so we must match the exact encoding the SDK expects.
  */
 function authHeaders(sessionJson) {
-  const cookieValue = encodeURIComponent(sessionJson);
+  const encoded = 'base64-' + encoding.b64encode(sessionJson, 'rawurl');
   return {
-    Cookie: `${COOKIE_NAME}=${cookieValue}`,
+    Cookie: `${COOKIE_NAME}=${encoded}`,
     'Content-Type': 'application/json',
   };
 }
