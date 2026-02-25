@@ -5,15 +5,9 @@ interface VerifyEmailPageProps {
 }
 
 function resolveReturnTo(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] ?? '/dashboard';
-  }
-
-  if (!value) {
-    return '/dashboard';
-  }
-
-  return value;
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  return '/dashboard';
 }
 
 export default async function VerifyEmailPage({

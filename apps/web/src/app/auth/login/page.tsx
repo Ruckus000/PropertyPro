@@ -6,8 +6,9 @@ interface LoginPageProps {
 }
 
 function resolveReturnTo(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? '/dashboard';
-  return value && value.length > 0 ? value : '/dashboard';
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  return '/dashboard';
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {

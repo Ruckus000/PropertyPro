@@ -1,4 +1,18 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    }
+  ],
   "crons": [
     {
       "path": "/api/v1/internal/payment-reminders",

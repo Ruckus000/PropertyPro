@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface ExportButtonProps {
   communityId: number;
@@ -9,6 +9,15 @@ interface ExportButtonProps {
 export function ExportButton({ communityId }: ExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+    };
+  }, []);
 
   async function handleExport() {
     setLoading(true);
@@ -31,7 +40,12 @@ export function ExportButton({ communityId }: ExportButtonProps) {
       }
 
       const blob = await res.blob();
+      // Revoke any previous blob URL before creating a new one
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
       const url = URL.createObjectURL(blob);
+      blobUrlRef.current = url;
       const a = document.createElement('a');
       a.href = url;
       const disposition = res.headers.get('Content-Disposition');
@@ -46,7 +60,6 @@ export function ExportButton({ communityId }: ExportButtonProps) {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
     } finally {
