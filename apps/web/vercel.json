@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "gitSubmodules": false,
   "buildCommand": "pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build",
   "installCommand": "pnpm install --frozen-lockfile",
   "headers": [
