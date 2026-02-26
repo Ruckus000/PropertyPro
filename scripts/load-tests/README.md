@@ -16,7 +16,7 @@ k6 run \
   -e BASE_URL="https://property-pro-xxx.vercel.app" \
   -e SUPABASE_URL="https://xxx.supabase.co" \
   -e SUPABASE_ANON_KEY="eyJ..." \
-  -e DEMO_PASSWORD="DemoPass123!" \
+  -e DEMO_PASSWORD="<YOUR_DEMO_PASSWORD>" \
   -e COMMUNITY_ID="1" \
   scripts/load-tests/k6-script.js
 ```
@@ -28,6 +28,7 @@ k6 run \
   -e BASE_URL="$BASE_URL" \
   -e SUPABASE_URL="$SUPABASE_URL" \
   -e SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  -e DEMO_PASSWORD="$DEMO_PASSWORD" \
   -e COMMUNITY_ID="$COMMUNITY_ID" \
   --summary-export=load-test-summary.json \
   scripts/load-tests/k6-script.js
