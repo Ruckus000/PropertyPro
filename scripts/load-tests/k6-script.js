@@ -13,10 +13,12 @@
  *     -e SUPABASE_ANON_KEY="eyJ..." \
  *     -e COMMUNITY_ID="1" \
  *     -e SUPABASE_SERVICE_ROLE_KEY="eyJ..." \
+ *     -e VERCEL_AUTOMATION_BYPASS_SECRET="..." \
  *     scripts/load-tests/k6-script.js
  *
- * The SUPABASE_SERVICE_ROLE_KEY bypasses Supabase auth rate limits during setup.
- * Without it, repeated runs may hit the per-IP rate limit on password auth.
+ * Optional env vars:
+ *   SUPABASE_SERVICE_ROLE_KEY  — bypasses Supabase auth rate limits during setup
+ *   VERCEL_AUTOMATION_BYPASS_SECRET — bypasses Vercel Deployment Protection on previews
  */
 
 import http from 'k6/http';
@@ -34,6 +36,7 @@ const SUPABASE_ANON_KEY = __ENV.SUPABASE_ANON_KEY;
 const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || __ENV.DEMO_DEFAULT_PASSWORD || 'DemoPass123!';
 const SUPABASE_SERVICE_ROLE_KEY = __ENV.SUPABASE_SERVICE_ROLE_KEY;
 const COMMUNITY_ID = __ENV.COMMUNITY_ID;
+const VERCEL_BYPASS_TOKEN = __ENV.VERCEL_AUTOMATION_BYPASS_SECRET;
 
 if (!BASE_URL || !SUPABASE_URL || !SUPABASE_ANON_KEY || !COMMUNITY_ID) {
   throw new Error(
@@ -143,6 +146,9 @@ export function setup() {
   } else {
     console.log('Using anon key for auth (subject to rate limits)');
   }
+  if (VERCEL_BYPASS_TOKEN) {
+    console.log('Vercel Deployment Protection bypass enabled');
+  }
 
   for (let i = 0; i < DEMO_USERS.length; i++) {
     const email = DEMO_USERS[i];
@@ -197,13 +203,29 @@ function getSession(data) {
  * @supabase/ssr@0.8.0 stores sessions as "base64-" + base64url(sessionJSON).
  * The middleware reads cookies via request.cookies.getAll() which does NOT
  * URL-decode values, so we must match the exact encoding the SDK expects.
+ *
+ * When VERCEL_AUTOMATION_BYPASS_SECRET is set, a bypass cookie is included
+ * to skip Vercel Deployment Protection on preview deploys.
  */
 function authHeaders(sessionJson) {
   const encoded = 'base64-' + encoding.b64encode(sessionJson, 'rawurl');
+  let cookieStr = `${COOKIE_NAME}=${encoded}`;
+  if (VERCEL_BYPASS_TOKEN) {
+    cookieStr += `; x-vercel-protection-bypass=${VERCEL_BYPASS_TOKEN}`;
+  }
   return {
-    Cookie: `${COOKIE_NAME}=${encoded}`,
+    Cookie: cookieStr,
     'Content-Type': 'application/json',
   };
+}
+
+/**
+ * Append Vercel bypass query params to a URL if the bypass token is set.
+ */
+function bypassUrl(url) {
+  if (!VERCEL_BYPASS_TOKEN) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}x-vercel-protection-bypass=${VERCEL_BYPASS_TOKEN}`;
 }
 
 /**
@@ -276,7 +298,7 @@ export function readScenario(data) {
 
   // GET documents
   const docsRes = authGet(
-    `${api}/documents?communityId=${cid}`,
+    bypassUrl(`${api}/documents?communityId=${cid}`),
     sessionJson,
     documentsLatency,
   );
@@ -286,7 +308,7 @@ export function readScenario(data) {
 
   // GET announcements
   const annRes = authGet(
-    `${api}/announcements?communityId=${cid}`,
+    bypassUrl(`${api}/announcements?communityId=${cid}`),
     sessionJson,
     announcementsLatency,
   );
@@ -296,7 +318,7 @@ export function readScenario(data) {
 
   // GET meetings
   const mtgRes = authGet(
-    `${api}/meetings?communityId=${cid}`,
+    bypassUrl(`${api}/meetings?communityId=${cid}`),
     sessionJson,
     meetingsLatency,
   );
@@ -321,7 +343,7 @@ export function writeScenario(data) {
   const priority = PRIORITIES[randInt(0, PRIORITIES.length - 1)];
 
   const res = authPost(
-    `${api}/maintenance-requests`,
+    bypassUrl(`${api}/maintenance-requests`),
     {
       action: 'create',
       communityId: parseInt(COMMUNITY_ID, 10),
@@ -353,7 +375,7 @@ export function complianceScenario(data) {
 
   // GET compliance
   const compRes = authGet(
-    `${api}/compliance?communityId=${cid}`,
+    bypassUrl(`${api}/compliance?communityId=${cid}`),
     sessionJson,
     complianceLatency,
   );
@@ -364,7 +386,7 @@ export function complianceScenario(data) {
   // 20% chance of hitting the export endpoint (heaviest)
   if (Math.random() < 0.2) {
     const expRes = authGet(
-      `${api}/export?communityId=${cid}`,
+      bypassUrl(`${api}/export?communityId=${cid}`),
       sessionJson,
       exportLatency,
     );

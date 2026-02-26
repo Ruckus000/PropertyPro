@@ -1,6 +1,6 @@
 # P4-62: Load Test Results
 
-**Date:** 2026-02-25
+**Date:** 2026-02-26
 **Tool:** [k6](https://k6.io/) v0.57.0
 **Script:** `scripts/load-tests/k6-script.js`
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Target | Vercel preview deploy / localhost:3000 |
+| Target | Vercel preview deploy (with bypass token) |
 | Peak VUs | 100 (80 read + 15 write + 5 compliance) |
 | Duration | 3 min (30s ramp-up, 2m sustain, 30s ramp-down) |
 | Auth | Supabase password auth with base64url cookies |
@@ -35,56 +35,71 @@
 | `maintenance_submit_latency` | p95 < 2000ms | Maintenance request creation |
 | `export_latency` | p95 < 5000ms | Data export (heavier) |
 
-## Results
+## Results — Infrastructure Baseline (2026-02-26)
 
-> **Status: PENDING** — Baseline run blocked by prerequisites (see below).
+> **Status: PARTIAL** — Vercel bypass and auth pipeline work end-to-end. API
+> endpoints return 500 due to a pending DB migration (`community_settings`
+> column). Latencies below reflect real Vercel serverless + middleware + auth
+> overhead but not actual query execution.
 
-### Blocking Issues
+| Metric | p50 | p95 | Max | Pass? |
+|--------|-----|-----|-----|-------|
+| `documents_latency` | 590ms | 732ms | 3822ms | FAIL* |
+| `announcements_latency` | 589ms | 700ms | 1859ms | FAIL* |
+| `meetings_latency` | 592ms | 704ms | 1526ms | FAIL* |
+| `compliance_latency` | 597ms | 775ms | 942ms | FAIL* |
+| `maintenance_submit_latency` | 186ms | 341ms | 960ms | FAIL* |
+| `export_latency` | 626ms | 786ms | 900ms | FAIL* |
+| `http_req_duration` (overall) | 584ms | 700ms | 3822ms | FAIL* |
+| `http_req_failed` (error rate) | — | — | 99.88% | FAIL* |
 
-1. **Vercel Deployment Protection** — Preview deployments require Vercel SSO authentication, returning 401 before the app runs. Fix: configure a [protection bypass token](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation) or run against a production deployment.
+\* All endpoints return 500 due to missing `community_settings` column — not a performance failure.
 
-2. **Pending Database Migrations** — The `community_settings` column and `user_roles.deleted_at` column referenced by the schema/RLS functions do not yet exist in the database. Fix: apply pending migrations (`0025_p4_55f_community_settings_and_user_scoped_rls.sql`).
+### Custom Counters
 
-### Placeholder Results Table
+| Counter | Value | Notes |
+|---------|-------|-------|
+| `rate_limited` | 238 | 429 responses from app middleware |
+| `cold_starts` | 2 | Responses > 3s (Vercel cold start) |
+| `auth_failures` | 0 | All 6 demo users authenticated successfully |
 
-Once the blockers are resolved, run:
+### Throughput
+
+| Metric | Value |
+|--------|-------|
+| Total requests | 4,941 |
+| Requests/sec | 25.0 |
+| Total iterations | 1,833 |
+| Max concurrent VUs | 100 |
+
+## Remaining Blocker
+
+**Pending Database Migration** — The `community_settings` column (migration
+`0025_p4_55f_community_settings_and_user_scoped_rls.sql`) does not exist in the
+database. Once applied, re-run the test to collect true baseline numbers.
+
+### Re-run Command
 
 ```bash
 export SB_URL=$(grep '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2-)
 export SB_KEY=$(grep '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.local | cut -d= -f2-)
 export SB_SERVICE_KEY=$(grep '^SUPABASE_SERVICE_ROLE_KEY=' .env.local | cut -d= -f2-)
+export BYPASS=$(grep '^VERCEL_AUTOMATION_BYPASS_SECRET=' .env.local | cut -d= -f2-)
 
 k6 run \
   -e BASE_URL="<deployment-url>" \
   -e SUPABASE_URL="$SB_URL" \
   -e SUPABASE_ANON_KEY="$SB_KEY" \
   -e SUPABASE_SERVICE_ROLE_KEY="$SB_SERVICE_KEY" \
+  -e VERCEL_AUTOMATION_BYPASS_SECRET="$BYPASS" \
   -e COMMUNITY_ID="1" \
   --summary-export=load-test-summary.json \
   scripts/load-tests/k6-script.js
 ```
 
-| Metric | p50 | p95 | Max | Pass? |
-|--------|-----|-----|-----|-------|
-| `documents_latency` | — | — | — | — |
-| `announcements_latency` | — | — | — | — |
-| `meetings_latency` | — | — | — | — |
-| `compliance_latency` | — | — | — | — |
-| `maintenance_submit_latency` | — | — | — | — |
-| `export_latency` | — | — | — | — |
-| `http_req_duration` (overall) | — | — | — | — |
-| `http_req_failed` (error rate) | — | — | — | — |
-
-### Custom Counters
-
-| Counter | Value | Notes |
-|---------|-------|-------|
-| `rate_limited` | — | 429 responses detected |
-| `cold_starts` | — | Responses > 3s (Vercel cold start) |
-| `auth_failures` | — | Setup auth failures |
-
 ## Script Features
 
+- **Vercel bypass** — Optional `VERCEL_AUTOMATION_BYPASS_SECRET` env var bypasses Deployment Protection on preview deploys
 - **Base64url cookie encoding** — Matches `@supabase/ssr@0.8.0` session storage format (`"base64-"` + base64url-encoded session JSON)
 - **Service role key auth** — Optional `SUPABASE_SERVICE_ROLE_KEY` env var bypasses Supabase's per-IP auth rate limit during setup
 - **Rate limit handling** — Automatic retry on 429 with `Retry-After` header
