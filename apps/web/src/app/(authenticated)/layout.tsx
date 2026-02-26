@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, COMMUNITY_TYPES, COMMUNITY_ROLES } from '@propertypro/shared';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { createServerClient } from '@/lib/supabase/server';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
@@ -79,13 +79,22 @@ async function resolveCommunity(
 
     if (!communityResult.data || !roleResult.data) return null;
 
+    const communityType = communityResult.data.community_type;
+    const role = roleResult.data.role;
+    if (
+      !COMMUNITY_TYPES.includes(communityType as CommunityType) ||
+      !COMMUNITY_ROLES.includes(role as CommunityRole)
+    ) {
+      return null;
+    }
+
     return {
       community: {
-        id: communityResult.data.id as number,
-        name: communityResult.data.name as string,
-        type: communityResult.data.community_type as CommunityType,
+        id: communityResult.data.id,
+        name: communityResult.data.name,
+        type: communityType as CommunityType,
       },
-      role: roleResult.data.role as CommunityRole,
+      role: role as CommunityRole,
     };
   } catch (error) {
     console.error('[AuthenticatedLayout] Failed to resolve community:', error);

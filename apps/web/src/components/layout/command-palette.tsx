@@ -5,7 +5,7 @@
  *
  * Uses the `cmdk` library for keyboard-navigable command list.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Command } from 'cmdk';
 import {
@@ -77,7 +77,7 @@ export function CommandPalette({ open, onOpenChange, communityId }: CommandPalet
   const { recentPages, addPage } = useRecentPages();
   const [search, setSearch] = useState('');
 
-  const items = getCommandItems(communityId);
+  const items = useMemo(() => getCommandItems(communityId), [communityId]);
 
   // Close on Escape (cmdk handles this internally, but we also handle it for the overlay)
   useEffect(() => {
@@ -109,7 +109,7 @@ export function CommandPalette({ open, onOpenChange, communityId }: CommandPalet
     if (matchingItem) {
       addPage(matchingItem.href, matchingItem.label);
     }
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathname, items, addPage]);
 
   const handleSelect = useCallback(
     (href: string, label: string) => {

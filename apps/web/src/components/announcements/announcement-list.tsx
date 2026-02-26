@@ -5,6 +5,16 @@ interface AnnouncementListProps {
   items: Announcement[];
 }
 
+function stripHtml(html: string): string {
+  if (typeof document !== 'undefined') {
+    const el = document.createElement('div');
+    el.innerHTML = html;
+    return el.textContent ?? '';
+  }
+  // SSR fallback: strip tags conservatively
+  return html.replace(/<[^>]*>/g, '');
+}
+
 function formatDate(value: Date | string): string {
   return new Date(value).toLocaleDateString('en-US', {
     month: 'short',
@@ -32,7 +42,7 @@ function AnnouncementCard({ item }: { item: Announcement }) {
       </div>
       {item.body && (
         <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-gray-600">
-          {item.body.replace(/<[^>]*>/g, '')}
+          {stripHtml(item.body)}
         </p>
       )}
     </article>
