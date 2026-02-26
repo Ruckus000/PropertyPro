@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useRecentPages } from '@/hooks/useRecentPages';
+import { NAV_ITEMS, PM_NAV_ITEMS, getActiveItemId } from './nav-config';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -103,11 +104,15 @@ export function CommandPalette({ open, onOpenChange, communityId }: CommandPalet
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onOpenChange]);
 
-  // Track page visits for recent pages
+  // Track page visits for recent pages using nav-config's route matching
   useEffect(() => {
-    const matchingItem = items.find((item) => pathname.startsWith(item.href.split('?')[0]!));
-    if (matchingItem) {
-      addPage(matchingItem.href, matchingItem.label);
+    const navItems = pathname.startsWith('/pm/') ? PM_NAV_ITEMS : NAV_ITEMS;
+    const activeId = getActiveItemId(navItems, pathname);
+    if (activeId) {
+      const matchingItem = items.find((item) => item.id === activeId);
+      if (matchingItem) {
+        addPage(matchingItem.href, matchingItem.label);
+      }
     }
   }, [pathname, items, addPage]);
 

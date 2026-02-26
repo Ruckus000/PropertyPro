@@ -69,7 +69,6 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
           role={role}
           features={features}
           userName={user?.fullName ?? null}
-          userRole={role}
         />
       </div>
 
@@ -96,7 +95,6 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
               role={role}
               features={features}
               userName={user?.fullName ?? null}
-              userRole={role}
             />
             <button
               type="button"

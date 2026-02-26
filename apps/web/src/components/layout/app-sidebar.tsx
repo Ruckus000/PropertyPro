@@ -27,7 +27,6 @@ interface AppSidebarProps {
   role: CommunityRole | null;
   features: CommunityFeatures | null;
   userName: string | null;
-  userRole: string | null;
 }
 
 export function AppSidebar({
@@ -36,7 +35,6 @@ export function AppSidebar({
   role,
   features,
   userName,
-  userRole,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { expanded, toggleExpanded } = useSidebar();
@@ -105,9 +103,9 @@ export function AppSidebar({
           className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}
         >
           <span className="truncate text-[11px] font-medium text-white">{userName}</span>
-          {userRole && (
+          {role && (
             <span className="truncate text-[11px] text-white/50">
-              {userRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </span>
           )}
         </div>

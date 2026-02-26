@@ -165,22 +165,26 @@ export function getVisibleItems(
 
 /**
  * Determine the active nav item ID based on the current pathname.
- * Uses matchPrefixes for each item — first match wins, so more specific
- * items should have more specific prefixes.
+ * Finds the longest matching prefix across all items to guarantee
+ * the most specific match regardless of item order.
  */
 export function getActiveItemId(
   items: readonly NavItemConfig[],
   pathname: string,
 ): string | null {
-  // Prefer more specific matches first (longer prefixes)
+  let bestMatch: { id: string; prefixLength: number } | null = null;
+
   for (const item of items) {
     for (const prefix of item.matchPrefixes) {
       if (pathname.startsWith(prefix)) {
-        return item.id;
+        if (!bestMatch || prefix.length > bestMatch.prefixLength) {
+          bestMatch = { id: item.id, prefixLength: prefix.length };
+        }
       }
     }
   }
-  return null;
+
+  return bestMatch?.id ?? null;
 }
 
 /** Page title/subtitle mapping for the top bar */
