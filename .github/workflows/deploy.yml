@@ -64,10 +64,15 @@ jobs:
       - name: Smoke test
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           echo "Verifying deployment at $DEPLOY_URL"
+          BYPASS_HEADER=""
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            BYPASS_HEADER="-H x-vercel-protection-bypass:$VERCEL_AUTOMATION_BYPASS_SECRET"
+          fi
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL" || true)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" $BYPASS_HEADER "$DEPLOY_URL" || true)
             if [ "$STATUS" = "200" ]; then
               echo "Smoke test passed (HTTP $STATUS)"
               exit 0
