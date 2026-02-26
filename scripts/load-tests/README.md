@@ -40,7 +40,7 @@ k6 run \
 | `BASE_URL` | Yes | Vercel preview deployment URL |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anon/public API key |
-| `DEMO_PASSWORD` | No | Demo user password (default: `DemoPass123!`) |
+| `DEMO_PASSWORD` | Yes | Demo user password (pass via `-e DEMO_PASSWORD=...`) |
 | `COMMUNITY_ID` | Yes | Numeric ID of the Sunset Condos community |
 
 ## Scenarios

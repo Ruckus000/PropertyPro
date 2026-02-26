@@ -233,27 +233,26 @@ function bypassUrl(url) {
   return `${url}${sep}x-vercel-protection-bypass=${VERCEL_BYPASS_TOKEN}`;
 }
 
-/**
- * Make an authenticated GET request, handling rate limits and tracking metrics.
- */
-function authGet(url, sessionJson, trendMetric) {
-  let res = http.get(url, { headers: authHeaders(sessionJson) });
+const COLD_START_THRESHOLD_MS = 3000;
 
-  // Handle rate limiting: retry once after waiting
+/**
+ * Wrap a k6 HTTP request with rate-limit retry, latency tracking, and cold-start detection.
+ */
+function handleRequest(requestFn, trendMetric) {
+  let res = requestFn();
+
   if (res.status === 429) {
     rateLimited.add(1);
     const retryAfter = parseInt(res.headers['Retry-After'], 10) || 5;
     sleep(retryAfter);
-    res = http.get(url, { headers: authHeaders(sessionJson) });
+    res = requestFn();
   }
 
-  // Track per-endpoint latency
   if (trendMetric) {
     trendMetric.add(res.timings.duration);
   }
 
-  // Track Vercel cold starts (responses > 3s)
-  if (res.timings.duration > 3000) {
+  if (res.timings.duration > COLD_START_THRESHOLD_MS) {
     coldStarts.add(1);
   }
 
@@ -261,28 +260,24 @@ function authGet(url, sessionJson, trendMetric) {
 }
 
 /**
+ * Make an authenticated GET request, handling rate limits and tracking metrics.
+ */
+function authGet(url, sessionJson, trendMetric) {
+  return handleRequest(
+    () => http.get(url, { headers: authHeaders(sessionJson) }),
+    trendMetric,
+  );
+}
+
+/**
  * Make an authenticated POST request, handling rate limits and tracking metrics.
  */
 function authPost(url, body, sessionJson, trendMetric) {
   const hdrs = authHeaders(sessionJson);
-  let res = http.post(url, JSON.stringify(body), { headers: hdrs });
-
-  if (res.status === 429) {
-    rateLimited.add(1);
-    const retryAfter = parseInt(res.headers['Retry-After'], 10) || 5;
-    sleep(retryAfter);
-    res = http.post(url, JSON.stringify(body), { headers: hdrs });
-  }
-
-  if (trendMetric) {
-    trendMetric.add(res.timings.duration);
-  }
-
-  if (res.timings.duration > 3000) {
-    coldStarts.add(1);
-  }
-
-  return res;
+  return handleRequest(
+    () => http.post(url, JSON.stringify(body), { headers: hdrs }),
+    trendMetric,
+  );
 }
 
 /**
