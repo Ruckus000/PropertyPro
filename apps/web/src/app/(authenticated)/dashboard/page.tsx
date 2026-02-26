@@ -10,8 +10,6 @@ import { loadWizardState } from '@/lib/queries/wizard-state';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
-import { DashboardQuickLinks } from '@/components/dashboard/dashboard-quick-links';
-
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -28,12 +26,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   if (!context.communityId) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-12">
+      <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
         <p className="mt-2 text-sm text-gray-600">
           Add a valid <code>communityId</code> query parameter to load your community dashboard.
         </p>
-      </main>
+      </div>
     );
   }
 
@@ -57,13 +55,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const data = await loadDashboardData(context.communityId, userId);
 
   return (
-    <main id="main-content" className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+    <div className="space-y-6">
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">
         <DashboardAnnouncements items={data.announcements} />
         <DashboardMeetings items={data.meetings} timezone={data.timezone} />
       </div>
-      <DashboardQuickLinks communityId={context.communityId} />
-    </main>
+    </div>
   );
 }

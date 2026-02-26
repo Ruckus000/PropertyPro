@@ -41,6 +41,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/maintenance',
   '/contracts',
   '/audit-trail',
+  '/announcements',
   '/mobile',
   '/pm',
   '/communities',
@@ -291,6 +292,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
     if (tenantContext.isReservedSubdomain) {
       return notFoundResponse(request, response as unknown as NextResponse, requestId, origin);
+    }
+
+    // Forward community ID from query param so layouts can read it from headers
+    if (tenantContext.communityId) {
+      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+      forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
     }
 
     if (tenantContext.tenantSlug) {

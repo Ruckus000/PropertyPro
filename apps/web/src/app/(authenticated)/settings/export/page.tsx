@@ -18,23 +18,23 @@ export default async function ExportPage({
 
   if (!communityIdStr || !Number.isInteger(communityId) || communityId <= 0) {
     return (
-      <main id="main-content" className="p-6">
+      <>
         <h1 className="mb-4 text-xl font-semibold">Data Export</h1>
         <p className="text-sm text-gray-600">
           Provide a <code>communityId</code> to export community data.
         </p>
-      </main>
+      </>
     );
   }
 
   return (
-    <main id="main-content" className="p-6">
+    <>
       <h1 className="mb-2 text-xl font-semibold">Data Export</h1>
       <p className="mb-4 text-sm text-gray-600">
         Download a ZIP file containing CSV exports of your community&apos;s residents,
         documents, maintenance requests, and announcements.
       </p>
       <ExportButton communityId={communityId} />
-    </main>
+    </>
   );
 }

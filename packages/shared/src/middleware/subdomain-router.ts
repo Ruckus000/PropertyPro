@@ -48,6 +48,11 @@ function parseHostSubdomain(host: string | null | undefined): string | null {
     return null;
   }
 
+  // IP addresses (e.g. 127.0.0.1) have no subdomains
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(withoutPort)) {
+    return null;
+  }
+
   const parts = withoutPort.split('.');
   if (parts.length < 3) return null;
 

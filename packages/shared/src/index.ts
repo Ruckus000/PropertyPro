@@ -53,6 +53,21 @@ export const PERMISSION_PROFILE_MAP = {
   resident_tenant: ["tenant"],
 } as const;
 
+/**
+ * Convert a full name to initials (e.g., "John Doe" → "JD").
+ * Returns "?" if name is null/empty.
+ */
+export function toInitials(name: string | null): string {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export * from './branding';
 export * from './compliance/templates';
 export * from './access-policies';

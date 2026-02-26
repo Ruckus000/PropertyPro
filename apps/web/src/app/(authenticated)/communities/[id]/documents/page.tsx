@@ -13,10 +13,10 @@ export default async function DocumentsPage({ params }: PageProps) {
 
   if (!Number.isFinite(communityId) || communityId <= 0) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-12">
+      <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Documents</h1>
         <p className="mt-2 text-sm text-red-600">Invalid community ID</p>
-      </main>
+      </div>
     );
   }
 
@@ -24,12 +24,10 @@ export default async function DocumentsPage({ params }: PageProps) {
   const membership = await requireCommunityMembership(communityId, userId);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <DocumentLibrary
-        communityId={communityId}
-        userId={userId}
-        userRole={membership.role}
-      />
-    </main>
+    <DocumentLibrary
+      communityId={communityId}
+      userId={userId}
+      userRole={membership.role}
+    />
   );
 }

@@ -43,9 +43,11 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   }
 
   return (
-    <ApartmentWizard
-      communityId={context.communityId}
-      initialState={wizardState ?? undefined}
-    />
+    <main className="min-h-screen bg-[var(--surface-page)] text-[var(--color-text)]">
+      <ApartmentWizard
+        communityId={context.communityId}
+        initialState={wizardState ?? undefined}
+      />
+    </main>
   );
 }

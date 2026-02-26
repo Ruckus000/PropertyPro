@@ -70,7 +70,7 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900">Maintenance Requests</h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -118,6 +118,6 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
           </div>
         </section>
       )}
-    </main>
+    </div>
   );
 }
