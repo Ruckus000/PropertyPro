@@ -12,7 +12,6 @@
  *     -e SUPABASE_URL="https://xxx.supabase.co" \
  *     -e SUPABASE_ANON_KEY="eyJ..." \
  *     -e COMMUNITY_ID="1" \
- *     -e SUPABASE_SERVICE_ROLE_KEY="eyJ..." \
  *     -e VERCEL_AUTOMATION_BYPASS_SECRET="..." \
  *     scripts/load-tests/k6-script.js
  *
@@ -224,15 +223,6 @@ function authHeaders(sessionJson) {
   };
 }
 
-/**
- * Append Vercel bypass query params to a URL if the bypass token is set.
- */
-function bypassUrl(url) {
-  if (!VERCEL_BYPASS_TOKEN) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}x-vercel-protection-bypass=${VERCEL_BYPASS_TOKEN}`;
-}
-
 const COLD_START_THRESHOLD_MS = 3000;
 
 /**
@@ -310,7 +300,7 @@ export function readScenario(data) {
 
   // GET documents
   const docsRes = authGet(
-    bypassUrl(`${api}/documents?communityId=${cid}`),
+    `${api}/documents?communityId=${cid}`,
     sessionJson,
     documentsLatency,
   );
@@ -320,7 +310,7 @@ export function readScenario(data) {
 
   // GET announcements
   const annRes = authGet(
-    bypassUrl(`${api}/announcements?communityId=${cid}`),
+    `${api}/announcements?communityId=${cid}`,
     sessionJson,
     announcementsLatency,
   );
@@ -330,7 +320,7 @@ export function readScenario(data) {
 
   // GET meetings
   const mtgRes = authGet(
-    bypassUrl(`${api}/meetings?communityId=${cid}`),
+    `${api}/meetings?communityId=${cid}`,
     sessionJson,
     meetingsLatency,
   );
@@ -356,7 +346,7 @@ export function writeScenario(data) {
   const priority = PRIORITIES[randInt(0, PRIORITIES.length - 1)];
 
   const res = authPost(
-    bypassUrl(`${api}/maintenance-requests?communityId=${cid}`),
+    `${api}/maintenance-requests?communityId=${cid}`,
     {
       action: 'create',
       communityId: parseInt(COMMUNITY_ID, 10),
@@ -388,7 +378,7 @@ export function complianceScenario(data) {
 
   // GET compliance
   const compRes = authGet(
-    bypassUrl(`${api}/compliance?communityId=${cid}`),
+    `${api}/compliance?communityId=${cid}`,
     sessionJson,
     complianceLatency,
   );
@@ -399,7 +389,7 @@ export function complianceScenario(data) {
   // 20% chance of hitting the export endpoint (heaviest)
   if (Math.random() < 0.2) {
     const expRes = authGet(
-      bypassUrl(`${api}/export?communityId=${cid}`),
+      `${api}/export?communityId=${cid}`,
       sessionJson,
       exportLatency,
     );

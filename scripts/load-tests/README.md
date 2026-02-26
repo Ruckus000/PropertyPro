@@ -12,11 +12,15 @@ k6-based load tests simulating 100 concurrent users during an annual meeting pea
 ## Running the tests
 
 ```bash
+# Export secrets first to keep them out of shell history
+export SUPABASE_ANON_KEY="eyJ..."
+export DEMO_PASSWORD="<YOUR_DEMO_PASSWORD>"
+
 k6 run \
   -e BASE_URL="https://property-pro-xxx.vercel.app" \
   -e SUPABASE_URL="https://xxx.supabase.co" \
-  -e SUPABASE_ANON_KEY="eyJ..." \
-  -e DEMO_PASSWORD="<YOUR_DEMO_PASSWORD>" \
+  -e SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  -e DEMO_PASSWORD="$DEMO_PASSWORD" \
   -e COMMUNITY_ID="1" \
   scripts/load-tests/k6-script.js
 ```
