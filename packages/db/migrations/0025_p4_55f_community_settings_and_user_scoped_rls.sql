@@ -93,7 +93,6 @@ AS $$
       FROM "public"."user_roles" ur
       WHERE ur.user_id = auth.uid()
         AND ur.community_id = target_community_id
-        AND ur.deleted_at IS NULL
     )
   END;
 $$;
