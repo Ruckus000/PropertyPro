@@ -338,12 +338,13 @@ const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 export function writeScenario(data) {
   const { sessionJson } = getSession(data);
   const api = `${BASE_URL}/api/v1`;
+  const cid = COMMUNITY_ID;
 
   const category = CATEGORIES[randInt(0, CATEGORIES.length - 1)];
   const priority = PRIORITIES[randInt(0, PRIORITIES.length - 1)];
 
   const res = authPost(
-    bypassUrl(`${api}/maintenance-requests`),
+    bypassUrl(`${api}/maintenance-requests?communityId=${cid}`),
     {
       action: 'create',
       communityId: parseInt(COMMUNITY_ID, 10),

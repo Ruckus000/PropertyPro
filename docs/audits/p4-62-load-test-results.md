@@ -85,13 +85,17 @@
 | Total iterations | 1,769 |
 | Max concurrent VUs | 100 |
 
-### Known Issue: Maintenance POST 404
+### Known Issue (Resolved): Maintenance POST 404
 
-The `POST /api/v1/maintenance-requests` endpoint returns 404 on both preview and
-production Vercel deploys despite the route handler existing in source
-(`apps/web/src/app/api/v1/maintenance-requests/route.ts` exports both GET and
-POST). GET on the same path works (200). This appears to be a deployment or
-Next.js build issue unrelated to the load test infrastructure.
+The `POST /api/v1/maintenance-requests` endpoint returned 404 because the k6
+`writeScenario` did not include `?communityId=` in the URL query string. All GET
+scenarios included it. Without the query param, middleware's
+`resolveCommunityContext()` fell through to host-subdomain parsing, extracted
+the Vercel preview hostname prefix (e.g. `property-pro-xxx`) as a tenant slug,
+failed the DB lookup, and returned 404 before the route handler ran.
+
+**Fix:** Added `?communityId=${cid}` to the POST URL in `writeScenario`,
+matching the pattern already used by `readScenario` and `complianceScenario`.
 
 ## Results — Run 1: Infrastructure Baseline (2026-02-26)
 
