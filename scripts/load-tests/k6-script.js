@@ -26,6 +26,11 @@ import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import encoding from 'k6/encoding';
 
+// Treat 429 (rate-limited) as an expected status so it doesn't inflate
+// http_req_failed. The script already retries 429s; only real errors
+// (5xx, 404, 403, etc.) should count toward the error budget.
+http.setResponseCallback(http.expectedStatuses(200, 201, 429));
+
 // ---------------------------------------------------------------------------
 // Environment variables
 // ---------------------------------------------------------------------------
