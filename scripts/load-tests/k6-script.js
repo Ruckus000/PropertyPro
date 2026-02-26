@@ -243,8 +243,20 @@ function handleRequest(requestFn, trendMetric) {
 
   if (res.status === 429) {
     rateLimited.add(1);
-    const retryAfter = parseInt(res.headers['Retry-After'], 10) || 5;
-    sleep(retryAfter);
+    const retryAfterHeader = res.headers['Retry-After'];
+    let sleepDuration = 5;
+    if (retryAfterHeader) {
+      const seconds = parseInt(retryAfterHeader, 10);
+      if (!isNaN(seconds)) {
+        sleepDuration = seconds;
+      } else {
+        const retryDate = new Date(retryAfterHeader);
+        if (!isNaN(retryDate.getTime())) {
+          sleepDuration = (retryDate.getTime() - Date.now()) / 1000;
+        }
+      }
+    }
+    sleep(Math.max(0, sleepDuration));
     res = requestFn();
   }
 
