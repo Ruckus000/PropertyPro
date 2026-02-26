@@ -1,0 +1,252 @@
+{
+    "setup_data": {
+        "sessions": {
+            "pm.admin@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJkZWZmNDQ3Ny03NTgyLTQwZWUtODRlMS05ZTI4NzYzNzZlZmUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzEyLCJpYXQiOjE3NzIxMTU3MTIsImVtYWlsIjoicG0uYWRtaW5Ac3Vuc2V0LmxvY2FsIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbF9uYW1lIjoiUGF0IFBNIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NzIxMTU3MTJ9XSwic2Vzc2lvbl9pZCI6ImQ4YjkzNDkyLTRjMjctNDAyNC04OGUyLTRiY2FjM2NiOTBjMiIsImlzX2Fub255bW91cyI6ZmFsc2V9.3MblW85JfB8zg93OVnMquLed3WNTakxtlzehmJn1cxDcaQm3qbJMCeK_Lhjk0NMguAQ3jSo0Y1AwqPAz6XFdvg\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119312,\"refresh_token\":\"dewsc3b7kptf\",\"user\":{\"id\":\"deff4477-7582-40ee-84e1-9e2876376efe\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"pm.admin@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:37:30.003802Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:37:30.003802Z\",\"last_sign_in_at\":\"2026-02-26T14:21:52.674002273Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Pat PM\"},\"identities\":[{\"identity_id\":\"e1a0daae-13ac-4c1c-b067-30b67bc6796b\",\"id\":\"deff4477-7582-40ee-84e1-9e2876376efe\",\"user_id\":\"deff4477-7582-40ee-84e1-9e2876376efe\",\"identity_data\":{\"email\":\"pm.admin@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"deff4477-7582-40ee-84e1-9e2876376efe\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:37:30.001683Z\",\"created_at\":\"2026-02-12T19:37:30.001746Z\",\"updated_at\":\"2026-02-12T19:37:30.001746Z\",\"email\":\"pm.admin@sunset.local\"}],\"created_at\":\"2026-02-12T19:37:30.000233Z\",\"updated_at\":\"2026-02-26T14:21:52.685782Z\",\"is_anonymous\":false},\"weak_password\":null}",
+            "tenant.one@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJkMmY5Zjc4NC1iNDkxLTQ4YTktYjMyNi1iMjY5NWNlZjYwYzQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzEwLCJpYXQiOjE3NzIxMTU3MTAsImVtYWlsIjoidGVuYW50Lm9uZUBzdW5zZXQubG9jYWwiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJUeWxlciBUZW5hbnQifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc3MjExNTcxMH1dLCJzZXNzaW9uX2lkIjoiYmMwMjJkMDItNTY4Mi00MThkLWE4YWMtMDVhNDliMjEwMDcwIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.YsHnqhy1tRI1PhDqYnqBSO58FM9J-XFUaHOq0bJpW6gtlBEif7P3bY8ceeFSCt7_i0cUmn3qttSn4s4ZhHsIxw\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119310,\"refresh_token\":\"vmv5osuipoxd\",\"user\":{\"id\":\"d2f9f784-b491-48a9-b326-b2695cef60c4\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"tenant.one@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:36:55.050387Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:36:55.050387Z\",\"last_sign_in_at\":\"2026-02-26T14:21:50.046585853Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Tyler Tenant\"},\"identities\":[{\"identity_id\":\"f04aa73b-737e-4bb6-a7a8-b8e4ffa6f8ca\",\"id\":\"d2f9f784-b491-48a9-b326-b2695cef60c4\",\"user_id\":\"d2f9f784-b491-48a9-b326-b2695cef60c4\",\"identity_data\":{\"email\":\"tenant.one@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"d2f9f784-b491-48a9-b326-b2695cef60c4\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:36:55.046498Z\",\"created_at\":\"2026-02-12T19:36:55.046563Z\",\"updated_at\":\"2026-02-12T19:36:55.046563Z\",\"email\":\"tenant.one@sunset.local\"}],\"created_at\":\"2026-02-12T19:36:55.044769Z\",\"updated_at\":\"2026-02-26T14:21:50.048722Z\",\"is_anonymous\":false},\"weak_password\":null}",
+            "board.member@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJlMzMxZTc4NS0wYThhLTQ0MmQtYTZhZi03NjQzNTM3NGYwNjMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzA3LCJpYXQiOjE3NzIxMTU3MDcsImVtYWlsIjoiYm9hcmQubWVtYmVyQHN1bnNldC5sb2NhbCIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWUsImZ1bGxfbmFtZSI6IkJpYW5jYSBCb2FyZCJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzcyMTE1NzA3fV0sInNlc3Npb25faWQiOiI3Yjk2NzVkZS1mMzA2LTQ3YmItODc5OS1kNzlkNDVmZDYzZmIiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.Vwerc0EYh_0F8LQ9_6VMxciDmdSXSLM1tqvjF3So3UCtj_NNjU2q5LApR2AA6vq0razPok-psR6r97CRgVhlUA\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119307,\"refresh_token\":\"sridi2okeugv\",\"user\":{\"id\":\"e331e785-0a8a-442d-a6af-76435374f063\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"board.member@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:36:53.737975Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:36:53.737975Z\",\"last_sign_in_at\":\"2026-02-26T14:21:47.582719277Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Bianca Board\"},\"identities\":[{\"identity_id\":\"7c77e49f-f941-4a6c-9260-098e39e6423c\",\"id\":\"e331e785-0a8a-442d-a6af-76435374f063\",\"user_id\":\"e331e785-0a8a-442d-a6af-76435374f063\",\"identity_data\":{\"email\":\"board.member@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"e331e785-0a8a-442d-a6af-76435374f063\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:36:53.736553Z\",\"created_at\":\"2026-02-12T19:36:53.736602Z\",\"updated_at\":\"2026-02-12T19:36:53.736602Z\",\"email\":\"board.member@sunset.local\"}],\"created_at\":\"2026-02-12T19:36:53.73358Z\",\"updated_at\":\"2026-02-26T14:21:47.585361Z\",\"is_anonymous\":false},\"weak_password\":null}",
+            "board.president@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIyNjcxNDRmZS0xYjRjLTRiYmEtOTUwNi01NTE1Y2RhZGUyNTQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzA2LCJpYXQiOjE3NzIxMTU3MDYsImVtYWlsIjoiYm9hcmQucHJlc2lkZW50QHN1bnNldC5sb2NhbCIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWUsImZ1bGxfbmFtZSI6IlNhbSBQcmVzaWRlbnQifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc3MjExNTcwNn1dLCJzZXNzaW9uX2lkIjoiMjIyMGU4NjEtNzFkYS00YTY5LThhODctZTlkY2Q3ZDY0ZGQ4IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.hOjVCrWDbTqZboeHEsOFLad2mhOwUcCfEusG1jdFjlqsLm17NY9oD_89maFzaU2LLNq34VHbtiACMeNlg83C3A\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119306,\"refresh_token\":\"bmtmxnzmldvx\",\"user\":{\"id\":\"267144fe-1b4c-4bba-9506-5515cdade254\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"board.president@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:36:53.108385Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:36:53.108385Z\",\"last_sign_in_at\":\"2026-02-26T14:21:46.345470428Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Sam President\"},\"identities\":[{\"identity_id\":\"dbd16674-6645-4082-a856-ee435300a6ba\",\"id\":\"267144fe-1b4c-4bba-9506-5515cdade254\",\"user_id\":\"267144fe-1b4c-4bba-9506-5515cdade254\",\"identity_data\":{\"email\":\"board.president@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"267144fe-1b4c-4bba-9506-5515cdade254\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:36:53.102979Z\",\"created_at\":\"2026-02-12T19:36:53.103038Z\",\"updated_at\":\"2026-02-12T19:36:53.103038Z\",\"email\":\"board.president@sunset.local\"}],\"created_at\":\"2026-02-12T19:36:53.086745Z\",\"updated_at\":\"2026-02-26T14:21:46.34767Z\",\"is_anonymous\":false},\"weak_password\":null}",
+            "cam.one@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwYmZhMDYzOC0xZjZlLTRlMDctOTZhZC0zZjFlOWU4NmEzYzciLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzExLCJpYXQiOjE3NzIxMTU3MTEsImVtYWlsIjoiY2FtLm9uZUBzdW5zZXQubG9jYWwiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJDYW1lcm9uIENBTSJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzcyMTE1NzExfV0sInNlc3Npb25faWQiOiI0ZDAyMTBjOC1lZmUzLTRmODgtOWYxNS0zMjc3YzE1ODJhOWIiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.yIOXB3gyyhHeIM7-IIm9oyyxY_UzaTzpGlEnowjigkBrTVRRBq8xfDxWQ9IKUD1qOpLkLUeIfRsr8CTnA-M9fA\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119311,\"refresh_token\":\"6ycahyay3ykd\",\"user\":{\"id\":\"0bfa0638-1f6e-4e07-96ad-3f1e9e86a3c7\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"cam.one@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:37:29.406378Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:37:29.406378Z\",\"last_sign_in_at\":\"2026-02-26T14:21:51.275442449Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Cameron CAM\"},\"identities\":[{\"identity_id\":\"204dbaba-ecef-47dc-bf34-f45221a9646d\",\"id\":\"0bfa0638-1f6e-4e07-96ad-3f1e9e86a3c7\",\"user_id\":\"0bfa0638-1f6e-4e07-96ad-3f1e9e86a3c7\",\"identity_data\":{\"email\":\"cam.one@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"0bfa0638-1f6e-4e07-96ad-3f1e9e86a3c7\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:37:29.404003Z\",\"created_at\":\"2026-02-12T19:37:29.404056Z\",\"updated_at\":\"2026-02-12T19:37:29.404056Z\",\"email\":\"cam.one@sunset.local\"}],\"created_at\":\"2026-02-12T19:37:29.402947Z\",\"updated_at\":\"2026-02-26T14:21:51.277667Z\",\"is_anonymous\":false},\"weak_password\":null}",
+            "owner.one@sunset.local": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6ImYwNmU1NGQxLTdhNTItNGViNi1hNjlkLWJiNDc0NmFkNTdlOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3ZicW9ieWFnanp2bGZwZm96dm14LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MzQ4OTg2MS1mNDJmLTRiMTMtOGM0Zi1hZWJkOGNjMjcxMWUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyMTE5MzA4LCJpYXQiOjE3NzIxMTU3MDgsImVtYWlsIjoib3duZXIub25lQHN1bnNldC5sb2NhbCIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWUsImZ1bGxfbmFtZSI6Ik9saXZpYSBPd25lciJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzcyMTE1NzA4fV0sInNlc3Npb25faWQiOiI4ZjhhYjBhZi04NmY5LTRkOTAtOTBlMy1hZmI1YTlhNmY5YjYiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.RuHnHcdfewYedAIdfMUXRqn-0YU9eMGZVO6b73Hr-s9sqwkKOgLMpIZ3tdb9h6Kv4cD74baEat4AwQQHWhV51Q\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772119308,\"refresh_token\":\"mnhhdiimebwz\",\"user\":{\"id\":\"43489861-f42f-4b13-8c4f-aebd8cc2711e\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"owner.one@sunset.local\",\"email_confirmed_at\":\"2026-02-12T19:36:54.439242Z\",\"phone\":\"\",\"confirmed_at\":\"2026-02-12T19:36:54.439242Z\",\"last_sign_in_at\":\"2026-02-26T14:21:48.813351886Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email_verified\":true,\"full_name\":\"Olivia Owner\"},\"identities\":[{\"identity_id\":\"784affe4-f3c7-4420-ab49-961f04c3ee56\",\"id\":\"43489861-f42f-4b13-8c4f-aebd8cc2711e\",\"user_id\":\"43489861-f42f-4b13-8c4f-aebd8cc2711e\",\"identity_data\":{\"email\":\"owner.one@sunset.local\",\"email_verified\":false,\"phone_verified\":false,\"sub\":\"43489861-f42f-4b13-8c4f-aebd8cc2711e\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-12T19:36:54.437091Z\",\"created_at\":\"2026-02-12T19:36:54.43715Z\",\"updated_at\":\"2026-02-12T19:36:54.43715Z\",\"email\":\"owner.one@sunset.local\"}],\"created_at\":\"2026-02-12T19:36:54.435424Z\",\"updated_at\":\"2026-02-26T14:21:48.81549Z\",\"is_anonymous\":false},\"weak_password\":null}"
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "documents: status 200": {
+                    "id": "8b6321ec33984ac7107b8beb935c99fa",
+                    "passes": 1362,
+                    "fails": 0,
+                    "name": "documents: status 200",
+                    "path": "::documents: status 200"
+                },
+                "maintenance: status 201": {
+                    "id": "090b860a590d71124458f4b826dc133a",
+                    "passes": 0,
+                    "fails": 343,
+                    "name": "maintenance: status 201",
+                    "path": "::maintenance: status 201"
+                },
+                "announcements: status 200": {
+                    "id": "e1eb7b14aaa757b24b6c94f362128717",
+                    "passes": 1361,
+                    "fails": 1,
+                    "name": "announcements: status 200",
+                    "path": "::announcements: status 200"
+                },
+                "meetings: status 200": {
+                    "name": "meetings: status 200",
+                    "path": "::meetings: status 200",
+                    "id": "ff7edbc2d8da60e27faa1ea764970212",
+                    "passes": 1362,
+                    "fails": 0
+                },
+                "compliance: status 200": {
+                    "id": "a5d777f5dcba3da324e460e841599e32",
+                    "passes": 60,
+                    "fails": 4,
+                    "name": "compliance: status 200",
+                    "path": "::compliance: status 200"
+                },
+                "export: status 200": {
+                    "name": "export: status 200",
+                    "path": "::export: status 200",
+                    "id": "1b4fd2aec7b9a95783e280d4329bf40b",
+                    "passes": 8,
+                    "fails": 0
+                }
+            }
+    },
+    "metrics": {
+        "meetings_latency": {
+            "avg": 787.9025704845811,
+            "min": 638.499,
+            "med": 754.058,
+            "max": 13776.105,
+            "p(90)": 864.6609,
+            "p(95)": 944.6827999999999,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "iterations": {
+            "count": 1769,
+            "rate": 9.031554433648273
+        },
+        "http_req_duration": {
+            "avg": 764.7381560158675,
+            "min": 159.701,
+            "med": 757.895,
+            "max": 16994.663,
+            "p(90)": 900.9155000000001,
+            "p(95)": 967.3535999999999,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_connecting": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.540830542089026,
+            "min": 0,
+            "med": 0,
+            "max": 190.995
+        },
+        "compliance_latency": {
+            "avg": 783.7941406250002,
+            "min": 572.762,
+            "med": 763.5509999999999,
+            "max": 1513.982,
+            "p(90)": 878.4603999999999,
+            "p(95)": 966.7248,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_duration{expected_response:true}": {
+            "min": 231.296,
+            "med": 765.211,
+            "max": 16994.663,
+            "p(90)": 907.9344,
+            "p(95)": 975.4039999999999,
+            "avg": 808.1495736956023
+        },
+        "http_req_failed": {
+            "passes": 379,
+            "fails": 4159,
+            "thresholds": {
+                "rate<0.05": true
+            },
+            "value": 0.08351696782723667
+        },
+        "vus_max": {
+            "min": 100,
+            "max": 100,
+            "value": 100
+        },
+        "data_received": {
+            "count": 3428329,
+            "rate": 17503.188230613312
+        },
+        "announcements_latency": {
+            "p(90)": 874.0091,
+            "p(95)": 940.9585,
+            "avg": 799.7712812041121,
+            "min": 335.142,
+            "med": 758.2905000000001,
+            "max": 16994.663,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_receiving": {
+            "p(90)": 0.132,
+            "p(95)": 0.1932999999999996,
+            "avg": 0.19195570736007037,
+            "min": 0.014,
+            "med": 0.063,
+            "max": 91.003
+        },
+        "http_req_blocked": {
+            "med": 0.001,
+            "max": 253.345,
+            "p(90)": 0.001,
+            "p(95)": 0.002,
+            "avg": 2.1537324812694134,
+            "min": 0
+        },
+        "data_sent": {
+            "count": 3713222,
+            "rate": 18957.697352866202
+        },
+        "iteration_duration": {
+            "avg": 8760.38330220067,
+            "min": 5162.395375,
+            "med": 8435.263958,
+            "max": 28708.356583,
+            "p(90)": 10699.227309,
+            "p(95)": 11587.020600199998
+        },
+        "http_req_waiting": {
+            "avg": 764.3993735125592,
+            "min": 159.507,
+            "med": 757.635,
+            "max": 16994.355,
+            "p(90)": 900.6589,
+            "p(95)": 967.00425
+        },
+        "rate_limited": {
+            "count": 31,
+            "rate": 0.15826918453538524
+        },
+        "http_req_sending": {
+            "avg": 0.14682679594535,
+            "min": 0.023,
+            "med": 0.133,
+            "max": 2.08,
+            "p(90)": 0.221,
+            "p(95)": 0.263
+        },
+        "export_latency": {
+            "avg": 903.58675,
+            "min": 834.403,
+            "med": 889.087,
+            "max": 1003.428,
+            "p(90)": 980.7312000000001,
+            "p(95)": 992.0796,
+            "thresholds": {
+                "p(95)<5000": false
+            }
+        },
+        "maintenance_submit_latency": {
+            "p(95)": 416.1494999999999,
+            "avg": 240.36899416909617,
+            "min": 159.701,
+            "med": 209.047,
+            "max": 1420.327,
+            "p(90)": 368.1892000000001,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_tls_handshaking": {
+            "avg": 1.587602908770384,
+            "min": 0,
+            "med": 0,
+            "max": 152.278,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_reqs": {
+            "count": 4538,
+            "rate": 23.168566432954137
+        },
+        "checks": {
+            "passes": 4153,
+            "fails": 348,
+            "value": 0.9226838480337702
+        },
+        "cold_starts": {
+            "rate": 0.035738202959603116,
+            "count": 7
+        },
+        "documents_latency": {
+            "p(95)": 1021.9261,
+            "avg": 838.6364992657849,
+            "min": 659.607,
+            "med": 796.4575,
+            "max": 13579.349,
+            "p(90)": 947.1508,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "vus": {
+            "value": 2,
+            "min": 0,
+            "max": 100
+        }
+    }
+}

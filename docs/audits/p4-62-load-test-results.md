@@ -35,48 +35,89 @@
 | `maintenance_submit_latency` | p95 < 2000ms | Maintenance request creation |
 | `export_latency` | p95 < 5000ms | Data export (heavier) |
 
-## Results — Infrastructure Baseline (2026-02-26)
+## Results — Run 2: Full Baseline (2026-02-26)
 
-> **Status: PARTIAL** — Vercel bypass and auth pipeline work end-to-end. API
-> endpoints return 500 due to a pending DB migration (`community_settings`
-> column). Latencies below reflect real Vercel serverless + middleware + auth
-> overhead but not actual query execution.
+> **Status: 7/8 thresholds PASS** — All read endpoints return 200 with real data.
+> Migration 0025 applied. The only failing threshold is `http_req_failed` at 8.35%,
+> caused entirely by the `maintenance_submit` scenario returning 404 (POST route
+> not reachable on preview deploy — see Known Issue below).
 
 | Metric | p50 | p95 | Max | Pass? |
 |--------|-----|-----|-----|-------|
-| `documents_latency` | 590ms | 732ms | 3822ms | FAIL* |
-| `announcements_latency` | 589ms | 700ms | 1859ms | FAIL* |
-| `meetings_latency` | 592ms | 704ms | 1526ms | FAIL* |
-| `compliance_latency` | 597ms | 775ms | 942ms | FAIL* |
-| `maintenance_submit_latency` | 186ms | 341ms | 960ms | FAIL* |
-| `export_latency` | 626ms | 786ms | 900ms | FAIL* |
-| `http_req_duration` (overall) | 584ms | 700ms | 3822ms | FAIL* |
-| `http_req_failed` (error rate) | — | — | 99.88% | FAIL* |
+| `documents_latency` | 796ms | 1020ms | 13.57s | PASS |
+| `announcements_latency` | 758ms | 941ms | 16.99s | PASS |
+| `meetings_latency` | 754ms | 945ms | 13.77s | PASS |
+| `compliance_latency` | 764ms | 967ms | 1510ms | PASS |
+| `maintenance_submit_latency` | 209ms | 416ms | 1420ms | PASS |
+| `export_latency` | 889ms | 992ms | 1000ms | PASS |
+| `http_req_duration` (overall) | 758ms | 967ms | 16.99s | PASS |
+| `http_req_failed` (error rate) | — | — | 8.35% | FAIL* |
 
-\* All endpoints return 500 due to missing `community_settings` column — not a performance failure.
+\* Error rate exceeds 5% budget due to maintenance POST returning 404 (see Known Issue). Excluding maintenance, read error rate ≈ 0.1%.
+
+### Check Results
+
+| Check | Passed | Failed | Rate |
+|-------|--------|--------|------|
+| `documents: status 200` | 1362 | 0 | 100% |
+| `announcements: status 200` | 1361 | 1 | 99.9% |
+| `meetings: status 200` | 1362 | 0 | 100% |
+| `compliance: status 200` | 60 | 4 | 93.7% |
+| `export: status 200` | 8 | 0 | 100% |
+| `maintenance: status 201` | 0 | 343 | 0%* |
+
+\* Maintenance POST returns 404 on preview deploy — see Known Issue.
 
 ### Custom Counters
 
 | Counter | Value | Notes |
 |---------|-------|-------|
-| `rate_limited` | 238 | 429 responses from app middleware |
-| `cold_starts` | 2 | Responses > 3s (Vercel cold start) |
+| `rate_limited` | 31 | 429 responses from app middleware |
+| `cold_starts` | 7 | Responses > 3s (Vercel cold start) |
 | `auth_failures` | 0 | All 6 demo users authenticated successfully |
 
 ### Throughput
 
 | Metric | Value |
 |--------|-------|
-| Total requests | 4,941 |
-| Requests/sec | 25.0 |
-| Total iterations | 1,833 |
+| Total requests | 4,538 |
+| Requests/sec | 23.2 |
+| Total iterations | 1,769 |
 | Max concurrent VUs | 100 |
 
-## Remaining Blocker
+### Known Issue: Maintenance POST 404
 
-**Pending Database Migration** — The `community_settings` column (migration
-`0025_p4_55f_community_settings_and_user_scoped_rls.sql`) does not exist in the
-database. Once applied, re-run the test to collect true baseline numbers.
+The `POST /api/v1/maintenance-requests` endpoint returns 404 on both preview and
+production Vercel deploys despite the route handler existing in source
+(`apps/web/src/app/api/v1/maintenance-requests/route.ts` exports both GET and
+POST). GET on the same path works (200). This appears to be a deployment or
+Next.js build issue unrelated to the load test infrastructure.
+
+## Results — Run 1: Infrastructure Baseline (2026-02-26)
+
+> **Status: PARTIAL** — Vercel bypass and auth pipeline work end-to-end. API
+> endpoints returned 500 due to a pending DB migration (`community_settings`
+> column). Latencies reflect real Vercel serverless + middleware + auth overhead
+> but not actual query execution.
+
+| Metric | p50 | p95 | Max |
+|--------|-----|-----|-----|
+| `documents_latency` | 590ms | 732ms | 3822ms |
+| `announcements_latency` | 589ms | 700ms | 1859ms |
+| `meetings_latency` | 592ms | 704ms | 1526ms |
+| `compliance_latency` | 597ms | 775ms | 942ms |
+| `maintenance_submit_latency` | 186ms | 341ms | 960ms |
+| `export_latency` | 626ms | 786ms | 900ms |
+| `http_req_duration` (overall) | 584ms | 700ms | 3822ms |
+| `http_req_failed` (error rate) | — | — | 99.88% |
+
+| Counter | Value |
+|---------|-------|
+| `rate_limited` | 238 |
+| `cold_starts` | 2 |
+| `auth_failures` | 0 |
+| Total requests | 4,941 |
+| Requests/sec | 25.0 |
 
 ### Re-run Command
 
