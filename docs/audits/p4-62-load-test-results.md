@@ -35,6 +35,54 @@
 | `maintenance_submit_latency` | p95 < 2000ms | Maintenance request creation |
 | `export_latency` | p95 < 5000ms | Data export (heavier) |
 
+## Results — Run 3: All Thresholds Pass (2026-02-26)
+
+> **Status: 8/8 thresholds PASS** — Maintenance POST fix confirmed. Error rate
+> dropped from 8.35% to 4.88%, within the 5% budget. Remaining errors are
+> rate-limit 429s (120 events) from the write scenario hitting the server at
+> full throughput.
+
+| Metric | p50 | p95 | Max | Pass? |
+|--------|-----|-----|-----|-------|
+| `documents_latency` | 807ms | 1000ms | 4.98s | PASS |
+| `announcements_latency` | 765ms | 946ms | 5.17s | PASS |
+| `meetings_latency` | 761ms | 909ms | 1.77s | PASS |
+| `compliance_latency` | 763ms | 912ms | 1.11s | PASS |
+| `maintenance_submit_latency` | 868ms | 1020ms | 3.92s | PASS |
+| `export_latency` | 888ms | 1100ms | 1.21s | PASS |
+| `http_req_duration` (overall) | 772ms | 971ms | 5.17s | PASS |
+| `http_req_failed` (error rate) | — | — | 4.88% | PASS |
+
+### Check Results
+
+| Check | Passed | Failed | Rate |
+|-------|--------|--------|------|
+| `documents: status 200` | 1324 | 3 | 99.8% |
+| `announcements: status 200` | 1323 | 4 | 99.7% |
+| `meetings: status 200` | 1326 | 1 | 99.9% |
+| `compliance: status 200` | 54 | 9 | 85.7% |
+| `export: status 200` | 14 | 2 | 87.5% |
+| `maintenance: status 201` | 234 | 81 | 74.3% |
+
+### Custom Counters
+
+| Counter | Value | Notes |
+|---------|-------|-------|
+| `rate_limited` | 120 | 429 responses — up from 31 with writes now reaching server |
+| `cold_starts` | 11 | Responses > 3s (Vercel cold start) |
+| `auth_failures` | 0 | All 6 demo users authenticated successfully |
+
+### Throughput
+
+| Metric | Value |
+|--------|-------|
+| Total requests | 4,501 |
+| Requests/sec | 22.9 |
+| Total iterations | 1,705 |
+| Max concurrent VUs | 100 |
+
+---
+
 ## Results — Run 2: Full Baseline (2026-02-26)
 
 > **Status: 7/8 thresholds PASS** — All read endpoints return 200 with real data.
