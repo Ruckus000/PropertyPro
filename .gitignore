@@ -31,3 +31,6 @@ coverage/
 docs/.~lock.*
 docs/*.tmp
 .vercel
+
+# Load test output (may contain session tokens)
+load-test-summary*.json

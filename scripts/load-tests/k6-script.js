@@ -38,20 +38,20 @@ http.setResponseCallback(http.expectedStatuses(200, 201, 429));
 const BASE_URL = __ENV.BASE_URL;
 const SUPABASE_URL = __ENV.SUPABASE_URL;
 const SUPABASE_ANON_KEY = __ENV.SUPABASE_ANON_KEY;
-const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || __ENV.DEMO_DEFAULT_PASSWORD || 'DemoPass123!';
+const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || __ENV.DEMO_DEFAULT_PASSWORD;
 const SUPABASE_SERVICE_ROLE_KEY = __ENV.SUPABASE_SERVICE_ROLE_KEY;
 const COMMUNITY_ID = __ENV.COMMUNITY_ID;
 const VERCEL_BYPASS_TOKEN = __ENV.VERCEL_AUTOMATION_BYPASS_SECRET;
 
-if (!BASE_URL || !SUPABASE_URL || !SUPABASE_ANON_KEY || !COMMUNITY_ID) {
+if (!BASE_URL || !SUPABASE_URL || !SUPABASE_ANON_KEY || !COMMUNITY_ID || !DEMO_PASSWORD) {
   throw new Error(
-    'Required env vars: BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, COMMUNITY_ID. Optional: SUPABASE_SERVICE_ROLE_KEY (bypasses auth rate limits), DEMO_PASSWORD',
+    'Required env vars: BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, COMMUNITY_ID, DEMO_PASSWORD (or DEMO_DEFAULT_PASSWORD). Optional: SUPABASE_SERVICE_ROLE_KEY (bypasses auth rate limits)',
   );
 }
 
 // Extract Supabase project ref from URL for cookie name.
 // e.g. https://abcdef.supabase.co -> abcdef
-const PROJECT_REF = SUPABASE_URL.replace('https://', '').split('.')[0];
+const PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0];
 const COOKIE_NAME = `sb-${PROJECT_REF}-auth-token`;
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ function authGet(url, sessionJson, trendMetric) {
   // Handle rate limiting: retry once after waiting
   if (res.status === 429) {
     rateLimited.add(1);
-    const retryAfter = parseInt(res.headers['Retry-After'] || '5', 10);
+    const retryAfter = parseInt(res.headers['Retry-After'], 10) || 5;
     sleep(retryAfter);
     res = http.get(url, { headers: authHeaders(sessionJson) });
   }
@@ -269,7 +269,7 @@ function authPost(url, body, sessionJson, trendMetric) {
 
   if (res.status === 429) {
     rateLimited.add(1);
-    const retryAfter = parseInt(res.headers['Retry-After'] || '5', 10);
+    const retryAfter = parseInt(res.headers['Retry-After'], 10) || 5;
     sleep(retryAfter);
     res = http.post(url, JSON.stringify(body), { headers: hdrs });
   }
