@@ -5,14 +5,51 @@ interface AnnouncementListProps {
   items: Announcement[];
 }
 
+/**
+ * Strip HTML tags and decode common entities to produce plain text.
+ *
+ * On the client we delegate to the DOM (handles all edge cases).
+ * On the server we use a small state-machine parser that correctly
+ * handles `>` characters inside quoted attribute values — something
+ * a simple regex cannot do reliably.
+ */
 function stripHtml(html: string): string {
   if (typeof document !== 'undefined') {
     const el = document.createElement('div');
     el.innerHTML = html;
     return el.textContent ?? '';
   }
-  // SSR fallback: non-greedy match handles attributes containing '>'
-  return html.replace(/<[^>]+?>/g, '');
+
+  // SSR fallback: state-machine tag stripper
+  let result = '';
+  let inTag = false;
+  let quote: string | null = null;
+
+  for (let i = 0; i < html.length; i++) {
+    const ch = html[i];
+    if (inTag) {
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === '>') {
+        inTag = false;
+      }
+    } else if (ch === '<') {
+      inTag = true;
+    } else {
+      result += ch;
+    }
+  }
+
+  // Decode the most common HTML entities
+  return result
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
 }
 
 function formatDate(value: Date | string): string {
