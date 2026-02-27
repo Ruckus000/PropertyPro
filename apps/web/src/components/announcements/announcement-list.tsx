@@ -11,8 +11,8 @@ function stripHtml(html: string): string {
     el.innerHTML = html;
     return el.textContent ?? '';
   }
-  // SSR fallback: strip tags conservatively
-  return html.replace(/<[^>]*>/g, '');
+  // SSR fallback: non-greedy match handles attributes containing '>'
+  return html.replace(/<[^>]+?>/g, '');
 }
 
 function formatDate(value: Date | string): string {

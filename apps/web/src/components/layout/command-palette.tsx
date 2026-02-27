@@ -55,11 +55,11 @@ function getCommandItems(communityId: number | null): CommandItem[] {
   return [
     // Pages
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: `/dashboard?communityId=${cid}`, group: 'page' },
-    { id: 'documents', label: 'Documents', icon: FileText, href: `/communities/${cid}/documents`, group: 'page', keywords: 'files upload' },
-    { id: 'meetings', label: 'Meetings', icon: Calendar, href: `/communities/${cid}/meetings`, group: 'page', keywords: 'schedule board' },
+    { id: 'documents', label: 'Documents', icon: FileText, href: `/communities/${cid}/documents?communityId=${cid}`, group: 'page', keywords: 'files upload' },
+    { id: 'meetings', label: 'Meetings', icon: Calendar, href: `/communities/${cid}/meetings?communityId=${cid}`, group: 'page', keywords: 'schedule board' },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, href: `/announcements?communityId=${cid}`, group: 'page', keywords: 'news updates' },
     { id: 'maintenance', label: 'Maintenance Requests', icon: Wrench, href: `/maintenance/submit?communityId=${cid}`, group: 'page', keywords: 'repair fix submit' },
-    { id: 'compliance', label: 'Compliance Dashboard', icon: Shield, href: `/communities/${cid}/compliance`, group: 'page', keywords: 'statute 718 720' },
+    { id: 'compliance', label: 'Compliance Dashboard', icon: Shield, href: `/communities/${cid}/compliance?communityId=${cid}`, group: 'page', keywords: 'statute 718 720' },
     { id: 'maintenance-inbox', label: 'Maintenance Inbox', icon: ClipboardList, href: `/maintenance/inbox?communityId=${cid}`, group: 'page', keywords: 'admin review' },
     { id: 'contracts', label: 'Contracts & Vendors', icon: FileText, href: `/contracts?communityId=${cid}`, group: 'page', keywords: 'vendor bid tracking' },
     { id: 'audit-trail', label: 'Audit Trail', icon: History, href: `/audit-trail?communityId=${cid}`, group: 'page', keywords: 'log activity history' },
@@ -67,7 +67,7 @@ function getCommandItems(communityId: number | null): CommandItem[] {
     ...globalItems,
 
     // Quick Actions
-    { id: 'action-upload', label: 'Upload Document', icon: Upload, href: `/communities/${cid}/documents`, group: 'action', keywords: 'add file' },
+    { id: 'action-upload', label: 'Upload Document', icon: Upload, href: `/communities/${cid}/documents?communityId=${cid}`, group: 'action', keywords: 'add file' },
     { id: 'action-maintenance', label: 'Submit Maintenance Request', icon: Wrench, href: `/maintenance/submit?communityId=${cid}`, group: 'action', keywords: 'new repair' },
   ];
 }
