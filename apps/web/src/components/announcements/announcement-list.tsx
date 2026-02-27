@@ -42,14 +42,16 @@ function stripHtml(html: string): string {
     }
   }
 
-  // Decode the most common HTML entities
+  // Decode HTML entities — named entities first, then numeric (decimal & hex)
   return result
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)));
 }
 
 function formatDate(value: Date | string): string {
