@@ -58,10 +58,10 @@ export const PERMISSION_PROFILE_MAP = {
  * Returns "?" if name is null/empty.
  */
 export function toInitials(name: string | null): string {
-  if (!name) return '?';
+  if (!name || !name.trim()) return '?';
   return name
-    .split(' ')
-    .filter(Boolean)
+    .trim()
+    .split(/\s+/)
     .map((word) => word[0])
     .join('')
     .toUpperCase()
