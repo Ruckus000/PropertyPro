@@ -89,8 +89,16 @@ function AnnouncementCard({ item }: { item: Announcement }) {
 }
 
 export function AnnouncementList({ items }: AnnouncementListProps) {
-  const pinned = items.filter((a) => a.isPinned);
-  const unpinned = items.filter((a) => !a.isPinned);
+  const { pinned, unpinned } = items.reduce<{
+    pinned: Announcement[];
+    unpinned: Announcement[];
+  }>(
+    (acc, item) => {
+      (item.isPinned ? acc.pinned : acc.unpinned).push(item);
+      return acc;
+    },
+    { pinned: [], unpinned: [] },
+  );
 
   if (items.length === 0) {
     return (
