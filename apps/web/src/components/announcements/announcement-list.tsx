@@ -36,6 +36,14 @@ function stripHtml(html: string): string {
         inTag = false;
       }
     } else if (ch === '<') {
+      // Skip HTML comments entirely
+      if (html.substring(i + 1, i + 4) === '!--') {
+        const commentEnd = html.indexOf('-->', i + 4);
+        if (commentEnd !== -1) {
+          i = commentEnd + 2;
+          continue;
+        }
+      }
       inTag = true;
     } else {
       result += ch;
