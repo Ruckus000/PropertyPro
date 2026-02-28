@@ -130,6 +130,8 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
         open={searchOpen}
         onOpenChange={setSearchOpen}
         communityId={community?.id ?? null}
+        role={role}
+        features={features}
       />
     </div>
   );

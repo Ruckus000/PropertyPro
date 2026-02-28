@@ -4,33 +4,31 @@
  * Command Palette — Cmd+K search across pages, quick actions, and recent history.
  *
  * Uses the `cmdk` library for keyboard-navigable command list.
+ * Page items are derived from nav-config.ts via getVisibleItems so that
+ * role/feature gating is consistent with the sidebar.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Command } from 'cmdk';
 import {
-  LayoutDashboard,
-  FileText,
-  Calendar,
-  Megaphone,
-  Wrench,
-  Shield,
-  ClipboardList,
-  History,
   Settings,
   Download,
   Upload,
+  Wrench,
   Search,
   Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { useRecentPages } from '@/hooks/useRecentPages';
-import { NAV_ITEMS, PM_NAV_ITEMS, getActiveItemId } from './nav-config';
+import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
 
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
+  role: CommunityRole | null;
+  features: CommunityFeatures | null;
 }
 
 interface CommandItem {
@@ -42,7 +40,11 @@ interface CommandItem {
   keywords?: string;
 }
 
-function getCommandItems(communityId: number | null): CommandItem[] {
+function getCommandItems(
+  communityId: number | null,
+  role: CommunityRole | null,
+  features: CommunityFeatures | null,
+): CommandItem[] {
   const cid = communityId;
 
   // Always-available items (no community required)
@@ -52,33 +54,41 @@ function getCommandItems(communityId: number | null): CommandItem[] {
 
   if (!cid) return globalItems;
 
-  return [
-    // Pages
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: `/dashboard?communityId=${cid}`, group: 'page' },
-    { id: 'documents', label: 'Documents', icon: FileText, href: `/communities/${cid}/documents?communityId=${cid}`, group: 'page', keywords: 'files upload' },
-    { id: 'meetings', label: 'Meetings', icon: Calendar, href: `/communities/${cid}/meetings?communityId=${cid}`, group: 'page', keywords: 'schedule board' },
-    { id: 'announcements', label: 'Announcements', icon: Megaphone, href: `/announcements?communityId=${cid}`, group: 'page', keywords: 'news updates' },
-    { id: 'maintenance', label: 'Maintenance Requests', icon: Wrench, href: `/maintenance/submit?communityId=${cid}`, group: 'page', keywords: 'repair fix submit' },
-    { id: 'compliance', label: 'Compliance Dashboard', icon: Shield, href: `/communities/${cid}/compliance?communityId=${cid}`, group: 'page', keywords: 'statute 718 720' },
-    { id: 'maintenance-inbox', label: 'Maintenance Inbox', icon: ClipboardList, href: `/maintenance/inbox?communityId=${cid}`, group: 'page', keywords: 'admin review' },
-    { id: 'contracts', label: 'Contracts & Vendors', icon: FileText, href: `/contracts?communityId=${cid}`, group: 'page', keywords: 'vendor bid tracking' },
-    { id: 'audit-trail', label: 'Audit Trail', icon: History, href: `/audit-trail?communityId=${cid}`, group: 'page', keywords: 'log activity history' },
-    { id: 'export', label: 'Data Export', icon: Download, href: `/settings/export?communityId=${cid}`, group: 'page', keywords: 'download csv zip' },
-    ...globalItems,
+  // Derive page items from nav-config, filtered by role & features
+  const visibleNavItems = getVisibleItems(NAV_ITEMS, role, features);
+  const pageItems: CommandItem[] = visibleNavItems.map((item) => ({
+    id: item.id,
+    label: item.label,
+    icon: item.icon,
+    href: item.href(cid),
+    group: 'page' as const,
+    keywords: PAGE_TITLES[item.id]?.subtitle || undefined,
+  }));
 
-    // Quick Actions
+  // Extra page items not in nav-config
+  const extraPages: CommandItem[] = [
+    { id: 'export', label: 'Data Export', icon: Download, href: `/settings/export?communityId=${cid}`, group: 'page', keywords: 'download csv zip' },
+  ];
+
+  // Quick actions
+  const actionItems: CommandItem[] = [
     { id: 'action-upload', label: 'Upload Document', icon: Upload, href: `/communities/${cid}/documents?communityId=${cid}`, group: 'action', keywords: 'add file' },
     { id: 'action-maintenance', label: 'Submit Maintenance Request', icon: Wrench, href: `/maintenance/submit?communityId=${cid}`, group: 'action', keywords: 'new repair' },
   ];
+
+  return [...pageItems, ...extraPages, ...globalItems, ...actionItems];
 }
 
-export function CommandPalette({ open, onOpenChange, communityId }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, communityId, role, features }: CommandPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { recentPages, addPage } = useRecentPages();
   const [search, setSearch] = useState('');
 
-  const items = useMemo(() => getCommandItems(communityId), [communityId]);
+  const items = useMemo(
+    () => getCommandItems(communityId, role, features),
+    [communityId, role, features],
+  );
 
   // Close on Escape (cmdk handles this internally, but we also handle it for the overlay)
   useEffect(() => {
