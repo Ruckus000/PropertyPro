@@ -56,7 +56,7 @@ export default async function PmCommunitiesPage({ searchParams }: CommunitiesPag
   const firstCommunityId = communities[0]?.communityId;
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
+    <>
       {/* Phone frame preview — shown when at least one community is managed */}
       {firstCommunityId !== undefined && (
         <div className="mb-8 flex justify-end">
@@ -110,6 +110,6 @@ export default async function PmCommunitiesPage({ searchParams }: CommunitiesPag
           ))}
         </ul>
       )}
-    </main>
+    </>
   );
 }

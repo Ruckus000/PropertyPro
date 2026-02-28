@@ -54,9 +54,9 @@ export default async function ApartmentDashboardPage({
   const metrics = await loadApartmentMetrics(context.communityId, userId);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+    <div className="space-y-6">
       <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
       <ApartmentDashboard metrics={metrics} communityId={context.communityId} />
-    </main>
+    </div>
   );
 }

@@ -1,40 +1,56 @@
+import { headers } from 'next/headers';
 import { ExportButton } from '@/components/settings/export-button';
+import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 
 /**
  * P4-64: Community data export page.
  *
  * Renders a download button that triggers a ZIP export of community data
  * (residents, documents, maintenance requests, announcements).
+ *
+ * Uses resolveCommunityContext for consistent tenant resolution
+ * across all authenticated pages.
  */
 export default async function ExportPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
-  const raw = params['communityId'];
-  const communityIdStr = Array.isArray(raw) ? raw[0] : raw;
-  const communityId = Number(communityIdStr);
+  const [resolvedSearchParams, requestHeaders] = await Promise.all([
+    searchParams,
+    headers(),
+  ]);
 
-  if (!communityIdStr || !Number.isInteger(communityId) || communityId <= 0) {
+  const context = resolveCommunityContext({
+    searchParams: toUrlSearchParams(resolvedSearchParams),
+    host: requestHeaders.get('host'),
+  });
+
+  if (!context.communityId) {
     return (
-      <main id="main-content" className="p-6">
+      <>
         <h1 className="mb-4 text-xl font-semibold">Data Export</h1>
         <p className="text-sm text-gray-600">
           Provide a <code>communityId</code> to export community data.
         </p>
-      </main>
+      </>
     );
   }
 
+  const userId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(context.communityId, userId);
+
   return (
-    <main id="main-content" className="p-6">
+    <>
       <h1 className="mb-2 text-xl font-semibold">Data Export</h1>
       <p className="mb-4 text-sm text-gray-600">
         Download a ZIP file containing CSV exports of your community&apos;s residents,
         documents, maintenance requests, and announcements.
       </p>
-      <ExportButton communityId={communityId} />
-    </main>
+      <ExportButton communityId={context.communityId} />
+    </>
   );
 }
