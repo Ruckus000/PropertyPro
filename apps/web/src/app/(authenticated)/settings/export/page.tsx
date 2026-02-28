@@ -1,4 +1,7 @@
+import { headers } from 'next/headers';
 import { ExportButton } from '@/components/settings/export-button';
+import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 
@@ -7,18 +10,26 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
  *
  * Renders a download button that triggers a ZIP export of community data
  * (residents, documents, maintenance requests, announcements).
+ *
+ * Uses resolveCommunityContext for consistent tenant resolution
+ * across all authenticated pages.
  */
 export default async function ExportPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
-  const raw = params['communityId'];
-  const communityIdStr = Array.isArray(raw) ? raw[0] : raw;
-  const communityId = Number(communityIdStr);
+  const [resolvedSearchParams, requestHeaders] = await Promise.all([
+    searchParams,
+    headers(),
+  ]);
 
-  if (!communityIdStr || !Number.isInteger(communityId) || communityId <= 0) {
+  const context = resolveCommunityContext({
+    searchParams: toUrlSearchParams(resolvedSearchParams),
+    host: requestHeaders.get('host'),
+  });
+
+  if (!context.communityId) {
     return (
       <>
         <h1 className="mb-4 text-xl font-semibold">Data Export</h1>
@@ -30,7 +41,7 @@ export default async function ExportPage({
   }
 
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
+  await requireCommunityMembership(context.communityId, userId);
 
   return (
     <>
@@ -39,7 +50,7 @@ export default async function ExportPage({
         Download a ZIP file containing CSV exports of your community&apos;s residents,
         documents, maintenance requests, and announcements.
       </p>
-      <ExportButton communityId={communityId} />
+      <ExportButton communityId={context.communityId} />
     </>
   );
 }
