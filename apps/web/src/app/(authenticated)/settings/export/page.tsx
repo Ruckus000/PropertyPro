@@ -1,4 +1,6 @@
 import { ExportButton } from '@/components/settings/export-button';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 
 /**
  * P4-64: Community data export page.
@@ -26,6 +28,9 @@ export default async function ExportPage({
       </>
     );
   }
+
+  const userId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, userId);
 
   return (
     <>

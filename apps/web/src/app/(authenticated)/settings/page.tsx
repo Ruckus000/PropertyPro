@@ -1,5 +1,7 @@
 import React from 'react';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -20,6 +22,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </>
     );
   }
+
+  const userId = await requireAuthenticatedUserId();
+  await requireCommunityMembership(communityId, userId);
 
   return (
     <>
