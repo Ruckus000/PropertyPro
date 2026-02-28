@@ -39,10 +39,12 @@ async function resolveUser(): Promise<AppShellUser | null> {
 
 /**
  * Resolve community context from middleware-injected headers.
+ * Accepts the already-resolved userId to avoid a duplicate auth call.
  * Returns null when no community is selected.
  */
 async function resolveCommunity(
   requestHeaders: Headers,
+  userId: string,
 ): Promise<{ community: AppShellCommunity; role: CommunityRole } | null> {
   const communityIdStr = requestHeaders.get('x-community-id');
   if (!communityIdStr) return null;
@@ -52,12 +54,6 @@ async function resolveCommunity(
 
   try {
     const supabase = await createServerClient();
-
-    // Get user for role lookup
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
 
     // Fetch community info and user role in parallel
     const [communityResult, roleResult] = await Promise.all([
@@ -71,7 +67,7 @@ async function resolveCommunity(
       supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('community_id', communityId)
         .limit(1)
         .single(),
@@ -108,10 +104,10 @@ export default async function AuthenticatedLayout({
   children: ReactNode;
 }) {
   const requestHeaders = await headers();
-  const [user, communityData] = await Promise.all([
-    resolveUser(),
-    resolveCommunity(requestHeaders),
-  ]);
+  const user = await resolveUser();
+  const communityData = user
+    ? await resolveCommunity(requestHeaders, user.id)
+    : null;
 
   const community = communityData?.community ?? null;
   const role = communityData?.role ?? null;
