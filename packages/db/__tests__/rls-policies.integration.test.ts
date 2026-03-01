@@ -1313,29 +1313,16 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(Array.isArray(rows)).toBe(true);
     });
 
-    it('service_role has INSERT privilege on platform_admin_users', async () => {
-      await setServiceRoleContext(serviceSql);
-      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
-        select has_table_privilege('service_role', 'public.platform_admin_users', 'INSERT') as has_privilege
-      `;
-      expect(row?.has_privilege).toBe(true);
-    });
-
-    it('service_role has UPDATE privilege on platform_admin_users', async () => {
-      await setServiceRoleContext(serviceSql);
-      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
-        select has_table_privilege('service_role', 'public.platform_admin_users', 'UPDATE') as has_privilege
-      `;
-      expect(row?.has_privilege).toBe(true);
-    });
-
-    it('service_role has DELETE privilege on platform_admin_users', async () => {
-      await setServiceRoleContext(serviceSql);
-      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
-        select has_table_privilege('service_role', 'public.platform_admin_users', 'DELETE') as has_privilege
-      `;
-      expect(row?.has_privilege).toBe(true);
-    });
+    it.each(['INSERT', 'UPDATE', 'DELETE'])(
+      'service_role has %s privilege on platform_admin_users',
+      async (privilege) => {
+        await setServiceRoleContext(serviceSql);
+        const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+          select has_table_privilege('service_role', 'public.platform_admin_users', ${privilege}) as has_privilege
+        `;
+        expect(row?.has_privilege).toBe(true);
+      },
+    );
   });
 
   it('verifies policy presence in pg_policies for every tenant table and family', async () => {
