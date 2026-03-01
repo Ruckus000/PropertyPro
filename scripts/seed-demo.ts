@@ -197,12 +197,13 @@ async function ensureUser(
       debugSeed(`syncing public.users.id for ${normalizedEmail}: ${existing[0].id} → ${preferredId}`);
       const oldId = existing[0].id;
       // Delete FK-referencing rows that use ON DELETE RESTRICT (would block cascade).
-      // Column names taken from Drizzle schema definitions.
+      // Only delete rows referencing the old user via RESTRICT FKs.
+      // SET NULL FKs (documents.uploaded_by, maintenance_requests.assigned_to_id,
+      // units.owner_user_id) are handled automatically by PostgreSQL.
       const restrictFkDeletes: Array<ReturnType<typeof sql>> = [
         sql`DELETE FROM maintenance_comments WHERE user_id = ${oldId}`,
-        sql`DELETE FROM maintenance_requests WHERE submitted_by_id = ${oldId} OR assigned_to_id = ${oldId}`,
+        sql`DELETE FROM maintenance_requests WHERE submitted_by_id = ${oldId}`,
         sql`DELETE FROM leases WHERE resident_id = ${oldId}`,
-        sql`DELETE FROM documents WHERE uploaded_by = ${oldId}`,
         sql`DELETE FROM announcements WHERE published_by = ${oldId}`,
         sql`DELETE FROM compliance_audit_log WHERE user_id = ${oldId}`,
         sql`DELETE FROM contracts WHERE created_by = ${oldId}`,
@@ -212,9 +213,9 @@ async function ensureUser(
       for (const stmt of restrictFkDeletes) {
         await db.execute(stmt);
       }
-      // Now delete the old users row (ON DELETE CASCADE handles user_roles,
-      // notification_preferences, notification_digest_queue, invitations.invited_by,
-      // announcement_delivery_log)
+      // Now delete the old users row (CASCADE FKs: user_roles,
+      // notification_preferences, notification_digest_queue, invitations.user_id,
+      // announcement_delivery_log; SET NULL FKs nullified automatically)
       await db.execute(sql`DELETE FROM public.users WHERE id = ${oldId}`);
       // Re-insert with the correct auth user ID
       await db.insert(users).values({
