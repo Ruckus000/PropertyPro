@@ -1270,6 +1270,74 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
+  describe('platform_admin_users RLS (service_role only)', () => {
+    // platform_admin_users uses REVOKE ALL from anon/authenticated + GRANT to service_role.
+    // This means authenticated users get a hard "permission denied" error (not just 0 rows).
+    // We cannot INSERT test rows directly because user_id FK references auth.users (not public.users).
+    // Instead we verify deny behaviour via permission errors and service_role privileges via
+    // has_table_privilege() checks.
+
+    it('authenticated user is denied SELECT on platform_admin_users', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await expect(
+        authSql`select user_id from public.platform_admin_users`,
+      ).rejects.toThrow();
+    });
+
+    it('authenticated user is denied INSERT on platform_admin_users', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await expect(
+        authSql`insert into public.platform_admin_users (user_id, role) values (${randomUUID()}, 'super_admin')`,
+      ).rejects.toThrow();
+    });
+
+    it('authenticated user is denied UPDATE on platform_admin_users', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await expect(
+        authSql`update public.platform_admin_users set role = 'super_admin' where user_id = ${randomUUID()}`,
+      ).rejects.toThrow();
+    });
+
+    it('authenticated user is denied DELETE on platform_admin_users', async () => {
+      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await expect(
+        authSql`delete from public.platform_admin_users where user_id = ${randomUUID()}`,
+      ).rejects.toThrow();
+    });
+
+    it('service_role can SELECT from platform_admin_users without error', async () => {
+      await setServiceRoleContext(serviceSql);
+      const rows = await serviceSql<{ user_id: string }[]>`
+        select user_id from public.platform_admin_users limit 1
+      `;
+      expect(Array.isArray(rows)).toBe(true);
+    });
+
+    it('service_role has INSERT privilege on platform_admin_users', async () => {
+      await setServiceRoleContext(serviceSql);
+      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+        select has_table_privilege('service_role', 'public.platform_admin_users', 'INSERT') as has_privilege
+      `;
+      expect(row?.has_privilege).toBe(true);
+    });
+
+    it('service_role has UPDATE privilege on platform_admin_users', async () => {
+      await setServiceRoleContext(serviceSql);
+      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+        select has_table_privilege('service_role', 'public.platform_admin_users', 'UPDATE') as has_privilege
+      `;
+      expect(row?.has_privilege).toBe(true);
+    });
+
+    it('service_role has DELETE privilege on platform_admin_users', async () => {
+      await setServiceRoleContext(serviceSql);
+      const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+        select has_table_privilege('service_role', 'public.platform_admin_users', 'DELETE') as has_privilege
+      `;
+      expect(row?.has_privilege).toBe(true);
+    });
+  });
+
   it('verifies policy presence in pg_policies for every tenant table and family', async () => {
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
       select schemaname, tablename, policyname
