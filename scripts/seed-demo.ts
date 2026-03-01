@@ -196,22 +196,30 @@ async function ensureUser(
     if (preferredId && existing[0].id !== preferredId) {
       debugSeed(`syncing public.users.id for ${normalizedEmail}: ${existing[0].id} → ${preferredId}`);
       const oldId = existing[0].id;
-      // ⚠️  MAINTENANCE NOTE: This list must include every table that has an
-      // ON DELETE RESTRICT foreign key referencing public.users.id.
-      // If you add a new table with such a constraint, add a DELETE here too,
-      // otherwise the seed script will fail on re-seed with a FK violation.
-      // SET NULL FKs (documents.uploaded_by, maintenance_requests.assigned_to_id,
-      // units.owner_user_id) are handled automatically by PostgreSQL.
-      const restrictFkDeletes: Array<ReturnType<typeof sql>> = [
-        sql`DELETE FROM maintenance_comments WHERE user_id = ${oldId}`,
-        sql`DELETE FROM maintenance_requests WHERE submitted_by_id = ${oldId}`,
-        sql`DELETE FROM leases WHERE resident_id = ${oldId}`,
-        sql`DELETE FROM announcements WHERE published_by = ${oldId}`,
-        sql`DELETE FROM compliance_audit_log WHERE user_id = ${oldId}`,
-        sql`DELETE FROM contracts WHERE created_by = ${oldId}`,
-        sql`DELETE FROM contract_bids WHERE created_by = ${oldId}`,
-        sql`DELETE FROM invitations WHERE invited_by = ${oldId}`,
-      ];
+      // Dynamically discover all tables with ON DELETE RESTRICT FKs
+      // referencing public.users.id so the seed script stays resilient
+      // to future schema changes without a hardcoded list.
+      const restrictFks = await db.execute(sql`
+        SELECT tc.table_name, kcu.column_name
+        FROM information_schema.referential_constraints AS rc
+        JOIN information_schema.key_column_usage AS kcu
+          ON rc.constraint_name = kcu.constraint_name
+          AND rc.constraint_schema = kcu.table_schema
+        JOIN information_schema.table_constraints AS tc
+          ON tc.constraint_name = rc.constraint_name
+          AND tc.table_schema = rc.constraint_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON rc.unique_constraint_name = ccu.constraint_name
+          AND rc.unique_constraint_schema = ccu.table_schema
+        WHERE rc.delete_rule = 'RESTRICT'
+          AND ccu.table_name = 'users'
+          AND ccu.column_name = 'id'
+          AND tc.table_schema = 'public'
+      `);
+      const restrictFkDeletes = (restrictFks as unknown as Array<{ table_name: string; column_name: string }>).map(
+        ({ table_name, column_name }) =>
+          sql`DELETE FROM ${sql.identifier(table_name)} WHERE ${sql.identifier(column_name)} = ${oldId}`,
+      );
       await db.transaction(async (tx) => {
         await Promise.all(restrictFkDeletes.map((stmt) => tx.execute(stmt)));
         // Delete the old users row (CASCADE FKs: user_roles,
