@@ -176,18 +176,19 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
   await seedRoles(crossAssignments);
 
-  for (const assignment of crossAssignments) {
-    await ensureNotificationPreference(assignment.communityId, assignment.userId);
-  }
+  await Promise.all(
+    crossAssignments.map((a) => ensureNotificationPreference(a.communityId, a.userId)),
+  );
 
-  for (const community of DEMO_COMMUNITIES) {
-    const communityId = communityIdsBySlug[community.slug]!;
-
-    for (const email of GLOBAL_PREF_USER_EMAILS) {
-      const userId = resolveUserId(userIdsByEmail, email);
-      await ensureNotificationPreference(communityId, userId);
-    }
-  }
+  await Promise.all(
+    DEMO_COMMUNITIES.flatMap((community) => {
+      const communityId = communityIdsBySlug[community.slug]!;
+      return GLOBAL_PREF_USER_EMAILS.map((email) => {
+        const userId = resolveUserId(userIdsByEmail, email);
+        return ensureNotificationPreference(communityId, userId);
+      });
+    }),
+  );
 
   const apartmentTenantAssignments = APARTMENT_TENANT_EMAILS.map((email) => ({
     communityId: apartmentCommunityId,
@@ -197,9 +198,9 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
   await seedRoles(apartmentTenantAssignments);
 
-  for (const assignment of apartmentTenantAssignments) {
-    await ensureNotificationPreference(assignment.communityId, assignment.userId);
-  }
+  await Promise.all(
+    apartmentTenantAssignments.map((a) => ensureNotificationPreference(a.communityId, a.userId)),
+  );
 
   debugSeed('cross-community role and notification fixups complete');
   debugSeed('runDemoSeed complete');

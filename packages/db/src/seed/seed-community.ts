@@ -1176,13 +1176,18 @@ export async function seedCommunity(
   const userIdsByEmail: Record<string, string> = {};
   const seededUsers: SeedCommunityResult['users'] = [];
 
-  for (const user of usersToSeed) {
-    const authUserId = syncAuthUsers
-      ? await ensureAuthUser(user.email, user.fullName, DEFAULT_PASSWORD)
-      : null;
-    const userId = await ensureUser(user.email, user.fullName, user.phone, authUserId ?? undefined);
-    userIdsByEmail[user.email] = userId;
-    seededUsers.push({ email: user.email, userId, role: user.role });
+  const seededUsersData = await Promise.all(
+    usersToSeed.map(async (user) => {
+      const authUserId = syncAuthUsers
+        ? await ensureAuthUser(user.email, user.fullName, DEFAULT_PASSWORD)
+        : null;
+      const userId = await ensureUser(user.email, user.fullName, user.phone, authUserId ?? undefined);
+      return { email: user.email, userId, role: user.role };
+    }),
+  );
+  for (const seededUser of seededUsersData) {
+    userIdsByEmail[seededUser.email] = seededUser.userId;
+    seededUsers.push(seededUser);
   }
 
   await seedRoles(
@@ -1193,9 +1198,7 @@ export async function seedCommunity(
     })),
   );
 
-  for (const entry of seededUsers) {
-    await ensureNotificationPreference(communityId, entry.userId);
-  }
+  await Promise.all(seededUsers.map((entry) => ensureNotificationPreference(communityId, entry.userId)));
 
   const categoryIds = await seedDocumentCategories(communityId, config.communityType);
 
