@@ -199,7 +199,7 @@ async function ensureUser(
       // Dynamically discover all tables with ON DELETE RESTRICT FKs
       // referencing public.users.id so the seed script stays resilient
       // to future schema changes without a hardcoded list.
-      const restrictFks = await db.execute(sql`
+      const restrictFksResult = await db.execute<{ table_name: string; column_name: string }>(sql`
         SELECT tc.table_name, kcu.column_name
         FROM information_schema.referential_constraints AS rc
         JOIN information_schema.key_column_usage AS kcu
@@ -216,7 +216,12 @@ async function ensureUser(
           AND ccu.column_name = 'id'
           AND tc.table_schema = 'public'
       `);
-      const restrictFkDeletes = (restrictFks as unknown as Array<{ table_name: string; column_name: string }>).map(
+      const fks = Array.isArray(restrictFksResult)
+        ? restrictFksResult
+        : ('rows' in restrictFksResult
+            ? (restrictFksResult.rows as { table_name: string; column_name: string }[])
+            : []);
+      const restrictFkDeletes = fks.map(
         ({ table_name, column_name }) =>
           sql`DELETE FROM ${sql.identifier(table_name)} WHERE ${sql.identifier(column_name)} = ${oldId}`,
       );
