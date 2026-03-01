@@ -13,7 +13,7 @@ export * from './announcement-delivery-log';
 export * from './notification-digest-queue';
 export * from './notification-preferences';
 export * from './pending-signups';
-export { platformAdminUsers } from './platform-admin-users';
+export * from './platform-admin-users';
 export * from './stripe-webhook-events';
 export * from './provisioning-jobs';
 export * from './compliance-audit-log';
@@ -58,6 +58,7 @@ import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { onboardingWizardState } from './onboarding-wizard-state';
+import type { platformAdminUsers } from './platform-admin-users';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -156,3 +157,7 @@ export type NewContractBid = typeof contractBids.$inferInsert;
 // Onboarding Wizard State
 export type OnboardingWizardState = typeof onboardingWizardState.$inferSelect;
 export type NewOnboardingWizardState = typeof onboardingWizardState.$inferInsert;
+
+// Platform Admin Users
+export type PlatformAdminUser = typeof platformAdminUsers.$inferSelect;
+export type NewPlatformAdminUser = typeof platformAdminUsers.$inferInsert;
