@@ -13,6 +13,7 @@ export * from './announcement-delivery-log';
 export * from './notification-digest-queue';
 export * from './notification-preferences';
 export * from './pending-signups';
+export { platformAdminUsers } from './platform-admin-users';
 export * from './stripe-webhook-events';
 export * from './provisioning-jobs';
 export * from './compliance-audit-log';
