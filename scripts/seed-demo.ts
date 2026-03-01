@@ -177,6 +177,8 @@ async function ensureUser(
   email: string,
   fullName: string,
   phone: string,
+  /** When provided (from auth.users), use this as the public.users ID to keep them in sync. */
+  preferredId?: string,
 ): Promise<string> {
   const normalizedEmail = email.toLowerCase();
   const existing = await db
@@ -186,6 +188,59 @@ async function ensureUser(
     .limit(1);
 
   if (existing[0]) {
+    // If the auth user ID differs from public.users.id, update the public ID to match.
+    // This reconciles any previous mismatch caused by independent ID generation.
+    // Strategy: delete the stale public.users row (FK-referencing rows are cleaned up
+    // by cascade or manual deletion), then re-insert with the correct ID.
+    // The seed script re-creates all dependent data (roles, documents, etc.) afterward.
+    if (preferredId && existing[0].id !== preferredId) {
+      debugSeed(`syncing public.users.id for ${normalizedEmail}: ${existing[0].id} → ${preferredId}`);
+      const oldId = existing[0].id;
+      // Dynamically discover all tables with ON DELETE RESTRICT FKs
+      // referencing public.users.id so the seed script stays resilient
+      // to future schema changes without a hardcoded list.
+      const restrictFksResult = await db.execute<{ table_name: string; column_name: string }>(sql`
+        SELECT tc.table_name, kcu.column_name
+        FROM information_schema.referential_constraints AS rc
+        JOIN information_schema.key_column_usage AS kcu
+          ON rc.constraint_name = kcu.constraint_name
+          AND rc.constraint_schema = kcu.table_schema
+        JOIN information_schema.table_constraints AS tc
+          ON tc.constraint_name = rc.constraint_name
+          AND tc.table_schema = rc.constraint_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON rc.unique_constraint_name = ccu.constraint_name
+          AND rc.unique_constraint_schema = ccu.table_schema
+        WHERE rc.delete_rule = 'RESTRICT'
+          AND ccu.table_name = 'users'
+          AND ccu.column_name = 'id'
+          AND tc.table_schema = 'public'
+      `);
+      const fks = Array.isArray(restrictFksResult)
+        ? restrictFksResult
+        : ('rows' in restrictFksResult
+            ? (restrictFksResult.rows as { table_name: string; column_name: string }[])
+            : []);
+      const restrictFkDeletes = fks.map(
+        ({ table_name, column_name }) =>
+          sql`DELETE FROM ${sql.identifier(table_name)} WHERE ${sql.identifier(column_name)} = ${oldId}`,
+      );
+      await db.transaction(async (tx) => {
+        await Promise.all(restrictFkDeletes.map((stmt) => tx.execute(stmt)));
+        // Delete the old users row (CASCADE FKs: user_roles,
+        // notification_preferences, notification_digest_queue, invitations.user_id,
+        // announcement_delivery_log; SET NULL FKs nullified automatically)
+        await tx.execute(sql`DELETE FROM public.users WHERE id = ${oldId}`);
+        // Re-insert with the correct auth user ID
+        await tx.insert(users).values({
+          id: preferredId,
+          email: normalizedEmail,
+          fullName,
+          phone,
+        });
+      });
+      return preferredId;
+    }
     await db
       .update(users)
       .set({
@@ -197,7 +252,7 @@ async function ensureUser(
     return existing[0].id;
   }
 
-  const userId = randomUUID();
+  const userId = preferredId ?? randomUUID();
   await db.insert(users).values({
     id: userId,
     email: normalizedEmail,
@@ -207,13 +262,17 @@ async function ensureUser(
   return userId;
 }
 
+/**
+ * Create or update an auth.users entry and return its ID.
+ * Returns `null` when Supabase env vars are missing (e.g. CI without a live DB).
+ */
 async function ensureAuthUser(
   email: string,
   fullName: string,
   password: string,
-): Promise<void> {
+): Promise<string | null> {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return;
+    return null;
   }
 
   const admin = createAdminClient();
@@ -224,7 +283,9 @@ async function ensureAuthUser(
     user_metadata: { full_name: fullName },
   });
 
-  if (!createResult.error) return;
+  if (!createResult.error) {
+    return createResult.data.user.id;
+  }
 
   const message = createResult.error.message.toLowerCase();
   const duplicate = message.includes('already') || message.includes('exists');
@@ -245,13 +306,15 @@ async function ensureAuthUser(
         password,
         user_metadata: { ...(matched.user_metadata ?? {}), full_name: fullName },
       });
-      return;
+      return matched.id;
     }
     if (listed.data.users.length < perPage) {
       break;
     }
     page += 1;
   }
+
+  return null;
 }
 
 async function seedRoles(
@@ -992,6 +1055,27 @@ async function seedApartmentMaintenanceRequests(
   debugSeed('apartment maintenance requests seeded');
 }
 
+/**
+ * Seed a completed onboarding wizard state for a community.
+ * Idempotent: does nothing if a state row already exists for the (communityId, wizardType) pair.
+ */
+// Must match getMaxStepIndex() in apps/web/src/lib/queries/wizard-state.ts
+const maxStepsByWizardType = {
+  condo: 2,
+  apartment: 3,
+} as const;
+
+type WizardType = keyof typeof maxStepsByWizardType;
+
+async function seedWizardState(communityId: number, wizardType: WizardType): Promise<void> {
+  const maxStep = maxStepsByWizardType[wizardType];
+  await db.execute(sql`
+    INSERT INTO onboarding_wizard_state (community_id, wizard_type, status, last_completed_step, step_data, completed_at)
+    VALUES (${communityId}, ${wizardType}, 'completed', ${maxStep}, '{}', now())
+    ON CONFLICT (community_id, wizard_type) DO NOTHING
+  `);
+}
+
 async function seedCoreEntities(context: SeedContext): Promise<void> {
   const sunsetCommunityId = context.communityIds['sunset-condos'];
   const palmCommunityId = context.communityIds['palm-shores-hoa'];
@@ -1231,6 +1315,12 @@ async function seedCoreEntities(context: SeedContext): Promise<void> {
   await seedCommunityCompliance(sunsetRidgeCommunityId, 'apartment');
   debugSeed('sunset ridge compliance seeded');
 
+  // Seed completed onboarding wizard states so dashboards don't redirect to onboarding
+  await seedWizardState(sunsetCommunityId, 'condo');
+  await seedWizardState(palmCommunityId, 'condo');
+  await seedWizardState(sunsetRidgeCommunityId, 'apartment');
+  debugSeed('onboarding wizard states seeded');
+
   const { unitIds: apartmentUnitIds, unitNumbers: apartmentUnitNumbers } = await seedApartmentUnits(sunsetRidgeCommunityId);
   debugSeed('apartment units seeded');
 
@@ -1258,11 +1348,12 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
   const userIdsByEmail: Record<string, string> = {};
   for (const user of DEMO_USERS) {
-    const userId = await ensureUser(user.email, user.fullName, user.phone);
+    // Resolve auth user first so we can use its ID for public.users (keeps IDs in sync)
+    const authUserId = syncAuthUsers
+      ? await ensureAuthUser(user.email, user.fullName, DEFAULT_PASSWORD)
+      : null;
+    const userId = await ensureUser(user.email, user.fullName, user.phone, authUserId ?? undefined);
     userIdsByEmail[user.email] = userId;
-    if (syncAuthUsers) {
-      await ensureAuthUser(user.email, user.fullName, DEFAULT_PASSWORD);
-    }
   }
   debugSeed('users seeded');
 
