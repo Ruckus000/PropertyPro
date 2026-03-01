@@ -1059,17 +1059,16 @@ async function seedApartmentMaintenanceRequests(
  * Seed a completed onboarding wizard state for a community.
  * Idempotent: does nothing if a state row already exists for the (communityId, wizardType) pair.
  */
-const maxStepsByWizardType: Record<string, number> = {
+// Must match getMaxStepIndex() in apps/web/src/lib/queries/wizard-state.ts
+const maxStepsByWizardType = {
   condo: 2,
   apartment: 3,
-};
+} as const;
 
-async function seedWizardState(communityId: number, wizardType: string): Promise<void> {
+type WizardType = keyof typeof maxStepsByWizardType;
+
+async function seedWizardState(communityId: number, wizardType: WizardType): Promise<void> {
   const maxStep = maxStepsByWizardType[wizardType];
-  if (maxStep === undefined) {
-    debugSeed(`seedWizardState: unknown wizard type "${wizardType}", skipping.`);
-    return;
-  }
   await db.execute(sql`
     INSERT INTO onboarding_wizard_state (community_id, wizard_type, status, last_completed_step, step_data, completed_at)
     VALUES (${communityId}, ${wizardType}, 'completed', ${maxStep}, '{}', now())
