@@ -118,6 +118,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'users', reason: 'Global identity mirror (no community_id column)' },
   { tableName: 'pending_signups', reason: 'Pre-provisioning flow, not community-scoped yet' },
   { tableName: 'stripe_webhook_events', reason: 'Global billing webhook log' },
+  { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);
