@@ -67,7 +67,15 @@ interface DemoCategoryDefinition {
   description: string;
 }
 
-const DEFAULT_PASSWORD = process.env.DEMO_DEFAULT_PASSWORD ?? 'DemoPass123!';
+function getDefaultPassword(): string {
+  const pw = process.env.DEMO_DEFAULT_PASSWORD;
+  if (!pw) {
+    throw new Error(
+      'DEMO_DEFAULT_PASSWORD environment variable must be set to run the seed script.',
+    );
+  }
+  return pw;
+}
 const DEBUG_DEMO_SEED = process.env.DEBUG_DEMO_SEED === '1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -258,7 +266,7 @@ async function ensureUser(
 
   if (existing[0]) {
     if (preferredId && existing[0].id !== preferredId) {
-      debugSeed(`syncing public.users.id for ${normalizedEmail}: ${existing[0].id} -> ${preferredId}`);
+      debugSeed(`syncing public.users.id for user ${existing[0].id} -> ${preferredId}`);
       const oldId = existing[0].id;
 
       const restrictFksResult = await db.execute<{ table_name: string; column_name: string }>(sql`
@@ -1103,6 +1111,30 @@ async function seedApartmentMaintenanceRequests(
       }
     }
 
+    if (!(await hasRegistryTable())) {
+      const existing = await db
+        .select({ id: maintenanceRequests.id })
+        .from(maintenanceRequests)
+        .where(and(eq(maintenanceRequests.communityId, communityId), eq(maintenanceRequests.title, request.title)))
+        .limit(1);
+
+      if (existing[0]) {
+        await db
+          .update(maintenanceRequests)
+          .set({
+            unitId: request.unitId,
+            submittedById: request.submittedById,
+            description: request.description,
+            status: request.status,
+            priority: request.priority,
+            deletedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(maintenanceRequests.id, existing[0].id));
+        continue;
+      }
+    }
+
     const [created] = await db
       .insert(maintenanceRequests)
       .values({
@@ -1179,7 +1211,7 @@ export async function seedCommunity(
   const seededUsersData = await Promise.all(
     usersToSeed.map(async (user) => {
       const authUserId = syncAuthUsers
-        ? await ensureAuthUser(user.email, user.fullName, DEFAULT_PASSWORD)
+        ? await ensureAuthUser(user.email, user.fullName, getDefaultPassword())
         : null;
       const userId = await ensureUser(user.email, user.fullName, user.phone, authUserId ?? undefined);
       return { email: user.email, userId, role: user.role };
