@@ -50,6 +50,8 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
+  // Community picker — cross-community user membership query for post-login routing
+  resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

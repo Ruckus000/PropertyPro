@@ -25,14 +25,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   });
 
   if (!context.communityId) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Add a valid <code>communityId</code> query parameter to load your community dashboard.
-        </p>
-      </div>
-    );
+    redirect('/select-community');
   }
 
   const userId = await requireAuthenticatedUserId();

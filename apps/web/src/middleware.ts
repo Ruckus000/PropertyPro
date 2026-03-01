@@ -36,6 +36,7 @@ import {
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
+  '/select-community',
   '/settings',
   '/documents',
   '/maintenance',

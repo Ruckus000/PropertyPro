@@ -1,9 +1,42 @@
 # PropertyPro Florida — Agent Warnings & Learnings
 
-**Platform:** Compliance and community management for Florida condo/HOA/apartment communities  
+**Platform:** Compliance and community management for Florida condo/HOA/apartment communities
 **Tech Stack:** Next.js 14+ App Router, TypeScript, Tailwind CSS, Supabase (DB + Auth + Storage), Drizzle ORM, Resend, Stripe, Turborepo + pnpm workspaces, Vercel
 
 These are the persistent "signs next to the slide" — accumulated warnings and learnings that must be read before every iteration.
+
+---
+
+## Codex Task Execution
+
+For task-based implementation driven by `docs/agent-tasks/`:
+
+### Setup
+```bash
+pnpm install
+```
+
+### Verification (run after every task)
+```bash
+pnpm typecheck && pnpm lint && pnpm test
+```
+
+### How to Execute a Task
+1. Read `docs/agent-tasks/SHARED-CONTEXT.md` for project conventions, locked decisions, and exact values
+2. Read the specific task file assigned (e.g., `docs/agent-tasks/TASK-0.3-platform-admin-table.md`)
+3. Read `CLAUDE.md` at the repo root for architecture context and project structure
+4. Implement the task per the deliverables and acceptance criteria in the task file
+5. Respect the "Do NOT" section in each task file — stay within scope
+6. Run verification commands before marking complete
+
+### Key Conventions
+- **Database:** PostgreSQL via Supabase, Drizzle ORM. Never import directly from `drizzle-orm` — use `@propertypro/db/filters`
+- **Scoped queries:** Use `createScopedClient()` for tenant queries, `createAdminClient()` for platform admin queries
+- **RLS:** Every new table must have `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and explicit policies
+- **Migrations:** Numbered sequentially in `packages/db/migrations/`. Check the task file for pre-assigned numbers
+- **Tests:** Vitest. Test files go in `__tests__/` directories adjacent to source
+- **Package manager:** pnpm (not npm, not yarn)
+- **Node version:** 20
 
 ---
 
