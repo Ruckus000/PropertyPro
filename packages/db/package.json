@@ -38,6 +38,11 @@
       "types": "./src/unsafe.ts",
       "import": "./src/unsafe.ts",
       "default": "./src/unsafe.ts"
+    },
+    "./seed/seed-community": {
+      "types": "./src/seed/seed-community.ts",
+      "import": "./src/seed/seed-community.ts",
+      "default": "./src/seed/seed-community.ts"
     }
   },
   "main": "./dist/index.js",
