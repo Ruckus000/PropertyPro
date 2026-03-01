@@ -210,19 +210,21 @@ async function ensureUser(
         sql`DELETE FROM contract_bids WHERE created_by = ${oldId}`,
         sql`DELETE FROM invitations WHERE invited_by = ${oldId}`,
       ];
-      for (const stmt of restrictFkDeletes) {
-        await db.execute(stmt);
-      }
-      // Now delete the old users row (CASCADE FKs: user_roles,
-      // notification_preferences, notification_digest_queue, invitations.user_id,
-      // announcement_delivery_log; SET NULL FKs nullified automatically)
-      await db.execute(sql`DELETE FROM public.users WHERE id = ${oldId}`);
-      // Re-insert with the correct auth user ID
-      await db.insert(users).values({
-        id: preferredId,
-        email: normalizedEmail,
-        fullName,
-        phone,
+      await db.transaction(async (tx) => {
+        for (const stmt of restrictFkDeletes) {
+          await tx.execute(stmt);
+        }
+        // Delete the old users row (CASCADE FKs: user_roles,
+        // notification_preferences, notification_digest_queue, invitations.user_id,
+        // announcement_delivery_log; SET NULL FKs nullified automatically)
+        await tx.execute(sql`DELETE FROM public.users WHERE id = ${oldId}`);
+        // Re-insert with the correct auth user ID
+        await tx.insert(users).values({
+          id: preferredId,
+          email: normalizedEmail,
+          fullName,
+          phone,
+        });
       });
       return preferredId;
     }
@@ -1044,8 +1046,17 @@ async function seedApartmentMaintenanceRequests(
  * Seed a completed onboarding wizard state for a community.
  * Idempotent: does nothing if a state row already exists for the (communityId, wizardType) pair.
  */
+const maxStepsByWizardType: Record<string, number> = {
+  condo: 2,
+  apartment: 3,
+};
+
 async function seedWizardState(communityId: number, wizardType: string): Promise<void> {
-  const maxStep = wizardType === 'condo' ? 2 : 3;
+  const maxStep = maxStepsByWizardType[wizardType];
+  if (maxStep === undefined) {
+    debugSeed(`seedWizardState: unknown wizard type "${wizardType}", skipping.`);
+    return;
+  }
   await db.execute(sql`
     INSERT INTO onboarding_wizard_state (community_id, wizard_type, status, last_completed_step, step_data, completed_at)
     VALUES (${communityId}, ${wizardType}, 'completed', ${maxStep}, '{}', now())
