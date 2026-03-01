@@ -196,8 +196,10 @@ async function ensureUser(
     if (preferredId && existing[0].id !== preferredId) {
       debugSeed(`syncing public.users.id for ${normalizedEmail}: ${existing[0].id} → ${preferredId}`);
       const oldId = existing[0].id;
-      // Delete FK-referencing rows that use ON DELETE RESTRICT (would block cascade).
-      // Only delete rows referencing the old user via RESTRICT FKs.
+      // ⚠️  MAINTENANCE NOTE: This list must include every table that has an
+      // ON DELETE RESTRICT foreign key referencing public.users.id.
+      // If you add a new table with such a constraint, add a DELETE here too,
+      // otherwise the seed script will fail on re-seed with a FK violation.
       // SET NULL FKs (documents.uploaded_by, maintenance_requests.assigned_to_id,
       // units.owner_user_id) are handled automatically by PostgreSQL.
       const restrictFkDeletes: Array<ReturnType<typeof sql>> = [
@@ -211,9 +213,7 @@ async function ensureUser(
         sql`DELETE FROM invitations WHERE invited_by = ${oldId}`,
       ];
       await db.transaction(async (tx) => {
-        for (const stmt of restrictFkDeletes) {
-          await tx.execute(stmt);
-        }
+        await Promise.all(restrictFkDeletes.map((stmt) => tx.execute(stmt)));
         // Delete the old users row (CASCADE FKs: user_roles,
         // notification_preferences, notification_digest_queue, invitations.user_id,
         // announcement_delivery_log; SET NULL FKs nullified automatically)
