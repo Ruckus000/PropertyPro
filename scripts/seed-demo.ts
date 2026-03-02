@@ -1,5 +1,4 @@
 import { pathToFileURL } from 'node:url';
-import { units } from '@propertypro/db';
 import {
   ensureNotificationPreference,
   seedCommunity,
@@ -76,10 +75,6 @@ const GLOBAL_PREF_USER_EMAILS = [
   'pm.admin@sunset.local',
   'site.manager@sunsetridge.local',
 ] as const;
-
-const APARTMENT_TENANT_EMAILS = DEMO_USERS
-  .filter((user) => user.email.startsWith('tenant.apt'))
-  .map((user) => user.email);
 
 const demoUsersByEmail = new Map(DEMO_USERS.map((user) => [user.email, user]));
 
@@ -188,18 +183,6 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
         return ensureNotificationPreference(communityId, userId);
       });
     }),
-  );
-
-  const apartmentTenantAssignments = APARTMENT_TENANT_EMAILS.map((email) => ({
-    communityId: apartmentCommunityId,
-    userId: resolveUserId(userIdsByEmail, email),
-    role: 'tenant' as const,
-  }));
-
-  await seedRoles(apartmentTenantAssignments);
-
-  await Promise.all(
-    apartmentTenantAssignments.map((a) => ensureNotificationPreference(a.communityId, a.userId)),
   );
 
   debugSeed('cross-community role and notification fixups complete');

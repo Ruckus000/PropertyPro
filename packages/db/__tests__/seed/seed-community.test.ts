@@ -74,4 +74,25 @@ describe('seedCommunity config validation', () => {
       [],
     )).rejects.toThrow('invalid communityType');
   });
+
+  it('rejects invalid slug with path traversal characters', async () => {
+    const invalidConfig = {
+      name: 'Acme Condos',
+      slug: '../evil',
+      communityType: 'condo_718' as const,
+    };
+
+    await expect(seedCommunity(invalidConfig, [])).rejects.toThrow('config.slug');
+  });
+
+  it('rejects empty usersToSeed array', async () => {
+    await expect(seedCommunity(
+      {
+        name: 'Acme Condos',
+        slug: 'acme-condos',
+        communityType: 'condo_718',
+      },
+      [],
+    )).rejects.toThrow('at least one user');
+  });
 });

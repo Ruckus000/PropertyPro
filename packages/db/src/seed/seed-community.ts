@@ -139,6 +139,10 @@ function assertValidConfig(config: SeedCommunityConfig): void {
     throw new Error('seedCommunity requires a non-empty config.slug');
   }
 
+  if (!/^[a-z0-9-]+$/.test(config.slug)) {
+    throw new Error('seedCommunity config.slug must only contain lowercase alphanumeric characters and hyphens');
+  }
+
   if (!config.communityType) {
     throw new Error('seedCommunity requires config.communityType');
   }
