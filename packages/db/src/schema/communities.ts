@@ -2,7 +2,7 @@
  * Communities table — the core tenant entity.
  * Every tenant-scoped table references communities.id.
  */
-import { bigserial, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigserial, boolean, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 
 export const communities = pgTable('communities', {
@@ -48,6 +48,10 @@ export const communities = pgTable('communities', {
   nextReminderAt: timestamp('next_reminder_at', { withTimezone: true }),
   /** P2-34a: When the subscription was canceled (start of 30-day grace period). Null = not canceled. */
   subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
+  /** Admin: true for demo communities created via the admin console. */
+  isDemo: boolean('is_demo').notNull().default(false),
+  /** Admin: reserved for future auto-expiry. Demos persist until manually deleted. */
+  demoExpiresAt: timestamp('demo_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

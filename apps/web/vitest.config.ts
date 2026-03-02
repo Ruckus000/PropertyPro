@@ -11,6 +11,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@propertypro/theme': path.resolve(__dirname, '../../packages/theme/src'),
     },
   },
   test: {

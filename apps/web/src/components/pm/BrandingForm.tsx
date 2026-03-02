@@ -6,10 +6,11 @@
  * Upload flow:
  *  1. User selects a logo file → local object URL shown in BrandingPreview
  *  2. On submit: POST /api/v1/upload (presigned URL) → PUT to Supabase Storage
- *  3. PATCH /api/v1/pm/branding with the storage path + colors
+ *  3. PATCH /api/v1/pm/branding with the storage path + colors + fonts
  */
 import { useState, useRef, useEffect } from 'react';
 import type { CommunityBranding } from '@propertypro/shared';
+import { ALLOWED_FONTS } from '@propertypro/theme';
 import { BrandingPreview } from './BrandingPreview';
 
 const MAX_LOGO_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -52,8 +53,11 @@ interface BrandingFormProps {
 }
 
 export function BrandingForm({ communityId, initialBranding }: BrandingFormProps) {
-  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#1a56db');
+  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#2563eb');
   const [secondaryColor, setSecondaryColor] = useState(initialBranding.secondaryColor ?? '#6b7280');
+  const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE');
+  const [fontHeading, setFontHeading] = useState(initialBranding.fontHeading ?? 'Inter');
+  const [fontBody, setFontBody] = useState(initialBranding.fontBody ?? 'Inter');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +158,9 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
           communityId,
           primaryColor,
           secondaryColor,
+          accentColor,
+          fontHeading,
+          fontBody,
           ...(logoStoragePath !== undefined && { logoStoragePath }),
         }),
       });
@@ -176,6 +183,9 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const previewBranding: CommunityBranding = {
     primaryColor,
     secondaryColor,
+    accentColor,
+    fontHeading,
+    fontBody,
     logoPath: initialBranding.logoPath,
   };
 
@@ -245,6 +255,68 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               className="w-28 rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
             />
           </div>
+        </div>
+
+        {/* Accent color */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            Accent Color
+          </label>
+          <p className="mb-1.5 text-xs text-gray-500">Used for badges and highlighted backgrounds</p>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={accentColor}
+              onChange={(e) => setAccentColor(e.target.value)}
+              className="h-9 w-16 cursor-pointer rounded border border-gray-300 p-0.5"
+            />
+            <input
+              type="text"
+              value={accentColor}
+              onChange={(e) => setAccentColor(e.target.value)}
+              pattern="^#[0-9a-fA-F]{6}$"
+              maxLength={7}
+              className="w-28 rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
+            />
+          </div>
+        </div>
+
+        {/* Font heading */}
+        <div>
+          <label htmlFor="font-heading" className="mb-1.5 block text-sm font-medium text-gray-700">
+            Heading Font
+          </label>
+          <select
+            id="font-heading"
+            value={fontHeading}
+            onChange={(e) => setFontHeading(e.target.value)}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {ALLOWED_FONTS.map((font) => (
+              <option key={font} value={font}>
+                {font}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Font body */}
+        <div>
+          <label htmlFor="font-body" className="mb-1.5 block text-sm font-medium text-gray-700">
+            Body Font
+          </label>
+          <select
+            id="font-body"
+            value={fontBody}
+            onChange={(e) => setFontBody(e.target.value)}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {ALLOWED_FONTS.map((font) => (
+              <option key={font} value={font}>
+                {font}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Feedback */}

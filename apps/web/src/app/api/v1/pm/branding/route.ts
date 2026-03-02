@@ -14,6 +14,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { ALLOWED_FONTS } from '@propertypro/theme';
 import { createPresignedDownloadUrl, createPresignedUploadUrl, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -25,16 +26,21 @@ import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/b
 import { resizeLogo } from '@/lib/services/image-processor';
 
 const PRESIGN_TTL_SECONDS = 60 * 60; // 1 hour for logo read
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const allowedFontsArray = ALLOWED_FONTS as readonly string[];
 
 const patchSchema = z.object({
   communityId: z.number().int().positive(),
-  primaryColor: z
+  primaryColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
+  secondaryColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
+  accentColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
+  fontHeading: z
     .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'Must be a 6-digit hex color')
+    .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' })
     .optional(),
-  secondaryColor: z
+  fontBody: z
     .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'Must be a 6-digit hex color')
+    .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' })
     .optional(),
   /** Raw Supabase Storage path of the user-uploaded image (pre-processing) */
   logoStoragePath: z.string().min(1).max(500).optional(),
@@ -70,8 +76,15 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const { communityId: rawCommunityId, primaryColor, secondaryColor, logoStoragePath } =
-    parseResult.data;
+  const {
+    communityId: rawCommunityId,
+    primaryColor,
+    secondaryColor,
+    accentColor,
+    fontHeading,
+    fontBody,
+    logoStoragePath,
+  } = parseResult.data;
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
@@ -128,6 +141,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const updated = await updateBrandingForCommunity(communityId, {
     ...(primaryColor !== undefined && { primaryColor }),
     ...(secondaryColor !== undefined && { secondaryColor }),
+    ...(accentColor !== undefined && { accentColor }),
+    ...(fontHeading !== undefined && { fontHeading }),
+    ...(fontBody !== undefined && { fontBody }),
     ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
   });
 

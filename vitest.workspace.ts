@@ -5,5 +5,7 @@ export default defineWorkspace([
   "packages/email",
   "packages/ui",
   "packages/shared",
+  "packages/theme",
   "apps/web",
+  "apps/admin",
 ]);

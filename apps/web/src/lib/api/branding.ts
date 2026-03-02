@@ -11,6 +11,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq } from '@propertypro/db/filters';
 import type { CommunityBranding } from '@propertypro/shared';
 import { isValidHexColor } from '@propertypro/shared';
+import { ALLOWED_FONTS } from '@propertypro/theme';
 import { ValidationError } from '@/lib/api/errors';
 
 /**
@@ -37,6 +38,9 @@ export async function getBrandingForCommunity(
 export interface BrandingPatch {
   primaryColor?: string;
   secondaryColor?: string;
+  accentColor?: string;
+  fontHeading?: string;
+  fontBody?: string;
   /** Supabase Storage path of the already-processed 400×400 WebP logo */
   logoPath?: string;
 }
@@ -50,10 +54,19 @@ export async function updateBrandingForCommunity(
   patch: BrandingPatch,
 ): Promise<CommunityBranding> {
   if (patch.primaryColor !== undefined && !isValidHexColor(patch.primaryColor)) {
-    throw new ValidationError('primaryColor must be a 6-digit hex color (e.g. #1a56db)');
+    throw new ValidationError('primaryColor must be a 6-digit hex color (e.g. #2563eb)');
   }
   if (patch.secondaryColor !== undefined && !isValidHexColor(patch.secondaryColor)) {
     throw new ValidationError('secondaryColor must be a 6-digit hex color (e.g. #6b7280)');
+  }
+  if (patch.accentColor !== undefined && !isValidHexColor(patch.accentColor)) {
+    throw new ValidationError('accentColor must be a 6-digit hex color (e.g. #DBEAFE)');
+  }
+  if (patch.fontHeading !== undefined && !(ALLOWED_FONTS as readonly string[]).includes(patch.fontHeading)) {
+    throw new ValidationError(`fontHeading must be one of the allowed Google Fonts families`);
+  }
+  if (patch.fontBody !== undefined && !(ALLOWED_FONTS as readonly string[]).includes(patch.fontBody)) {
+    throw new ValidationError(`fontBody must be one of the allowed Google Fonts families`);
   }
 
   const existing = await getBrandingForCommunity(communityId);

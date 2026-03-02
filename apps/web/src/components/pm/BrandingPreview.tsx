@@ -15,8 +15,11 @@ interface BrandingPreviewProps {
 }
 
 export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProps) {
-  const primary = branding.primaryColor ?? '#1a56db';
+  const primary = branding.primaryColor ?? '#2563eb';
   const secondary = branding.secondaryColor ?? '#6b7280';
+  const accent = branding.accentColor ?? '#DBEAFE';
+  const headingFont = branding.fontHeading ?? 'Inter';
+  const bodyFont = branding.fontBody ?? 'Inter';
   const logoSrc = logoObjectUrl ?? null;
 
   return (
@@ -28,7 +31,7 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
       {/* Miniature portal mockup */}
       <div
         className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-e1"
-        style={{ '--brand-primary': primary, '--brand-secondary': secondary } as React.CSSProperties}
+        style={{ '--theme-primary': primary, '--theme-secondary': secondary, '--theme-accent': accent } as React.CSSProperties}
       >
         {/* Mock header */}
         <div
@@ -41,7 +44,12 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
           ) : (
             <div className="h-6 w-6 rounded bg-white/30" />
           )}
-          <span className="text-xs font-semibold text-white">Community Portal</span>
+          <span
+            className="text-xs font-semibold text-white"
+            style={{ fontFamily: headingFont }}
+          >
+            Community Portal
+          </span>
         </div>
 
         {/* Mock nav */}
@@ -50,7 +58,7 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
             <span
               key={label}
               className="rounded px-2 py-0.5 text-xs"
-              style={{ color: primary }}
+              style={{ color: primary, fontFamily: bodyFont }}
             >
               {label}
             </span>
@@ -66,11 +74,17 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
               style={{ width: `${w}%`, backgroundColor: secondary, opacity: 0.3 }}
             />
           ))}
+          <div
+            className="mt-2 inline-block rounded px-2 py-0.5 text-xs"
+            style={{ backgroundColor: accent, color: primary }}
+          >
+            Accent sample
+          </div>
         </div>
       </div>
 
       {/* Color swatches */}
-      <div className="mt-3 flex gap-3">
+      <div className="mt-3 flex flex-wrap gap-3">
         <div className="flex items-center gap-1.5">
           <div
             className="h-4 w-4 rounded border border-gray-200"
@@ -85,6 +99,19 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
           />
           <span className="text-xs text-gray-600">Secondary</span>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div
+            className="h-4 w-4 rounded border border-gray-200"
+            style={{ backgroundColor: accent }}
+          />
+          <span className="text-xs text-gray-600">Accent</span>
+        </div>
+      </div>
+
+      {/* Font info */}
+      <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+        <span>Heading: <span className="font-medium text-gray-700">{headingFont}</span></span>
+        <span>Body: <span className="font-medium text-gray-700">{bodyFont}</span></span>
       </div>
     </div>
   );

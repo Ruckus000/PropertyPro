@@ -1,0 +1,73 @@
+/**
+ * Platform admin authentication utilities for apps/admin.
+ *
+ * Note: placed in apps/admin (not packages/shared) because it depends on
+ * @propertypro/db and Next.js types — adding those to packages/shared
+ * would break its zero-dependency contract.
+ */
+import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+export interface PlatformAdminUser {
+  id: string;
+  email: string;
+  role: string;
+}
+
+/**
+ * Extract Supabase session from cookies, verify platform_admin_users row.
+ * Throws a Response with status 401/403 if not a platform admin.
+ */
+export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Response('Server misconfiguration', { status: 500 });
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+    },
+  });
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    throw new Response('Unauthorized', { status: 401 });
+  }
+
+  const adminDb = createAdminClient();
+  const { data: adminRow } = await adminDb
+    .from('platform_admin_users')
+    .select('role')
+    .eq('user_id', session.user.id)
+    .single() as { data: { role: string } | null; error: unknown };
+
+  if (!adminRow) {
+    throw new Response('Forbidden', { status: 403 });
+  }
+
+  return {
+    id: session.user.id,
+    email: session.user.email ?? '',
+    role: adminRow.role,
+  };
+}
+
+/**
+ * Non-throwing variant for conditional rendering in RSC.
+ * Returns null if the caller is not a platform admin.
+ */
+export async function getPlatformAdminSession(): Promise<PlatformAdminUser | null> {
+  try {
+    return await requirePlatformAdmin();
+  } catch {
+    return null;
+  }
+}
