@@ -59,6 +59,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
   // Community picker — cross-community user membership query for post-login routing
   resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
+  // Invitation acceptance — creates Supabase auth user via admin client (service_role)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/invitations/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
@@ -183,7 +185,7 @@ function validateSpecifier(
   }
 
   if (
-    specifier === '@propertypro/db/unsafe' &&
+    (specifier === '@propertypro/db/unsafe' || specifier === '@propertypro/db/supabase/admin') &&
     config.mode === 'scoped' &&
     !config.unsafeAllowlist.has(file)
   ) {
@@ -227,6 +229,21 @@ function collectViolationsForFile(file: string, config: AppGuardConfig): Violati
         config,
         sourceFile,
         arg.getStart(sourceFile),
+        violations,
+      );
+    }
+
+    if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      validateSpecifier(
+        node.moduleSpecifier.text,
+        file,
+        config,
+        sourceFile,
+        node.moduleSpecifier.getStart(sourceFile),
         violations,
       );
     }
