@@ -1,7 +1,7 @@
 import { ALLOWED_FONTS, THEME_DEFAULTS } from './constants';
 import type { CommunityTheme } from './types';
 
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}){1,2}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
