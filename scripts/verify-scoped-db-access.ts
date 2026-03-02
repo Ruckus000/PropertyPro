@@ -317,12 +317,14 @@ function runRlsPolicyCheck(): number {
   for (const migrationFile of migrationFiles) {
     const sql = readFileSync(migrationFile, 'utf8');
     const cleanedSql = stripSqlComments(sql);
-    const createTablePattern = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(?:"?\w+"?\.)?\"?(\w+)\"?/gi;
+    // Group 1: quoted identifier (e.g. "my-table"), Group 2: unquoted identifier (e.g. my_table)
+    const createTablePattern =
+      /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(?:(?:"[^"]+"|\w+)\.)?(?:"([^"]+)"|(\w+))/gi;
     const seenTables = new Set<string>();
     let match: RegExpExecArray | null = createTablePattern.exec(cleanedSql);
 
     while (match !== null) {
-      const tableName = (match[1] ?? '').toLowerCase();
+      const tableName = (match[1] ?? match[2] ?? '').toLowerCase();
       if (tableName.length > 0 && !seenTables.has(tableName)) {
         seenTables.add(tableName);
         if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(cleanedSql, tableName)) {
