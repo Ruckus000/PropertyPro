@@ -256,7 +256,7 @@ function isDirectory(path: string): boolean {
 function hasTableRlsEnable(sql: string, tableName: string): boolean {
   const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(
-    `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:\"?[\\w]+\"?\\.)?\"?${escapedTableName}\"?\\s+ENABLE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+    `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|${escapedTableName})\\s+ENABLE\\s+ROW\\s+LEVEL\\s+SECURITY`,
     'i',
   );
   return pattern.test(sql);
@@ -324,17 +324,18 @@ function runRlsPolicyCheck(): number {
     let match: RegExpExecArray | null = createTablePattern.exec(cleanedSql);
 
     while (match !== null) {
-      const tableName = (match[1] ?? match[2] ?? '').toLowerCase();
-      if (tableName.length > 0 && !seenTables.has(tableName)) {
+      const originalTableName = match[1] ?? match[2] ?? '';
+      const tableName = originalTableName.toLowerCase();
+      if (originalTableName.length > 0 && !seenTables.has(tableName)) {
         seenTables.add(tableName);
-        if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(cleanedSql, tableName)) {
+        if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(cleanedSql, originalTableName)) {
           const lc = lineColForText(cleanedSql, match.index);
           violations.push({
             file: migrationFile,
             line: lc.line,
             column: lc.column,
             code: 'DB005',
-            message: `Migration creates table "${tableName}" without enabling row level security in the same file.`,
+            message: `Migration creates table "${originalTableName}" without enabling row level security in the same file.`,
           });
         }
       }
