@@ -55,8 +55,8 @@
 }
 
 .mobile-tab-item[data-active='true'] {
-  color: var(--brand-primary, #1a56db);
-  border-top: 2px solid var(--brand-primary, #1a56db);
+  color: var(--theme-primary, #2563EB);
+  border-top: 2px solid var(--theme-primary, #2563EB);
   padding-top: 4px; /* compensate for border */
 }
 
