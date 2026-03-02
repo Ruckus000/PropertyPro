@@ -5,6 +5,7 @@
  * Returns 404 if the community doesn't exist or is a demo.
  */
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
@@ -15,24 +16,24 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-interface CommunityRow {
-  id: number;
-  name: string;
-  slug: string;
-  community_type: 'condo_718' | 'hoa_720' | 'apartment';
-  city: string | null;
-  state: string | null;
-  zip_code: string | null;
-  address_line1: string | null;
-  subscription_status: string | null;
-  subscription_plan: string | null;
-  created_at: string;
-  is_demo: boolean;
-}
+const CommunityRowSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  slug: z.string(),
+  community_type: z.enum(['condo_718', 'hoa_720', 'apartment']),
+  city: z.string().nullable(),
+  state: z.string().nullable(),
+  zip_code: z.string().nullable(),
+  address_line1: z.string().nullable(),
+  subscription_status: z.string().nullable(),
+  subscription_plan: z.string().nullable(),
+  created_at: z.string(),
+  is_demo: z.boolean(),
+});
 
-interface ComplianceRow {
-  status: string;
-}
+const ComplianceRowSchema = z.object({
+  status: z.string(),
+});
 
 export default async function ClientWorkspacePage({ params }: PageProps) {
   const { id } = await params;
@@ -52,12 +53,12 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
     .is('deleted_at', null)
     .single();
 
-  // The untyped Supabase client returns `data: unknown` — narrow at the boundary
-  const community = communityResult.data as CommunityRow | null;
-
-  if (!community || community.is_demo) {
+  // Validate data at runtime (untyped Supabase client returns `unknown`)
+  const communityParse = CommunityRowSchema.safeParse(communityResult.data);
+  if (!communityParse.success || communityParse.data.is_demo) {
     notFound();
   }
+  const community = communityParse.data;
 
   // Fetch counts and compliance in parallel to minimize round trips
   const [membersResult, documentsResult, complianceResult] = await Promise.all([
@@ -69,8 +70,8 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;
 
-  // Narrow compliance data at the boundary (untyped Supabase client)
-  const compliance = (complianceResult.data ?? []) as ComplianceRow[];
+  // Validate compliance data at runtime
+  const compliance = z.array(ComplianceRowSchema).parse(complianceResult.data ?? []);
   const totalItems = compliance.length;
   const metItems = compliance.filter((c) => c.status === 'met').length;
   const complianceScore = totalItems > 0 ? Math.round((metItems / totalItems) * 100) : null;

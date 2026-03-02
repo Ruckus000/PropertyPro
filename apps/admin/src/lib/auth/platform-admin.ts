@@ -5,9 +5,12 @@
  * @propertypro/db and Next.js types — adding those to packages/shared
  * would break its zero-dependency contract.
  */
+import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+
+const AdminRowSchema = z.object({ role: z.string() });
 
 export interface PlatformAdminUser {
   id: string;
@@ -43,20 +46,21 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
   }
 
   const adminDb = createAdminClient();
-  const { data: adminRow } = await adminDb
+  const { data } = await adminDb
     .from('platform_admin_users')
     .select('role')
     .eq('user_id', session.user.id)
-    .single() as { data: { role: string } | null; error: unknown };
+    .single();
 
-  if (!adminRow) {
+  const adminRow = AdminRowSchema.safeParse(data);
+  if (!adminRow.success) {
     throw new Response('Forbidden', { status: 403 });
   }
 
   return {
     id: session.user.id,
     email: session.user.email ?? '',
-    role: adminRow.role,
+    role: adminRow.data.role,
   };
 }
 
