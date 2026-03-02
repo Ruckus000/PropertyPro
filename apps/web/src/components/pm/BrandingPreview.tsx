@@ -28,7 +28,7 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
       {/* Miniature portal mockup */}
       <div
         className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-e1"
-        style={{ '--brand-primary': primary, '--brand-secondary': secondary } as React.CSSProperties}
+        style={{ '--theme-primary': primary, '--theme-secondary': secondary } as React.CSSProperties}
       >
         {/* Mock header */}
         <div
