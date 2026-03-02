@@ -9,9 +9,7 @@ function toFontLink(fontName: string): string {
 }
 
 export function toFontLinks(theme: CommunityTheme): string[] {
-  const fonts = theme.fontHeading === theme.fontBody
-    ? [theme.fontHeading]
-    : [theme.fontHeading, theme.fontBody];
+  const fonts = Array.from(new Set([theme.fontHeading, theme.fontBody]));
 
   return fonts.map(toFontLink);
 }

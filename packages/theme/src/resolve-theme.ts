@@ -11,10 +11,10 @@ function resolveColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && HEX_COLOR_RE.test(value) ? value : fallback;
 }
 
-function resolveFont(value: unknown): string {
+function resolveFont(value: unknown, fallback: string): string {
   return typeof value === 'string' && ALLOWED_FONTS.includes(value as (typeof ALLOWED_FONTS)[number])
     ? value
-    : 'Inter';
+    : fallback;
 }
 
 export function resolveTheme(
@@ -34,8 +34,8 @@ export function resolveTheme(
     primaryColor: resolveColor(branding.primaryColor, THEME_DEFAULTS.primaryColor),
     secondaryColor: resolveColor(branding.secondaryColor, THEME_DEFAULTS.secondaryColor),
     accentColor: resolveColor(branding.accentColor, THEME_DEFAULTS.accentColor),
-    fontHeading: resolveFont(branding.fontHeading),
-    fontBody: resolveFont(branding.fontBody),
+    fontHeading: resolveFont(branding.fontHeading, THEME_DEFAULTS.fontHeading),
+    fontBody: resolveFont(branding.fontBody, THEME_DEFAULTS.fontBody),
     logoUrl: typeof branding.logoUrl === 'string' ? branding.logoUrl : null,
     communityName,
     communityType,
