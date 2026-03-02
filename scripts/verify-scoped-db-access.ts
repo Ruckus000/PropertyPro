@@ -3,7 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-type RuleCode = 'DB001' | 'DB002' | 'DB003' | 'DB004';
+type RuleCode = 'DB001' | 'DB002' | 'DB003' | 'DB004' | 'DB005';
+type GuardMode = 'scoped' | 'admin';
 
 interface Violation {
   file: string;
@@ -13,9 +14,15 @@ interface Violation {
   message: string;
 }
 
+interface AppGuardConfig {
+  appDir: string;
+  mode: GuardMode;
+  unsafeAllowlist: Set<string>;
+}
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
-const runtimeRoot = join(repoRoot, 'apps', 'web', 'src');
+const migrationsRoot = join(repoRoot, 'packages', 'db', 'migrations');
 
 const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/supabase/client',
@@ -26,7 +33,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/unsafe',
 ]);
 
-const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
+const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
@@ -50,6 +57,50 @@ const UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
+  // Community picker — cross-community user membership query for post-login routing
+  resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
+]);
+
+const APP_CONFIGS: AppGuardConfig[] = [
+  {
+    appDir: join(repoRoot, 'apps', 'web', 'src'),
+    mode: 'scoped',
+    unsafeAllowlist: WEB_UNSAFE_IMPORT_ALLOWLIST,
+  },
+  {
+    appDir: join(repoRoot, 'apps', 'admin', 'src'),
+    mode: 'admin',
+    unsafeAllowlist: new Set<string>(),
+  },
+];
+
+const NO_RLS_ALLOWLIST = new Set<string>([
+  // Core tenant tables were created before migration-level RLS enforcement and are covered by later hardening migrations.
+  'communities',
+  'users',
+  'user_roles',
+  'units',
+  'document_categories',
+  'documents',
+  'notification_preferences',
+  'announcements',
+  'compliance_audit_log',
+  'compliance_checklist_items',
+  'invitations',
+  'meetings',
+  'meeting_documents',
+  'announcement_delivery_log',
+  'demo_seed_registry',
+  'leases',
+  'notification_digest_queue',
+  'pending_signups',
+  'stripe_webhook_events',
+  'provisioning_jobs',
+  'maintenance_requests',
+  'onboarding_wizard_state',
+  'contracts',
+  'contract_bids',
+  'maintenance_comments',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {
@@ -79,6 +130,7 @@ function lineCol(sourceFile: ts.SourceFile, position: number): { line: number; c
 function validateSpecifier(
   specifier: string,
   file: string,
+  config: AppGuardConfig,
   sourceFile: ts.SourceFile,
   position: number,
   violations: Violation[],
@@ -130,7 +182,11 @@ function validateSpecifier(
     return;
   }
 
-  if (specifier === '@propertypro/db/unsafe' && !UNSAFE_IMPORT_ALLOWLIST.has(file)) {
+  if (
+    specifier === '@propertypro/db/unsafe' &&
+    config.mode === 'scoped' &&
+    !config.unsafeAllowlist.has(file)
+  ) {
     violations.push({
       file,
       line: lc.line,
@@ -141,7 +197,7 @@ function validateSpecifier(
   }
 }
 
-function collectViolationsForFile(file: string): Violation[] {
+function collectViolationsForFile(file: string, config: AppGuardConfig): Violation[] {
   const content = readFileSync(file, 'utf8');
   const sourceFile = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
   const violations: Violation[] = [];
@@ -151,6 +207,7 @@ function collectViolationsForFile(file: string): Violation[] {
       validateSpecifier(
         node.moduleSpecifier.text,
         file,
+        config,
         sourceFile,
         node.moduleSpecifier.getStart(sourceFile),
         violations,
@@ -167,6 +224,7 @@ function collectViolationsForFile(file: string): Violation[] {
       validateSpecifier(
         arg.text,
         file,
+        config,
         sourceFile,
         arg.getStart(sourceFile),
         violations,
@@ -180,19 +238,45 @@ function collectViolationsForFile(file: string): Violation[] {
   return violations;
 }
 
-function main(): number {
-  if (!statSync(runtimeRoot).isDirectory()) {
+function lineColForText(content: string, position: number): { line: number; column: number } {
+  const prefix = content.slice(0, position);
+  const lines = prefix.split('\n');
+  const lastLine = lines[lines.length - 1] ?? '';
+  return { line: lines.length, column: lastLine.length + 1 };
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function hasTableRlsEnable(sql: string, tableName: string): boolean {
+  const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:\"?[\\w]+\"?\\.)?\"?${escapedTableName}\"?\\s+ENABLE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+    'i',
+  );
+  return pattern.test(sql);
+}
+
+function runAppGuard(config: AppGuardConfig): number {
+  if (!isDirectory(config.appDir)) {
     // eslint-disable-next-line no-console
-    console.error(`Runtime directory not found: ${runtimeRoot}`);
-    return 1;
+    console.log(`SKIP: DB access guard skipped for ${config.appDir} (${config.mode} mode, directory not found).`);
+    return 0;
   }
 
-  const files = listRuntimeSourceFiles(runtimeRoot);
-  const violations = files.flatMap((file) => collectViolationsForFile(file));
+  const files = listRuntimeSourceFiles(config.appDir);
+  const violations = files.flatMap((file) => collectViolationsForFile(file, config));
 
   if (violations.length === 0) {
     // eslint-disable-next-line no-console
-    console.log(`PASS: scoped DB access guard is clean for ${files.length} runtime files.`);
+    console.log(
+      `PASS: DB access guard is clean for ${files.length} runtime files in ${config.appDir} (${config.mode} mode).`,
+    );
     return 0;
   }
 
@@ -203,8 +287,83 @@ function main(): number {
     );
   }
   // eslint-disable-next-line no-console
-  console.error(`FAIL: ${violations.length} scoped DB access violation(s) found.`);
+  console.error(
+    `FAIL: ${violations.length} DB access violation(s) found in ${config.appDir} (${config.mode} mode).`,
+  );
   return 1;
+}
+
+function runRlsPolicyCheck(): number {
+  if (!isDirectory(migrationsRoot)) {
+    // eslint-disable-next-line no-console
+    console.error(`Migrations directory not found: ${migrationsRoot}`);
+    return 1;
+  }
+
+  const migrationFiles = readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+    .map((entry) => join(migrationsRoot, entry.name))
+    .sort();
+  const violations: Violation[] = [];
+
+  for (const migrationFile of migrationFiles) {
+    const sql = readFileSync(migrationFile, 'utf8');
+    const createTablePattern = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+"?(\w+)"?/gi;
+    const seenTables = new Set<string>();
+    let match: RegExpExecArray | null = createTablePattern.exec(sql);
+
+    while (match !== null) {
+      const tableName = (match[1] ?? '').toLowerCase();
+      if (tableName.length > 0 && !seenTables.has(tableName)) {
+        seenTables.add(tableName);
+        if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(sql, tableName)) {
+          const lc = lineColForText(sql, match.index);
+          violations.push({
+            file: migrationFile,
+            line: lc.line,
+            column: lc.column,
+            code: 'DB005',
+            message: `Migration creates table "${tableName}" without enabling row level security in the same file.`,
+          });
+        }
+      }
+      match = createTablePattern.exec(sql);
+    }
+  }
+
+  if (violations.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log(`PASS: RLS policy check is clean for ${migrationFiles.length} migration files.`);
+    return 0;
+  }
+
+  for (const violation of violations) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `${violation.file}:${violation.line}:${violation.column} [${violation.code}] ${violation.message}`,
+    );
+  }
+  // eslint-disable-next-line no-console
+  console.error(`FAIL: ${violations.length} RLS policy violation(s) found.`);
+  return 1;
+}
+
+function main(): number {
+  let exitCode = 0;
+
+  for (const config of APP_CONFIGS) {
+    const code = runAppGuard(config);
+    if (code !== 0) {
+      exitCode = code;
+    }
+  }
+
+  const rlsCode = runRlsPolicyCheck();
+  if (rlsCode !== 0) {
+    exitCode = rlsCode;
+  }
+
+  return exitCode;
 }
 
 process.exit(main());
