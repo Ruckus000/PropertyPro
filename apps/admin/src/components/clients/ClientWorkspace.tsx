@@ -7,6 +7,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { ArrowLeft, Users, FileText, CheckCircle, BadgeCheck } from 'lucide-react';
+import {
+  COMMUNITY_TYPE_LABELS,
+  SUBSCRIPTION_STATUS_LABELS,
+} from '@/lib/constants/community-labels';
 
 interface Community {
   id: number;
@@ -29,25 +33,13 @@ interface ClientWorkspaceProps {
   community: Community;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  condo_718: 'Condo §718',
-  hoa_720: 'HOA §720',
-  apartment: 'Apartment',
-};
-
-const STATUS_CLASSES: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  trialing: 'bg-blue-100 text-blue-700',
-  past_due: 'bg-yellow-100 text-yellow-700',
-  canceled: 'bg-gray-100 text-gray-600',
-};
-
 type Tab = 'overview' | 'site-builder' | 'settings';
 
 export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-  const statusClass = STATUS_CLASSES[community.subscription_status ?? ''] ?? 'bg-gray-100 text-gray-600';
+  const statusEntry = SUBSCRIPTION_STATUS_LABELS[community.subscription_status ?? ''];
+  const statusClass = statusEntry?.className ?? 'bg-gray-100 text-gray-600';
 
   const address = [community.address_line1, community.city, community.state, community.zip_code]
     .filter(Boolean)
@@ -69,7 +61,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
             <h1 className="text-xl font-semibold text-gray-900">{community.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="text-sm text-gray-500">
-                {TYPE_LABELS[community.community_type] ?? community.community_type}
+                {COMMUNITY_TYPE_LABELS[community.community_type]?.label ?? community.community_type}
               </span>
               {address && (
                 <>
@@ -80,8 +72,8 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
             </div>
           </div>
           {community.subscription_status && (
-            <span className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium capitalize ${statusClass}`}>
-              {community.subscription_status.replace('_', ' ')}
+            <span className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${statusClass}`}>
+              {statusEntry?.label ?? community.subscription_status.replace('_', ' ')}
             </span>
           )}
         </div>
@@ -163,7 +155,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                 <div>
                   <dt className="text-xs text-gray-500">Type</dt>
                   <dd className="mt-0.5 text-sm text-gray-900">
-                    {TYPE_LABELS[community.community_type] ?? community.community_type}
+                    {COMMUNITY_TYPE_LABELS[community.community_type]?.label ?? community.community_type}
                   </dd>
                 </div>
                 <div>

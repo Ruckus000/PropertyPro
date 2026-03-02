@@ -16,6 +16,11 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 // ---------------------------------------------------------------------------
 // Simple sliding-window rate limiter (edge-compatible, in-memory)
+//
+// NOTE: This in-memory store resets on each serverless cold start, so rate
+// limiting is best-effort in Vercel's ephemeral environment. This matches the
+// same pattern used in apps/web (see apps/web/src/lib/middleware/rate-limiter.ts).
+// For production hardening, swap to a centralized store (e.g. Upstash Redis).
 // ---------------------------------------------------------------------------
 
 interface RateBucket {

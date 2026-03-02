@@ -6,7 +6,11 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { format, differenceInDays } from 'date-fns';
-import { Search, ChevronDown, Trash2, Building2, Home, Building } from 'lucide-react';
+import { Search, ChevronDown, Trash2 } from 'lucide-react';
+import {
+  COMMUNITY_TYPE_LABELS,
+  SUBSCRIPTION_STATUS_LABELS,
+} from '@/lib/constants/community-labels';
 
 interface Community {
   id: number;
@@ -30,19 +34,6 @@ interface ClientPortfolioProps {
   communities: Community[];
   staleDemos: StaleDemo[];
 }
-
-const TYPE_LABELS: Record<string, { label: string; className: string; Icon: React.ElementType }> = {
-  condo_718: { label: 'Condo §718', className: 'bg-blue-100 text-blue-700', Icon: Building2 },
-  hoa_720: { label: 'HOA §720', className: 'bg-green-100 text-green-700', Icon: Home },
-  apartment: { label: 'Apartment', className: 'bg-purple-100 text-purple-700', Icon: Building },
-};
-
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  active: { label: 'Active', className: 'bg-green-100 text-green-700' },
-  trialing: { label: 'Trial', className: 'bg-blue-100 text-blue-700' },
-  past_due: { label: 'Past Due', className: 'bg-yellow-100 text-yellow-700' },
-  canceled: { label: 'Canceled', className: 'bg-gray-100 text-gray-600' },
-};
 
 function staleBadge(createdAt: string): { label: string; className: string } {
   const days = differenceInDays(new Date(), new Date(createdAt));
@@ -142,8 +133,8 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((c) => {
-            const type = TYPE_LABELS[c.community_type] ?? TYPE_LABELS.condo_718!;
-            const status = STATUS_LABELS[c.subscription_status ?? ''];
+            const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
+            const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
             return (
               <Link
                 key={c.id}
@@ -194,7 +185,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <div className="space-y-2">
             {staleDemos.map((demo) => {
               const badge = staleBadge(demo.created_at);
-              const typeLabel = TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
               return (
                 <div
                   key={demo.id}
@@ -212,8 +203,9 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                     onClick={() => {
-                      // Phase 2 will wire the delete action
-                      alert(`Delete demo ${demo.id} — to be implemented in Phase 2`);
+                      // TODO(Phase 2): Wire up demo deletion via API
+                      // eslint-disable-next-line no-console
+                      console.log(`[stub] Delete demo ${demo.id} — to be implemented in Phase 2`);
                     }}
                   >
                     <Trash2 size={14} />

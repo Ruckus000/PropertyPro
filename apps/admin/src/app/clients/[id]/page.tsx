@@ -44,39 +44,35 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
 
   const db = createAdminClient();
 
-  // Fetch community
-  const { data: community } = await db
+  // Fetch community first (need it to gate 404)
+  const communityResult = await db
     .from('communities')
     .select('id, name, slug, community_type, city, state, zip_code, address_line1, subscription_status, subscription_plan, created_at, is_demo')
     .eq('id', communityId)
     .is('deleted_at', null)
-    .single() as { data: CommunityRow | null; error: unknown };
+    .single();
+
+  // The untyped Supabase client returns `data: unknown` — narrow at the boundary
+  const community = communityResult.data as CommunityRow | null;
 
   if (!community || community.is_demo) {
     notFound();
   }
 
-  // Fetch member count
-  const { count: memberCount } = await db
-    .from('user_roles')
-    .select('*', { count: 'exact', head: true })
-    .eq('community_id', communityId);
+  // Fetch counts and compliance in parallel to minimize round trips
+  const [membersResult, documentsResult, complianceResult] = await Promise.all([
+    db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
+    db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
+    db.from('compliance_items').select('status').eq('community_id', communityId),
+  ]);
 
-  // Fetch document count
-  const { count: documentCount } = await db
-    .from('documents')
-    .select('*', { count: 'exact', head: true })
-    .eq('community_id', communityId)
-    .is('deleted_at', null);
+  const memberCount = membersResult.count ?? 0;
+  const documentCount = documentsResult.count ?? 0;
 
-  // Fetch compliance score
-  const { data: compliance } = await db
-    .from('compliance_items')
-    .select('status')
-    .eq('community_id', communityId) as { data: ComplianceRow[] | null; error: unknown };
-
-  const totalItems = compliance?.length ?? 0;
-  const metItems = compliance?.filter((c) => c.status === 'met').length ?? 0;
+  // Narrow compliance data at the boundary (untyped Supabase client)
+  const compliance = (complianceResult.data ?? []) as ComplianceRow[];
+  const totalItems = compliance.length;
+  const metItems = compliance.filter((c) => c.status === 'met').length;
   const complianceScore = totalItems > 0 ? Math.round((metItems / totalItems) * 100) : null;
 
   return (
