@@ -262,6 +262,14 @@ function hasTableRlsEnable(sql: string, tableName: string): boolean {
   return pattern.test(sql);
 }
 
+function stripSqlComments(sql: string): string {
+  // Replace block comments /* ... */ with equivalent whitespace (preserves newlines for accurate line reporting)
+  let s = sql.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '));
+  // Replace line comments -- ... with equivalent whitespace
+  s = s.replace(/--[^\r\n]*/g, (match) => ' '.repeat(match.length));
+  return s;
+}
+
 function runAppGuard(config: AppGuardConfig): number {
   if (!isDirectory(config.appDir)) {
     // eslint-disable-next-line no-console
@@ -308,16 +316,17 @@ function runRlsPolicyCheck(): number {
 
   for (const migrationFile of migrationFiles) {
     const sql = readFileSync(migrationFile, 'utf8');
-    const createTablePattern = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+"?(\w+)"?/gi;
+    const cleanedSql = stripSqlComments(sql);
+    const createTablePattern = /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(?:"?\w+"?\.)?\"?(\w+)\"?/gi;
     const seenTables = new Set<string>();
-    let match: RegExpExecArray | null = createTablePattern.exec(sql);
+    let match: RegExpExecArray | null = createTablePattern.exec(cleanedSql);
 
     while (match !== null) {
       const tableName = (match[1] ?? '').toLowerCase();
       if (tableName.length > 0 && !seenTables.has(tableName)) {
         seenTables.add(tableName);
-        if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(sql, tableName)) {
-          const lc = lineColForText(sql, match.index);
+        if (!NO_RLS_ALLOWLIST.has(tableName) && !hasTableRlsEnable(cleanedSql, tableName)) {
+          const lc = lineColForText(cleanedSql, match.index);
           violations.push({
             file: migrationFile,
             line: lc.line,
@@ -327,7 +336,7 @@ function runRlsPolicyCheck(): number {
           });
         }
       }
-      match = createTablePattern.exec(sql);
+      match = createTablePattern.exec(cleanedSql);
     }
   }
 
