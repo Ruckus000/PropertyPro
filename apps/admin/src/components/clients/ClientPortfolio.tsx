@@ -5,12 +5,13 @@
  */
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { format, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { Search, ChevronDown, Trash2 } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
+import { staleBadge } from '@/lib/utils/stale-badge';
 
 interface Community {
   id: number;
@@ -33,17 +34,6 @@ interface StaleDemo {
 interface ClientPortfolioProps {
   communities: Community[];
   staleDemos: StaleDemo[];
-}
-
-const STALE_DEMO_RED_THRESHOLD_DAYS = 30;
-const STALE_DEMO_ORANGE_THRESHOLD_DAYS = 20;
-const STALE_DEMO_YELLOW_THRESHOLD_DAYS = 10;
-
-function staleBadge(createdAt: string): { label: string; className: string } {
-  const days = differenceInDays(new Date(), new Date(createdAt));
-  if (days >= STALE_DEMO_RED_THRESHOLD_DAYS) return { label: `${STALE_DEMO_RED_THRESHOLD_DAYS}+ days`, className: 'bg-red-100 text-red-700' };
-  if (days >= STALE_DEMO_ORANGE_THRESHOLD_DAYS) return { label: `${STALE_DEMO_ORANGE_THRESHOLD_DAYS}+ days`, className: 'bg-orange-100 text-orange-700' };
-  return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-yellow-100 text-yellow-700' };
 }
 
 export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {

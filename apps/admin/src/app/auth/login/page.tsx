@@ -7,7 +7,7 @@
  * Shows an "Access Denied" message (no redirect loop) when the user's account
  * is not in platform_admin_users.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -22,6 +22,13 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return null;
+    return createClient(url, key);
+  }, []);
 
   if (accessDenied) {
     return (
@@ -55,14 +62,10 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !supabaseAnonKey) {
+      if (!supabase) {
         throw new Error('Missing Supabase configuration');
       }
 
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,

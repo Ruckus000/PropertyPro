@@ -5,38 +5,28 @@
  * stale demo threshold at 10 days.
  */
 import { describe, it, expect } from 'vitest';
-import { differenceInDays } from 'date-fns';
-
-// ---------------------------------------------------------------------------
-// Pure utility: stale badge computation (extracted from ClientPortfolio)
-// ---------------------------------------------------------------------------
-function staleBadge(createdAt: string): { label: string; severity: 'yellow' | 'orange' | 'red' } {
-  const days = differenceInDays(new Date(), new Date(createdAt));
-  if (days >= 30) return { label: '30+ days', severity: 'red' };
-  if (days >= 20) return { label: '20+ days', severity: 'orange' };
-  return { label: '10+ days', severity: 'yellow' };
-}
+import { staleBadge } from '@/lib/utils/stale-badge';
 
 describe('stale demo badge', () => {
   it('returns yellow badge for 10-19 day old demo', () => {
     const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
     const badge = staleBadge(fifteenDaysAgo);
     expect(badge.label).toBe('10+ days');
-    expect(badge.severity).toBe('yellow');
+    expect(badge.className).toContain('yellow');
   });
 
   it('returns orange badge for 20-29 day old demo', () => {
     const twentyFiveDaysAgo = new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString();
     const badge = staleBadge(twentyFiveDaysAgo);
     expect(badge.label).toBe('20+ days');
-    expect(badge.severity).toBe('orange');
+    expect(badge.className).toContain('orange');
   });
 
   it('returns red badge for 30+ day old demo', () => {
     const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString();
     const badge = staleBadge(thirtyFiveDaysAgo);
     expect(badge.label).toBe('30+ days');
-    expect(badge.severity).toBe('red');
+    expect(badge.className).toContain('red');
   });
 });
 

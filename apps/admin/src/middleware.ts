@@ -125,8 +125,8 @@ export async function middleware(request: NextRequest) {
   // 5. Rate-limit API routes
   if (isApiRoute(pathname)) {
     const ip =
+      (request as NextRequest & { ip?: string }).ip ??
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
       'unknown';
     const rl = checkRateLimit(ip);
     if (!rl.allowed) {
