@@ -35,11 +35,15 @@ interface ClientPortfolioProps {
   staleDemos: StaleDemo[];
 }
 
+const STALE_DEMO_RED_THRESHOLD_DAYS = 30;
+const STALE_DEMO_ORANGE_THRESHOLD_DAYS = 20;
+const STALE_DEMO_YELLOW_THRESHOLD_DAYS = 10;
+
 function staleBadge(createdAt: string): { label: string; className: string } {
   const days = differenceInDays(new Date(), new Date(createdAt));
-  if (days >= 30) return { label: '30+ days', className: 'bg-red-100 text-red-700' };
-  if (days >= 20) return { label: '20+ days', className: 'bg-orange-100 text-orange-700' };
-  return { label: '10+ days', className: 'bg-yellow-100 text-yellow-700' };
+  if (days >= STALE_DEMO_RED_THRESHOLD_DAYS) return { label: `${STALE_DEMO_RED_THRESHOLD_DAYS}+ days`, className: 'bg-red-100 text-red-700' };
+  if (days >= STALE_DEMO_ORANGE_THRESHOLD_DAYS) return { label: `${STALE_DEMO_ORANGE_THRESHOLD_DAYS}+ days`, className: 'bg-orange-100 text-orange-700' };
+  return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-yellow-100 text-yellow-700' };
 }
 
 export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {

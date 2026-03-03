@@ -21,19 +21,23 @@ export default async function ClientsPage() {
     .is('deleted_at', null)
     .order('name');
 
-  // Fetch stale demos (created > 10 days ago)
+  // Fetch stale demos (created > 10 days ago).
+  // NOTE: The `demo_instances` table is created in Phase 2. Before that migration
+  // runs, the query will resolve with { data: null, error } — the `?? []` fallback
+  // below keeps the page functional until the table exists.
   const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: staleDemos } = await db
+  const staleDemosResult = await db
     .from('demo_instances')
     .select('id, prospect_name, template_type, created_at')
     .lt('created_at', tenDaysAgo)
     .order('created_at');
+  const staleDemos = staleDemosResult.error ? [] : (staleDemosResult.data ?? []);
 
   return (
     <AdminLayout>
       <ClientPortfolio
         communities={communities ?? []}
-        staleDemos={staleDemos ?? []}
+        staleDemos={staleDemos}
       />
     </AdminLayout>
   );

@@ -1,9 +1,0 @@
-Prompt file: /Users/jphilistin/Documents/Coding/PropertyPro/docs/agent-prompts/phase3-batch-e/p3-52-53.strict-skip-perms.prompt.md
-Iterations: 8
-Success marker: <promise>ALL TESTS PASSING</promise>
-Run directory: .claude-ralph-runs/p3-52-53.strict-skip-perms.prompt/20260222T072728Z
-Permission mode: bypassPermissions
-Dangerous skip permissions: true
-Claude command: claude --permission-mode bypassPermissions --dangerously-skip-permissions
-=== Iteration 1/8 ===
-Success marker found at iteration 1.
