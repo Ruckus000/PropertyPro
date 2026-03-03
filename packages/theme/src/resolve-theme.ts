@@ -1,49 +1,43 @@
-import type { CommunityTheme } from './types';
 import { ALLOWED_FONTS, THEME_DEFAULTS } from './constants';
+import type { CommunityTheme } from './types';
 
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}){1,2}$/;
 
-function isValidHex(value: unknown): value is string {
-  return typeof value === 'string' && HEX_RE.test(value);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-function isAllowedFont(value: unknown): value is string {
-  return typeof value === 'string' && (ALLOWED_FONTS as readonly string[]).includes(value);
+function resolveColor(value: unknown, fallback: string): string {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value) ? value : fallback;
 }
 
-function isValidCommunityType(value: unknown): value is CommunityTheme['communityType'] {
-  return value === 'condo_718' || value === 'hoa_720' || value === 'apartment';
+function resolveFont(value: unknown, fallback: string): string {
+  return typeof value === 'string' && ALLOWED_FONTS.includes(value as (typeof ALLOWED_FONTS)[number])
+    ? value
+    : fallback;
 }
 
-/**
- * Resolve a fully typed CommunityTheme from raw JSONB branding data.
- *
- * Accepts the raw JSONB from `communities.branding` (type `unknown` for safety).
- * Invalid or missing fields fall back to THEME_DEFAULTS.
- *
- * Note: This function does NOT convert logoPath to a public URL.
- * Pass a pre-resolved public URL in the `logoUrl` override, or null.
- */
 export function resolveTheme(
   branding: unknown,
   communityName: string,
-  communityType: string,
-  overrides?: { logoUrl?: string | null },
+  communityType: 'condo_718' | 'hoa_720' | 'apartment',
 ): CommunityTheme {
-  const raw = typeof branding === 'object' && branding !== null ? branding : {};
-
-  const b = raw as Record<string, unknown>;
+  if (!isRecord(branding)) {
+    return {
+      ...THEME_DEFAULTS,
+      communityName,
+      communityType,
+    };
+  }
 
   return {
-    primaryColor: isValidHex(b['primaryColor']) ? b['primaryColor'] : THEME_DEFAULTS.primaryColor,
-    secondaryColor: isValidHex(b['secondaryColor'])
-      ? b['secondaryColor']
-      : THEME_DEFAULTS.secondaryColor,
-    accentColor: isValidHex(b['accentColor']) ? b['accentColor'] : THEME_DEFAULTS.accentColor,
-    fontHeading: isAllowedFont(b['fontHeading']) ? b['fontHeading'] : THEME_DEFAULTS.fontHeading,
-    fontBody: isAllowedFont(b['fontBody']) ? b['fontBody'] : THEME_DEFAULTS.fontBody,
-    logoUrl: overrides?.logoUrl !== undefined ? overrides.logoUrl : THEME_DEFAULTS.logoUrl,
-    communityName: communityName,
-    communityType: isValidCommunityType(communityType) ? communityType : 'condo_718',
+    primaryColor: resolveColor(branding.primaryColor, THEME_DEFAULTS.primaryColor),
+    secondaryColor: resolveColor(branding.secondaryColor, THEME_DEFAULTS.secondaryColor),
+    accentColor: resolveColor(branding.accentColor, THEME_DEFAULTS.accentColor),
+    fontHeading: resolveFont(branding.fontHeading, THEME_DEFAULTS.fontHeading),
+    fontBody: resolveFont(branding.fontBody, THEME_DEFAULTS.fontBody),
+    logoUrl: typeof branding.logoUrl === 'string' ? branding.logoUrl : null,
+    communityName,
+    communityType,
   };
 }

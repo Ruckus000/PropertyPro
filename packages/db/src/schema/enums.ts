@@ -93,3 +93,6 @@ export const emailFrequencyEnum = pgEnum('email_frequency', [
   'weekly_digest',
   'never',
 ]);
+
+/** Platform admin role. Only 'super_admin' exists today; enum enforces type safety and makes future roles explicit. */
+export const platformAdminRoleEnum = pgEnum('platform_admin_role', ['super_admin']);

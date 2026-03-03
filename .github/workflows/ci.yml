@@ -39,8 +39,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: CSS variable migration check
-        run: bash scripts/verify-css-var-migration.sh
+      - name: Verify CSS variable migration
+        run: ./scripts/verify-css-var-migration.sh
 
   typecheck:
     name: Typecheck

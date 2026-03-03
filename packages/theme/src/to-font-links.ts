@@ -1,23 +1,15 @@
 import type { CommunityTheme } from './types';
 
-/**
- * Generate Google Fonts <link> href URLs for the fonts used in this theme.
- *
- * Returns deduplicated array of stylesheet URLs.
- * Always requests weights 400, 500, 600, 700.
- */
+const FONT_WEIGHTS = 'wght@400;500;600;700';
+const GOOGLE_FONTS_BASE = 'https://fonts.googleapis.com/css2?family=';
+
+function toFontLink(fontName: string): string {
+  const encodedName = fontName.replaceAll(' ', '+');
+  return `${GOOGLE_FONTS_BASE}${encodedName}:${FONT_WEIGHTS}&display=swap`;
+}
+
 export function toFontLinks(theme: CommunityTheme): string[] {
-  const fonts = new Set<string>();
-  fonts.add(theme.fontHeading);
-  fonts.add(theme.fontBody);
+  const fonts = Array.from(new Set([theme.fontHeading, theme.fontBody]));
 
-  const links: string[] = [];
-  for (const family of fonts) {
-    const encodedFamily = family.replace(/ /g, '+');
-    links.push(
-      `https://fonts.googleapis.com/css2?family=${encodedFamily}:wght@400;500;600;700&display=swap`,
-    );
-  }
-
-  return links;
+  return fonts.map(toFontLink);
 }

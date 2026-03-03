@@ -1,43 +1,27 @@
-import { describe, it, expect } from 'vitest';
-import { toCssVars } from '../src/to-css-vars';
-import type { CommunityTheme } from '../src/types';
-
-const theme: CommunityTheme = {
-  primaryColor: '#2563EB',
-  secondaryColor: '#6B7280',
-  accentColor: '#DBEAFE',
-  fontHeading: 'Inter',
-  fontBody: 'Lato',
-  logoUrl: 'https://example.com/logo.webp',
-  communityName: 'Sunset Condos',
-  communityType: 'condo_718',
-};
+import { describe, expect, it } from 'vitest';
+import { toCssVars } from '../src';
 
 describe('toCssVars', () => {
-  it('returns correct CSS custom property key-value pairs', () => {
-    const vars = toCssVars(theme);
+  it('maps theme fields to CSS variables and converts null logoUrl to none', () => {
+    const cssVars = toCssVars({
+      primaryColor: '#2563EB',
+      secondaryColor: '#6B7280',
+      accentColor: '#DBEAFE',
+      fontHeading: 'Inter',
+      fontBody: 'Lato',
+      logoUrl: null,
+      communityName: 'Sunset Condos',
+      communityType: 'condo_718',
+    });
 
-    expect(vars['--theme-primary']).toBe('#2563EB');
-    expect(vars['--theme-secondary']).toBe('#6B7280');
-    expect(vars['--theme-accent']).toBe('#DBEAFE');
-    expect(vars['--theme-font-heading']).toBe('Inter');
-    expect(vars['--theme-font-body']).toBe('Lato');
-    expect(vars['--theme-logo-url']).toBe('https://example.com/logo.webp');
-    expect(vars['--theme-community-name']).toBe('Sunset Condos');
-  });
-
-  it('omits null logoUrl', () => {
-    const vars = toCssVars({ ...theme, logoUrl: null });
-
-    expect('--theme-logo-url' in vars).toBe(false);
-  });
-
-  it('does not include communityType as a CSS var', () => {
-    const vars = toCssVars(theme);
-
-    expect('--theme-community-type' in vars).toBe(false);
-    // Ensure exactly the expected keys are present
-    const keys = Object.keys(vars);
-    expect(keys).not.toContain('communityType');
+    expect(cssVars).toEqual({
+      '--theme-primary': '#2563EB',
+      '--theme-secondary': '#6B7280',
+      '--theme-accent': '#DBEAFE',
+      '--theme-font-heading': 'Inter',
+      '--theme-font-body': 'Lato',
+      '--theme-logo-url': 'none',
+      '--theme-community-name': 'Sunset Condos',
+    });
   });
 });

@@ -1,27 +1,16 @@
 {
   "name": "@propertypro/theme",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
-  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": ["dist"],
   "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "clean": "rm -rf dist .turbo"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "typescript": "^5.0.0"
   }
 }

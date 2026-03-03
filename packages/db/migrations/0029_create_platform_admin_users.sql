@@ -1,6 +1,8 @@
+CREATE TYPE platform_admin_role AS ENUM ('super_admin');
+
 CREATE TABLE platform_admin_users (
   user_id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
-  role text NOT NULL DEFAULT 'super_admin',
+  role platform_admin_role NOT NULL DEFAULT 'super_admin',
   invited_by uuid REFERENCES auth.users ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
