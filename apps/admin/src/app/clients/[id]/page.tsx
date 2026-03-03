@@ -12,6 +12,7 @@ import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 
 export const dynamic = 'force-dynamic';
 
+// Next.js 15+ passes params as a Promise (async page props).
 interface PageProps {
   params: Promise<{ id: string }>;
 }
