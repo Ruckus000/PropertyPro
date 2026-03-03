@@ -155,14 +155,6 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     throw new Error('Missing seeded community IDs');
   }
 
-  await db
-    .insert(units)
-    .values({
-      communityId: sunsetCommunityId,
-      unitNumber: 'A-101',
-    })
-    .onConflictDoNothing();
-
   const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({
     communityId: communityIdsBySlug[assignment.slug]!,
     userId: resolveUserId(userIdsByEmail, assignment.email),
