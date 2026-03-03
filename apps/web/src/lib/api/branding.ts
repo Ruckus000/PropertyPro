@@ -10,9 +10,6 @@ import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq } from '@propertypro/db/filters';
 import type { CommunityBranding } from '@propertypro/shared';
-import { isValidHexColor } from '@propertypro/shared';
-import { ALLOWED_FONTS } from '@propertypro/theme';
-import { ValidationError } from '@/lib/api/errors';
 
 /**
  * Read the current branding for a community.
@@ -46,29 +43,17 @@ export interface BrandingPatch {
 }
 
 /**
- * Validate and persist a branding patch.
+ * Persist a branding patch.
  * Merges with existing branding so partial updates are safe.
+ *
+ * NOTE: Input validation is handled by the Zod schema in the API route
+ * (apps/web/src/app/api/v1/pm/branding/route.ts). This function trusts
+ * that its callers have already validated the patch.
  */
 export async function updateBrandingForCommunity(
   communityId: number,
   patch: BrandingPatch,
 ): Promise<CommunityBranding> {
-  if (patch.primaryColor !== undefined && !isValidHexColor(patch.primaryColor)) {
-    throw new ValidationError('primaryColor must be a 6-digit hex color (e.g. #2563eb)');
-  }
-  if (patch.secondaryColor !== undefined && !isValidHexColor(patch.secondaryColor)) {
-    throw new ValidationError('secondaryColor must be a 6-digit hex color (e.g. #6b7280)');
-  }
-  if (patch.accentColor !== undefined && !isValidHexColor(patch.accentColor)) {
-    throw new ValidationError('accentColor must be a 6-digit hex color (e.g. #DBEAFE)');
-  }
-  if (patch.fontHeading !== undefined && !(ALLOWED_FONTS as readonly string[]).includes(patch.fontHeading)) {
-    throw new ValidationError(`fontHeading must be one of the allowed Google Fonts families`);
-  }
-  if (patch.fontBody !== undefined && !(ALLOWED_FONTS as readonly string[]).includes(patch.fontBody)) {
-    throw new ValidationError(`fontBody must be one of the allowed Google Fonts families`);
-  }
-
   const existing = await getBrandingForCommunity(communityId);
   const updated: CommunityBranding = {
     ...existing,

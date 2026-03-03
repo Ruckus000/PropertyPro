@@ -1,10 +1,5 @@
 import type { UserCommunityRow } from '@/lib/api/user-communities';
-
-const COMMUNITY_TYPE_LABELS: Record<string, string> = {
-  condo_718: 'Condo',
-  hoa_720: 'HOA',
-  apartment: 'Apartment',
-};
+import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
 
 const COMMUNITY_TYPE_COLORS: Record<string, string> = {
   condo_718: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -45,7 +40,7 @@ export function CommunityPickerGrid({ communities }: CommunityPickerGridProps) {
                   COMMUNITY_TYPE_COLORS[community.communityType] ?? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
                 }`}
               >
-                {COMMUNITY_TYPE_LABELS[community.communityType] ?? community.communityType}
+                {COMMUNITY_TYPE_DISPLAY_NAMES[community.communityType] ?? community.communityType}
               </span>
             </div>
 
