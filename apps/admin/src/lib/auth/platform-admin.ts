@@ -10,12 +10,12 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-const AdminRowSchema = z.object({ role: z.string() });
+const AdminRowSchema = z.object({ role: z.enum(['super_admin']) });
 
 export interface PlatformAdminUser {
   id: string;
   email: string;
-  role: string;
+  role: 'super_admin';
 }
 
 /**

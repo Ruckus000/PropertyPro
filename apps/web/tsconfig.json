@@ -45,6 +45,9 @@
       ],
       "@propertypro/shared/*": [
         "../../packages/shared/src/*"
+      ],
+      "@propertypro/theme": [
+        "../../packages/theme/src"
       ]
     },
     "incremental": true
