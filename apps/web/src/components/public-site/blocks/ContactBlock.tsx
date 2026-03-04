@@ -9,13 +9,12 @@ interface ContactBlockProps {
 
 /**
  * Contact block — static render from content fields showing community
- * contact information (email, phone, address, office hours).
+ * contact information (email, phone, address, management company).
  */
 export function ContactBlock({ content, theme }: ContactBlockProps) {
   const c = content as unknown as ContactBlockContent;
-  const heading = c.heading ?? 'Contact Us';
 
-  const hasContent = c.email || c.phone || c.address || c.officeHours;
+  const hasContent = c.boardEmail || c.phone || c.address || c.managementCompany;
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
@@ -27,7 +26,7 @@ export function ContactBlock({ content, theme }: ContactBlockProps) {
             fontFamily: `'${theme.fontHeading}', sans-serif`,
           }}
         >
-          {heading}
+          Contact Us
         </h2>
         {!hasContent ? (
           <p className="text-gray-500">Contact information coming soon.</p>
@@ -36,19 +35,19 @@ export function ContactBlock({ content, theme }: ContactBlockProps) {
             className="grid gap-6 sm:grid-cols-2"
             style={{ fontFamily: `'${theme.fontBody}', sans-serif` }}
           >
-            {c.email ? (
+            {c.boardEmail ? (
               <div className="flex items-start gap-3">
                 <span className="text-gray-400 mt-0.5" aria-hidden="true">
                   {'\u2709'}
                 </span>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Email</dt>
+                  <dt className="text-sm font-medium text-gray-500">Board Email</dt>
                   <dd>
                     <a
-                      href={`mailto:${c.email}`}
+                      href={`mailto:${c.boardEmail}`}
                       className="text-gray-900 hover:underline"
                     >
-                      {c.email}
+                      {c.boardEmail}
                     </a>
                   </dd>
                 </div>
@@ -83,14 +82,14 @@ export function ContactBlock({ content, theme }: ContactBlockProps) {
                 </div>
               </div>
             ) : null}
-            {c.officeHours ? (
+            {c.managementCompany ? (
               <div className="flex items-start gap-3">
                 <span className="text-gray-400 mt-0.5" aria-hidden="true">
-                  {'\u{1F552}'}
+                  {'\u{1F3E2}'}
                 </span>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Office Hours</dt>
-                  <dd className="text-gray-900 whitespace-pre-line">{c.officeHours}</dd>
+                  <dt className="text-sm font-medium text-gray-500">Management Company</dt>
+                  <dd className="text-gray-900">{c.managementCompany}</dd>
                 </div>
               </div>
             ) : null}

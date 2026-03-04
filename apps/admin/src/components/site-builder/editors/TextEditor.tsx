@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Text block editor — body text and alignment selector.
+ * Text block editor — body text with character count.
  */
-import type { TextContent } from '@propertypro/shared/site-blocks';
+import type { TextBlockContent } from '@propertypro/shared/site-blocks';
 
 interface TextEditorProps {
-  content: TextContent;
-  onChange: (content: TextContent) => void;
+  content: TextBlockContent;
+  onChange: (content: TextBlockContent) => void;
 }
 
 export function TextEditor({ content, onChange }: TextEditorProps) {
@@ -20,29 +20,13 @@ export function TextEditor({ content, onChange }: TextEditorProps) {
         <textarea
           id="text-body"
           value={content.body}
+          maxLength={5000}
           onChange={(e) => onChange({ ...content, body: e.target.value })}
           rows={6}
           className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           placeholder="Enter your text here..."
         />
-      </div>
-
-      <div>
-        <label htmlFor="text-alignment" className="mb-1 block text-xs font-medium text-gray-700">
-          Text Alignment
-        </label>
-        <select
-          id="text-alignment"
-          value={content.alignment ?? 'left'}
-          onChange={(e) =>
-            onChange({ ...content, alignment: e.target.value as 'left' | 'center' | 'right' })
-          }
-          className="block w-40 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-        </select>
+        <p className="mt-1 text-xs text-gray-400">{content.body.length} / 5000</p>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import type { CommunityTheme } from '@propertypro/theme';
 import type { DocumentsBlockContent } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
 import { documents } from '@propertypro/db';
-import { desc, eq } from '@propertypro/db/filters';
+import { desc, inArray } from '@propertypro/db/filters';
 
 interface DocumentsBlockProps {
   content: Record<string, unknown>;
@@ -12,7 +12,7 @@ interface DocumentsBlockProps {
 
 /**
  * Documents block — server component that queries documents (optionally filtered
- * by category) and renders them as a list with download-friendly display.
+ * by categories) and renders them as a list with download-friendly display.
  */
 export async function DocumentsBlock({
   content,
@@ -20,18 +20,18 @@ export async function DocumentsBlock({
   theme,
 }: DocumentsBlockProps) {
   const c = content as unknown as DocumentsBlockContent;
-  const limit = c.limit ?? 10;
   const title = c.title ?? 'Documents';
-  const categoryId = c.categoryId;
+  const categoryIds = c.categoryIds ?? [];
 
   const scoped = createScopedClient(communityId);
 
   // Build category filter if specified
-  const additionalWhere = categoryId
-    ? eq(documents.categoryId, categoryId)
-    : undefined;
+  const additionalWhere =
+    categoryIds.length > 0
+      ? inArray(documents.categoryId, categoryIds)
+      : undefined;
 
-  const rows = await scoped.selectFrom(
+  const rows = (await scoped.selectFrom(
     documents,
     {
       id: documents.id,
@@ -42,11 +42,22 @@ export async function DocumentsBlock({
       createdAt: documents.createdAt,
     },
     additionalWhere,
-  );
+  )) as unknown as Array<{
+    id: number;
+    title: string;
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    createdAt: Date;
+  }>;
 
-  const items = await (rows as unknown as { orderBy: (col: ReturnType<typeof desc>) => { limit: (n: number) => Promise<Array<{ id: number; title: string; fileName: string; mimeType: string; fileSize: number; createdAt: Date }>> } })
-    .orderBy(desc(documents.createdAt))
-    .limit(limit);
+  // Sort client-side since scoped client may not chain orderBy
+  const items = rows
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .slice(0, 10);
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
@@ -86,7 +97,7 @@ export async function DocumentsBlock({
                   </div>
                 </div>
                 <time className="text-sm text-gray-500 flex-shrink-0 ml-4">
-                  {item.createdAt.toLocaleDateString('en-US', {
+                  {new Date(item.createdAt).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',

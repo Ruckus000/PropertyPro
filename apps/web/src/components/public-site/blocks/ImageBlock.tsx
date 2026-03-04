@@ -12,17 +12,17 @@ interface ImageBlockProps {
  */
 export function ImageBlock({ content, theme }: ImageBlockProps) {
   const c = content as unknown as ImageBlockContent;
-  const src = c.src;
+  const url = c.url;
   const alt = c.alt ?? '';
   const caption = c.caption;
 
-  if (!src) return null;
+  if (!url) return null;
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8">
       <figure className="max-w-4xl mx-auto">
         <img
-          src={src}
+          src={url}
           alt={alt}
           className="w-full rounded-lg shadow-md"
           loading="lazy"

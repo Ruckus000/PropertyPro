@@ -89,10 +89,10 @@ export async function POST(request: NextRequest) {
 
   // Use provided content or generate defaults
   const blockContent = content ?? (getDefaultBlockContent(blockType) as unknown as Record<string, unknown>);
-  const validation = validateBlockContent(blockType, blockContent);
-  if (!validation.valid) {
+  const validationError = validateBlockContent(blockType, blockContent);
+  if (validationError) {
     return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: validation.error } },
+      { error: { code: 'VALIDATION_ERROR', message: validationError } },
       { status: 400 },
     );
   }

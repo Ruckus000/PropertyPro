@@ -2,7 +2,7 @@ import type { CommunityTheme } from '@propertypro/theme';
 import type { MeetingsBlockContent } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
 import { meetings } from '@propertypro/db';
-import { asc, gte } from '@propertypro/db/filters';
+import { gte } from '@propertypro/db/filters';
 
 interface MeetingsBlockProps {
   content: Record<string, unknown>;
@@ -20,13 +20,12 @@ export async function MeetingsBlock({
   theme,
 }: MeetingsBlockProps) {
   const c = content as unknown as MeetingsBlockContent;
-  const limit = c.limit ?? 5;
   const title = c.title ?? 'Upcoming Meetings';
 
   const scoped = createScopedClient(communityId);
   const now = new Date();
 
-  const rows = await scoped.selectFrom(
+  const rows = (await scoped.selectFrom(
     meetings,
     {
       id: meetings.id,
@@ -36,11 +35,21 @@ export async function MeetingsBlock({
       location: meetings.location,
     },
     gte(meetings.startsAt, now),
-  );
+  )) as unknown as Array<{
+    id: number;
+    title: string;
+    meetingType: string;
+    startsAt: Date;
+    location: string;
+  }>;
 
-  const items = await (rows as unknown as { orderBy: (col: ReturnType<typeof asc>) => { limit: (n: number) => Promise<Array<{ id: number; title: string; meetingType: string; startsAt: Date; location: string }>> } })
-    .orderBy(asc(meetings.startsAt))
-    .limit(limit);
+  // Sort by date ascending and limit to 5
+  const items = rows
+    .sort(
+      (a, b) =>
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+    )
+    .slice(0, 5);
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8">
@@ -69,10 +78,10 @@ export async function MeetingsBlock({
                     className="text-sm font-semibold uppercase"
                     style={{ color: theme.primaryColor }}
                   >
-                    {item.startsAt.toLocaleDateString('en-US', { month: 'short' })}
+                    {new Date(item.startsAt).toLocaleDateString('en-US', { month: 'short' })}
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {item.startsAt.toLocaleDateString('en-US', { day: 'numeric' })}
+                    {new Date(item.startsAt).toLocaleDateString('en-US', { day: 'numeric' })}
                   </div>
                 </div>
                 <div>
@@ -83,7 +92,7 @@ export async function MeetingsBlock({
                     {item.title}
                   </h3>
                   <p className="text-sm text-gray-500">
-                    {item.startsAt.toLocaleTimeString('en-US', {
+                    {new Date(item.startsAt).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}{' '}

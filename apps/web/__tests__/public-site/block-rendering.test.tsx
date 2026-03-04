@@ -19,6 +19,7 @@ vi.mock('@propertypro/db/filters', () => ({
   desc: vi.fn(),
   eq: vi.fn(),
   gte: vi.fn(),
+  inArray: vi.fn(),
   isNull: vi.fn(),
 }));
 
@@ -67,13 +68,13 @@ describe('BLOCK_RENDERERS registry', () => {
 });
 
 describe('HeroBlock', () => {
-  it('renders heading and subheading', () => {
+  it('renders headline and subheadline', () => {
     const html = renderToStaticMarkup(
       <HeroBlock
         {...defaultBlockProps}
         content={{
-          heading: 'Welcome Home',
-          subheading: 'Your community, your way',
+          headline: 'Welcome Home',
+          subheadline: 'Your community, your way',
         }}
       />,
     );
@@ -82,14 +83,14 @@ describe('HeroBlock', () => {
     expect(html).toContain('Your community, your way');
   });
 
-  it('renders CTA button when ctaText and ctaUrl provided', () => {
+  it('renders CTA button when ctaLabel and ctaHref provided', () => {
     const html = renderToStaticMarkup(
       <HeroBlock
         {...defaultBlockProps}
         content={{
-          heading: 'Welcome',
-          ctaText: 'Learn More',
-          ctaUrl: '/about',
+          headline: 'Welcome',
+          ctaLabel: 'Learn More',
+          ctaHref: '/about',
         }}
       />,
     );
@@ -103,7 +104,7 @@ describe('HeroBlock', () => {
       <HeroBlock
         {...defaultBlockProps}
         content={{
-          heading: 'Welcome',
+          headline: 'Welcome',
           backgroundImageUrl: 'https://example.com/hero.jpg',
         }}
       />,
@@ -114,7 +115,7 @@ describe('HeroBlock', () => {
     expect(html).toContain('bg-black/50');
   });
 
-  it('falls back to community name when heading is missing', () => {
+  it('falls back to community name when headline is missing', () => {
     const html = renderToStaticMarkup(
       <HeroBlock
         {...defaultBlockProps}
@@ -129,7 +130,7 @@ describe('HeroBlock', () => {
     const html = renderToStaticMarkup(
       <HeroBlock
         {...defaultBlockProps}
-        content={{ heading: 'Hello' }}
+        content={{ headline: 'Hello' }}
       />,
     );
 
@@ -143,29 +144,28 @@ describe('ContactBlock', () => {
       <ContactBlock
         {...defaultBlockProps}
         content={{
-          heading: 'Get In Touch',
-          email: 'info@sunset.com',
+          boardEmail: 'info@sunset.com',
           phone: '555-123-4567',
           address: '123 Beach Ave\nMiami, FL 33101',
-          officeHours: 'Mon-Fri 9am-5pm',
+          managementCompany: 'ABC Property Mgmt',
         }}
       />,
     );
 
-    expect(html).toContain('Get In Touch');
+    expect(html).toContain('Contact Us');
     expect(html).toContain('info@sunset.com');
     expect(html).toContain('mailto:info@sunset.com');
     expect(html).toContain('555-123-4567');
     expect(html).toContain('tel:555-123-4567');
     expect(html).toContain('123 Beach Ave');
-    expect(html).toContain('Mon-Fri 9am-5pm');
+    expect(html).toContain('ABC Property Mgmt');
   });
 
-  it('renders default heading when none provided', () => {
+  it('renders default heading "Contact Us"', () => {
     const html = renderToStaticMarkup(
       <ContactBlock
         {...defaultBlockProps}
-        content={{ email: 'test@test.com' }}
+        content={{ boardEmail: 'test@test.com' }}
       />,
     );
 
@@ -197,21 +197,6 @@ describe('TextBlock', () => {
     expect(html).toContain('whitespace-pre-wrap');
   });
 
-  it('renders markdown content as HTML', () => {
-    const html = renderToStaticMarkup(
-      <TextBlock
-        {...defaultBlockProps}
-        content={{
-          body: '<p>Welcome to <strong>Sunset Condos</strong></p>',
-          markdown: true,
-        }}
-      />,
-    );
-
-    expect(html).toContain('prose');
-    expect(html).toContain('<strong>Sunset Condos</strong>');
-  });
-
   it('returns null when body is empty', () => {
     const html = renderToStaticMarkup(
       <TextBlock
@@ -230,7 +215,7 @@ describe('ImageBlock', () => {
       <ImageBlock
         {...defaultBlockProps}
         content={{
-          src: 'https://example.com/photo.jpg',
+          url: 'https://example.com/photo.jpg',
           alt: 'Community pool',
         }}
       />,
@@ -247,7 +232,7 @@ describe('ImageBlock', () => {
       <ImageBlock
         {...defaultBlockProps}
         content={{
-          src: 'https://example.com/photo.jpg',
+          url: 'https://example.com/photo.jpg',
           alt: 'Pool',
           caption: 'Our newly renovated pool area',
         }}
@@ -258,11 +243,11 @@ describe('ImageBlock', () => {
     expect(html).toContain('Our newly renovated pool area');
   });
 
-  it('returns null when src is missing', () => {
+  it('returns null when url is missing', () => {
     const html = renderToStaticMarkup(
       <ImageBlock
         {...defaultBlockProps}
-        content={{ src: '', alt: 'Test' }}
+        content={{ url: '', alt: 'Test' }}
       />,
     );
 

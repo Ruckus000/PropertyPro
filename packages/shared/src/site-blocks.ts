@@ -117,3 +117,25 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
       return `Unknown block type: ${type}`;
   }
 }
+
+/**
+ * Returns sensible default content for a new block of the given type.
+ */
+export function getDefaultBlockContent(type: BlockType): BlockContent {
+  switch (type) {
+    case 'hero':
+      return { headline: '', subheadline: '', ctaLabel: 'Learn More', ctaHref: '/auth/login' };
+    case 'announcements':
+      return { title: 'Announcements', limit: 5 };
+    case 'documents':
+      return { title: 'Documents', categoryIds: [] };
+    case 'meetings':
+      return { title: 'Upcoming Meetings' };
+    case 'contact':
+      return { boardEmail: '' };
+    case 'text':
+      return { body: '' };
+    case 'image':
+      return { url: '', alt: '' };
+  }
+}

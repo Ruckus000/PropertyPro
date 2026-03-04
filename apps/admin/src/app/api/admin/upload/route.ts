@@ -6,7 +6,7 @@
  *
  * Storage path: community-assets/{communityId}/site/{uuid}.{ext}
  */
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -60,19 +60,20 @@ function detectMimeFromBuffer(buffer: Uint8Array): AllowedMime | null {
   return null;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   // Defense in depth: verify platform admin even though middleware checks too
   await requirePlatformAdmin();
 
-  const formData = await request.formData();
-  const file = formData.get('file');
-  const communityId = formData.get('communityId');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formData: any = await request.formData();
+  const file: Blob | null = formData.get('file') ?? null;
+  const communityId: string | null = formData.get('communityId') ?? null;
 
-  if (!file || !(file instanceof Blob)) {
+  if (!file) {
     return NextResponse.json({ error: 'file is required' }, { status: 400 });
   }
 
-  if (!communityId || typeof communityId !== 'string') {
+  if (!communityId) {
     return NextResponse.json({ error: 'communityId is required' }, { status: 400 });
   }
 

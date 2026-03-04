@@ -13,11 +13,11 @@ interface HeroBlockProps {
  */
 export function HeroBlock({ content, theme }: HeroBlockProps) {
   const c = content as unknown as HeroBlockContent;
-  const heading = c.heading || theme.communityName;
-  const subheading = c.subheading;
+  const headline = c.headline || theme.communityName;
+  const subheadline = c.subheadline;
   const backgroundImageUrl = c.backgroundImageUrl;
-  const ctaText = c.ctaText;
-  const ctaUrl = c.ctaUrl;
+  const ctaLabel = c.ctaLabel;
+  const ctaHref = c.ctaHref;
 
   return (
     <section
@@ -40,26 +40,26 @@ export function HeroBlock({ content, theme }: HeroBlockProps) {
           className="text-4xl sm:text-5xl font-bold text-white mb-4"
           style={{ fontFamily: `'${theme.fontHeading}', sans-serif` }}
         >
-          {heading}
+          {headline}
         </h1>
-        {subheading ? (
+        {subheadline ? (
           <p
             className="text-lg sm:text-xl text-white/90 mb-8"
             style={{ fontFamily: `'${theme.fontBody}', sans-serif` }}
           >
-            {subheading}
+            {subheadline}
           </p>
         ) : null}
-        {ctaText && ctaUrl ? (
+        {ctaLabel && ctaHref ? (
           <a
-            href={ctaUrl}
+            href={ctaHref}
             className="inline-flex items-center px-6 py-3 text-base font-medium rounded-md transition-colors"
             style={{
               backgroundColor: theme.accentColor,
               color: theme.primaryColor,
             }}
           >
-            {ctaText}
+            {ctaLabel}
           </a>
         ) : null}
       </div>

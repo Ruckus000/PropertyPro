@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { createScopedClient, siteBlocks } from '@propertypro/db';
-import { asc, eq } from '@propertypro/db/filters';
+import { eq } from '@propertypro/db/filters';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityType, BlockType } from '@propertypro/shared';
 import {
@@ -40,7 +40,7 @@ async function fetchPublishedBlocks(communityId: number) {
       blockOrder: siteBlocks.blockOrder,
       content: siteBlocks.content,
     },
-    eq(siteBlocks.isVisible, true),
+    eq(siteBlocks.isDraft, false),
   ) as unknown as Promise<
     Array<{
       id: number;

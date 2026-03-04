@@ -84,10 +84,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         { status: 500 },
       );
     }
-    const validation = validateBlockContent(blockType, content);
-    if (!validation.valid) {
+    const validationError = validateBlockContent(blockType, content);
+    if (validationError) {
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: validation.error } },
+        { error: { code: 'VALIDATION_ERROR', message: validationError } },
         { status: 400 },
       );
     }

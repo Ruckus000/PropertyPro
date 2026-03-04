@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Hero block editor — headline, subheading, background image URL, CTA text/URL.
+ * Hero block editor — headline, subheadline, background image URL, CTA label/href.
  */
-import type { HeroContent } from '@propertypro/shared/site-blocks';
+import type { HeroBlockContent } from '@propertypro/shared/site-blocks';
 
 interface HeroEditorProps {
-  content: HeroContent;
-  onChange: (content: HeroContent) => void;
+  content: HeroBlockContent;
+  onChange: (content: HeroBlockContent) => void;
 }
 
 export function HeroEditor({ content, onChange }: HeroEditorProps) {
@@ -20,6 +20,7 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
         <input
           id="hero-headline"
           type="text"
+          maxLength={120}
           value={content.headline}
           onChange={(e) => onChange({ ...content, headline: e.target.value })}
           className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -28,14 +29,15 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="hero-subheading" className="mb-1 block text-xs font-medium text-gray-700">
-          Subheading
+        <label htmlFor="hero-subheadline" className="mb-1 block text-xs font-medium text-gray-700">
+          Subheadline
         </label>
         <input
-          id="hero-subheading"
+          id="hero-subheadline"
           type="text"
-          value={content.subheading ?? ''}
-          onChange={(e) => onChange({ ...content, subheading: e.target.value })}
+          maxLength={300}
+          value={content.subheadline}
+          onChange={(e) => onChange({ ...content, subheadline: e.target.value })}
           className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           placeholder="Your community portal for documents, meetings, and more"
         />
@@ -49,7 +51,7 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
           id="hero-bg-image"
           type="url"
           value={content.backgroundImageUrl ?? ''}
-          onChange={(e) => onChange({ ...content, backgroundImageUrl: e.target.value })}
+          onChange={(e) => onChange({ ...content, backgroundImageUrl: e.target.value || undefined })}
           className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           placeholder="https://example.com/hero-image.jpg"
         />
@@ -57,29 +59,30 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="hero-cta-text" className="mb-1 block text-xs font-medium text-gray-700">
-            CTA Button Text
+          <label htmlFor="hero-cta-label" className="mb-1 block text-xs font-medium text-gray-700">
+            CTA Button Label
           </label>
           <input
-            id="hero-cta-text"
+            id="hero-cta-label"
             type="text"
-            value={content.ctaText ?? ''}
-            onChange={(e) => onChange({ ...content, ctaText: e.target.value })}
+            maxLength={40}
+            value={content.ctaLabel}
+            onChange={(e) => onChange({ ...content, ctaLabel: e.target.value })}
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             placeholder="Get Started"
           />
         </div>
         <div>
-          <label htmlFor="hero-cta-url" className="mb-1 block text-xs font-medium text-gray-700">
+          <label htmlFor="hero-cta-href" className="mb-1 block text-xs font-medium text-gray-700">
             CTA Button URL
           </label>
           <input
-            id="hero-cta-url"
-            type="url"
-            value={content.ctaUrl ?? ''}
-            onChange={(e) => onChange({ ...content, ctaUrl: e.target.value })}
+            id="hero-cta-href"
+            type="text"
+            value={content.ctaHref}
+            onChange={(e) => onChange({ ...content, ctaHref: e.target.value })}
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            placeholder="/documents"
+            placeholder="/auth/login"
           />
         </div>
       </div>
