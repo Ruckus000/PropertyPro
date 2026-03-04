@@ -8,7 +8,7 @@
  * Token-authenticated (no session required) — listed in middleware allowlist.
  */
 import { NextResponse } from 'next/server';
-import { extractDemoIdFromToken, validateDemoToken } from '@propertypro/shared';
+import { extractDemoIdFromToken, validateDemoToken } from '@propertypro/shared/server';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
