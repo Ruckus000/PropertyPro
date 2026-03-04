@@ -440,8 +440,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      // Unauthenticated — let through to public site page with community headers
-      const publicSiteResponse = NextResponse.next({
+      // Unauthenticated — rewrite to /_site so the public-site page renders
+      const siteUrl = request.nextUrl.clone();
+      siteUrl.pathname = '/_site';
+      const publicSiteResponse = NextResponse.rewrite(siteUrl, {
         request: { headers: forwardedHeaders },
       });
       return finaliseResponse(
