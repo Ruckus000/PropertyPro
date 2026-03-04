@@ -25,20 +25,19 @@ export async function MeetingsBlock({
   const scoped = createScopedClient(communityId);
   const now = new Date();
 
-  const items = (await scoped
-    .selectFrom(
-      meetings,
-      {
-        id: meetings.id,
-        title: meetings.title,
-        meetingType: meetings.meetingType,
-        startsAt: meetings.startsAt,
-        location: meetings.location,
-      },
-      gte(meetings.startsAt, now),
-    )
+  const items = await scoped.selectFrom(
+    meetings,
+    {
+      id: meetings.id,
+      title: meetings.title,
+      meetingType: meetings.meetingType,
+      startsAt: meetings.startsAt,
+      location: meetings.location,
+    },
+    gte(meetings.startsAt, now),
+  )
     .orderBy(asc(meetings.startsAt))
-    .limit(5)) as unknown as Array<{
+    .limit(5) as unknown as Array<{
     id: number;
     title: string;
     meetingType: string;

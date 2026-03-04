@@ -31,21 +31,20 @@ export async function DocumentsBlock({
       ? inArray(documents.categoryId, categoryIds)
       : undefined;
 
-  const items = (await scoped
-    .selectFrom(
-      documents,
-      {
-        id: documents.id,
-        title: documents.title,
-        fileName: documents.fileName,
-        mimeType: documents.mimeType,
-        fileSize: documents.fileSize,
-        createdAt: documents.createdAt,
-      },
-      additionalWhere,
-    )
+  const items = await scoped.selectFrom(
+    documents,
+    {
+      id: documents.id,
+      title: documents.title,
+      fileName: documents.fileName,
+      mimeType: documents.mimeType,
+      fileSize: documents.fileSize,
+      createdAt: documents.createdAt,
+    },
+    additionalWhere,
+  )
     .orderBy(desc(documents.createdAt))
-    .limit(10)) as unknown as Array<{
+    .limit(10) as unknown as Array<{
     id: number;
     title: string;
     fileName: string;

@@ -141,8 +141,8 @@ describeDb('site-blocks CRUD (db-backed integration)', () => {
       await db
         .delete(dbModule.communities)
         .where(eq(dbModule.communities.id, communityId));
-    } catch {
-      // Best-effort
+    } catch (e) {
+      console.error('Failed to clean up test community:', e);
     } finally {
       await sqlClient.end();
     }

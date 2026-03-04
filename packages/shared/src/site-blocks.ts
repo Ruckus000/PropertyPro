@@ -11,7 +11,7 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export interface HeroBlockContent {
   headline: string;                    // max 120 chars
-  subheadline: string;                 // max 300 chars
+  subheadline?: string;                // max 300 chars, optional
   ctaLabel: string;                    // max 40 chars
   ctaHref: string;
   backgroundImageUrl?: string;
@@ -82,7 +82,7 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
     case 'hero': {
       const c = content as HeroBlockContent;
       if (!c.headline || c.headline.length > 120) return 'Headline required, max 120 chars';
-      if (!c.subheadline || c.subheadline.length > 300) return 'Subheadline required, max 300 chars';
+      if (c.subheadline && c.subheadline.length > 300) return 'Subheadline cannot exceed 300 characters';
       if (!c.ctaLabel || c.ctaLabel.length > 40) return 'CTA label required, max 40 chars';
       if (!c.ctaHref) return 'CTA href required';
       return null;

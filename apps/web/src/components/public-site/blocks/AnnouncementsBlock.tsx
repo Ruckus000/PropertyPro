@@ -24,7 +24,7 @@ export async function AnnouncementsBlock({
   const title = c.title ?? 'Recent Announcements';
 
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom(
+  const items = await scoped.selectFrom(
     announcements,
     {
       id: announcements.id,
@@ -33,12 +33,9 @@ export async function AnnouncementsBlock({
       publishedAt: announcements.publishedAt,
     },
     isNull(announcements.archivedAt),
-  );
-
-  // Apply ordering and limit manually since selectFrom returns a dynamic builder
-  const items = await (rows as unknown as { orderBy: (col: ReturnType<typeof desc>) => { limit: (n: number) => Promise<Array<{ id: number; title: string; body: string; publishedAt: Date }>> } })
+  )
     .orderBy(desc(announcements.publishedAt))
-    .limit(limit);
+    .limit(limit) as unknown as Array<{ id: number; title: string; body: string; publishedAt: Date }>;
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8">
@@ -80,10 +77,9 @@ export async function AnnouncementsBlock({
                 <div
                   className="text-gray-700 line-clamp-3"
                   style={{ fontFamily: `'${theme.fontBody}', sans-serif` }}
-                  dangerouslySetInnerHTML={{
-                    __html: truncateHtml(item.body, 200),
-                  }}
-                />
+                >
+                  {truncateHtml(item.body, 200)}
+                </div>
               </article>
             ))}
           </div>

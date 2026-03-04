@@ -15,7 +15,7 @@ import {
 import {
   listBlocks,
   insertBlock,
-  getMaxBlockOrder,
+  insertBlockAtEnd,
 } from '@/lib/db/site-blocks-queries';
 
 const createBlockSchema = z.object({
@@ -97,16 +97,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // If no blockOrder provided, put it at the end
-  const order = blockOrder ?? await getMaxBlockOrder(communityId);
-
-  const { data, error } = await insertBlock({
-    community_id: communityId,
-    block_type: blockType,
-    block_order: order,
-    content: blockContent as Record<string, unknown>,
-    is_draft: true,
-  });
+  // Use atomic insert-at-end when no explicit order, to avoid race conditions
+  const { data, error } = blockOrder != null
+    ? await insertBlock({
+        community_id: communityId,
+        block_type: blockType,
+        block_order: blockOrder,
+        content: blockContent as Record<string, unknown>,
+        is_draft: true,
+      })
+    : await insertBlockAtEnd({
+        community_id: communityId,
+        block_type: blockType,
+        content: blockContent as Record<string, unknown>,
+        is_draft: true,
+      });
 
   if (error) {
     return NextResponse.json(

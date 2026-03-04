@@ -61,14 +61,24 @@ describe('validateBlockContent', () => {
       expect(result).not.toBeNull();
     });
 
-    it('rejects missing subheadline', () => {
+    it('accepts missing subheadline (optional)', () => {
       const result = validateBlockContent('hero', {
         headline: 'Hello',
         ctaLabel: 'Click',
         ctaHref: '/',
       });
+      expect(result).toBeNull();
+    });
+
+    it('rejects subheadline over 300 chars', () => {
+      const result = validateBlockContent('hero', {
+        headline: 'Hello',
+        subheadline: 'x'.repeat(301),
+        ctaLabel: 'Click',
+        ctaHref: '/',
+      });
       expect(result).not.toBeNull();
-      expect(result).toContain('Subheadline');
+      expect(result).toContain('300');
     });
 
     it('rejects missing ctaLabel', () => {

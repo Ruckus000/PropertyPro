@@ -141,6 +141,30 @@ export async function getMaxBlockOrder(communityId: number): Promise<number> {
   return row ? (Number(row['block_order']) + 1) : 0;
 }
 
+/**
+ * Insert a block at the end of the community's block list with retry on
+ * unique constraint conflict. Handles the race condition where concurrent
+ * inserts could compute the same block_order.
+ */
+export async function insertBlockAtEnd(row: {
+  community_id: number;
+  block_type: string;
+  content: Record<string, unknown>;
+  is_draft: boolean;
+}): Promise<{ data: SiteBlockRow | null; error: { message: string } | null }> {
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const order = await getMaxBlockOrder(row.community_id);
+    const result = await insertBlock({ ...row, block_order: order });
+    // Unique constraint violation → retry with fresh order
+    if (result.error?.message?.includes('unique') || result.error?.message?.includes('duplicate')) {
+      continue;
+    }
+    return result;
+  }
+  return { data: null, error: { message: 'Failed to insert block after retries due to ordering conflict' } };
+}
+
 /** Update community site_published_at timestamp. */
 export async function updateCommunityPublishTimestamp(
   communityId: number,
