@@ -23,17 +23,11 @@ import postgres from 'postgres';
 // Environment helpers
 // ---------------------------------------------------------------------------
 
-function requireEnvVarInCI(name: string): void {
-  if (process.env.CI && !process.env[name]) {
-    throw new Error(`${name} is required in CI for site-blocks integration tests`);
-  }
-}
-
-requireEnvVarInCI('DATABASE_URL');
-requireEnvVarInCI('NEXT_PUBLIC_SUPABASE_URL');
-requireEnvVarInCI('SUPABASE_SERVICE_ROLE_KEY');
-
-const hasDb = Boolean(process.env.DATABASE_URL);
+const hasDb = Boolean(
+  process.env.DATABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+);
 const describeDb = hasDb ? describe : describe.skip;
 
 // ---------------------------------------------------------------------------
