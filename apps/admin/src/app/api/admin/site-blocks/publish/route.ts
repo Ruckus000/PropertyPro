@@ -10,6 +10,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import {
+  validateBlockContent,
+  type BlockType,
+} from '@propertypro/shared/site-blocks';
+import {
+  listDraftBlocks,
   publishDrafts,
   updateCommunityPublishTimestamp,
 } from '@/lib/db/site-blocks-queries';
@@ -46,6 +51,43 @@ export async function POST(request: NextRequest) {
   }
 
   const { communityId } = parseResult.data;
+
+  // Validate all draft blocks before publishing
+  const { data: drafts, error: listError } = await listDraftBlocks(communityId);
+
+  if (listError) {
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: listError.message } },
+      { status: 500 },
+    );
+  }
+
+  if (drafts && drafts.length > 0) {
+    const validationErrors: Array<{ blockId: number; blockType: string; error: string }> = [];
+    for (const block of drafts) {
+      const err = validateBlockContent(block.block_type as BlockType, block.content);
+      if (err) {
+        validationErrors.push({
+          blockId: block.id,
+          blockType: block.block_type,
+          error: err,
+        });
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `${validationErrors.length} block(s) have invalid content`,
+            details: validationErrors,
+          },
+        },
+        { status: 400 },
+      );
+    }
+  }
 
   // Publish all draft blocks for the community
   const { data: publishedBlocks, error: publishError } = await publishDrafts(communityId);

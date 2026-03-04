@@ -519,24 +519,24 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
       const withOrder = reordered.map((b, i) => ({ ...b, block_order: i }));
       setBlocks(withOrder);
 
-      // Persist new order
+      // Persist new order via batch endpoint
       try {
-        await Promise.all(
-          withOrder.map((b) =>
-            fetch(`/api/admin/site-blocks/${b.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blockOrder: b.block_order }),
-            }),
-          ),
-        );
+        const res = await fetch('/api/admin/site-blocks/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            communityId,
+            order: withOrder.map((b) => ({ id: b.id, blockOrder: b.block_order })),
+          }),
+        });
+        if (!res.ok) throw new Error(await extractApiError(res));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to reorder blocks');
         // Reload on error
         void loadBlocks();
       }
     },
-    [blocks, loadBlocks],
+    [blocks, communityId, loadBlocks],
   );
 
   // ---------------------------------------------------------------------------

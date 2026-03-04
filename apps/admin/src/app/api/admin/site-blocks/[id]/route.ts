@@ -1,7 +1,7 @@
 /**
  * Site blocks CRUD API — update and delete individual blocks.
  *
- * PUT    /api/admin/site-blocks/:id — updates content/blockOrder, validates content
+ * PUT    /api/admin/site-blocks/:id — updates content/blockOrder (validates content for published blocks only)
  * DELETE /api/admin/site-blocks/:id — soft-deletes a block
  */
 import { NextResponse, type NextRequest } from 'next/server';
@@ -75,8 +75,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const { blockOrder, content } = parseResult.data;
 
-  // Validate content if provided
-  if (content) {
+  // Validate content if provided — but only for published blocks.
+  // Draft blocks are allowed to have incomplete content (e.g. empty required
+  // fields from default scaffolds). Full validation is enforced at publish time.
+  if (content && !existing.is_draft) {
     const blockType = existing.block_type as BlockType;
     if (!BLOCK_TYPES.includes(blockType)) {
       return NextResponse.json(

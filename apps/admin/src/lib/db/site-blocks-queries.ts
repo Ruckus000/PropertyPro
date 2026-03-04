@@ -96,6 +96,38 @@ export async function softDeleteBlock(id: number): Promise<{
     .single();
 }
 
+/** Fetch all non-deleted draft blocks for a community (for pre-publish validation). */
+export async function listDraftBlocks(communityId: number): Promise<{
+  data: SiteBlockRow[] | null;
+  error: { message: string } | null;
+}> {
+  return from('site_blocks')
+    .select('*')
+    .eq('community_id', communityId)
+    .eq('is_draft', true)
+    .is('deleted_at', null)
+    .order('block_order', { ascending: true });
+}
+
+/** Batch-update block_order for multiple blocks. */
+export async function reorderBlocks(
+  communityId: number,
+  order: Array<{ id: number; blockOrder: number }>,
+): Promise<{ error: { message: string } | null }> {
+  // Update each block's order — all blocks must belong to the same community
+  for (const item of order) {
+    const result = await from('site_blocks')
+      .update({ block_order: item.blockOrder, updated_at: new Date().toISOString() })
+      .eq('id', item.id)
+      .eq('community_id', communityId)
+      .is('deleted_at', null);
+    if (result.error) {
+      return { error: result.error };
+    }
+  }
+  return { error: null };
+}
+
 /** Publish all draft blocks for a community. */
 export async function publishDrafts(communityId: number): Promise<{
   data: SiteBlockRow[] | null;
