@@ -15,7 +15,9 @@ import type { ReactNode } from 'react';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { getBrandingForCommunity } from '@/lib/api/branding';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { BottomTabBar } from '@/components/mobile/BottomTabBar';
 import '@/styles/mobile.css';
 
@@ -42,20 +44,32 @@ export default async function MobileLayout({ children, searchParams }: MobileLay
   }
 
   let communityType: CommunityType = 'condo_718'; // fallback; overwritten below
+  let communityName = '';
 
   try {
     const membership = await requireCommunityMembership(communityId, userId!);
     communityType = membership.communityType;
+    communityName = membership.communityName;
   } catch {
     redirect('/auth/login');
   }
 
   const features = getFeaturesForCommunity(communityType);
 
+  const branding = await getBrandingForCommunity(communityId);
+  const theme = resolveTheme(branding, communityName, communityType);
+  const cssVars = toCssVars(theme);
+  const fontLinks = toFontLinks(theme);
+
   return (
-    <div className="mobile-shell">
-      <main id="main-content" className="mobile-content">{children}</main>
-      <BottomTabBar features={features} communityId={communityId} />
-    </div>
+    <>
+      {fontLinks.map((href) => (
+        <link key={href} rel="stylesheet" href={href} />
+      ))}
+      <div className="mobile-shell" style={cssVars as React.CSSProperties}>
+        <main id="main-content" className="mobile-content">{children}</main>
+        <BottomTabBar features={features} communityId={communityId} />
+      </div>
+    </>
   );
 }

@@ -76,6 +76,7 @@ export function toInitials(name: string | null): string {
 }
 
 export * from './branding';
+export * from './demo-token';
 export * from './compliance/templates';
 export * from './access-policies';
 export * from './rbac-matrix';

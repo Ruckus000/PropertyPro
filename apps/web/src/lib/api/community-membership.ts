@@ -6,6 +6,7 @@ import { requireCommunityRole, requireCommunityType } from '@/lib/utils/communit
 export interface CommunityMembership {
   userId: string;
   communityId: number;
+  communityName: string;
   role: CommunityRole;
   communityType: CommunityType;
   timezone: string;
@@ -35,6 +36,7 @@ export async function requireCommunityMembership(
   return {
     userId,
     communityId,
+    communityName: typeof community['name'] === 'string' ? community['name'] : '',
     role: requireCommunityRole(
       membership['role'],
       `requireCommunityMembership(communityId=${communityId}, userId=${userId}) role`,

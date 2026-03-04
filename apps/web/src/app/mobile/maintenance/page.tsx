@@ -54,7 +54,12 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
 
   return (
     <div>
-      <div className="mobile-page-header">Maintenance</div>
+      <header
+        className="px-4 py-3 text-white text-base font-semibold"
+        style={{ backgroundColor: 'var(--theme-primary, #2563EB)' }}
+      >
+        Maintenance
+      </header>
       {active.length === 0 ? (
         <p className="mobile-empty">No maintenance requests</p>
       ) : (
