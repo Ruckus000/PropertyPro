@@ -8,6 +8,7 @@ export const DEMO_COMMUNITIES = [
     state: 'FL',
     zipCode: '33101',
     addressLine1: '123 Sunset Blvd',
+    isDemo: true,
   },
   {
     name: 'Palm Shores HOA',
@@ -18,6 +19,7 @@ export const DEMO_COMMUNITIES = [
     state: 'FL',
     zipCode: '33301',
     addressLine1: '500 Palm Shores Dr',
+    isDemo: true,
   },
   {
     name: 'Sunset Ridge Apartments',
@@ -28,6 +30,7 @@ export const DEMO_COMMUNITIES = [
     state: 'FL',
     zipCode: '33602',
     addressLine1: '456 Sunset Ridge Blvd',
+    isDemo: true,
   },
 ] as const;
 

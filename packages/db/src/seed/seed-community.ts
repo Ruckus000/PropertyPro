@@ -219,6 +219,7 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
       city: config.city,
       state: config.state,
       zipCode: config.zipCode,
+      isDemo,
       updatedAt: new Date(),
     };
 
@@ -248,6 +249,7 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
       state: config.state,
       zipCode: config.zipCode,
       branding: config.branding,
+      isDemo,
     })
     .returning();
 
