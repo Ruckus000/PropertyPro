@@ -20,8 +20,8 @@ import {
 } from '@propertypro/shared/site-blocks';
 
 describe('publish lifecycle — content validation', () => {
-  it('validates that all defaults except hero/contact/image pass validation', () => {
-    // Default content for announcements, documents, meetings, text should pass
+  it('validates that all defaults except hero/contact/image/text pass validation', () => {
+    // Default content for announcements, documents, and meetings should pass
     const passingTypes: BlockType[] = ['announcements', 'documents', 'meetings'];
     for (const blockType of passingTypes) {
       const content = getDefaultBlockContent(blockType);

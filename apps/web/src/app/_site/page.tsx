@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { createScopedClient, siteBlocks } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { asc, eq } from '@propertypro/db/filters';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityType, BlockType } from '@propertypro/shared';
 import {
@@ -41,7 +41,8 @@ async function fetchPublishedBlocks(communityId: number) {
       content: siteBlocks.content,
     },
     eq(siteBlocks.isDraft, false),
-  ) as unknown as Promise<
+  )
+    .orderBy(asc(siteBlocks.blockOrder)) as unknown as Promise<
     Array<{
       id: number;
       blockType: string;
@@ -121,11 +122,8 @@ export default async function PublicSitePage() {
     );
   }
 
-  // Fetch and render published blocks
+  // Fetch and render published blocks (pre-sorted by block_order in DB)
   const blocks = await fetchPublishedBlocks(community.id);
-
-  // Sort blocks by blockOrder for consistent rendering
-  const sortedBlocks = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
 
   return (
     <>
@@ -136,10 +134,10 @@ export default async function PublicSitePage() {
       <div style={cssVars}>
         <PublicSiteHeader theme={theme} />
         <main id="main-content" className="flex-1">
-          {sortedBlocks.length === 0 ? (
+          {blocks.length === 0 ? (
             <ComingSoon communityName={community.name} />
           ) : (
-            sortedBlocks.map((block) => {
+            blocks.map((block) => {
               const Renderer =
                 BLOCK_RENDERERS[block.blockType as BlockType];
               if (!Renderer) return null;

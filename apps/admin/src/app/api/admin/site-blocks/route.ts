@@ -2,14 +2,13 @@
  * Site blocks CRUD API — list and create blocks.
  *
  * GET  /api/admin/site-blocks?communityId=X — returns all blocks ordered by block_order
- * POST /api/admin/site-blocks — creates a draft block with content validation
+ * POST /api/admin/site-blocks — creates a draft block (validation deferred to publish)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import {
   BLOCK_TYPES,
-  validateBlockContent,
   getDefaultBlockContent,
 } from '@propertypro/shared/site-blocks';
 import {
@@ -87,15 +86,11 @@ export async function POST(request: NextRequest) {
 
   const { communityId, blockType, blockOrder, content } = parseResult.data;
 
-  // Use provided content or generate defaults
+  // Use provided content or generate defaults.
+  // Content validation is intentionally deferred to the publish flow — default
+  // content for hero/text/image/contact has empty required fields by design,
+  // giving the user a scaffold to fill in via the block editor.
   const blockContent = content ?? (getDefaultBlockContent(blockType) as unknown as Record<string, unknown>);
-  const validationError = validateBlockContent(blockType, blockContent);
-  if (validationError) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: validationError } },
-      { status: 400 },
-    );
-  }
 
   // Use atomic insert-at-end when no explicit order, to avoid race conditions
   const { data, error } = blockOrder != null
