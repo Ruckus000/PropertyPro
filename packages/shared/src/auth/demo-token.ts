@@ -53,14 +53,14 @@ export function validateDemoToken(
   // Verify HMAC
   const expectedSig = createHmac('sha256', secret).update(payloadB64).digest('base64url');
 
-  // Timing-safe comparison — use Uint8Array wrapper for Node 20+ type compatibility.
+  // Timing-safe comparison.
   // When lengths differ, perform a dummy comparison to prevent timing side-channels
   // that could reveal the expected signature length.
   try {
-    const sigBuf = new Uint8Array(Buffer.from(sig, 'base64url'));
-    const expectedBuf = new Uint8Array(Buffer.from(expectedSig, 'base64url'));
+    const sigBuf = Buffer.from(sig, 'base64url');
+    const expectedBuf = Buffer.from(expectedSig, 'base64url');
 
-    if (sigBuf.byteLength !== expectedBuf.byteLength) {
+    if (sigBuf.length !== expectedBuf.length) {
       timingSafeEqual(expectedBuf, expectedBuf);
       return null;
     }

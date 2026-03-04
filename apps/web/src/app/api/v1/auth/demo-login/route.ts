@@ -8,7 +8,11 @@
  * Token-authenticated (no session required) — listed in middleware allowlist.
  */
 import { NextResponse } from 'next/server';
-import { extractDemoIdFromToken, validateDemoToken } from '@propertypro/shared/server';
+import {
+  decryptDemoTokenSecret,
+  extractDemoIdFromToken,
+  validateDemoToken,
+} from '@propertypro/shared/server';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
@@ -42,15 +46,20 @@ export async function GET(request: Request) {
     .where(eq(demoInstances.id, demoId))
     .limit(1);
 
-  // To prevent enumerating demo instances, use a dummy secret if the instance
-  // is not found. The subsequent token validation will fail in a timing-safe
-  // manner, without revealing whether the demoId was valid.
+  // To prevent demo instance enumeration, use a dummy secret whenever the real
+  // secret cannot be resolved (missing row or decrypt failure). Signature checks
+  // still run timing-safe and return the same external error.
   const instance = rows[0];
-  const secret = instance?.authTokenSecret ?? 'dummy-secret-for-timing-safe-comparison';
+  const encryptedSecret = instance?.authTokenSecret;
+  const encryptionKeyHex = process.env.DEMO_TOKEN_ENCRYPTION_KEY_HEX ?? '';
+  const decryptedSecret = encryptedSecret
+    ? decryptDemoTokenSecret(encryptedSecret, encryptionKeyHex)
+    : null;
+  const secret = decryptedSecret ?? 'dummy-secret-for-timing-safe-comparison';
 
   // 3. Validate token with the demo's HMAC secret
   const payload = validateDemoToken(token, secret);
-  if (!instance || !payload) {
+  if (!instance || !decryptedSecret || !payload) {
     return loginError(request, 'invalid_token');
   }
 

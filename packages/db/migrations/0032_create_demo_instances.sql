@@ -9,10 +9,11 @@ CREATE TABLE demo_instances (
   demo_board_user_id uuid REFERENCES auth.users ON DELETE SET NULL,
   demo_resident_email text NOT NULL,
   demo_board_email text NOT NULL,
-  -- NOTE: auth_token_secret is stored plaintext. Acceptable for ephemeral demo
-  -- instances (short-lived, non-production data). For production secrets, migrate
-  -- to Supabase Vault (pgsodium) when available.
-  auth_token_secret text NOT NULL,
+  -- Encrypted payload format: enc:v1:<iv_b64url>:<ciphertext_b64url>:<tag_b64url>
+  -- Plaintext secrets are rejected by this constraint.
+  auth_token_secret text NOT NULL
+    CONSTRAINT demo_instances_auth_token_secret_encrypted_ck
+    CHECK (auth_token_secret LIKE 'enc:v1:%'),
   external_crm_url text,
   prospect_notes text,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -23,3 +24,4 @@ REVOKE ALL ON demo_instances FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON demo_instances TO service_role;
 
 COMMENT ON TABLE demo_instances IS 'Demo instance tracking for sales demos. service_role only.';
+COMMENT ON COLUMN demo_instances.auth_token_secret IS 'Encrypted HMAC secret ciphertext payload (enc:v1), never plaintext.';

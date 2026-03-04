@@ -59,6 +59,14 @@ describe('validateDemoToken', () => {
     expect(validateDemoToken('', SECRET)).toBeNull();
     expect(validateDemoToken('random.garbage.extra', SECRET)).toBeNull();
   });
+
+  it('returns null when signature length mismatches expected length', () => {
+    const token = generateDemoToken(BASE_PARAMS);
+    const [payloadB64] = token.split('.');
+    const shortSig = 'AA';
+    const result = validateDemoToken(`${payloadB64}.${shortSig}`, SECRET);
+    expect(result).toBeNull();
+  });
 });
 
 describe('extractDemoIdFromToken', () => {

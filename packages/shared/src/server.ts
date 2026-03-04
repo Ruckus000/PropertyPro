@@ -5,3 +5,4 @@
  * imported from client-side code. Use `@propertypro/shared/server`.
  */
 export { generateDemoToken, validateDemoToken, extractDemoIdFromToken } from './auth/demo-token';
+export { encryptDemoTokenSecret, decryptDemoTokenSecret } from './auth/demo-secret';
