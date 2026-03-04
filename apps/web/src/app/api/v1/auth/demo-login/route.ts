@@ -14,18 +14,24 @@ import { demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
+/** Redirect to login with an error code. */
+function loginError(request: Request, error?: string) {
+  const url = error ? `/auth/login?error=${error}` : '/auth/login';
+  return NextResponse.redirect(new URL(url, request.url));
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
 
   if (!token) {
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+    return loginError(request);
   }
 
   // 1. Extract demoId (before signature verification — just to look up the secret)
   const demoId = extractDemoIdFromToken(token);
   if (!demoId) {
-    return NextResponse.redirect(new URL('/auth/login?error=invalid_token', request.url));
+    return loginError(request, 'invalid_token');
   }
 
   // 2. Look up demo instance to get the HMAC secret (service_role access via unscoped client)
@@ -38,13 +44,13 @@ export async function GET(request: Request) {
 
   const instance = rows[0];
   if (!instance) {
-    return NextResponse.redirect(new URL('/auth/login?error=demo_not_found', request.url));
+    return loginError(request, 'demo_not_found');
   }
 
   // 3. Validate token with the demo's HMAC secret
   const payload = validateDemoToken(token, instance.authTokenSecret);
   if (!payload) {
-    return NextResponse.redirect(new URL('/auth/login?error=invalid_token', request.url));
+    return loginError(request, 'invalid_token');
   }
 
   // 4. Determine which demo user to authenticate as
@@ -52,13 +58,13 @@ export async function GET(request: Request) {
     payload.role === 'resident' ? instance.demoResidentEmail : instance.demoBoardEmail;
 
   if (!email) {
-    return NextResponse.redirect(new URL('/auth/login?error=demo_user_missing', request.url));
+    return loginError(request, 'demo_user_missing');
   }
 
   // 5. Determine redirect target before creating the session link
   const communityId = instance.seededCommunityId;
   if (!communityId) {
-    return NextResponse.redirect(new URL('/auth/login?error=demo_setup_incomplete', request.url));
+    return loginError(request, 'demo_setup_incomplete');
   }
   const redirectPath =
     payload.role === 'resident'
@@ -75,7 +81,7 @@ export async function GET(request: Request) {
   });
 
   if (error || !data?.properties?.action_link) {
-    return NextResponse.redirect(new URL('/auth/login?error=session_error', request.url));
+    return loginError(request, 'session_error');
   }
 
   // 7. Redirect to the Supabase action link (sets session cookie, then redirects to app)
