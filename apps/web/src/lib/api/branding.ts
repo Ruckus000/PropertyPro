@@ -8,8 +8,43 @@ import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { eq } from '@propertypro/db/filters';
+import { eq, and, isNull } from '@propertypro/db/filters';
 import type { CommunityBranding } from '@propertypro/shared';
+
+/**
+ * Public info about a community for the public site renderer.
+ * Fetched via unscoped client because communities is the root tenant table.
+ */
+export interface CommunityPublicInfo {
+  id: number;
+  name: string;
+  slug: string;
+  communityType: string;
+  sitePublishedAt: Date | null;
+}
+
+/**
+ * Fetch community public info by ID for the public site renderer.
+ * Returns null if the community does not exist or is soft-deleted.
+ */
+export async function getCommunityPublicInfo(
+  communityId: number,
+): Promise<CommunityPublicInfo | null> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({
+      id: communities.id,
+      name: communities.name,
+      slug: communities.slug,
+      communityType: communities.communityType,
+      sitePublishedAt: communities.sitePublishedAt,
+    })
+    .from(communities)
+    .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
 
 /**
  * Read the current branding for a community.

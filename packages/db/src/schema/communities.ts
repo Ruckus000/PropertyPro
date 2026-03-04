@@ -38,6 +38,10 @@ export const communities = pgTable('communities', {
     }>()
     .notNull()
     .default({}),
+  /** Wave 5: Custom domain for public site (e.g. "www.sunsetcondos.com"). Null = subdomain only. */
+  customDomain: text('custom_domain'),
+  /** Wave 5: When the public site was last published. Null = not yet published (show Coming Soon). */
+  sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
   stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),

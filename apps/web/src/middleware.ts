@@ -391,6 +391,69 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // --- Public site auth-split [Wave 5 / Task 3.3] ---
+  // When a community subdomain requests '/' (the public site root):
+  //   - Resolve tenant context and forward headers so the page can read community info
+  //   - If authenticated, redirect to /dashboard (existing logged-in experience)
+  //   - If NOT authenticated, let through to the public site renderer
+  if (pathname === '/') {
+    const tenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+    });
+
+    const hasCommunityContext =
+      tenantContext.source !== 'none' && !tenantContext.isReservedSubdomain;
+
+    if (hasCommunityContext) {
+      // Resolve community ID from slug if needed
+      if (tenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } else if (tenantContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+          }
+        } catch {
+          // Non-fatal for public site — continue without community headers
+        }
+      }
+
+      // Check auth: authenticated users go to dashboard, unauthenticated see public site
+      const {
+        data: { user: publicSiteUser },
+      } = await supabase.auth.getUser();
+
+      if (publicSiteUser) {
+        const dashboardUrl = request.nextUrl.clone();
+        dashboardUrl.pathname = '/dashboard';
+        return finaliseResponse(
+          response as unknown as NextResponse,
+          NextResponse.redirect(dashboardUrl),
+          requestId,
+          origin,
+          isApi,
+        );
+      }
+
+      // Unauthenticated — let through to public site page with community headers
+      const publicSiteResponse = NextResponse.next({
+        request: { headers: forwardedHeaders },
+      });
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        publicSiteResponse,
+        requestId,
+        origin,
+        isApi,
+      );
+    }
+  }
+
   // Redirect already-authenticated users away from auth pages (except verify-email)
   if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== VERIFY_EMAIL_PATH) {
     const {
