@@ -1,4 +1,4 @@
-import { bigint, bigserial, index, jsonb, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, index, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { communityTypeEnum } from './enums';
 
@@ -14,8 +14,8 @@ export const demoInstances = pgTable(
       () => communities.id,
       { onDelete: 'set null' },
     ),
-    demoResidentUserId: text('demo_resident_user_id'),
-    demoBoardUserId: text('demo_board_user_id'),
+    demoResidentUserId: uuid('demo_resident_user_id'),
+    demoBoardUserId: uuid('demo_board_user_id'),
     demoResidentEmail: text('demo_resident_email').notNull(),
     demoBoardEmail: text('demo_board_email').notNull(),
     authTokenSecret: text('auth_token_secret').notNull(),

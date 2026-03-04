@@ -16,6 +16,7 @@ import { createScopedClient, meetings } from '@propertypro/db';
 import type { Meeting } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
+import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -54,12 +55,7 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <header
-        className="px-4 py-3 text-white text-base font-semibold"
-        style={{ backgroundColor: 'var(--theme-primary, #2563EB)' }}
-      >
-        Meetings
-      </header>
+      <MobilePageHeader>Meetings</MobilePageHeader>
       {upcoming.length === 0 ? (
         <p className="mobile-empty">No upcoming meetings</p>
       ) : (
