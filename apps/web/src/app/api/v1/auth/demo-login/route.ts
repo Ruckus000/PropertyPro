@@ -42,14 +42,15 @@ export async function GET(request: Request) {
     .where(eq(demoInstances.id, demoId))
     .limit(1);
 
+  // To prevent enumerating demo instances, use a dummy secret if the instance
+  // is not found. The subsequent token validation will fail in a timing-safe
+  // manner, without revealing whether the demoId was valid.
   const instance = rows[0];
-  if (!instance) {
-    return loginError(request, 'demo_not_found');
-  }
+  const secret = instance?.authTokenSecret ?? 'dummy-secret-for-timing-safe-comparison';
 
   // 3. Validate token with the demo's HMAC secret
-  const payload = validateDemoToken(token, instance.authTokenSecret);
-  if (!payload) {
+  const payload = validateDemoToken(token, secret);
+  if (!instance || !payload) {
     return loginError(request, 'invalid_token');
   }
 
