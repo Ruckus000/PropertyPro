@@ -83,3 +83,4 @@ export * from './features';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
+export { generateDemoToken, validateDemoToken, extractDemoIdFromToken } from './auth/demo-token';
