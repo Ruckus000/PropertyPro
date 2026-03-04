@@ -64,10 +64,11 @@ export async function POST(request: NextRequest) {
   // Defense in depth: verify platform admin even though middleware checks too
   await requirePlatformAdmin();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const formData: any = await request.formData();
-  const file: Blob | null = formData.get('file') ?? null;
-  const communityId: string | null = formData.get('communityId') ?? null;
+  // @types/node@22 undici-types shadows DOM FormData (missing .get())
+  type WebFormData = { get(name: string): File | string | null };
+  const formData = await request.formData() as unknown as WebFormData;
+  const file = formData.get('file') as File | null;
+  const communityId = formData.get('communityId') as string | null;
 
   if (!file) {
     return NextResponse.json({ error: 'file is required' }, { status: 400 });
