@@ -11,6 +11,7 @@ CREATE TABLE site_blocks (
   published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
   UNIQUE (community_id, block_order, is_draft)
 );
 
