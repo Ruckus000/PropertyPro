@@ -54,7 +54,12 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <div className="mobile-page-header">Meetings</div>
+      <header
+        className="px-4 py-3 text-white text-base font-semibold"
+        style={{ backgroundColor: 'var(--theme-primary, #2563EB)' }}
+      >
+        Meetings
+      </header>
       {upcoming.length === 0 ? (
         <p className="mobile-empty">No upcoming meetings</p>
       ) : (

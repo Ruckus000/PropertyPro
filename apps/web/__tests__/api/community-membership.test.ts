@@ -47,6 +47,7 @@ describe('requireCommunityMembership', () => {
     expect(membership).toEqual({
       userId: 'user-1',
       communityId: 42,
+      communityName: '',
       role: 'owner',
       communityType: 'condo_718',
       timezone: 'America/New_York',

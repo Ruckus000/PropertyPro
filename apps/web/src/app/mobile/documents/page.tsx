@@ -61,7 +61,12 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <div className="mobile-page-header">Documents</div>
+      <header
+        className="px-4 py-3 text-white text-base font-semibold"
+        style={{ backgroundColor: 'var(--theme-primary, #2563EB)' }}
+      >
+        Documents
+      </header>
       {docs.length === 0 ? (
         <p className="mobile-empty">No documents available</p>
       ) : (

@@ -47,7 +47,12 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
 
   return (
     <div>
-      <div className="mobile-page-header">Announcements</div>
+      <header
+        className="px-4 py-3 text-white text-base font-semibold"
+        style={{ backgroundColor: 'var(--theme-primary, #2563EB)' }}
+      >
+        Announcements
+      </header>
       {active.length === 0 ? (
         <p className="mobile-empty">No announcements</p>
       ) : (
