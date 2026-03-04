@@ -20,6 +20,10 @@ export interface CommunityBranding {
   logoPath?: string;
 }
 
+/** Default branding colors used when no community branding is configured. */
+export const DEFAULT_PRIMARY_COLOR = '#2563EB';
+export const DEFAULT_SECONDARY_COLOR = '#6B7280';
+
 /** Validates a string is a 6-digit hex color (with leading #). */
 export function isValidHexColor(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value);

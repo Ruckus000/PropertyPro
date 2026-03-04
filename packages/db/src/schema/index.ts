@@ -27,6 +27,7 @@ export * from './maintenance-comments';
 export * from './contracts';
 export * from './contract-bids';
 export * from './demo-seed-registry';
+export * from './demo-instances';
 export * from './onboarding-wizard-state';
 export * from './rls-config';
 
@@ -57,6 +58,7 @@ import type { maintenanceComments } from './maintenance-comments';
 import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
 import type { demoSeedRegistry } from './demo-seed-registry';
+import type { demoInstances } from './demo-instances';
 import type { onboardingWizardState } from './onboarding-wizard-state';
 import type { platformAdminUsers } from './platform-admin-users';
 
@@ -145,6 +147,10 @@ export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 // Demo Seed Registry
 export type DemoSeedRegistryRecord = typeof demoSeedRegistry.$inferSelect;
 export type NewDemoSeedRegistryRecord = typeof demoSeedRegistry.$inferInsert;
+
+// Demo Instances
+export type DemoInstance = typeof demoInstances.$inferSelect;
+export type NewDemoInstance = typeof demoInstances.$inferInsert;
 
 // Contracts (P3-52)
 export type Contract = typeof contracts.$inferSelect;
