@@ -53,16 +53,11 @@ export function validateDemoToken(
   // Verify HMAC
   const expectedSig = createHmac('sha256', secret).update(payloadB64).digest('base64url');
 
-  // Timing-safe comparison using Uint8Array<ArrayBuffer> for type compatibility
+  // Timing-safe comparison — use Uint8Array wrapper for Node 20+ type compatibility
   try {
-    const sigBuf = Buffer.from(sig, 'base64url');
-    const expectedBuf = Buffer.from(expectedSig, 'base64url');
-    // new Uint8Array(length) allocates a fresh ArrayBuffer (not SharedArrayBuffer)
-    const sigArr = new Uint8Array(sigBuf.byteLength);
-    const expectedArr = new Uint8Array(expectedBuf.byteLength);
-    sigArr.set(sigBuf);
-    expectedArr.set(expectedBuf);
-    if (sigArr.byteLength !== expectedArr.byteLength || !timingSafeEqual(sigArr, expectedArr)) {
+    const sigBuf = new Uint8Array(Buffer.from(sig, 'base64url'));
+    const expectedBuf = new Uint8Array(Buffer.from(expectedSig, 'base64url'));
+    if (sigBuf.byteLength !== expectedBuf.byteLength || !timingSafeEqual(sigBuf, expectedBuf)) {
       return null;
     }
   } catch {

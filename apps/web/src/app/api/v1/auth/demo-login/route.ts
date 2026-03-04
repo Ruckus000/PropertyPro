@@ -57,6 +57,9 @@ export async function GET(request: Request) {
 
   // 5. Determine redirect target before creating the session link
   const communityId = instance.seededCommunityId;
+  if (!communityId) {
+    return NextResponse.redirect(new URL('/auth/login?error=demo_setup_incomplete', request.url));
+  }
   const redirectPath =
     payload.role === 'resident'
       ? `/mobile?communityId=${communityId}`

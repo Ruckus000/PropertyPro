@@ -9,6 +9,9 @@ CREATE TABLE demo_instances (
   demo_board_user_id uuid REFERENCES auth.users ON DELETE SET NULL,
   demo_resident_email text NOT NULL,
   demo_board_email text NOT NULL,
+  -- NOTE: auth_token_secret is stored plaintext. Acceptable for ephemeral demo
+  -- instances (short-lived, non-production data). For production secrets, migrate
+  -- to Supabase Vault (pgsodium) when available.
   auth_token_secret text NOT NULL,
   external_crm_url text,
   prospect_notes text,
