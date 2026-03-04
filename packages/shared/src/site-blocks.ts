@@ -40,6 +40,7 @@ export interface ContactBlockContent {
 
 export interface TextBlockContent {
   body: string;                        // plain text or markdown, max 5000 chars
+  format?: 'plain' | 'markdown';       // defaults to 'plain' for backward compat
 }
 
 export interface ImageBlockContent {
@@ -104,6 +105,9 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
       const c = content as TextBlockContent;
       if (!c.body) return 'Body text required';
       if (c.body.length > 5000) return 'Body text max 5000 chars';
+      if (c.format !== undefined && c.format !== 'plain' && c.format !== 'markdown') {
+        return 'Format must be "plain" or "markdown"';
+      }
       return null;
     }
     case 'image': {
@@ -134,7 +138,7 @@ export function getDefaultBlockContent(type: BlockType): BlockContent {
     case 'contact':
       return { boardEmail: '' };
     case 'text':
-      return { body: '' };
+      return { body: '', format: 'plain' };
     case 'image':
       return { url: '', alt: '' };
   }
