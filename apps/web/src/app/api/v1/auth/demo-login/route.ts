@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     options: { redirectTo },
   });
 
-  if (error || !data.properties?.action_link) {
+  if (error || !data?.properties?.action_link) {
     return NextResponse.redirect(new URL('/auth/login?error=session_error', request.url));
   }
 

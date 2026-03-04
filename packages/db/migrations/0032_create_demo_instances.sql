@@ -22,6 +22,4 @@ ALTER TABLE demo_instances ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON demo_instances FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON demo_instances TO service_role;
 
-CREATE INDEX idx_demo_instances_slug ON demo_instances(slug);
-
 COMMENT ON TABLE demo_instances IS 'Demo instance tracking for sales demos. service_role only.';

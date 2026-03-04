@@ -1,4 +1,4 @@
-import { bigint, bigserial, index, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { communityTypeEnum } from './enums';
 
@@ -25,6 +25,5 @@ export const demoInstances = pgTable(
   },
   (table) => [
     unique('demo_instances_slug_unique').on(table.slug),
-    index('idx_demo_instances_slug').on(table.slug),
   ],
 );
