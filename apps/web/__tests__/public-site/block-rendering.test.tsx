@@ -299,13 +299,18 @@ describe('PublicSiteHeader', () => {
 
 describe('PublicSiteFooter', () => {
   it('renders community name and copyright year', () => {
-    const html = renderToStaticMarkup(
-      <PublicSiteFooter communityName="Sunset Condos" />,
-    );
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15'));
+    try {
+      const html = renderToStaticMarkup(
+        <PublicSiteFooter communityName="Sunset Condos" />,
+      );
 
-    const currentYear = new Date().getFullYear();
-    expect(html).toContain('Sunset Condos');
-    expect(html).toContain(String(currentYear));
+      expect(html).toContain('Sunset Condos');
+      expect(html).toContain('2026');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders Powered by PropertyPro link', () => {

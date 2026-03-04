@@ -332,7 +332,7 @@ describeDb('site-blocks CRUD (db-backed integration)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST text block with empty body returns 400', async () => {
+  it('POST text block with empty body succeeds (validation deferred to publish)', async () => {
     const res = await blocksRoute.POST(
       jsonReq('/api/admin/site-blocks', 'POST', {
         communityId,
@@ -340,7 +340,9 @@ describeDb('site-blocks CRUD (db-backed integration)', () => {
         content: { body: '' },
       }),
     );
-    expect(res.status).toBe(400);
+    // Content validation removed from POST — drafts are scaffolds;
+    // validation happens at publish time.
+    expect(res.status).toBe(201);
   });
 
   it('PUT with invalid id returns 400', async () => {
