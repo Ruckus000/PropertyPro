@@ -50,6 +50,30 @@ import {
 } from './editors';
 
 // ---------------------------------------------------------------------------
+// API error parsing helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract a human-readable error message from a failed API response.
+ *
+ * Our API routes return `{ error: { code, message } }` — this helper safely
+ * parses that shape and falls back to `Response.statusText`.
+ */
+async function extractApiError(res: Response): Promise<string> {
+  try {
+    const json = (await res.json()) as Record<string, unknown>;
+    const errObj = json?.['error'];
+    if (errObj && typeof errObj === 'object' && errObj !== null) {
+      const msg = (errObj as Record<string, unknown>)['message'];
+      if (typeof msg === 'string' && msg.length > 0) return msg;
+    }
+  } catch {
+    // response body wasn't valid JSON — fall through
+  }
+  return res.statusText || `HTTP ${res.status}`;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -341,10 +365,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
     setError(null);
     try {
       const res = await fetch(`/api/admin/site-blocks?communityId=${communityId}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as Record<string, unknown>)?.['error'] ? String((err as Record<string, { message?: string }>)['error']?.message) : res.statusText);
-      }
+      if (!res.ok) throw new Error(await extractApiError(res));
       const json = (await res.json()) as { data: SiteBlock[] };
       setBlocks(json.data);
     } catch (err) {
@@ -424,10 +445,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
             content: getDefaultBlockContent(blockType),
           }),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as Record<string, { message?: string }>)?.['error']?.message ?? res.statusText);
-        }
+        if (!res.ok) throw new Error(await extractApiError(res));
         const json = (await res.json()) as { data: SiteBlock };
         setBlocks((prev) => [...prev, json.data]);
         setExpandedIds((prev) => new Set(prev).add(json.data.id));
@@ -444,10 +462,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
       const res = await fetch(`/api/admin/site-blocks/${blockId}`, {
         method: 'DELETE',
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as Record<string, { message?: string }>)?.['error']?.message ?? res.statusText);
-      }
+      if (!res.ok) throw new Error(await extractApiError(res));
       setBlocks((prev) => prev.filter((b) => b.id !== blockId));
       setExpandedIds((prev) => {
         const next = new Set(prev);
@@ -545,10 +560,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as Record<string, { message?: string }>)?.['error']?.message ?? res.statusText);
-      }
+      if (!res.ok) throw new Error(await extractApiError(res));
       // Reload blocks to reflect published state
       await loadBlocks();
     } catch (err) {
@@ -567,10 +579,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as Record<string, { message?: string }>)?.['error']?.message ?? res.statusText);
-      }
+      if (!res.ok) throw new Error(await extractApiError(res));
       // Reload blocks
       await loadBlocks();
     } catch (err) {
