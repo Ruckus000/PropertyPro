@@ -2,7 +2,7 @@ import type { CommunityTheme } from '@propertypro/theme';
 import type { MeetingsBlockContent } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
 import { meetings } from '@propertypro/db';
-import { gte } from '@propertypro/db/filters';
+import { asc, gte } from '@propertypro/db/filters';
 
 interface MeetingsBlockProps {
   content: Record<string, unknown>;
@@ -25,31 +25,26 @@ export async function MeetingsBlock({
   const scoped = createScopedClient(communityId);
   const now = new Date();
 
-  const rows = (await scoped.selectFrom(
-    meetings,
-    {
-      id: meetings.id,
-      title: meetings.title,
-      meetingType: meetings.meetingType,
-      startsAt: meetings.startsAt,
-      location: meetings.location,
-    },
-    gte(meetings.startsAt, now),
-  )) as unknown as Array<{
+  const items = (await scoped
+    .selectFrom(
+      meetings,
+      {
+        id: meetings.id,
+        title: meetings.title,
+        meetingType: meetings.meetingType,
+        startsAt: meetings.startsAt,
+        location: meetings.location,
+      },
+      gte(meetings.startsAt, now),
+    )
+    .orderBy(asc(meetings.startsAt))
+    .limit(5)) as unknown as Array<{
     id: number;
     title: string;
     meetingType: string;
     startsAt: Date;
     location: string;
   }>;
-
-  // Sort by date ascending and limit to 5
-  const items = rows
-    .sort(
-      (a, b) =>
-        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-    )
-    .slice(0, 5);
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8">

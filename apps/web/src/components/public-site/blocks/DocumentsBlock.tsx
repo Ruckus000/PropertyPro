@@ -31,18 +31,21 @@ export async function DocumentsBlock({
       ? inArray(documents.categoryId, categoryIds)
       : undefined;
 
-  const rows = (await scoped.selectFrom(
-    documents,
-    {
-      id: documents.id,
-      title: documents.title,
-      fileName: documents.fileName,
-      mimeType: documents.mimeType,
-      fileSize: documents.fileSize,
-      createdAt: documents.createdAt,
-    },
-    additionalWhere,
-  )) as unknown as Array<{
+  const items = (await scoped
+    .selectFrom(
+      documents,
+      {
+        id: documents.id,
+        title: documents.title,
+        fileName: documents.fileName,
+        mimeType: documents.mimeType,
+        fileSize: documents.fileSize,
+        createdAt: documents.createdAt,
+      },
+      additionalWhere,
+    )
+    .orderBy(desc(documents.createdAt))
+    .limit(10)) as unknown as Array<{
     id: number;
     title: string;
     fileName: string;
@@ -50,14 +53,6 @@ export async function DocumentsBlock({
     fileSize: number;
     createdAt: Date;
   }>;
-
-  // Sort client-side since scoped client may not chain orderBy
-  const items = rows
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-    .slice(0, 10);
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
