@@ -4,8 +4,5 @@
 ALTER TABLE communities ADD COLUMN IF NOT EXISTS is_demo boolean NOT NULL DEFAULT false;
 ALTER TABLE communities ADD COLUMN IF NOT EXISTS demo_expires_at timestamptz;
 
--- Explicitly mark all existing non-demo communities
-UPDATE communities SET is_demo = false WHERE is_demo = false;
-
 COMMENT ON COLUMN communities.is_demo IS 'True for demo communities created via admin console';
 COMMENT ON COLUMN communities.demo_expires_at IS 'Unused — demos persist until manually deleted. Column retained for future use';
