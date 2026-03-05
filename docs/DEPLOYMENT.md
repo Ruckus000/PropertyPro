@@ -41,6 +41,7 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `DATABASE_URL` | Supabase pooled connection string (port 6543) | Supabase Dashboard > Project Settings > Database |
 | `DIRECT_URL` | Supabase direct connection string (port 5432) | Supabase Dashboard > Project Settings > Database |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Supabase Dashboard > Project Settings > API |
+| `DEMO_TOKEN_ENCRYPTION_KEY_HEX` | AES-256-GCM key for demo token-secret encryption | Generated via `openssl rand -hex 32` |
 | `DEMO_DEFAULT_PASSWORD` | Password for demo seed users | Internal documentation |
 | `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://propertyprofl.com` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
@@ -62,6 +63,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `NEXT_PUBLIC_SUPABASE_URL` | All | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | All | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Supabase service role key |
+| `DEMO_TOKEN_ENCRYPTION_KEY_HEX` | Server only | AES-256-GCM key used to decrypt `demo_instances.auth_token_secret` |
 | `DATABASE_URL` | Server only | Pooled connection string (port 6543) |
 | `DIRECT_URL` | Server only | Direct connection string (port 5432, migrations only) |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | All | Stripe publishable key |

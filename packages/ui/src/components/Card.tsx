@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Card — Container for grouped content.
  *

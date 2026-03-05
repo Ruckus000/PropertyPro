@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Button — Interactive element for user actions.
  *

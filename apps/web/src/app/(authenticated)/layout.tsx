@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { getFeaturesForCommunity, COMMUNITY_TYPES, COMMUNITY_ROLES } from '@propertypro/shared';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { createServerClient } from '@/lib/supabase/server';
+import { getBrandingForCommunity } from '@/lib/api/branding';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { AppShell, type AppShellUser, type AppShellCommunity } from '@/components/layout/app-shell';
 
@@ -113,12 +115,24 @@ export default async function AuthenticatedLayout({
   const role = communityData?.role ?? null;
   const features = community ? getFeaturesForCommunity(community.type) : null;
 
+  const branding = community ? await getBrandingForCommunity(community.id) : null;
+  const theme = community
+    ? resolveTheme(branding, community.name, community.type)
+    : resolveTheme(null, '', 'condo_718');
+  const cssVars = toCssVars(theme);
+  const fontLinks = toFontLinks(theme);
+
   return (
     <>
-      <AuthSessionSync />
-      <AppShell user={user} community={community} role={role} features={features}>
-        {children}
-      </AppShell>
+      {fontLinks.map((href) => (
+        <link key={href} rel="stylesheet" href={href} />
+      ))}
+      <div style={cssVars as React.CSSProperties}>
+        <AuthSessionSync />
+        <AppShell user={user} community={community} role={role} features={features}>
+          {children}
+        </AppShell>
+      </div>
     </>
   );
 }

@@ -5,6 +5,10 @@
 **Status:** Complete on `main` (16/16 base Phase 2 tasks complete; Gate 3 closed 2026-02-21)
 **Prerequisites:** Phase 0 complete, Gate 1 signed off, Phase 1 complete with Gate 2 closed
 
+**Transition Tracking Note (2026-03-04):**
+- This file tracks the legacy phase program completed on `main`.
+- Transition Plan v4.1 wave status is tracked in `IMPLEMENTATION_PLAN.md` under "Transition Plan v4.1 Progress Snapshot (2026-03-04)".
+
 ---
 
 ## Execution Progress Log (Single-Writer)

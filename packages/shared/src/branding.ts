@@ -10,9 +10,19 @@ export interface CommunityBranding {
   primaryColor?: string;
   /** Hex color string, e.g. "#6b7280". Applied as --theme-secondary CSS custom property. */
   secondaryColor?: string;
+  /** Hex color string for accent highlights. Applied as --theme-accent CSS custom property. */
+  accentColor?: string;
+  /** Google Font family name for headings, e.g. "Inter". */
+  fontHeading?: string;
+  /** Google Font family name for body text, e.g. "Open Sans". */
+  fontBody?: string;
   /** Supabase Storage path to the processed 400×400 WebP logo. */
   logoPath?: string;
 }
+
+/** Default branding colors used when no community branding is configured. */
+export const DEFAULT_PRIMARY_COLOR = '#2563EB';
+export const DEFAULT_SECONDARY_COLOR = '#6B7280';
 
 /** Validates a string is a 6-digit hex color (with leading #). */
 export function isValidHexColor(value: string): boolean {

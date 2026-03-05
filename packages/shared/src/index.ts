@@ -12,6 +12,13 @@
 export const COMMUNITY_TYPES = ["condo_718", "hoa_720", "apartment"] as const;
 export type CommunityType = (typeof COMMUNITY_TYPES)[number];
 
+/** Human-readable display names for each community type. */
+export const COMMUNITY_TYPE_DISPLAY_NAMES: Record<CommunityType, string> = {
+  condo_718: 'Condo §718',
+  hoa_720: 'HOA §720',
+  apartment: 'Apartment',
+};
+
 /**
  * Canonical community-scoped roles per ADR-001.
  * Note: platform_admin is system-scoped (not in user_roles); auditor deferred to v2.
@@ -76,3 +83,10 @@ export * from './features';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
+
+export type {
+  BlockType, BlockContent, BlockContentMap,
+  HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
+  MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent,
+} from './site-blocks';
+export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';

@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@propertypro/web", "exec", "next", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@propertypro/admin", "exec", "next", "dev"],
+      "port": 3001,
+      "autoPort": true
+    }
+  ]
+}

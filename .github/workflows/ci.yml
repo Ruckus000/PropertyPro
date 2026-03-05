@@ -90,10 +90,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build workspace packages
-        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build
+        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' build
 
       - name: Run unit tests
         run: pnpm test
+
+      - name: Run admin unit tests
+        run: pnpm --filter '@propertypro/admin' test
 
   build:
     name: Build
@@ -107,6 +110,7 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+      SUPABASE_SERVICE_ROLE_KEY: placeholder
 
     steps:
       - name: Checkout

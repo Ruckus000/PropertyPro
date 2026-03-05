@@ -31,6 +31,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/supabase/middleware',
   '@propertypro/db/filters',
   '@propertypro/db/unsafe',
+  '@propertypro/db/seed/seed-community',
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
@@ -61,6 +62,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
   // Invitation acceptance — creates Supabase auth user via admin client (service_role)
   resolve(repoRoot, 'apps/web/src/app/api/v1/invitations/route.ts'),
+  // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
+  resolve(repoRoot, 'apps/web/src/app/api/v1/auth/demo-login/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

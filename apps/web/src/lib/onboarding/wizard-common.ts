@@ -26,8 +26,15 @@ export interface WizardRow {
 }
 
 export function requireMutationAuthorization(role: string): void {
-    if (!['site_manager', 'property_manager_admin'].includes(role)) {
-        throw new ForbiddenError('Only site managers and property manager admins can modify wizard state');
+    const allowedRoles = [
+        'board_president',
+        'board_member',
+        'cam',
+        'site_manager',
+        'property_manager_admin',
+    ];
+    if (!allowedRoles.includes(role)) {
+        throw new ForbiddenError('Only board members, CAMs, and property managers can modify wizard state');
     }
 }
 

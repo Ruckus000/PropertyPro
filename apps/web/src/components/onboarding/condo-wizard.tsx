@@ -29,7 +29,7 @@ interface CondoWizardProps {
 const STEP_TITLES = ['Statutory Documents', 'Community Profile', 'Unit Roster'];
 
 interface ApiErrorResponse {
-    error?: string;
+    error?: string | { code?: string; message?: string };
 }
 
 function mergeStepData(previous: CondoWizardStepData, patch: Partial<CondoWizardStepData>): CondoWizardStepData {
@@ -46,7 +46,9 @@ function mergeStepData(previous: CondoWizardStepData, patch: Partial<CondoWizard
 async function readApiError(response: Response): Promise<string> {
     try {
         const body = (await response.json()) as ApiErrorResponse;
-        return body.error ?? 'Request failed';
+        if (typeof body.error === 'string') return body.error;
+        if (body.error && typeof body.error === 'object') return body.error.message ?? 'Request failed';
+        return 'Request failed';
     } catch {
         return 'Request failed';
     }

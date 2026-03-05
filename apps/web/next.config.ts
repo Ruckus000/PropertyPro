@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
     "@propertypro/shared",
     "@propertypro/db",
     "@propertypro/email",
+    "@propertypro/theme",
   ],
+  env: {
+    NEXT_PUBLIC_APP_ROLE: "web",
+  },
 };
 
 export default withSentryConfig(nextConfig, {

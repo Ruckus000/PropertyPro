@@ -28,6 +28,17 @@ export {
 } from './queries/pm-portfolio';
 
 /**
+ * Community picker — cross-community user membership query.
+ *
+ * **Authorization contract:** callers MUST verify the user is authenticated
+ * before invoking `findUserCommunitiesUnscoped`.
+ */
+export {
+  findUserCommunitiesUnscoped,
+  type UserCommunityRow,
+} from './queries/user-communities';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */

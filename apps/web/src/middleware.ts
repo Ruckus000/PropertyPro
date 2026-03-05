@@ -36,6 +36,7 @@ import {
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
+  '/select-community',
   '/settings',
   '/documents',
   '/maintenance',
@@ -58,6 +59,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
   { path: '/api/v1/internal/payment-reminders', method: 'POST' },
+  // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
+  { path: '/api/v1/auth/demo-login', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
@@ -381,6 +384,71 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(verifyUrl),
+        requestId,
+        origin,
+        isApi,
+      );
+    }
+  }
+
+  // --- Public site auth-split [Wave 5 / Task 3.3] ---
+  // When a community subdomain requests '/' (the public site root):
+  //   - Resolve tenant context and forward headers so the page can read community info
+  //   - If authenticated, redirect to /dashboard (existing logged-in experience)
+  //   - If NOT authenticated, let through to the public site renderer
+  if (pathname === '/') {
+    const tenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+    });
+
+    const hasCommunityContext =
+      tenantContext.source !== 'none' && !tenantContext.isReservedSubdomain;
+
+    if (hasCommunityContext) {
+      // Resolve community ID from slug if needed
+      if (tenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } else if (tenantContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+          }
+        } catch {
+          // Non-fatal for public site — continue without community headers
+        }
+      }
+
+      // Check auth: authenticated users go to dashboard, unauthenticated see public site
+      const {
+        data: { user: publicSiteUser },
+      } = await supabase.auth.getUser();
+
+      if (publicSiteUser) {
+        const dashboardUrl = request.nextUrl.clone();
+        dashboardUrl.pathname = '/dashboard';
+        return finaliseResponse(
+          response as unknown as NextResponse,
+          NextResponse.redirect(dashboardUrl),
+          requestId,
+          origin,
+          isApi,
+        );
+      }
+
+      // Unauthenticated — rewrite to /_site so the public-site page renders
+      const siteUrl = request.nextUrl.clone();
+      siteUrl.pathname = '/_site';
+      const publicSiteResponse = NextResponse.rewrite(siteUrl, {
+        request: { headers: forwardedHeaders },
+      });
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        publicSiteResponse,
         requestId,
         origin,
         isApi,

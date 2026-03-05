@@ -27,7 +27,7 @@ interface ApartmentWizardProps {
 const STEP_TITLES = ['Profile', 'Units', 'Rules', 'Invite'];
 
 interface ApiErrorResponse {
-  error?: string;
+  error?: string | { code?: string; message?: string };
 }
 
 function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>): WizardStepData {
@@ -44,7 +44,9 @@ function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>)
 async function readApiError(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as ApiErrorResponse;
-    return body.error ?? 'Request failed';
+    if (typeof body.error === 'string') return body.error;
+    if (body.error && typeof body.error === 'object') return body.error.message ?? 'Request failed';
+    return 'Request failed';
   } catch {
     return 'Request failed';
   }
