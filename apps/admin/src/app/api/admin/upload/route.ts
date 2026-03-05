@@ -78,6 +78,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'communityId is required' }, { status: 400 });
   }
 
+  const communityIdNum = Number(communityId);
+  if (!Number.isInteger(communityIdNum) || communityIdNum <= 0) {
+    return NextResponse.json({ error: 'communityId must be a positive integer' }, { status: 400 });
+  }
+
   // Size check
   if (file.size > MAX_FILE_SIZE) {
     return NextResponse.json(
@@ -99,7 +104,7 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = MIME_TO_EXT[detectedMime];
-  const storagePath = `${communityId}/site/${randomUUID()}.${ext}`;
+  const storagePath = `${communityIdNum}/site/${randomUUID()}.${ext}`;
 
   // Upload to Supabase Storage via admin client (bypasses RLS)
   const admin = createAdminClient();

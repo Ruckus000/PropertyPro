@@ -114,16 +114,19 @@ export async function reorderBlocks(
   communityId: number,
   order: Array<{ id: number; blockOrder: number }>,
 ): Promise<{ error: { message: string } | null }> {
-  // Update each block's order — all blocks must belong to the same community
-  for (const item of order) {
-    const result = await from('site_blocks')
-      .update({ block_order: item.blockOrder, updated_at: new Date().toISOString() })
-      .eq('id', item.id)
-      .eq('community_id', communityId)
-      .is('deleted_at', null);
-    if (result.error) {
-      return { error: result.error };
-    }
+  // Update all blocks in parallel — each targets a different row by id
+  const results = await Promise.all(
+    order.map((item) =>
+      from('site_blocks')
+        .update({ block_order: item.blockOrder, updated_at: new Date().toISOString() })
+        .eq('id', item.id)
+        .eq('community_id', communityId)
+        .is('deleted_at', null),
+    ),
+  );
+
+  for (const result of results) {
+    if (result.error) return { error: result.error };
   }
   return { error: null };
 }

@@ -5,7 +5,7 @@
  *
  * Scaled to 70% with a refresh button and postMessage reload mechanism.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, ExternalLink } from 'lucide-react';
 
 interface PreviewPanelProps {
@@ -23,30 +23,28 @@ export function PreviewPanel({ communitySlug }: PreviewPanelProps) {
       ? `http://localhost:3000?tenant=${communitySlug}`
       : `https://${communitySlug}.propertyprofl.com`;
 
+  // Clear spinner reliably when iframe finishes loading
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const handleLoad = () => setIsRefreshing(false);
+    iframe.addEventListener('load', handleLoad);
+    return () => iframe.removeEventListener('load', handleLoad);
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-
-    // Try postMessage first (for same-origin or configured cross-origin)
-    try {
-      iframeRef.current?.contentWindow?.postMessage({ type: 'site-builder-refresh' }, '*');
-    } catch {
-      // Fall back to iframe src reload
-    }
 
     // Reload the iframe by cycling the src
     if (iframeRef.current) {
       const currentSrc = iframeRef.current.src;
       iframeRef.current.src = '';
-      // Use requestAnimationFrame to ensure the src is cleared before setting
       requestAnimationFrame(() => {
         if (iframeRef.current) {
           iframeRef.current.src = currentSrc;
         }
       });
     }
-
-    // Reset spinner after a short delay
-    setTimeout(() => setIsRefreshing(false), 1000);
   }, []);
 
   return (

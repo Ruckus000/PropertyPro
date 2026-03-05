@@ -89,4 +89,4 @@ export type {
   HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
   MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent,
 } from './site-blocks';
-export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent } from './site-blocks';
+export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';

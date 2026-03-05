@@ -71,6 +71,63 @@ export interface BlockContentMap {
   image: ImageBlockContent;
 }
 
+// ---------------------------------------------------------------------------
+// URL safety helpers
+// ---------------------------------------------------------------------------
+
+/** Protocols considered safe for general href attributes. */
+const SAFE_URL_PROTOCOLS = ['https:', 'http:', 'mailto:', 'tel:'];
+
+/**
+ * Returns true if `url` uses a safe protocol (https, http, mailto, tel)
+ * or is a relative path / fragment. Rejects javascript:, data:, vbscript:, etc.
+ */
+export function isSafeUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/') || trimmed.startsWith('#')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return SAFE_URL_PROTOCOLS.includes(parsed.protocol);
+  } catch {
+    // If URL() throws, it's likely a relative path — but guard against
+    // cases like "javascript:alert(1)" where the constructor may not throw.
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx >= 0) {
+      const slashIdx = trimmed.indexOf('/');
+      if (slashIdx < 0 || colonIdx < slashIdx) return false;
+    }
+    return true;
+  }
+}
+
+/**
+ * Returns true if `url` is safe for use as an image src.
+ * Allows https, http, relative paths, and data:image/* URIs.
+ */
+export function isSafeImageUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return true;
+    if (parsed.protocol === 'data:' && trimmed.startsWith('data:image/')) return true;
+    return false;
+  } catch {
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx >= 0) {
+      const slashIdx = trimmed.indexOf('/');
+      if (slashIdx < 0 || colonIdx < slashIdx) return false;
+    }
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Block content validation
+// ---------------------------------------------------------------------------
+
 /**
  * Validate block content against its type's constraints.
  * Returns an error message or null if valid.
@@ -85,6 +142,10 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
       if (c.subheadline && c.subheadline.length > 300) return 'Subheadline cannot exceed 300 characters';
       if (!c.ctaLabel || c.ctaLabel.length > 40) return 'CTA label required, max 40 chars';
       if (!c.ctaHref) return 'CTA href required';
+      if (!isSafeUrl(c.ctaHref)) return 'CTA href must use a safe protocol (https, http, mailto, tel, or relative path)';
+      if (c.backgroundImageUrl && !isSafeImageUrl(c.backgroundImageUrl)) {
+        return 'Background image URL must use a safe protocol';
+      }
       return null;
     }
     case 'announcements': {
@@ -113,6 +174,7 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
     case 'image': {
       const c = content as ImageBlockContent;
       if (!c.url) return 'Image URL required';
+      if (!isSafeImageUrl(c.url)) return 'Image URL must use a safe protocol';
       if (!c.alt || c.alt.length > 200) return 'Alt text required, max 200 chars';
       if (c.caption && c.caption.length > 300) return 'Caption max 300 chars';
       return null;

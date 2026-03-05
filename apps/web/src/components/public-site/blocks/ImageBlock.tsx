@@ -1,5 +1,6 @@
 import type { CommunityTheme } from '@propertypro/theme';
 import type { ImageBlockContent } from '@propertypro/shared';
+import { isSafeImageUrl } from '@propertypro/shared';
 
 interface ImageBlockProps {
   content: Record<string, unknown>;
@@ -16,13 +17,16 @@ export function ImageBlock({ content, theme }: ImageBlockProps) {
   const alt = c.alt ?? '';
   const caption = c.caption;
 
-  if (!url) return null;
+  // Defense-in-depth: sanitize URL at render time
+  const safeUrl = url && isSafeImageUrl(url) ? url : undefined;
+
+  if (!safeUrl) return null;
 
   return (
     <section className="w-full py-12 px-4 sm:px-6 lg:px-8">
       <figure className="max-w-4xl mx-auto">
         <img
-          src={url}
+          src={safeUrl}
           alt={alt}
           className="w-full rounded-lg shadow-md"
           loading="lazy"

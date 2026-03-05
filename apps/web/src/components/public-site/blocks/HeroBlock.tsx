@@ -1,5 +1,6 @@
 import type { CommunityTheme } from '@propertypro/theme';
 import type { HeroBlockContent } from '@propertypro/shared';
+import { isSafeUrl, isSafeImageUrl } from '@propertypro/shared';
 
 interface HeroBlockProps {
   content: Record<string, unknown>;
@@ -19,20 +20,24 @@ export function HeroBlock({ content, theme }: HeroBlockProps) {
   const ctaLabel = c.ctaLabel;
   const ctaHref = c.ctaHref;
 
+  // Defense-in-depth: sanitize URLs at render time
+  const safeBgUrl = backgroundImageUrl && isSafeImageUrl(backgroundImageUrl) ? backgroundImageUrl : undefined;
+  const safeCtaHref = ctaHref && isSafeUrl(ctaHref) ? ctaHref : undefined;
+
   return (
     <section
       className="relative w-full py-24 sm:py-32 px-4 sm:px-6 lg:px-8 flex items-center justify-center text-center"
       style={{
         backgroundColor: theme.primaryColor,
-        backgroundImage: backgroundImageUrl
-          ? `url(${backgroundImageUrl})`
+        backgroundImage: safeBgUrl
+          ? `url(${safeBgUrl})`
           : undefined,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
       {/* Dark overlay for readability when background image is present */}
-      {backgroundImageUrl ? (
+      {safeBgUrl ? (
         <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
       ) : null}
       <div className="relative z-10 max-w-3xl mx-auto">
@@ -50,9 +55,9 @@ export function HeroBlock({ content, theme }: HeroBlockProps) {
             {subheadline}
           </p>
         ) : null}
-        {ctaLabel && ctaHref ? (
+        {ctaLabel && safeCtaHref ? (
           <a
-            href={ctaHref}
+            href={safeCtaHref}
             className="inline-flex items-center px-6 py-3 text-base font-medium rounded-md transition-colors"
             style={{
               backgroundColor: theme.accentColor,
