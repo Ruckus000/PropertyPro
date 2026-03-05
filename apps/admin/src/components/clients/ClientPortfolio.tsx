@@ -3,7 +3,7 @@
 /**
  * P1-5: Client Portfolio — interactive grid with search/filter/sort.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { Search, ChevronDown, Trash2 } from 'lucide-react';
@@ -12,6 +12,8 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
 import { staleBadge } from '@/lib/utils/stale-badge';
+
+const PAGE_SIZE = 20;
 
 interface Community {
   id: number;
@@ -40,6 +42,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -66,13 +69,79 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     return result;
   }, [communities, search, typeFilter, sort]);
 
+  // Reset page when filters change (not sort)
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const isFiltered = filtered.length !== communities.length;
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
-        <p className="mt-0.5 text-sm text-gray-500">{communities.length} communities</p>
+        <p className="mt-0.5 text-sm text-gray-500">
+          {isFiltered
+            ? `${filtered.length} of ${communities.length} communities`
+            : `${communities.length} communities`}
+        </p>
       </div>
+
+      {/* Stale Demos card — positioned above filter controls */}
+      {staleDemos.length > 0 && (
+        <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-900">
+              Stale Demos
+              <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                {staleDemos.length}
+              </span>
+            </h2>
+            <Link
+              href="/demo"
+              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            >
+              Manage demos &rarr;
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {staleDemos.map((demo) => {
+              const badge = staleBadge(demo.created_at);
+              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+              return (
+                <div
+                  key={demo.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate text-sm font-medium text-gray-900">{demo.prospect_name}</span>
+                    <span className="ml-2 text-xs text-gray-500">{typeLabel}</span>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Delete demo for ${demo.prospect_name}`}
+                    className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    onClick={async () => {
+                      if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
+                      await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
+                      window.location.reload();
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3">
@@ -125,90 +194,73 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <p className="text-sm text-gray-500">No communities match your filters.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((c) => {
-            const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
-            const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
-            return (
-              <Link
-                key={c.id}
-                href={`/clients/${c.id}`}
-                className="flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-e1 transition-shadow hover:shadow-e2"
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{c.name}</p>
-                    {(c.city || c.state) && (
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        {[c.city, c.state].filter(Boolean).join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${type.className}`}>
-                    {type.label}
-                  </span>
-                </div>
-
-                <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
-                  {status ? (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-                      {status.label}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">—</span>
-                  )}
-                  <span className="text-xs text-gray-400">
-                    {format(new Date(c.created_at), 'MMM d, yyyy')}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Stale Demos card */}
-      {staleDemos.length > 0 && (
-        <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">
-            Stale Demos
-            <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-              {staleDemos.length}
-            </span>
-          </h2>
-          <div className="space-y-2">
-            {staleDemos.map((demo) => {
-              const badge = staleBadge(demo.created_at);
-              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {paginated.map((c) => {
+              const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
+              const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
               return (
-                <div
-                  key={demo.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                <Link
+                  key={c.id}
+                  href={`/clients/${c.id}`}
+                  className="flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-e1 transition-shadow hover:shadow-e2"
                 >
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium text-gray-900">{demo.prospect_name}</span>
-                    <span className="ml-2 text-xs text-gray-500">{typeLabel}</span>
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900" title={c.name}>{c.name}</p>
+                      {(c.city || c.state) && (
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {[c.city, c.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${type.className}`}>
+                      {type.label}
+                    </span>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    onClick={async () => {
-                      if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
-                      await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
-                      window.location.reload();
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+
+                  <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
+                    {status ? (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+                        {status.label}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {format(new Date(c.created_at), 'MMM d, yyyy')}
+                    </span>
+                  </div>
+                </Link>
               );
             })}
           </div>
-        </div>
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <nav aria-label="Pagination" className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((p) => p - 1)}
+                disabled={page === 1}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-gray-500">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page === totalPages}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </nav>
+          )}
+        </>
       )}
     </div>
   );
