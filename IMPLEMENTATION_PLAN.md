@@ -1,11 +1,23 @@
 # PropertyPro Florida: Implementation Plan
-Generated: 2026-02-26 (v31 — Phase 4 complete; Gate 4 sign-off)
+Generated: 2026-03-04 (v34 - all transition waves complete)
 
 ## Overview
 - **Total Tasks:** 65 implementation tasks + 5 quality gates
 - **Blocked Tasks:** 0
-- **Stuck Tasks:** 0 (no currently stuck tasks in the active implementation baseline)
-- **Current State:** All phases complete. Phase 0 (Gate 1), Phase 1 (Gate 2), Phase 2 (Gate 3, 16/16), Phase 3 (10/10, exit evidence), and Phase 4 (10/10, Gate 4 signed off 2026-02-26) are fully merged to `main`. Canonical execution tracking for Phases 2-4 is maintained in `PHASE2_EXECUTION_PLAN.md`, `PHASE3_EXECUTION_PLAN.md`, and `PHASE4_EXECUTION_PLAN.md`.
+- **Stuck Tasks:** 0
+- **Current State:** Legacy implementation plan (65 tasks + 5 quality gates) is complete on `main`. Transition Plan v4.1 (all 5 waves) is complete on `codex/transition-plan` and ready to merge to `main` via PR #33.
+
+### Transition Plan v4.1 Progress Snapshot (2026-03-04)
+- **Baseline branch:** `codex/transition-plan`
+- **PR #33:** Contains all 5 waves. CI green. Ready to merge to `main`.
+
+| Wave | Status |
+| --- | --- |
+| Wave 1 (`0.3`, `0.4`, `0.5`, `0.6`, `0.8`) | Complete |
+| Wave 2 (`0.1`, `0.2`, `0.7`) | Complete |
+| Wave 3 (`Task 1`, `0.9`) | Complete |
+| Wave 4 (`2.1`, `2.2`, `2.3`, `2.4-2.6`, `2.7-2.11`) | Complete |
+| Wave 5 (`3.1-3.2`, `3.3`, `3.4`) | Complete |
 
 ### Progress Snapshot (2026-02-26 — Phase 4 Complete, Gate 4 Sign-Off)
 - All 10/10 Phase 4 base tasks complete and merged to `main`.

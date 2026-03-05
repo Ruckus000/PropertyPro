@@ -1,25 +1,18 @@
 'use client';
 
 /**
- * P3-48: iPhone 15 phone-frame mockup component.
- *
- * Wraps a same-origin /mobile/* route in a CSS iPhone 15 shell.
- * Same-origin iframe shares auth cookies — no token passing needed.
+ * iPhone 15 phone-frame mockup component for previewing mobile views.
  *
  * Inner viewport: 393×852 CSS px (iPhone 15 logical resolution)
  * Outer frame:    ~430×932 CSS px (with bezel, notch, home bar)
  */
 
-interface PhoneFrameProps {
-  /** /mobile route to embed; defaults to /mobile when communityId provided */
-  src?: string;
-  communityId?: number;
+export interface PhoneFrameProps {
+  /** URL to embed in the iframe */
+  src: string;
 }
 
-export function PhoneFrame({ src, communityId }: PhoneFrameProps) {
-  const iframeSrc =
-    src ?? (communityId !== undefined ? `/mobile?communityId=${communityId}` : '/mobile');
-
+export function PhoneFrame({ src }: PhoneFrameProps) {
   return (
     <div
       aria-label="Mobile portal preview"
@@ -63,7 +56,7 @@ export function PhoneFrame({ src, communityId }: PhoneFrameProps) {
         }}
       >
         <iframe
-          src={iframeSrc}
+          src={src}
           loading="lazy"
           title="Mobile portal preview"
           style={{
@@ -72,7 +65,6 @@ export function PhoneFrame({ src, communityId }: PhoneFrameProps) {
             border: 'none',
             display: 'block',
           }}
-          // Prevent the iframe from being able to navigate the parent
           sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation-by-user-activation"
         />
       </div>

@@ -31,6 +31,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/supabase/middleware',
   '@propertypro/db/filters',
   '@propertypro/db/unsafe',
+  '@propertypro/db/seed/seed-community',
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([

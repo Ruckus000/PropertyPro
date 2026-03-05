@@ -13,7 +13,7 @@ import { isPmAdminInAnyCommunity, listManagedCommunitiesForPm } from '@/lib/api/
 import type { PmCommunityFilters } from '@/lib/api/pm-communities';
 import { CommunityCard } from '@/components/pm/CommunityCard';
 import { CommunityFilters } from '@/components/pm/CommunityFilters';
-import { PhoneFrame } from '@/components/mobile/PhoneFrame';
+import { PhoneFrame } from '@propertypro/ui';
 import type { CommunityType } from '@propertypro/shared';
 
 interface CommunitiesPageProps {
@@ -65,7 +65,7 @@ export default async function PmCommunitiesPage({ searchParams }: CommunitiesPag
               Mobile Preview
             </summary>
             <div className="mt-4 flex justify-end">
-              <PhoneFrame communityId={firstCommunityId} />
+              <PhoneFrame src={`/mobile?communityId=${firstCommunityId}`} />
             </div>
           </details>
         </div>

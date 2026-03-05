@@ -196,10 +196,10 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    onClick={() => {
-                      // TODO(Phase 2): Wire up demo deletion via API
-                      // eslint-disable-next-line no-console
-                      console.log(`[stub] Delete demo ${demo.id} — to be implemented in Phase 2`);
+                    onClick={async () => {
+                      if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
+                      await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
+                      window.location.reload();
                     }}
                   >
                     <Trash2 size={14} />
