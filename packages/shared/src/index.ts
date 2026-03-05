@@ -83,3 +83,10 @@ export * from './features';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
+
+export type {
+  BlockType, BlockContent, BlockContentMap,
+  HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
+  MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent,
+} from './site-blocks';
+export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';

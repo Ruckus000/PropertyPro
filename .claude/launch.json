@@ -4,14 +4,16 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@propertypro/web", "dev"],
-      "port": 3000
+      "runtimeArgs": ["--filter", "@propertypro/web", "exec", "next", "dev"],
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "admin",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@propertypro/admin", "dev"],
-      "port": 3001
+      "runtimeArgs": ["--filter", "@propertypro/admin", "exec", "next", "dev"],
+      "port": 3001,
+      "autoPort": true
     }
   ]
 }

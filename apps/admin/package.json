@@ -12,10 +12,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@propertypro/db": "workspace:*",
     "@propertypro/shared": "workspace:*",
-    "@propertypro/ui": "workspace:*",
     "@propertypro/theme": "workspace:*",
+    "@propertypro/ui": "workspace:*",
     "@sentry/nextjs": "^10.38.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",

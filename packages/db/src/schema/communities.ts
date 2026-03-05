@@ -52,6 +52,10 @@ export const communities = pgTable('communities', {
   isDemo: boolean('is_demo').notNull().default(false),
   /** Admin: reserved for future auto-expiry. Demos persist until manually deleted. */
   demoExpiresAt: timestamp('demo_expires_at', { withTimezone: true }),
+  /** Phase 3: Optional custom domain for the community's public site. */
+  customDomain: text('custom_domain'),
+  /** Phase 3: When the community's public site was last published. */
+  sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
