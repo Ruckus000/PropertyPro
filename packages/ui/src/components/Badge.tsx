@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Badge & StatusBadge — Visual indicators for status and metadata.
  */

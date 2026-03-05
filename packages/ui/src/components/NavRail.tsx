@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * NavRail — Sidebar navigation with collapsible state.
  *
