@@ -24,8 +24,8 @@ export function PreviewPanel({ communitySlug }: PreviewPanelProps) {
   // In production, use the subdomain
   const isDev = process.env.NODE_ENV === 'development';
   const previewUrl = isDev
-    ? `http://localhost:3000?tenant=${communitySlug}`
-    : `https://${communitySlug}.propertyprofl.com`;
+    ? `http://localhost:3000?tenant=${communitySlug}&preview=true`
+    : `https://${communitySlug}.propertyprofl.com?preview=true`;
 
   const checkConnection = useCallback(async () => {
     setStatus('checking');
