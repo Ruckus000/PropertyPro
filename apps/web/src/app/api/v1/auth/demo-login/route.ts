@@ -154,7 +154,12 @@ export async function GET(request: Request) {
     payload.role === 'resident'
       ? `/mobile?communityId=${communityId}`
       : `/dashboard?communityId=${communityId}`;
-  const redirectTo = new URL(redirectPath, trustedBaseUrl).toString();
+  const redirectToUrl = new URL(redirectPath, trustedBaseUrl);
+  // Propagate preview flag so the final page response has relaxed iframe headers
+  if (url.searchParams.get('preview') === 'true') {
+    redirectToUrl.searchParams.set('preview', 'true');
+  }
+  const redirectTo = redirectToUrl.toString();
 
   // 6. Create a Supabase session via admin magic-link API
   const supabase = createAdminClient();
