@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { provisionInitialAdmin } from '@/lib/auth/provision-initial-admin';
+import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createTypedAdminClient } from '@/lib/db/admin-client-types';
 
 const HEX_COLOR = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Invalid hex color' });
@@ -45,10 +46,61 @@ const createClientSchema = z.object({
     .optional(),
 });
 
-export async function POST(request: NextRequest) {
+async function authorizeRequest(): Promise<NextResponse | null> {
   try {
-    const db = createTypedAdminClient();
-    const body = await request.json();
+    await requirePlatformAdmin();
+    return null;
+  } catch (error) {
+    if (error instanceof Response) {
+      const message = error.status === 401
+        ? 'Unauthorized'
+        : error.status === 403
+          ? 'Forbidden'
+          : error.status === 500
+            ? 'Server misconfiguration'
+            : 'Internal server error';
+      return NextResponse.json({ error: { message } }, { status: error.status });
+    }
+
+    console.error('[Admin] Platform admin authorization error:', error);
+    return NextResponse.json(
+      { error: { message: 'Internal server error' } },
+      { status: 500 },
+    );
+  }
+}
+
+async function rollbackCreatedCommunity(
+  db: ReturnType<typeof createTypedAdminClient>,
+  communityId: number,
+): Promise<void> {
+  const { error } = await db
+    .from('communities')
+    .delete()
+    .eq('id', communityId);
+
+  if (error) {
+    console.error('[Admin] Failed to roll back community creation:', error);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const authError = await authorizeRequest();
+  if (authError) {
+    return authError;
+  }
+
+  try {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: { message: 'Invalid JSON body' } },
+        { status: 400 },
+      );
+    }
+
     const parsed = createClientSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -59,6 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+    const db = createTypedAdminClient();
 
     // Check slug uniqueness
     const { data: existing } = await db
@@ -104,7 +157,7 @@ export async function POST(request: NextRequest) {
     // Create initial compliance items for the community
     const complianceCategories = getComplianceCategories(data.communityType);
     if (complianceCategories.length > 0) {
-      await db.from('compliance_items').insert(
+      const { error: complianceError } = await db.from('compliance_items').insert(
         complianceCategories.map((category) => ({
           community_id: community.id,
           category,
@@ -112,6 +165,15 @@ export async function POST(request: NextRequest) {
           description: `${category} compliance requirement`,
         })),
       );
+
+      if (complianceError) {
+        console.error('[Admin] Failed to create compliance items:', complianceError);
+        await rollbackCreatedCommunity(db, community.id);
+        return NextResponse.json(
+          { error: { message: 'Failed to create compliance items for community' } },
+          { status: 500 },
+        );
+      }
     }
 
     // Invite initial admin if provided
@@ -175,6 +237,11 @@ function getComplianceCategories(type: 'condo_718' | 'hoa_720' | 'apartment'): s
  * GET /api/admin/clients?slug=xxx — Check slug availability.
  */
 export async function GET(request: NextRequest) {
+  const authError = await authorizeRequest();
+  if (authError) {
+    return authError;
+  }
+
   const db = createTypedAdminClient();
   const slug = request.nextUrl.searchParams.get('slug');
 

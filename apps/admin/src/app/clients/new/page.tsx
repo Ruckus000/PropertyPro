@@ -7,7 +7,7 @@
  * Step 2: Branding (colors, fonts, logo)
  * Step 3: Review & create (summary + optional initial admin invite)
  */
-import { useState, useCallback } from 'react';
+import { useCallback, useReducer, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ALLOWED_FONTS } from '@propertypro/theme';
@@ -67,20 +67,64 @@ const ADMIN_ROLE_OPTIONS = [
   { value: 'site_manager', label: 'Site Manager' },
 ] as const;
 
-const INITIAL_CREATE_CLIENT_FORM = {
-  name: '',
-  communityType: null as CommunityType | null,
-  slug: '',
-  address: '',
-  city: '',
-  state: 'FL',
-  zipCode: '',
-  unitCount: '',
-  plan: 'professional',
-  branding: DEFAULT_BRANDING,
-  adminEmail: '',
-  adminRole: 'board_president' as typeof ADMIN_ROLE_OPTIONS[number]['value'],
+type CreateClientFormState = {
+  name: string;
+  communityType: CommunityType | null;
+  slug: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  unitCount: string;
+  plan: string;
+  branding: typeof DEFAULT_BRANDING;
+  adminEmail: string;
+  adminRole: typeof ADMIN_ROLE_OPTIONS[number]['value'];
 };
+
+type CreateClientFormAction =
+  | { type: 'reset' }
+  | { type: 'setValues'; values: Partial<CreateClientFormState> }
+  | { type: 'setBranding'; field: keyof CreateClientFormState['branding']; value: string };
+
+function createInitialCreateClientForm(): CreateClientFormState {
+  return {
+    name: '',
+    communityType: null,
+    slug: '',
+    address: '',
+    city: '',
+    state: 'FL',
+    zipCode: '',
+    unitCount: '',
+    plan: 'professional',
+    branding: { ...DEFAULT_BRANDING },
+    adminEmail: '',
+    adminRole: 'board_president',
+  };
+}
+
+function createClientFormReducer(
+  state: CreateClientFormState,
+  action: CreateClientFormAction,
+): CreateClientFormState {
+  switch (action.type) {
+    case 'reset':
+      return createInitialCreateClientForm();
+    case 'setValues':
+      return { ...state, ...action.values };
+    case 'setBranding':
+      return {
+        ...state,
+        branding: {
+          ...state.branding,
+          [action.field]: action.value,
+        },
+      };
+    default:
+      return state;
+  }
+}
 
 function slugify(name: string): string {
   return name
@@ -95,40 +139,45 @@ export default function CreateClientPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateClientResult | null>(null);
+  const [form, dispatchForm] = useReducer(
+    createClientFormReducer,
+    undefined,
+    createInitialCreateClientForm,
+  );
 
-  // Step 1 state
-  const [name, setName] = useState(INITIAL_CREATE_CLIENT_FORM.name);
-  const [communityType, setCommunityType] = useState<CommunityType | null>(INITIAL_CREATE_CLIENT_FORM.communityType);
-  const [slug, setSlug] = useState(INITIAL_CREATE_CLIENT_FORM.slug);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [slugChecking, setSlugChecking] = useState(false);
-  const [address, setAddress] = useState(INITIAL_CREATE_CLIENT_FORM.address);
-  const [city, setCity] = useState(INITIAL_CREATE_CLIENT_FORM.city);
-  const [state, setState] = useState(INITIAL_CREATE_CLIENT_FORM.state);
-  const [zipCode, setZipCode] = useState(INITIAL_CREATE_CLIENT_FORM.zipCode);
-  const [unitCount, setUnitCount] = useState(INITIAL_CREATE_CLIENT_FORM.unitCount);
-  const [plan, setPlan] = useState(INITIAL_CREATE_CLIENT_FORM.plan);
-
-  // Step 2 state
-  const [branding, setBranding] = useState(() => ({ ...INITIAL_CREATE_CLIENT_FORM.branding }));
-
-  // Step 3 state
-  const [adminEmail, setAdminEmail] = useState(INITIAL_CREATE_CLIENT_FORM.adminEmail);
-  const [adminRole, setAdminRole] = useState<typeof ADMIN_ROLE_OPTIONS[number]['value']>(INITIAL_CREATE_CLIENT_FORM.adminRole);
+  const {
+    name,
+    communityType,
+    slug,
+    address,
+    city,
+    state,
+    zipCode,
+    unitCount,
+    plan,
+    branding,
+    adminEmail,
+    adminRole,
+  } = form;
 
   const handleNameChange = (value: string) => {
-    setName(value);
+    const nextValues: Partial<CreateClientFormState> = { name: value };
     if (!slugManuallyEdited) {
-      const newSlug = slugify(value);
-      setSlug(newSlug);
+      nextValues.slug = slugify(value);
       setSlugAvailable(null);
     }
+    dispatchForm({ type: 'setValues', values: nextValues });
   };
 
   const handleSlugChange = (value: string) => {
     setSlugManuallyEdited(true);
-    setSlug(value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+    dispatchForm({
+      type: 'setValues',
+      values: { slug: value.toLowerCase().replace(/[^a-z0-9-]/g, '') },
+    });
     setSlugAvailable(null);
   };
 
@@ -147,31 +196,27 @@ export default function CreateClientPage() {
   }, [slug]);
 
   const updateBranding = (field: string, value: string) => {
-    setBranding((prev) => ({ ...prev, [field]: value }));
+    dispatchForm({
+      type: 'setBranding',
+      field: field as keyof CreateClientFormState['branding'],
+      value,
+    });
   };
 
   const resetWizard = useCallback(() => {
     setStep(1);
-    setName(INITIAL_CREATE_CLIENT_FORM.name);
-    setCommunityType(INITIAL_CREATE_CLIENT_FORM.communityType);
-    setSlug(INITIAL_CREATE_CLIENT_FORM.slug);
+    dispatchForm({ type: 'reset' });
     setSlugManuallyEdited(false);
     setSlugAvailable(null);
     setSlugChecking(false);
-    setAddress(INITIAL_CREATE_CLIENT_FORM.address);
-    setCity(INITIAL_CREATE_CLIENT_FORM.city);
-    setState(INITIAL_CREATE_CLIENT_FORM.state);
-    setZipCode(INITIAL_CREATE_CLIENT_FORM.zipCode);
-    setUnitCount(INITIAL_CREATE_CLIENT_FORM.unitCount);
-    setPlan(INITIAL_CREATE_CLIENT_FORM.plan);
-    setBranding({ ...INITIAL_CREATE_CLIENT_FORM.branding });
-    setAdminEmail(INITIAL_CREATE_CLIENT_FORM.adminEmail);
-    setAdminRole(INITIAL_CREATE_CLIENT_FORM.adminRole);
     setError(null);
     setResult(null);
   }, []);
 
-  const canProceedStep1 = name.trim() && communityType && slug.length >= 2;
+  const canProceedStep1 =
+    name.trim().length > 0 &&
+    communityType !== null &&
+    slug.length >= 2;
   const canCreate = canProceedStep1;
 
   const handleCreate = async () => {
@@ -289,7 +334,7 @@ export default function CreateClientPage() {
                 {TEMPLATE_OPTIONS.map((opt) => (
                   <button
                     key={opt.type}
-                    onClick={() => setCommunityType(opt.type)}
+                    onClick={() => dispatchForm({ type: 'setValues', values: { communityType: opt.type } })}
                     className={`rounded-lg border-2 p-5 text-left transition-all ${
                       communityType === opt.type
                         ? 'border-blue-600 bg-blue-50'
@@ -337,7 +382,7 @@ export default function CreateClientPage() {
                 <input
                   type="text"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => dispatchForm({ type: 'setValues', values: { address: e.target.value } })}
                   placeholder="1200 Coral Way"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
@@ -347,7 +392,7 @@ export default function CreateClientPage() {
                 <input
                   type="text"
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => dispatchForm({ type: 'setValues', values: { city: e.target.value } })}
                   placeholder="Coral Gables"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
@@ -360,7 +405,7 @@ export default function CreateClientPage() {
                 <input
                   type="text"
                   value={state}
-                  onChange={(e) => setState(e.target.value)}
+                  onChange={(e) => dispatchForm({ type: 'setValues', values: { state: e.target.value } })}
                   maxLength={2}
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
@@ -370,7 +415,7 @@ export default function CreateClientPage() {
                 <input
                   type="text"
                   value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value)}
+                  onChange={(e) => dispatchForm({ type: 'setValues', values: { zipCode: e.target.value } })}
                   maxLength={10}
                   placeholder="33134"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -381,7 +426,7 @@ export default function CreateClientPage() {
                 <input
                   type="number"
                   value={unitCount}
-                  onChange={(e) => setUnitCount(e.target.value)}
+                  onChange={(e) => dispatchForm({ type: 'setValues', values: { unitCount: e.target.value } })}
                   min={1}
                   placeholder="48"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -395,7 +440,7 @@ export default function CreateClientPage() {
               </label>
               <select
                 value={plan}
-                onChange={(e) => setPlan(e.target.value)}
+                onChange={(e) => dispatchForm({ type: 'setValues', values: { plan: e.target.value } })}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {PLAN_OPTIONS.map((p) => (
@@ -668,7 +713,7 @@ export default function CreateClientPage() {
                   <input
                     type="email"
                     value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
+                    onChange={(e) => dispatchForm({ type: 'setValues', values: { adminEmail: e.target.value } })}
                     placeholder="president@community.com"
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
@@ -679,7 +724,10 @@ export default function CreateClientPage() {
                   </label>
                   <select
                     value={adminRole}
-                    onChange={(e) => setAdminRole(e.target.value as typeof adminRole)}
+                    onChange={(e) => dispatchForm({
+                      type: 'setValues',
+                      values: { adminRole: e.target.value as typeof adminRole },
+                    })}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                     {ADMIN_ROLE_OPTIONS.map((r) => (
