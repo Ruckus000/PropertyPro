@@ -130,12 +130,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Generate and encrypt HMAC secret
+  // Generate and encrypt HMAC secret — encryption key is mandatory (DB CHECK constraint
+  // requires the 'enc:v1:' prefix produced by encryptDemoTokenSecret).
   const authTokenSecret = randomBytes(32).toString('hex');
   const encryptionKey = process.env.DEMO_TOKEN_ENCRYPTION_KEY_HEX;
-  const storedSecret = encryptionKey
-    ? encryptDemoTokenSecret(authTokenSecret, encryptionKey)
-    : authTokenSecret;
+  if (!encryptionKey) {
+    console.error(
+      '[demos/POST] DEMO_TOKEN_ENCRYPTION_KEY_HEX is not configured. '
+      + 'Generate one with: openssl rand -hex 32',
+    );
+    return NextResponse.json(
+      {
+        error: {
+          code: 'CONFIGURATION_ERROR',
+          message: 'Demo token encryption key is not configured. Contact the platform administrator.',
+        },
+      },
+      { status: 500 },
+    );
+  }
+  const storedSecret = encryptDemoTokenSecret(authTokenSecret, encryptionKey);
 
   const residentUser = seedResult.users.find((u) => u.email === residentEmail);
   const boardUser = seedResult.users.find((u) => u.email === boardEmail);

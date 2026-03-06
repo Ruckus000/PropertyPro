@@ -60,9 +60,9 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       ? `http://localhost:3000`
       : `https://${demo.slug}.propertyprofl.com`;
 
-  const boardUrl = boardToken ? `${webBaseUrl}/api/v1/auth/demo-login?token=${boardToken}` : null;
+  const boardUrl = boardToken ? `${webBaseUrl}/api/v1/auth/demo-login?token=${boardToken}&preview=true` : null;
   const residentUrl = residentToken
-    ? `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}`
+    ? `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`
     : null;
 
   const typeLabel =

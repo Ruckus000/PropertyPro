@@ -48,7 +48,7 @@ export default async function DemoMobilePage({ params }: PageProps) {
       ? `http://localhost:3000`
       : `https://${demo.slug}.propertyprofl.com`;
 
-  const residentUrl = `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}`;
+  const residentUrl = `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`;
 
   return <MobilePreviewClient src={residentUrl} />;
 }

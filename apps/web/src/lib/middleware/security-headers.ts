@@ -20,6 +20,21 @@
 const PRODUCTION_DOMAIN = 'propertyprofl.com';
 
 /**
+ * Returns space-separated admin origin(s) for CSP frame-ancestors in preview mode.
+ * Uses ADMIN_ORIGIN env var if set, otherwise falls back to known defaults.
+ */
+function getAdminOrigins(): string {
+  const envOrigin = process.env.ADMIN_ORIGIN;
+  if (envOrigin) return envOrigin;
+
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3001 http://127.0.0.1:3001';
+  }
+
+  return 'https://admin.propertyprofl.com';
+}
+
+/**
  * Returns true when the given Origin header value is an allowed origin.
  * Returns false for origins not on the allowlist.
  */
@@ -77,10 +92,10 @@ export function buildCorsHeaders(origin: string | null): Record<string, string> 
  *
  * Call buildCspHeader() separately and add it to page responses.
  */
-export function buildSecurityHeaders(): Record<string, string> {
+export function buildSecurityHeaders(options?: { isPreview?: boolean }): Record<string, string> {
   return {
     'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
+    'X-Frame-Options': options?.isPreview ? 'SAMEORIGIN' : 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'X-DNS-Prefetch-Control': 'off',
@@ -93,7 +108,7 @@ export function buildSecurityHeaders(): Record<string, string> {
  * NOTE: 'unsafe-inline' for script-src is required by Next.js 15 App Router
  * until nonce-based CSP is implemented (tracked as a future hardening item).
  */
-export function buildCspHeader(): string {
+export function buildCspHeader(options?: { isPreview?: boolean }): string {
   let supabaseHost: string;
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -112,7 +127,9 @@ export function buildCspHeader(): string {
     `img-src 'self' data: blob: https://${supabaseHost}`,
     `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
     "font-src 'self' data:",
-    "frame-ancestors 'none'",
+    options?.isPreview
+      ? `frame-ancestors 'self' ${getAdminOrigins()}`
+      : "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",

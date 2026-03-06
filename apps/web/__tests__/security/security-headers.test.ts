@@ -144,6 +144,26 @@ describe('buildSecurityHeaders', () => {
     const headers = buildSecurityHeaders();
     expect(headers['X-DNS-Prefetch-Control']).toBe('off');
   });
+
+  describe('with isPreview option', () => {
+    it('sets X-Frame-Options to SAMEORIGIN when isPreview is true', () => {
+      const headers = buildSecurityHeaders({ isPreview: true });
+      expect(headers['X-Frame-Options']).toBe('SAMEORIGIN');
+    });
+
+    it('preserves all other security headers when isPreview is true', () => {
+      const headers = buildSecurityHeaders({ isPreview: true });
+      expect(headers['X-Content-Type-Options']).toBe('nosniff');
+      expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
+      expect(headers['Permissions-Policy']).toContain('camera=()');
+      expect(headers['X-DNS-Prefetch-Control']).toBe('off');
+    });
+
+    it('still returns DENY when isPreview is false', () => {
+      const headers = buildSecurityHeaders({ isPreview: false });
+      expect(headers['X-Frame-Options']).toBe('DENY');
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -194,5 +214,34 @@ describe('buildCspHeader', () => {
   it('includes connect-src for Stripe', () => {
     const csp = buildCspHeader();
     expect(csp).toContain('https://api.stripe.com');
+  });
+
+  describe('with isPreview option', () => {
+    it('replaces frame-ancestors none with self and admin origins when isPreview is true', () => {
+      const csp = buildCspHeader({ isPreview: true });
+      expect(csp).not.toContain("frame-ancestors 'none'");
+      expect(csp).toContain("frame-ancestors 'self'");
+    });
+
+    it('includes localhost admin origins in development', () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      const csp = buildCspHeader({ isPreview: true });
+      expect(csp).toContain('http://localhost:3001');
+      expect(csp).toContain('http://127.0.0.1:3001');
+      vi.unstubAllEnvs();
+    });
+
+    it('uses ADMIN_ORIGIN env var when set', () => {
+      vi.stubEnv('ADMIN_ORIGIN', 'https://custom-admin.example.com');
+      const csp = buildCspHeader({ isPreview: true });
+      expect(csp).toContain('https://custom-admin.example.com');
+      expect(csp).not.toContain('http://localhost:3001');
+      vi.unstubAllEnvs();
+    });
+
+    it('still returns frame-ancestors none when isPreview is false', () => {
+      const csp = buildCspHeader({ isPreview: false });
+      expect(csp).toContain("frame-ancestors 'none'");
+    });
   });
 });

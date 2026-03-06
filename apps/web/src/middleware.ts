@@ -123,6 +123,7 @@ function finaliseResponse(
   requestId: string,
   origin: string | null,
   isApi: boolean,
+  isPreview: boolean = false,
 ): NextResponse {
   attachResponseCookies(source, target);
   target.headers.set('X-Request-ID', requestId);
@@ -133,15 +134,15 @@ function finaliseResponse(
     target.headers.set(name, value);
   }
 
-  // Universal security headers
-  const secHeaders = buildSecurityHeaders();
+  // Universal security headers (relaxed for admin preview iframes)
+  const secHeaders = buildSecurityHeaders({ isPreview });
   for (const [name, value] of Object.entries(secHeaders)) {
     target.headers.set(name, value);
   }
 
   // CSP for page responses only (not JSON API responses)
   if (!isApi) {
-    target.headers.set('Content-Security-Policy', buildCspHeader());
+    target.headers.set('Content-Security-Policy', buildCspHeader({ isPreview }));
   }
 
   return target;
@@ -152,12 +153,13 @@ function notFoundResponse(
   source: NextResponse,
   requestId: string,
   origin: string | null,
+  isPreview: boolean = false,
 ): NextResponse {
   const isApi = isApiPath(request.nextUrl.pathname);
   const target = isApi
     ? NextResponse.json({ error: 'Not Found' }, { status: 404 })
     : new NextResponse('Not Found', { status: 404 });
-  return finaliseResponse(source, target, requestId, origin, isApi);
+  return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
 }
 
 function internalErrorResponse(
@@ -165,12 +167,13 @@ function internalErrorResponse(
   source: NextResponse,
   requestId: string,
   origin: string | null,
+  isPreview: boolean = false,
 ): NextResponse {
   const isApi = isApiPath(request.nextUrl.pathname);
   const target = isApi
     ? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     : new NextResponse('Internal Server Error', { status: 500 });
-  return finaliseResponse(source, target, requestId, origin, isApi);
+  return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
 }
 
 function readTenantCache(slug: string): number | null | undefined {
@@ -249,6 +252,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get('origin');
   const isApi = isApiPath(pathname);
+  const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
 
   // --- CORS preflight — handle before heavier processing [P4-56] ---
   // OPTIONS requests from browsers trigger preflight checks. Allowed origins
@@ -294,7 +298,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
 
     if (tenantContext.isReservedSubdomain) {
-      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin);
+      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
     }
 
     // Forward community ID from query param so layouts can read it from headers
@@ -307,13 +311,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       try {
         const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
         if (communityId == null) {
-          return notFoundResponse(request, response as unknown as NextResponse, requestId, origin);
+          return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
         }
         forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
         forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
         forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
       } catch {
-        return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin);
+        return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
       }
     }
   }
@@ -352,6 +356,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           requestId,
           origin,
           isApi,
+          isPreviewRequest,
         );
       }
 
@@ -364,6 +369,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         requestId,
         origin,
         isApi,
+        isPreviewRequest,
       );
     }
 
@@ -375,6 +381,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           requestId,
           origin,
           isApi,
+          isPreviewRequest,
         );
       }
 
@@ -387,6 +394,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         requestId,
         origin,
         isApi,
+        isPreviewRequest,
       );
     }
   }
@@ -437,6 +445,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           requestId,
           origin,
           isApi,
+          isPreviewRequest,
         );
       }
 
@@ -452,6 +461,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         requestId,
         origin,
         isApi,
+        isPreviewRequest,
       );
     }
   }
@@ -476,6 +486,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           requestId,
           origin,
           isApi,
+          isPreviewRequest,
         );
       }
 
@@ -489,6 +500,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         requestId,
         origin,
         isApi,
+        isPreviewRequest,
       );
     }
   }
@@ -504,6 +516,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     requestId,
     origin,
     isApi,
+    isPreviewRequest,
   );
 }
 
