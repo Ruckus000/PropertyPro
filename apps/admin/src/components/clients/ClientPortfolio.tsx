@@ -45,6 +45,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [page, setPage] = useState(1);
   const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
   const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
+  const [staleDemoDeleteError, setStaleDemoDeleteError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -226,6 +227,9 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
               {currentStaleDemos.length}
             </span>
           </h2>
+          {staleDemoDeleteError && (
+            <p className="mb-3 text-xs font-medium text-red-600">{staleDemoDeleteError}</p>
+          )}
           <div className="space-y-2">
             {currentStaleDemos.map((demo) => {
               const badge = staleBadge(demo.created_at);
@@ -250,6 +254,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     disabled={isDeleting}
                     onClick={async () => {
                       if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
+                      setStaleDemoDeleteError(null);
                       setDeletingDemoIds((previousIds) =>
                         previousIds.includes(demo.id)
                           ? previousIds
@@ -261,7 +266,11 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                           setCurrentStaleDemos((previousDemos) =>
                             previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
                           );
+                        } else {
+                          setStaleDemoDeleteError('Failed to delete demo. Please try again.');
                         }
+                      } catch {
+                        setStaleDemoDeleteError('Failed to delete demo. Please try again.');
                       } finally {
                         setDeletingDemoIds((previousIds) =>
                           previousIds.filter((existingId) => existingId !== demo.id),
