@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, MonitorPlay, Settings, LogOut } from 'lucide-react';
+import { LayoutGrid, MonitorPlay, Settings, LogOut, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { useState } from 'react';
 
 const NAV_ITEMS = [
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
@@ -12,17 +13,35 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const isSiteBuilder = pathname.includes('/site-builder');
+  const [collapsed, setCollapsed] = useState(isSiteBuilder);
 
   return (
-    <aside className="flex h-screen w-56 flex-col border-r border-gray-200 bg-gray-900">
-      {/* Logo */}
-      <div className="flex h-14 items-center px-4 border-b border-gray-700">
-        <span className="text-sm font-semibold text-white tracking-tight">
-          PropertyPro
-        </span>
-        <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-medium text-white">
-          Admin
-        </span>
+    <aside
+      className={`flex h-screen flex-col border-r border-gray-200 bg-gray-900 transition-[width] duration-200 ${
+        collapsed ? 'w-14' : 'w-56'
+      }`}
+    >
+      {/* Logo + collapse toggle */}
+      <div className="flex h-14 items-center justify-between border-b border-gray-700 px-3">
+        {!collapsed && (
+          <>
+            <span className="text-sm font-semibold text-white tracking-tight">
+              PropertyPro
+            </span>
+            <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-medium text-white">
+              Admin
+            </span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="rounded-md p-1 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+        </button>
       </div>
 
       {/* Nav */}
@@ -34,14 +53,16 @@ export function Sidebar() {
               key={href}
               href={href}
               className={[
-                'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center rounded-md text-sm font-medium transition-colors',
+                collapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-3 py-2',
                 active
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white',
               ].join(' ')}
+              title={collapsed ? label : undefined}
             >
               <Icon size={16} />
-              {label}
+              {!collapsed && label}
             </Link>
           );
         })}
@@ -52,10 +73,14 @@ export function Sidebar() {
         <form action="/api/auth/signout" method="POST">
           <button
             type="submit"
-            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+            className={[
+              'flex w-full items-center rounded-md text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors',
+              collapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-3 py-2',
+            ].join(' ')}
+            title={collapsed ? 'Sign out' : undefined}
           >
             <LogOut size={16} />
-            Sign out
+            {!collapsed && 'Sign out'}
           </button>
         </form>
       </div>
