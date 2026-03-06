@@ -109,11 +109,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
         );
       } else {
-        setStaleDemoDeleteError('Failed to delete demo. Please try again.');
+        const errorData = await response.json().catch(() => null);
+        const message = errorData?.error?.message || 'Failed to delete demo. Please try again.';
+        setStaleDemoDeleteError(message);
       }
     } catch (error) {
       console.error('Failed to delete demo:', error);
-      setStaleDemoDeleteError('Failed to delete demo. Please try again.');
+      setStaleDemoDeleteError('A network error occurred. Please check your connection and try again.');
     } finally {
       setDeletingDemoIds((previousIds) =>
         previousIds.filter((existingId) => existingId !== demo.id),
