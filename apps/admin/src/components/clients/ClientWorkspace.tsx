@@ -12,6 +12,7 @@ import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Community {
   id: number;
@@ -261,6 +262,7 @@ function SettingsTab({ community }: { community: Community }) {
         method: 'DELETE',
       });
       if (res.ok) {
+        setShowDeleteConfirm(false);
         router.push('/clients');
       }
     } finally {
@@ -390,45 +392,43 @@ function SettingsTab({ community }: { community: Community }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-900">Delete Community</p>
+              <p className="text-sm font-medium text-gray-900">Archive Community</p>
               <p className="text-xs text-gray-500">
-                Permanently remove this community and all associated data
+                Soft-delete this community and hide it from active platform views
               </p>
             </div>
             <button
               onClick={() => setShowDeleteConfirm(true)}
               className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
             >
-              Delete Community
+              Archive Community
             </button>
           </div>
         </div>
 
         {/* Delete confirmation modal */}
         {showDeleteConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-              <h3 className="text-lg font-semibold text-gray-900">Delete Community?</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                This will permanently delete <span className="font-medium">{community.name}</span> and all associated data including documents, meetings, and user accounts. This action cannot be undone.
-              </p>
-              <div className="mt-4 flex justify-end gap-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  {deleting ? 'Deleting...' : 'Delete Permanently'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <ConfirmDialog
+            title="Archive Community?"
+            message={
+              <>
+                <p>
+                  This will soft-delete <span className="font-medium">{community.name}</span> by
+                  setting a deleted flag.
+                </p>
+                <p className="mt-2">
+                  Documents, meetings, and user accounts remain stored in the database but will no
+                  longer appear in active platform views. This action does not permanently erase
+                  records.
+                </p>
+              </>
+            }
+            confirmLabel={deleting ? 'Archiving...' : 'Archive Community'}
+            confirmVariant="danger"
+            isPending={deleting}
+            onConfirm={handleDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
         )}
       </div>
     </div>

@@ -5,6 +5,7 @@
  */
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { Search, ChevronDown, Trash2, Plus } from 'lucide-react';
 import {
@@ -12,6 +13,7 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
 import { staleBadge } from '@/lib/utils/stale-badge';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const PAGE_SIZE = 20;
 
@@ -39,10 +41,13 @@ interface ClientPortfolioProps {
 }
 
 export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
   const [page, setPage] = useState(1);
+  const [demoToDelete, setDemoToDelete] = useState<StaleDemo | null>(null);
+  const [deletingDemoId, setDeletingDemoId] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -78,6 +83,22 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const isFiltered = filtered.length !== communities.length;
+  const isDeletingDemo = demoToDelete !== null && deletingDemoId === demoToDelete.id;
+
+  const handleDeleteDemo = async () => {
+    if (!demoToDelete) return;
+
+    setDeletingDemoId(demoToDelete.id);
+    try {
+      const res = await fetch(`/api/admin/demos/${demoToDelete.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setDemoToDelete(null);
+        router.refresh();
+      }
+    } finally {
+      setDeletingDemoId(null);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -137,11 +158,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    onClick={async () => {
-                      if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
-                      await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
-                      window.location.reload();
-                    }}
+                    onClick={() => setDemoToDelete(demo)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -150,6 +167,28 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             })}
           </div>
         </div>
+      )}
+
+      {demoToDelete && (
+        <ConfirmDialog
+          title="Delete Demo?"
+          message={
+            <>
+              <p>
+                This will permanently delete the seeded demo workspace for{' '}
+                <span className="font-medium">{demoToDelete.prospect_name}</span>.
+              </p>
+              <p className="mt-2">
+                The demo community, seeded data, and demo user accounts will be removed.
+              </p>
+            </>
+          }
+          confirmLabel={isDeletingDemo ? 'Deleting...' : 'Delete Demo'}
+          confirmVariant="danger"
+          isPending={isDeletingDemo}
+          onConfirm={handleDeleteDemo}
+          onCancel={() => setDemoToDelete(null)}
+        />
       )}
 
       {/* Controls */}

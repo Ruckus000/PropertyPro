@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { provisionInitialAdmin } from '@/lib/auth/provision-initial-admin';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function from(table: string): any {
@@ -118,30 +119,14 @@ export async function POST(request: NextRequest) {
     // Invite initial admin if provided
     let invitationSent = false;
     if (data.initialAdmin) {
-      // Create auth user
       const db = createAdminClient();
-      const { data: authUser, error: authError } = await db.auth.admin.createUser({
+      const initialAdminResult = await provisionInitialAdmin(db, {
+        communityId: community.id,
         email: data.initialAdmin.email,
-        email_confirm: true,
-        user_metadata: { community_id: community.id },
+        role: data.initialAdmin.role,
       });
 
-      if (!authError && authUser?.user) {
-        // Assign role
-        await from('user_roles').insert({
-          user_id: authUser.user.id,
-          community_id: community.id,
-          role: data.initialAdmin.role,
-        });
-
-        // Send invitation (password reset email acts as invitation)
-        await db.auth.admin.generateLink({
-          type: 'magiclink',
-          email: data.initialAdmin.email,
-        });
-
-        invitationSent = true;
-      }
+      invitationSent = initialAdminResult.invitationSent;
     }
 
     return NextResponse.json(
@@ -190,7 +175,7 @@ function getComplianceCategories(type: 'condo_718' | 'hoa_720' | 'apartment'): s
 }
 
 /**
- * GET /api/admin/clients/check-slug?slug=xxx — Check slug availability.
+ * GET /api/admin/clients?slug=xxx — Check slug availability.
  */
 export async function GET(request: NextRequest) {
   const slug = request.nextUrl.searchParams.get('slug');

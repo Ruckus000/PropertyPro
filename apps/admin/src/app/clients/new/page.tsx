@@ -77,6 +77,21 @@ const ADMIN_ROLE_OPTIONS = [
   { value: 'site_manager', label: 'Site Manager' },
 ] as const;
 
+const INITIAL_CREATE_CLIENT_FORM = {
+  name: '',
+  communityType: null as CommunityType | null,
+  slug: '',
+  address: '',
+  city: '',
+  state: 'FL',
+  zipCode: '',
+  unitCount: '',
+  plan: 'professional',
+  branding: DEFAULT_BRANDING,
+  adminEmail: '',
+  adminRole: 'board_president' as typeof ADMIN_ROLE_OPTIONS[number]['value'],
+};
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -92,25 +107,25 @@ export default function CreateClientPage() {
   const [result, setResult] = useState<CreateResult | null>(null);
 
   // Step 1 state
-  const [name, setName] = useState('');
-  const [communityType, setCommunityType] = useState<CommunityType | null>(null);
-  const [slug, setSlug] = useState('');
+  const [name, setName] = useState(INITIAL_CREATE_CLIENT_FORM.name);
+  const [communityType, setCommunityType] = useState<CommunityType | null>(INITIAL_CREATE_CLIENT_FORM.communityType);
+  const [slug, setSlug] = useState(INITIAL_CREATE_CLIENT_FORM.slug);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [slugChecking, setSlugChecking] = useState(false);
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('FL');
-  const [zipCode, setZipCode] = useState('');
-  const [unitCount, setUnitCount] = useState('');
-  const [plan, setPlan] = useState('professional');
+  const [address, setAddress] = useState(INITIAL_CREATE_CLIENT_FORM.address);
+  const [city, setCity] = useState(INITIAL_CREATE_CLIENT_FORM.city);
+  const [state, setState] = useState(INITIAL_CREATE_CLIENT_FORM.state);
+  const [zipCode, setZipCode] = useState(INITIAL_CREATE_CLIENT_FORM.zipCode);
+  const [unitCount, setUnitCount] = useState(INITIAL_CREATE_CLIENT_FORM.unitCount);
+  const [plan, setPlan] = useState(INITIAL_CREATE_CLIENT_FORM.plan);
 
   // Step 2 state
-  const [branding, setBranding] = useState(DEFAULT_BRANDING);
+  const [branding, setBranding] = useState(() => ({ ...INITIAL_CREATE_CLIENT_FORM.branding }));
 
   // Step 3 state
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminRole, setAdminRole] = useState<typeof ADMIN_ROLE_OPTIONS[number]['value']>('board_president');
+  const [adminEmail, setAdminEmail] = useState(INITIAL_CREATE_CLIENT_FORM.adminEmail);
+  const [adminRole, setAdminRole] = useState<typeof ADMIN_ROLE_OPTIONS[number]['value']>(INITIAL_CREATE_CLIENT_FORM.adminRole);
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -144,6 +159,27 @@ export default function CreateClientPage() {
   const updateBranding = (field: string, value: string) => {
     setBranding((prev) => ({ ...prev, [field]: value }));
   };
+
+  const resetForm = useCallback(() => {
+    setStep(1);
+    setName(INITIAL_CREATE_CLIENT_FORM.name);
+    setCommunityType(INITIAL_CREATE_CLIENT_FORM.communityType);
+    setSlug(INITIAL_CREATE_CLIENT_FORM.slug);
+    setSlugManuallyEdited(false);
+    setSlugAvailable(null);
+    setSlugChecking(false);
+    setAddress(INITIAL_CREATE_CLIENT_FORM.address);
+    setCity(INITIAL_CREATE_CLIENT_FORM.city);
+    setState(INITIAL_CREATE_CLIENT_FORM.state);
+    setZipCode(INITIAL_CREATE_CLIENT_FORM.zipCode);
+    setUnitCount(INITIAL_CREATE_CLIENT_FORM.unitCount);
+    setPlan(INITIAL_CREATE_CLIENT_FORM.plan);
+    setBranding({ ...INITIAL_CREATE_CLIENT_FORM.branding });
+    setAdminEmail(INITIAL_CREATE_CLIENT_FORM.adminEmail);
+    setAdminRole(INITIAL_CREATE_CLIENT_FORM.adminRole);
+    setError(null);
+    setResult(null);
+  }, []);
 
   const canProceedStep1 = name.trim() && communityType && slug.length >= 2;
   const canCreate = canProceedStep1;
@@ -736,25 +772,7 @@ export default function CreateClientPage() {
 
               <div className="mt-4">
                 <button
-                  onClick={() => {
-                    setStep(1);
-                    setName('');
-                    setCommunityType(null);
-                    setSlug('');
-                    setSlugManuallyEdited(false);
-                    setSlugAvailable(null);
-                    setAddress('');
-                    setCity('');
-                    setState('FL');
-                    setZipCode('');
-                    setUnitCount('');
-                    setPlan('professional');
-                    setBranding(DEFAULT_BRANDING);
-                    setAdminEmail('');
-                    setAdminRole('board_president');
-                    setError(null);
-                    setResult(null);
-                  }}
+                  onClick={resetForm}
                   className="text-sm font-medium text-blue-600 hover:text-blue-700"
                 >
                   Create Another

@@ -12,6 +12,7 @@ function from(table: string): any {
 }
 
 interface RouteContext {
+  // Next.js 15 route handlers surface params asynchronously in generated types.
   params: Promise<{ id: string }>;
 }
 

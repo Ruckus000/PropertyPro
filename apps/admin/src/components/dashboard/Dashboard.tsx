@@ -10,6 +10,7 @@ import {
   Clock,
   CreditCard,
 } from 'lucide-react';
+import { daysOld, formatRelativeTime } from '@/lib/utils/dashboard-time';
 
 interface StaleDemoItem {
   id: number;
@@ -52,25 +53,6 @@ interface DashboardProps {
     demos: number;
     active: number;
   };
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const diffMin = Math.floor(diffMs / 60_000);
-  const diffHr = Math.floor(diffMs / 3_600_000);
-  const diffDay = Math.floor(diffMs / 86_400_000);
-
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDay < 30) return `${diffDay}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
-
-function daysOld(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
 
 function ageBadgeClass(days: number): string {
