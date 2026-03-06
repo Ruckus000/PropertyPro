@@ -6,13 +6,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { provisionInitialAdmin } from '@/lib/auth/provision-initial-admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function from(table: string): any {
-  return createAdminClient().from(table);
-}
+import { createTypedAdminClient } from '@/lib/db/admin-client-types';
 
 const HEX_COLOR = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Invalid hex color' });
 
@@ -52,6 +47,7 @@ const createClientSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const db = createTypedAdminClient();
     const body = await request.json();
     const parsed = createClientSchema.safeParse(body);
 
@@ -65,7 +61,8 @@ export async function POST(request: NextRequest) {
     const data = parsed.data;
 
     // Check slug uniqueness
-    const { data: existing } = await from('communities')
+    const { data: existing } = await db
+      .from('communities')
       .select('id')
       .eq('slug', data.slug)
       .maybeSingle();
@@ -78,7 +75,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the community
-    const { data: community, error: communityError } = await from('communities')
+    const { data: community, error: communityError } = await db
+      .from('communities')
       .insert({
         name: data.name,
         slug: data.slug,
@@ -106,7 +104,7 @@ export async function POST(request: NextRequest) {
     // Create initial compliance items for the community
     const complianceCategories = getComplianceCategories(data.communityType);
     if (complianceCategories.length > 0) {
-      await from('compliance_items').insert(
+      await db.from('compliance_items').insert(
         complianceCategories.map((category) => ({
           community_id: community.id,
           category,
@@ -119,7 +117,6 @@ export async function POST(request: NextRequest) {
     // Invite initial admin if provided
     let invitationSent = false;
     if (data.initialAdmin) {
-      const db = createAdminClient();
       const initialAdminResult = await provisionInitialAdmin(db, {
         communityId: community.id,
         email: data.initialAdmin.email,
@@ -178,6 +175,7 @@ function getComplianceCategories(type: 'condo_718' | 'hoa_720' | 'apartment'): s
  * GET /api/admin/clients?slug=xxx — Check slug availability.
  */
 export async function GET(request: NextRequest) {
+  const db = createTypedAdminClient();
   const slug = request.nextUrl.searchParams.get('slug');
 
   if (!slug) {
@@ -187,7 +185,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: existing } = await from('communities')
+  const { data: existing } = await db
+    .from('communities')
     .select('id')
     .eq('slug', slug)
     .maybeSingle();

@@ -16,10 +16,10 @@ export default function NotFound() {
             The page you&apos;re looking for doesn&apos;t exist or has been moved.
           </p>
           <Link
-            href="/clients"
+            href="/dashboard"
             className="mt-6 inline-block rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >
-            Back to Client Portfolio
+            Back to Dashboard
           </Link>
         </div>
       </div>

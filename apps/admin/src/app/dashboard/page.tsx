@@ -9,12 +9,23 @@ import { Dashboard } from '@/components/dashboard/Dashboard';
 
 export const dynamic = 'force-dynamic';
 
+interface RecentCommunity {
+  id: number;
+  name: string;
+  updated_at: string;
+}
+
+interface RecentDemo {
+  id: number;
+  prospect_name: string;
+  created_at: string;
+}
+
 export default async function DashboardPage() {
   const db = createAdminClient();
 
   const now = new Date();
   const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // Fetch all data in parallel
@@ -61,7 +72,7 @@ export default async function DashboardPage() {
     // Recently created/updated communities (for activity feed)
     db
       .from('communities')
-      .select('id, name, slug, created_at, updated_at')
+      .select('id, name, updated_at')
       .eq('is_demo', false)
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
@@ -79,12 +90,12 @@ export default async function DashboardPage() {
   const staleDemos = staleDemosResult.error ? [] : (staleDemosResult.data ?? []);
   const newClients = newClientsResult.data ?? [];
   const pastDueCommunities = pastDueResult.data ?? [];
-  const recentCommunities = recentCommunitiesResult.data ?? [];
-  const recentDemos = recentDemosResult.error ? [] : (recentDemosResult.data ?? []);
+  const recentCommunities: RecentCommunity[] = recentCommunitiesResult.data ?? [];
+  const recentDemos: RecentDemo[] = recentDemosResult.error ? [] : (recentDemosResult.data ?? []);
 
   // Build activity feed by merging recent communities and demos
   const activityItems = [
-    ...recentCommunities.map((c: { id: number; name: string; slug: string; created_at: string; updated_at: string }) => ({
+    ...recentCommunities.map((c) => ({
       type: 'community' as const,
       id: `community-${c.id}`,
       label: c.name,
@@ -92,7 +103,7 @@ export default async function DashboardPage() {
       timestamp: c.updated_at,
       href: `/clients/${c.id}`,
     })),
-    ...recentDemos.map((d: { id: number; prospect_name: string; created_at: string }) => ({
+    ...recentDemos.map((d) => ({
       type: 'demo' as const,
       id: `demo-${d.id}`,
       label: d.prospect_name,

@@ -14,20 +14,10 @@ import { ALLOWED_FONTS } from '@propertypro/theme';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { AdminLayout } from '@/components/AdminLayout';
+import { CreateClientSuccessState } from '@/components/clients/CreateClientSuccessState';
+import type { CreateClientResult } from '@/components/clients/types';
 
 type WizardStep = 1 | 2 | 3 | 'creating' | 'done';
-
-interface CreateResult {
-  community: {
-    id: number;
-    name: string;
-    slug: string;
-    community_type: string;
-    subscription_status: string | null;
-    created_at: string;
-  };
-  invitationSent: boolean;
-}
 
 const TEMPLATE_OPTIONS: Array<{
   type: CommunityType;
@@ -104,7 +94,7 @@ export default function CreateClientPage() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CreateResult | null>(null);
+  const [result, setResult] = useState<CreateClientResult | null>(null);
 
   // Step 1 state
   const [name, setName] = useState(INITIAL_CREATE_CLIENT_FORM.name);
@@ -160,7 +150,7 @@ export default function CreateClientPage() {
     setBranding((prev) => ({ ...prev, [field]: value }));
   };
 
-  const resetForm = useCallback(() => {
+  const resetWizard = useCallback(() => {
     setStep(1);
     setName(INITIAL_CREATE_CLIENT_FORM.name);
     setCommunityType(INITIAL_CREATE_CLIENT_FORM.communityType);
@@ -737,49 +727,12 @@ export default function CreateClientPage() {
 
         {/* Done state */}
         {step === 'done' && result && (
-          <div className="max-w-xl">
-            <div className="rounded-lg border border-green-200 bg-green-50 p-6">
-              <h2 className="text-lg font-semibold text-green-900">
-                Community Created!
-              </h2>
-              <p className="mt-1 text-sm text-green-700">
-                <span className="font-medium">{result.community.name}</span> is now live at{' '}
-                <span className="font-mono text-xs">
-                  {result.community.slug}.propertyprofl.com
-                </span>
-              </p>
-              {result.invitationSent && adminEmail && (
-                <p className="mt-2 text-sm text-green-700">
-                  An invitation has been sent to{' '}
-                  <span className="font-medium">{adminEmail}</span>.
-                </p>
-              )}
-
-              <div className="mt-4 space-y-2">
-                <Link
-                  href={`/clients/${result.community.id}`}
-                  className="block rounded-md bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Open Workspace
-                </Link>
-                <button
-                  onClick={() => router.push('/clients')}
-                  className="block w-full rounded-md border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Back to Clients
-                </button>
-              </div>
-
-              <div className="mt-4">
-                <button
-                  onClick={resetForm}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                >
-                  Create Another
-                </button>
-              </div>
-            </div>
-          </div>
+          <CreateClientSuccessState
+            result={result}
+            adminEmail={adminEmail}
+            onBackToClients={() => router.push('/clients')}
+            onResetWizard={resetWizard}
+          />
         )}
       </div>
     </AdminLayout>

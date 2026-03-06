@@ -4,16 +4,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createTypedAdminClient } from '@/lib/db/admin-client-types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function from(table: string): any {
-  return createAdminClient().from(table);
-}
+type ClientRouteParams = Promise<{ id: string }> | { id: string };
 
-interface RouteContext {
-  // Next.js 15 route handlers surface params asynchronously in generated types.
-  params: Promise<{ id: string }>;
+interface ClientRouteContext {
+  params: ClientRouteParams;
 }
 
 const updateSchema = z.object({
@@ -26,9 +22,14 @@ const updateSchema = z.object({
   subscription_status: z.string().optional(),
 });
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  const communityId = Number(id);
+async function resolveCommunityId(params: ClientRouteParams): Promise<number> {
+  // Accept both runtime object params and Next-generated async handler params.
+  const { id } = await params;
+  return Number(id);
+}
+
+export async function PATCH(request: NextRequest, { params }: ClientRouteContext) {
+  const communityId = await resolveCommunityId(params);
 
   if (!Number.isInteger(communityId) || communityId <= 0) {
     return NextResponse.json(
@@ -38,6 +39,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
+    const db = createTypedAdminClient();
     const body = await request.json();
     const parsed = updateSchema.safeParse(body);
 
@@ -48,7 +50,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const { data: community, error } = await from('communities')
+    const { data: community, error } = await db
+      .from('communities')
       .update({
         ...parsed.data,
         updated_at: new Date().toISOString(),
@@ -75,9 +78,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  const communityId = Number(id);
+export async function DELETE(_request: NextRequest, { params }: ClientRouteContext) {
+  const communityId = await resolveCommunityId(params);
 
   if (!Number.isInteger(communityId) || communityId <= 0) {
     return NextResponse.json(
@@ -87,8 +89,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   try {
+    const db = createTypedAdminClient();
     // Soft-delete: set deleted_at timestamp
-    const { data: community, error } = await from('communities')
+    const { data: community, error } = await db
+      .from('communities')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', communityId)
       .is('deleted_at', null)
