@@ -56,6 +56,15 @@ function filterCommunities(
   return result;
 }
 
+function paginateCommunities(
+  communities: Community[],
+  page: number,
+  pageSize: number,
+): Community[] {
+  const start = (page - 1) * pageSize;
+  return communities.slice(start, start + pageSize);
+}
+
 describe('portfolio filtering', () => {
   const communities: Community[] = [
     { id: 1, name: 'Sunset Condos', community_type: 'condo_718', created_at: '2025-01-01T00:00:00Z' },
@@ -88,5 +97,30 @@ describe('portfolio filtering', () => {
   it('returns empty array when nothing matches', () => {
     const result = filterCommunities(communities, 'nonexistent', 'all');
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('portfolio pagination', () => {
+  const communities: Community[] = [
+    { id: 1, name: 'One', community_type: 'condo_718', created_at: '2025-01-01T00:00:00Z' },
+    { id: 2, name: 'Two', community_type: 'hoa_720', created_at: '2025-02-01T00:00:00Z' },
+    { id: 3, name: 'Three', community_type: 'apartment', created_at: '2025-03-01T00:00:00Z' },
+    { id: 4, name: 'Four', community_type: 'condo_718', created_at: '2025-04-01T00:00:00Z' },
+    { id: 5, name: 'Five', community_type: 'hoa_720', created_at: '2025-05-01T00:00:00Z' },
+  ];
+
+  it('returns first page items', () => {
+    const result = paginateCommunities(communities, 1, 2);
+    expect(result.map((community) => community.id)).toEqual([1, 2]);
+  });
+
+  it('returns second page items', () => {
+    const result = paginateCommunities(communities, 2, 2);
+    expect(result.map((community) => community.id)).toEqual([3, 4]);
+  });
+
+  it('returns remaining items on last partial page', () => {
+    const result = paginateCommunities(communities, 3, 2);
+    expect(result.map((community) => community.id)).toEqual([5]);
   });
 });

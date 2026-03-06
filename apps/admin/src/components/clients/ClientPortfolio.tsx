@@ -3,7 +3,7 @@
 /**
  * P1-5: Client Portfolio — interactive grid with search/filter/sort.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { Search, ChevronDown, Trash2 } from 'lucide-react';
@@ -12,6 +12,8 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
 import { staleBadge } from '@/lib/utils/stale-badge';
+
+const PAGE_SIZE = 20;
 
 interface Community {
   id: number;
@@ -40,6 +42,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -65,6 +68,21 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
 
     return result;
   }, [communities, search, typeFilter, sort]);
+
+  // Reset pagination when filters change.
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="p-6 space-y-6">
@@ -125,46 +143,72 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <p className="text-sm text-gray-500">No communities match your filters.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((c) => {
-            const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
-            const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
-            return (
-              <Link
-                key={c.id}
-                href={`/clients/${c.id}`}
-                className="flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-e1 transition-shadow hover:shadow-e2"
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{c.name}</p>
-                    {(c.city || c.state) && (
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        {[c.city, c.state].filter(Boolean).join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${type.className}`}>
-                    {type.label}
-                  </span>
-                </div>
-
-                <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
-                  {status ? (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-                      {status.label}
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {paginated.map((c) => {
+              const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
+              const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
+              return (
+                <Link
+                  key={c.id}
+                  href={`/clients/${c.id}`}
+                  className="flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-e1 transition-shadow hover:shadow-e2"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900">{c.name}</p>
+                      {(c.city || c.state) && (
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {[c.city, c.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${type.className}`}>
+                      {type.label}
                     </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">—</span>
-                  )}
-                  <span className="text-xs text-gray-400">
-                    {format(new Date(c.created_at), 'MMM d, yyyy')}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                  </div>
+
+                  <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
+                    {status ? (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+                        {status.label}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {format(new Date(c.created_at), 'MMM d, yyyy')}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <nav aria-label="Pagination" className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((currentPage) => currentPage - 1)}
+                disabled={page === 1}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-gray-500">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((currentPage) => currentPage + 1)}
+                disabled={page === totalPages}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </nav>
+          )}
+        </>
       )}
 
       {/* Stale Demos card */}
