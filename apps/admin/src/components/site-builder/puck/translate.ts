@@ -172,7 +172,7 @@ export function diffDirtyBlocks(
 
     if (dbId !== undefined) {
       const knownContent = knownState.content.get(puckId);
-      if (knownContent && !shallowEqual(contentProps as Record<string, unknown>, knownContent)) {
+      if (knownContent && !contentEqual(contentProps as Record<string, unknown>, knownContent)) {
         updates.push({
           dbId,
           puckId,
@@ -222,7 +222,7 @@ export function diffPuckData(
     } else {
       // Existing block — check for content changes
       const knownContent = knownState.content.get(puckId);
-      if (knownContent && !shallowEqual(contentProps as Record<string, unknown>, knownContent)) {
+      if (knownContent && !contentEqual(contentProps as Record<string, unknown>, knownContent)) {
         updates.push({
           dbId,
           puckId,
@@ -429,8 +429,8 @@ export function mergeApplyResult(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Shallow comparison of two flat objects (one level deep). */
-export function shallowEqual(
+/** Compare two content objects — shallow key check with deep JSON comparison for nested values. */
+export function contentEqual(
   a: Record<string, unknown>,
   b: Record<string, unknown>,
 ): boolean {

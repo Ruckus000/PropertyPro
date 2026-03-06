@@ -16,7 +16,7 @@ import {
   diffPuckData,
   diffDirtyBlocks,
   classifyAction,
-  shallowEqual,
+  contentEqual,
   type SiteBlockRow,
 } from '../../src/components/site-builder/puck/translate';
 import type { Data } from '@puckeditor/core';
@@ -303,30 +303,30 @@ describe('diffPuckData', () => {
 });
 
 // ---------------------------------------------------------------------------
-// shallowEqual
+// contentEqual
 // ---------------------------------------------------------------------------
 
-describe('shallowEqual', () => {
+describe('contentEqual', () => {
   it('returns true for identical objects', () => {
-    expect(shallowEqual({ a: 1, b: 'x' }, { a: 1, b: 'x' })).toBe(true);
+    expect(contentEqual({ a: 1, b: 'x' }, { a: 1, b: 'x' })).toBe(true);
   });
 
   it('returns false for different values', () => {
-    expect(shallowEqual({ a: 1 }, { a: 2 })).toBe(false);
+    expect(contentEqual({ a: 1 }, { a: 2 })).toBe(false);
   });
 
   it('returns false for different key counts', () => {
-    expect(shallowEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+    expect(contentEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
   });
 
   it('deep-compares arrays', () => {
-    expect(shallowEqual({ ids: [1, 2, 3] }, { ids: [1, 2, 3] })).toBe(true);
-    expect(shallowEqual({ ids: [1, 2, 3] }, { ids: [1, 2, 4] })).toBe(false);
+    expect(contentEqual({ ids: [1, 2, 3] }, { ids: [1, 2, 3] })).toBe(true);
+    expect(contentEqual({ ids: [1, 2, 3] }, { ids: [1, 2, 4] })).toBe(false);
   });
 
   it('deep-compares nested objects', () => {
-    expect(shallowEqual({ meta: { a: 1 } }, { meta: { a: 1 } })).toBe(true);
-    expect(shallowEqual({ meta: { a: 1 } }, { meta: { a: 2 } })).toBe(false);
+    expect(contentEqual({ meta: { a: 1 } }, { meta: { a: 1 } })).toBe(true);
+    expect(contentEqual({ meta: { a: 1 } }, { meta: { a: 2 } })).toBe(false);
   });
 });
 
