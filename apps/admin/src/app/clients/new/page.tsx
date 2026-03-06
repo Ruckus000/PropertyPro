@@ -16,6 +16,7 @@ import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { AdminLayout } from '@/components/AdminLayout';
 import { CreateClientSuccessState } from '@/components/clients/CreateClientSuccessState';
 import type { CreateClientResult } from '@/components/clients/types';
+import { extractApiError } from '@/lib/http/extract-api-error';
 
 type WizardStep = 1 | 2 | 3 | 'creating' | 'done';
 
@@ -252,11 +253,11 @@ export default function CreateClientPage() {
         }),
       });
 
-      const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error?.message ?? 'Failed to create community');
+        throw new Error(await extractApiError(res));
       }
 
+      const json = await res.json();
       setResult(json.data);
       setStep('done');
     } catch (err) {

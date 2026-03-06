@@ -6,8 +6,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { authorizePlatformAdminRequest } from '@/lib/auth/authorize-platform-admin-request';
 import { provisionInitialAdmin } from '@/lib/auth/provision-initial-admin';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createTypedAdminClient } from '@/lib/db/admin-client-types';
 
 const HEX_COLOR = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Invalid hex color' });
@@ -46,30 +46,6 @@ const createClientSchema = z.object({
     .optional(),
 });
 
-async function authorizeRequest(): Promise<NextResponse | null> {
-  try {
-    await requirePlatformAdmin();
-    return null;
-  } catch (error) {
-    if (error instanceof Response) {
-      const message = error.status === 401
-        ? 'Unauthorized'
-        : error.status === 403
-          ? 'Forbidden'
-          : error.status === 500
-            ? 'Server misconfiguration'
-            : 'Internal server error';
-      return NextResponse.json({ error: { message } }, { status: error.status });
-    }
-
-    console.error('[Admin] Platform admin authorization error:', error);
-    return NextResponse.json(
-      { error: { message: 'Internal server error' } },
-      { status: 500 },
-    );
-  }
-}
-
 async function rollbackCreatedCommunity(
   db: ReturnType<typeof createTypedAdminClient>,
   communityId: number,
@@ -88,7 +64,7 @@ export async function POST(request: NextRequest) {
   let db: ReturnType<typeof createTypedAdminClient> | null = null;
   let createdCommunityId: number | null = null;
 
-  const authError = await authorizeRequest();
+  const authError = await authorizePlatformAdminRequest();
   if (authError) {
     return authError;
   }
@@ -255,7 +231,7 @@ function getComplianceCategories(type: 'condo_718' | 'hoa_720' | 'apartment'): s
  * GET /api/admin/clients?slug=xxx — Check slug availability.
  */
 export async function GET(request: NextRequest) {
-  const authError = await authorizeRequest();
+  const authError = await authorizePlatformAdminRequest();
   if (authError) {
     return authError;
   }
