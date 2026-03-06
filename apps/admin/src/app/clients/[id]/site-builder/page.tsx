@@ -21,6 +21,14 @@ const CommunityRowSchema = z.object({
   id: z.number(),
   name: z.string(),
   slug: z.string(),
+  branding: z
+    .object({
+      primaryColor: z.string().optional(),
+      secondaryColor: z.string().optional(),
+      logoPath: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export default async function SiteBuilderPage({ params }: PageProps) {
@@ -34,7 +42,7 @@ export default async function SiteBuilderPage({ params }: PageProps) {
   const db = createAdminClient();
   const { data } = await db
     .from('communities')
-    .select('id, name, slug')
+    .select('id, name, slug, branding')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
@@ -70,6 +78,7 @@ export default async function SiteBuilderPage({ params }: PageProps) {
           <SiteBuilderLayout
             communityId={community.id}
             communitySlug={community.slug}
+            branding={community.branding}
           />
         </div>
       </div>

@@ -5,23 +5,31 @@
  * and the new PuckEditor based on the NEXT_PUBLIC_USE_PUCK_EDITOR feature flag.
  *
  * ADR-002 #10: Feature flag enables instant rollback to the old editor.
+ * ADR-002 #14: Passes community branding to PuckEditor for theme context.
  */
 import { BlockEditor } from './BlockEditor';
 import { PreviewPanel } from './PreviewPanel';
-import { PuckEditor } from './puck/PuckEditor';
+import { PuckEditor, type CommunityBranding } from './puck/PuckEditor';
 
 interface SiteBuilderLayoutProps {
   communityId: number;
   communitySlug: string;
+  /** Community branding for PuckEditor theme context (ADR-002 #14). */
+  branding?: CommunityBranding | null;
 }
 
-const usePuckEditor = process.env.NEXT_PUBLIC_USE_PUCK_EDITOR === 'true';
+/** Puck editor is the default. Set NEXT_PUBLIC_USE_PUCK_EDITOR=false for emergency rollback to legacy editor. */
+const usePuckEditor = process.env.NEXT_PUBLIC_USE_PUCK_EDITOR !== 'false';
 
-export function SiteBuilderLayout({ communityId, communitySlug }: SiteBuilderLayoutProps) {
+export function SiteBuilderLayout({ communityId, communitySlug, branding }: SiteBuilderLayoutProps) {
   if (usePuckEditor) {
     return (
       <div className="h-full">
-        <PuckEditor communityId={communityId} communitySlug={communitySlug} />
+        <PuckEditor
+          communityId={communityId}
+          communitySlug={communitySlug}
+          branding={branding}
+        />
       </div>
     );
   }

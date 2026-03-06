@@ -5,17 +5,24 @@
  *
  * Replaces BlockEditor when the NEXT_PUBLIC_USE_PUCK_EDITOR feature flag is set.
  * Uses the same API endpoints so both editors can coexist during transition.
+ *
+ * ADR-002 improvements:
+ * - #5: "Live Preview" toggle shows real iframe alongside Puck canvas
+ * - #7: onAction-based dirty tracking avoids full-page diff on every debounce
+ * - #14: Accepts community branding for future theme integration
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Puck } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
 import type { Data } from '@puckeditor/core';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 import { puckConfig } from './config';
 import {
   rowsToPuckData,
   diffPuckData,
+  diffDirtyBlocks,
+  classifyAction,
   applyChangeSet,
   mergeApplyResult,
   type SiteBlockRow,
@@ -24,27 +31,40 @@ import {
 } from './translate';
 import { extractApiError } from '../shared/extractApiError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { PreviewPanel } from '../PreviewPanel';
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
+/** Branding data from the communities table (jsonb column). */
+export interface CommunityBranding {
+  primaryColor?: string;
+  secondaryColor?: string;
+  logoPath?: string;
+}
+
 interface PuckEditorProps {
   communityId: number;
   communitySlug: string;
+  /** Community branding for theme context (ADR-002 #14). */
+  branding?: CommunityBranding | null;
 }
 
 // ---------------------------------------------------------------------------
 // PuckEditor component
 // ---------------------------------------------------------------------------
 
-export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
+export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorProps) {
   const [initialData, setInitialData] = useState<Data | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<'publish' | 'discard' | null>(null);
+
+  // ADR-002 #5: Live preview toggle
+  const [showLivePreview, setShowLivePreview] = useState(false);
 
   // Refs for the translation layer state (persisted across renders)
   const idMapRef = useRef<IdMap>(new Map());
@@ -59,8 +79,16 @@ export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
   const latestDataRef = useRef<Data | null>(null);
   const isSavingRef = useRef(false);
 
+  // ADR-002 #7: Dirty tracking — only diff changed blocks on content-only changes
+  const dirtyPuckIdsRef = useRef<Set<string>>(new Set());
+  const needsFullDiffRef = useRef(false);
+
   // Track whether we have any drafts for the discard button
   const [hasDrafts, setHasDrafts] = useState(false);
+
+  // Store branding in a ref for future use in Puck config resolveData
+  const brandingRef = useRef(branding);
+  brandingRef.current = branding;
 
   // ---------------------------------------------------------------------------
   // Load blocks from API
@@ -99,13 +127,26 @@ export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
 
   // ---------------------------------------------------------------------------
   // Auto-save with debounce (1000ms)
+  // ADR-002 #7: Uses dirty set for content-only changes, full diff for structural
   // ---------------------------------------------------------------------------
 
   const flushSaves = useCallback(async () => {
     const data = latestDataRef.current;
     if (!data || isSavingRef.current) return;
 
-    const changeSet = diffPuckData(data, idMapRef.current, knownStateRef.current);
+    // Choose targeted or full diff based on action tracking
+    const dirty = dirtyPuckIdsRef.current;
+    const needsFull = needsFullDiffRef.current;
+
+    // Reset dirty tracking for next cycle
+    dirtyPuckIdsRef.current = new Set();
+    needsFullDiffRef.current = false;
+
+    const changeSet =
+      !needsFull && dirty.size > 0
+        ? diffDirtyBlocks(data, idMapRef.current, knownStateRef.current, dirty)
+        : diffPuckData(data, idMapRef.current, knownStateRef.current);
+
     const hasChanges =
       changeSet.creates.length > 0 ||
       changeSet.updates.length > 0 ||
@@ -155,6 +196,33 @@ export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
       }, 1000);
     },
     [flushSaves],
+  );
+
+  // ---------------------------------------------------------------------------
+  // ADR-002 #7: onAction — track which blocks are dirty for targeted diffing
+  // ---------------------------------------------------------------------------
+
+  const handleAction = useCallback(
+    (action: { type: string; destinationIndex?: number; index?: number }, appState: { data: Data }) => {
+      const kind = classifyAction(action.type);
+      if (kind === null) return; // UI-only action, ignore
+
+      if (kind === 'structural') {
+        // Structural change (insert, remove, reorder, etc.) — needs full diff
+        needsFullDiffRef.current = true;
+      } else {
+        // Content change (replace) — mark the specific block as dirty
+        const idx = action.destinationIndex ?? action.index;
+        if (idx !== undefined && appState.data.content[idx]) {
+          const puckId = appState.data.content[idx].props.id as string;
+          dirtyPuckIdsRef.current.add(puckId);
+        } else {
+          // Can't identify the block — fall back to full diff
+          needsFullDiffRef.current = true;
+        }
+      }
+    },
+    [],
   );
 
   // ---------------------------------------------------------------------------
@@ -250,6 +318,19 @@ export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* ADR-002 #5: Live Preview toggle */}
+          <button
+            type="button"
+            onClick={() => setShowLivePreview((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              showLivePreview
+                ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {showLivePreview ? <EyeOff size={12} /> : <Eye size={12} />}
+            {showLivePreview ? 'Hide' : 'Live'} Preview
+          </button>
           {hasDrafts && (
             <button
               type="button"
@@ -276,15 +357,25 @@ export function PuckEditor({ communityId, communitySlug }: PuckEditorProps) {
         </div>
       )}
 
-      {/* Puck editor */}
-      <div className="flex-1 overflow-hidden">
-        <Puck
-          config={puckConfig}
-          data={initialData}
-          onChange={handleChange}
-          onPublish={handlePuckPublish}
-          headerTitle={communitySlug}
-        />
+      {/* Puck editor + optional Live Preview */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className={showLivePreview ? 'w-3/5 overflow-hidden' : 'flex-1 overflow-hidden'}>
+          <Puck
+            config={puckConfig}
+            data={initialData}
+            onChange={handleChange}
+            onAction={handleAction}
+            onPublish={handlePuckPublish}
+            headerTitle={communitySlug}
+          />
+        </div>
+
+        {/* ADR-002 #5: Live Preview panel — shows real rendered site with actual data */}
+        {showLivePreview && (
+          <div className="w-2/5 border-l border-gray-200 overflow-hidden">
+            <PreviewPanel communitySlug={communitySlug} />
+          </div>
+        )}
       </div>
 
       {/* Confirmation dialogs */}

@@ -14,6 +14,8 @@ import { describe, it, expect } from 'vitest';
 import {
   rowsToPuckData,
   diffPuckData,
+  diffDirtyBlocks,
+  classifyAction,
   shallowEqual,
   type SiteBlockRow,
 } from '../../src/components/site-builder/puck/translate';
@@ -325,5 +327,104 @@ describe('shallowEqual', () => {
   it('deep-compares nested objects', () => {
     expect(shallowEqual({ meta: { a: 1 } }, { meta: { a: 1 } })).toBe(true);
     expect(shallowEqual({ meta: { a: 1 } }, { meta: { a: 2 } })).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyAction (ADR-002 #7)
+// ---------------------------------------------------------------------------
+
+describe('classifyAction', () => {
+  it('classifies content-change actions as "content"', () => {
+    expect(classifyAction('replace')).toBe('content');
+    expect(classifyAction('replaceRoot')).toBe('content');
+  });
+
+  it('classifies structural actions as "structural"', () => {
+    expect(classifyAction('insert')).toBe('structural');
+    expect(classifyAction('remove')).toBe('structural');
+    expect(classifyAction('reorder')).toBe('structural');
+    expect(classifyAction('move')).toBe('structural');
+    expect(classifyAction('duplicate')).toBe('structural');
+  });
+
+  it('classifies UI-only actions as null', () => {
+    expect(classifyAction('setUi')).toBeNull();
+    expect(classifyAction('registerZone')).toBeNull();
+    expect(classifyAction('unregisterZone')).toBeNull();
+  });
+
+  it('defaults unknown actions to "structural"', () => {
+    expect(classifyAction('unknown')).toBe('structural');
+    expect(classifyAction('setData')).toBe('structural');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// diffDirtyBlocks (ADR-002 #7)
+// ---------------------------------------------------------------------------
+
+describe('diffDirtyBlocks', () => {
+  it('only diffs blocks in the dirty set', () => {
+    const rows: SiteBlockRow[] = [
+      makeRow({ id: 1, block_type: 'hero', block_order: 0, content: { headline: 'Hi' } }),
+      makeRow({ id: 2, block_type: 'text', block_order: 1, content: { body: 'Hello' } }),
+    ];
+    const { data, idMap, knownState } = rowsToPuckData(rows);
+
+    // Edit both blocks
+    const edited: Data = {
+      ...data,
+      content: [
+        { type: 'hero', props: { id: 'block-1', headline: 'Changed' } },
+        { type: 'text', props: { id: 'block-2', body: 'Changed too' } },
+      ],
+    };
+
+    // Only mark block-1 as dirty
+    const dirty = new Set(['block-1']);
+    const changeSet = diffDirtyBlocks(edited, idMap, knownState, dirty);
+
+    expect(changeSet.updates).toHaveLength(1);
+    expect(changeSet.updates[0]!.dbId).toBe(1);
+    expect(changeSet.creates).toHaveLength(0);
+    expect(changeSet.deletes).toHaveLength(0);
+    expect(changeSet.reorder).toBeNull();
+  });
+
+  it('returns empty changeset for unchanged dirty blocks', () => {
+    const rows: SiteBlockRow[] = [
+      makeRow({ id: 1, block_type: 'hero', block_order: 0, content: { headline: 'Hi' } }),
+    ];
+    const { data, idMap, knownState } = rowsToPuckData(rows);
+
+    // Mark as dirty but content unchanged
+    const dirty = new Set(['block-1']);
+    const changeSet = diffDirtyBlocks(data, idMap, knownState, dirty);
+
+    expect(changeSet.updates).toHaveLength(0);
+  });
+
+  it('ignores new blocks without DB IDs', () => {
+    const rows: SiteBlockRow[] = [
+      makeRow({ id: 1, block_type: 'hero', block_order: 0, content: { headline: 'Hi' } }),
+    ];
+    const { data, idMap, knownState } = rowsToPuckData(rows);
+
+    // Add a new block and mark it dirty
+    const withNew: Data = {
+      ...data,
+      content: [
+        ...data.content,
+        { type: 'text', props: { id: 'new-block', body: 'New' } },
+      ],
+    };
+
+    const dirty = new Set(['new-block']);
+    const changeSet = diffDirtyBlocks(withNew, idMap, knownState, dirty);
+
+    // New blocks need full diff to be detected — dirty blocks only handles updates
+    expect(changeSet.updates).toHaveLength(0);
+    expect(changeSet.creates).toHaveLength(0);
   });
 });

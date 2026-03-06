@@ -119,6 +119,73 @@ export function rowsToPuckData(rows: SiteBlockRow[]): {
 // ---------------------------------------------------------------------------
 
 /**
+ * Categorize a Puck action type into a content change kind.
+ * Returns null for non-content actions (UI-only) that don't need saving.
+ *
+ * ADR-002 #7: Used by onAction to build a targeted dirty set instead of
+ * diffing the entire page on every debounce.
+ */
+export type ActionKind = 'content' | 'structural' | null;
+
+export function classifyAction(actionType: string): ActionKind {
+  switch (actionType) {
+    case 'replace':
+    case 'replaceRoot':
+      return 'content';
+    case 'insert':
+    case 'remove':
+    case 'reorder':
+    case 'move':
+    case 'duplicate':
+      return 'structural';
+    case 'setUi':
+    case 'registerZone':
+    case 'unregisterZone':
+      return null;
+    default:
+      // Unknown action types default to structural (safe — will trigger full diff)
+      return 'structural';
+  }
+}
+
+/**
+ * Diff only a specific set of dirty blocks against known state.
+ * Falls back to full diff for structural changes (inserts, deletes, reorder).
+ *
+ * ADR-002 #7: Avoids O(n) deep comparison on every debounce by only checking
+ * blocks that Puck's onAction reported as changed.
+ */
+export function diffDirtyBlocks(
+  current: Data,
+  idMap: IdMap,
+  knownState: KnownState,
+  dirtyPuckIds: Set<string>,
+): ChangeSet {
+  const updates: ChangeSet['updates'] = [];
+
+  for (const item of current.content) {
+    const puckId = item.props.id as string;
+    if (!dirtyPuckIds.has(puckId)) continue;
+
+    const { id: _id, ...contentProps } = item.props;
+    const dbId = idMap.get(puckId);
+
+    if (dbId !== undefined) {
+      const knownContent = knownState.content.get(puckId);
+      if (knownContent && !shallowEqual(contentProps as Record<string, unknown>, knownContent)) {
+        updates.push({
+          dbId,
+          puckId,
+          content: contentProps as Record<string, unknown>,
+        });
+      }
+    }
+  }
+
+  return { creates: [], updates, deletes: [], reorder: null };
+}
+
+/**
  * Compare the current Puck Data against the last-known DB state and produce
  * a minimal set of API operations (creates, updates, deletes, reorder).
  */
