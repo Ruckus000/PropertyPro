@@ -1,9 +1,9 @@
 /**
- * Split-Screen Demo Preview — board member dashboard + resident mobile side by side.
+ * Tabbed Demo Preview — landing page, board portal, and mobile app views.
  *
- * Server component that generates fresh 1-hour tokens and renders two iframes.
+ * Server component that generates fresh 1-hour tokens and renders the
+ * appropriate preview pane based on the ?tab= search param.
  */
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoById } from '@/lib/db/demo-queries';
@@ -11,19 +11,26 @@ import {
   generateDemoToken,
   decryptDemoTokenSecret,
 } from '@propertypro/shared/server';
-import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
-import { SplitPreviewClient } from './SplitPreviewClient';
+import { DemoToolbar, type PreviewTab } from '@/components/demo/DemoToolbar';
+import { TabbedPreviewClient } from '@/components/demo/TabbedPreviewClient';
+
+const VALID_TABS: PreviewTab[] = ['landing', 'board', 'mobile'];
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
-export default async function DemoPreviewPage({ params }: PageProps) {
+export default async function DemoPreviewPage({ params, searchParams }: PageProps) {
   await requirePlatformAdmin();
 
-  const { id: idRaw } = await params;
+  const [{ id: idRaw }, { tab: tabRaw }] = await Promise.all([params, searchParams]);
   const id = Number(idRaw);
   if (!Number.isInteger(id) || id <= 0) notFound();
+
+  const activeTab: PreviewTab = VALID_TABS.includes(tabRaw as PreviewTab)
+    ? (tabRaw as PreviewTab)
+    : 'board';
 
   const { data: demo } = await getDemoById(id);
   if (!demo) notFound();
@@ -54,7 +61,7 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       })
     : null;
 
-  // Build demo-login URLs
+  // Build URLs
   const webBaseUrl =
     process.env.NODE_ENV === 'development'
       ? `http://localhost:3000`
@@ -64,36 +71,25 @@ export default async function DemoPreviewPage({ params }: PageProps) {
   const residentUrl = residentToken
     ? `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`
     : null;
-
-  const typeLabel =
-    COMMUNITY_TYPE_DISPLAY_NAMES[demo.template_type as CommunityType] ?? demo.template_type;
+  const landingUrl = `${webBaseUrl}/${demo.slug}?preview=true`;
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
-        <div className="flex items-center gap-3">
-          <Link href="/demo" className="text-sm text-gray-500 hover:text-gray-700">
-            ← Demos
-          </Link>
-          <span className="text-gray-300">|</span>
-          <span className="text-sm font-semibold text-gray-900">{demo.prospect_name}</span>
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-            {typeLabel}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/demo/${demo.id}/mobile`}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Full-Screen Mobile
-          </Link>
-        </div>
-      </div>
-
-      {/* Split view */}
-      <SplitPreviewClient boardUrl={boardUrl} residentUrl={residentUrl} />
+      <DemoToolbar
+        demoId={demo.id}
+        prospectName={demo.prospect_name}
+        templateType={demo.template_type}
+        createdAt={demo.created_at}
+        activeTab={activeTab}
+        variant="full"
+        communityId={demo.seeded_community_id ?? undefined}
+      />
+      <TabbedPreviewClient
+        activeTab={activeTab}
+        landingUrl={landingUrl}
+        boardUrl={boardUrl}
+        residentUrl={residentUrl}
+      />
     </div>
   );
 }

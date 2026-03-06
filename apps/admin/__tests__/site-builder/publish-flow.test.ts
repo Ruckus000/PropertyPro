@@ -20,26 +20,13 @@ import {
 } from '@propertypro/shared/site-blocks';
 
 describe('publish lifecycle — content validation', () => {
-  it('validates that all defaults except hero/contact/image/text pass validation', () => {
-    // Default content for announcements, documents, and meetings should pass
-    const passingTypes: BlockType[] = ['announcements', 'documents', 'meetings'];
+  it('validates that defaults for announcements, documents, meetings, hero, and contact pass validation', () => {
+    const passingTypes: BlockType[] = ['announcements', 'documents', 'meetings', 'hero', 'contact'];
     for (const blockType of passingTypes) {
       const content = getDefaultBlockContent(blockType);
       const result = validateBlockContent(blockType, content);
       expect(result).toBeNull();
     }
-  });
-
-  it('hero default has empty headline so fails validation', () => {
-    const content = getDefaultBlockContent('hero');
-    const result = validateBlockContent('hero', content);
-    expect(result).not.toBeNull();
-  });
-
-  it('contact default has empty boardEmail so fails validation', () => {
-    const content = getDefaultBlockContent('contact');
-    const result = validateBlockContent('contact', content);
-    expect(result).not.toBeNull();
   });
 
   it('image default has empty url so fails validation', () => {

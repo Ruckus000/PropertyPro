@@ -32,6 +32,8 @@ import {
   Upload,
   X,
   Loader2,
+  Undo2,
+  LayoutTemplate,
 } from 'lucide-react';
 import {
   BLOCK_TYPES,
@@ -70,6 +72,8 @@ interface SiteBlock {
 interface BlockEditorProps {
   communityId: number;
 }
+
+const MAX_BLOCKS = 20;
 
 const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   hero: 'Hero Banner',
@@ -269,6 +273,10 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSavesRef = useRef<Map<number, BlockContent>>(new Map());
 
+  // Undo: single-level snapshot of content before each auto-save
+  const [undoSnapshot, setUndoSnapshot] = useState<Map<number, BlockContent> | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -307,6 +315,22 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
 
     if (pending.size === 0) return;
 
+    // Snapshot current content for undo before saving
+    setBlocks((currentBlocks) => {
+      const snapshot = new Map<number, BlockContent>();
+      for (const blockId of pending.keys()) {
+        const block = currentBlocks.find((b) => b.id === blockId);
+        if (block) snapshot.set(blockId, block.content);
+      }
+      setUndoSnapshot(snapshot);
+
+      // Clear undo after 5 seconds
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = setTimeout(() => setUndoSnapshot(null), 5000);
+
+      return currentBlocks;
+    });
+
     setIsSaving(true);
     try {
       const promises = Array.from(pending.entries()).map(([blockId, content]) =>
@@ -337,13 +361,17 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
     [flushSaves],
   );
 
-  // Cleanup on unmount
+  // Flush pending saves and cleanup on unmount
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      // Fire-and-forget flush so edits made in the last 500ms aren't lost
+      if (pendingSavesRef.current.size > 0) {
+        void flushSaves();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -413,6 +441,65 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
       return next;
     });
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Undo last auto-save
+  // ---------------------------------------------------------------------------
+
+  const handleUndo = useCallback(async () => {
+    if (!undoSnapshot) return;
+    const snapshot = undoSnapshot;
+    setUndoSnapshot(null);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+
+    // Restore content in local state
+    setBlocks((prev) =>
+      prev.map((b) => {
+        const old = snapshot.get(b.id);
+        return old ? { ...b, content: old } : b;
+      }),
+    );
+
+    // Persist restored content
+    try {
+      const promises = Array.from(snapshot.entries()).map(([blockId, content]) =>
+        fetch(`/api/admin/site-blocks/${blockId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        }),
+      );
+      await Promise.all(promises);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Undo failed');
+    }
+  }, [undoSnapshot]);
+
+  // ---------------------------------------------------------------------------
+  // Starter template
+  // ---------------------------------------------------------------------------
+
+  const STARTER_BLOCK_TYPES: BlockType[] = ['hero', 'announcements', 'documents', 'meetings', 'contact', 'text'];
+
+  const handleStarterTemplate = useCallback(async () => {
+    setError(null);
+    try {
+      for (const blockType of STARTER_BLOCK_TYPES) {
+        const content = blockType === 'text'
+          ? { body: 'Welcome to our community portal. Here you\'ll find important documents, meeting schedules, and announcements.', format: 'plain' as const }
+          : getDefaultBlockContent(blockType);
+        const res = await fetch('/api/admin/site-blocks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ communityId, blockType, content }),
+        });
+        if (!res.ok) throw new Error(await extractApiError(res));
+      }
+      await loadBlocks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create starter blocks');
+    }
+  }, [communityId, loadBlocks]);
 
   // ---------------------------------------------------------------------------
   // Drag end — reorder blocks
@@ -531,6 +618,16 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
               Saving...
             </span>
           )}
+          {undoSnapshot && !isSaving && (
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <Undo2 size={12} />
+              Undo
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {hasDrafts && (
@@ -575,10 +672,17 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
       {/* Block list */}
       <div className="flex-1 space-y-3 overflow-y-auto">
         {blocks.length === 0 ? (
-          <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-            <p className="text-sm text-gray-500">
-              No blocks yet. Click "Add Block" to get started.
-            </p>
+          <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-gray-300 bg-white">
+            <p className="text-sm text-gray-500">No blocks yet.</p>
+            <button
+              type="button"
+              onClick={handleStarterTemplate}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <LayoutTemplate size={16} />
+              Use Florida Compliance Starter
+            </button>
+            <p className="text-xs text-gray-400">or click &quot;Add Block&quot; to start from scratch</p>
           </div>
         ) : (
           <DndContext
@@ -605,11 +709,15 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
         )}
 
         {/* Add block button */}
-        <AddBlockDropdown
-          onAdd={handleAddBlock}
-          isOpen={showAddMenu}
-          onToggle={() => setShowAddMenu((prev) => !prev)}
-        />
+        {blocks.length < MAX_BLOCKS ? (
+          <AddBlockDropdown
+            onAdd={handleAddBlock}
+            isOpen={showAddMenu}
+            onToggle={() => setShowAddMenu((prev) => !prev)}
+          />
+        ) : (
+          <p className="text-center text-sm text-gray-400 py-2">Maximum of 20 blocks reached.</p>
+        )}
       </div>
 
       {/* Confirmation dialogs */}

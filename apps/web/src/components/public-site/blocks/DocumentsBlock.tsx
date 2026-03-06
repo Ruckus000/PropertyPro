@@ -70,9 +70,11 @@ export async function DocumentsBlock({
         ) : (
           <div className="space-y-3">
             {items.map((item) => (
-              <div
+              <a
                 key={item.id}
-                className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4"
+                href={`/api/v1/documents/${item.id}/download`}
+                download
+                className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4 hover:border-gray-300 hover:shadow-sm transition-all"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="flex-shrink-0 text-gray-400" aria-hidden="true">
@@ -97,7 +99,7 @@ export async function DocumentsBlock({
                     day: 'numeric',
                   })}
                 </time>
-              </div>
+              </a>
             ))}
           </div>
         )}

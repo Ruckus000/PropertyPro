@@ -39,7 +39,7 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
           value={content.subheadline}
           onChange={(e) => onChange({ ...content, subheadline: e.target.value })}
           className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          placeholder="Your community portal for documents, meetings, and more"
+          placeholder="Discover what makes our community special"
         />
       </div>
 

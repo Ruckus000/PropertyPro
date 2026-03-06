@@ -160,6 +160,7 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
     case 'contact': {
       const c = content as ContactBlockContent;
       if (!c.boardEmail) return 'Board email required';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.boardEmail)) return 'Board email must be a valid email address';
       return null;
     }
     case 'text': {
@@ -190,7 +191,7 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
 export function getDefaultBlockContent(type: BlockType): BlockContent {
   switch (type) {
     case 'hero':
-      return { headline: '', subheadline: '', ctaLabel: 'Learn More', ctaHref: '/auth/login' };
+      return { headline: 'Welcome to Our Community', subheadline: 'Discover what makes our community special', ctaLabel: 'Learn More', ctaHref: '/auth/login' };
     case 'announcements':
       return { title: 'Announcements', limit: 5 };
     case 'documents':
@@ -198,7 +199,7 @@ export function getDefaultBlockContent(type: BlockType): BlockContent {
     case 'meetings':
       return { title: 'Upcoming Meetings' };
     case 'contact':
-      return { boardEmail: '' };
+      return { boardEmail: 'board@community.com' };
     case 'text':
       return { body: '', format: 'plain' };
     case 'image':

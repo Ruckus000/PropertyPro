@@ -6,7 +6,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { AdminLayout } from '@/components/AdminLayout';
-import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
+import { AgeBadge } from '@/components/demo/AgeBadge';
+import { TypeBadge } from '@/components/demo/TypeBadge';
 
 interface DemoRow {
   id: number;
@@ -16,37 +17,6 @@ interface DemoRow {
   external_crm_url: string | null;
   prospect_notes: string | null;
   created_at: string;
-}
-
-function getAgeDays(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function AgeBadge({ createdAt }: { createdAt: string }) {
-  const days = getAgeDays(createdAt);
-  let color = 'bg-green-100 text-green-800';
-  if (days >= 30) color = 'bg-red-100 text-red-800';
-  else if (days >= 20) color = 'bg-orange-100 text-orange-800';
-  else if (days >= 10) color = 'bg-yellow-100 text-yellow-800';
-
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {days}d
-    </span>
-  );
-}
-
-function TypeBadge({ type }: { type: string }) {
-  const colors: Record<string, string> = {
-    condo_718: 'bg-blue-100 text-blue-800',
-    hoa_720: 'bg-green-100 text-green-800',
-    apartment: 'bg-purple-100 text-purple-800',
-  };
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[type] ?? 'bg-gray-100 text-gray-800'}`}>
-      {COMMUNITY_TYPE_DISPLAY_NAMES[type as CommunityType] ?? type}
-    </span>
-  );
 }
 
 export default function DemoListPage() {
@@ -167,9 +137,16 @@ export default function DemoListPage() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link
+                          href={`/demo/${demo.id}/edit`}
+                          className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                          title="Edit"
+                        >
+                          Edit
+                        </Link>
+                        <Link
                           href={`/demo/${demo.id}/preview`}
                           className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                          title="Split-screen preview"
+                          title="Preview"
                         >
                           Preview
                         </Link>

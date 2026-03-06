@@ -2,7 +2,7 @@
  * Full-Screen Mobile Demo Preview — resident mobile view on dark background.
  *
  * Server component that generates a fresh 1-hour resident token.
- * No admin chrome — this is the page to show prospects on a large screen.
+ * Includes a toolbar header with a link back to the tabbed preview.
  */
 import { notFound } from 'next/navigation';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
@@ -11,6 +11,7 @@ import {
   generateDemoToken,
   decryptDemoTokenSecret,
 } from '@propertypro/shared/server';
+import { DemoToolbar } from '@/components/demo/DemoToolbar';
 import { MobilePreviewClient } from './MobilePreviewClient';
 
 interface PageProps {
@@ -50,5 +51,17 @@ export default async function DemoMobilePage({ params }: PageProps) {
 
   const residentUrl = `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`;
 
-  return <MobilePreviewClient src={residentUrl} />;
+  return (
+    <div className="flex h-screen flex-col">
+      <DemoToolbar
+        demoId={demo.id}
+        prospectName={demo.prospect_name}
+        templateType={demo.template_type}
+        createdAt={demo.created_at}
+        variant="minimal"
+        communityId={demo.seeded_community_id ?? undefined}
+      />
+      <MobilePreviewClient src={residentUrl} />
+    </div>
+  );
 }

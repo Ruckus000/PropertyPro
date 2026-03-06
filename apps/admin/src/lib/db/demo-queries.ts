@@ -92,6 +92,22 @@ export async function deleteDemo(id: number): Promise<{
     .single();
 }
 
+/** Partial-update a demo instance by ID. */
+export async function updateDemo(
+  id: number,
+  updates: Partial<Pick<DemoInstanceRow, 'prospect_name' | 'theme' | 'external_crm_url' | 'prospect_notes'>>,
+): Promise<{ data: DemoInstanceRow | null; error: { message: string } | null }> {
+  return from('demo_instances').update(updates).eq('id', id).select().single();
+}
+
+/** Update a community's name and/or branding (keeps demo in sync). */
+export async function updateCommunityBranding(
+  communityId: number,
+  updates: { name?: string; branding?: Record<string, unknown> },
+): Promise<{ error: { message: string } | null }> {
+  return from('communities').update(updates).eq('id', communityId);
+}
+
 /** Delete a community by ID (cascades demo data). */
 export async function deleteCommunity(communityId: number): Promise<{
   error: { message: string } | null;

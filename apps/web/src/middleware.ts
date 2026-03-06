@@ -436,7 +436,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         data: { user: publicSiteUser },
       } = await supabase.auth.getUser();
 
-      if (publicSiteUser) {
+      if (publicSiteUser && !isPreviewRequest) {
         const dashboardUrl = request.nextUrl.clone();
         dashboardUrl.pathname = '/dashboard';
         return finaliseResponse(

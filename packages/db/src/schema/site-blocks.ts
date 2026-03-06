@@ -14,31 +14,22 @@ import {
   pgTable,
   text,
   timestamp,
-  unique,
 } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 
-export const siteBlocks = pgTable(
-  'site_blocks',
-  {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
-    communityId: bigint('community_id', { mode: 'number' })
-      .notNull()
-      .references(() => communities.id, { onDelete: 'cascade' }),
-    blockOrder: integer('block_order').notNull(),
-    blockType: text('block_type').notNull(),
-    content: jsonb('content').notNull().default('{}'),
-    isDraft: boolean('is_draft').notNull().default(true),
-    publishedAt: timestamp('published_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  },
-  (table) => [
-    unique('site_blocks_community_order_draft_unique').on(
-      table.communityId,
-      table.blockOrder,
-      table.isDraft,
-    ),
-  ],
-);
+// NOTE: Partial unique index (community_id, block_order, is_draft) WHERE deleted_at IS NULL
+// is managed via raw SQL in migration 0035. Drizzle cannot express partial indexes.
+export const siteBlocks = pgTable('site_blocks', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  communityId: bigint('community_id', { mode: 'number' })
+    .notNull()
+    .references(() => communities.id, { onDelete: 'cascade' }),
+  blockOrder: integer('block_order').notNull(),
+  blockType: text('block_type').notNull(),
+  content: jsonb('content').notNull().default('{}'),
+  isDraft: boolean('is_draft').notNull().default(true),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});

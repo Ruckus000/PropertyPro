@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { unstable_noStore as noStore } from 'next/cache';
 import { createScopedClient, siteBlocks } from '@propertypro/db';
 import { asc, eq } from '@propertypro/db/filters';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
@@ -26,10 +27,11 @@ async function resolveCommunityId(): Promise<number | null> {
 }
 
 /**
- * Fetch published, visible site blocks for a community, ordered by block_order.
+ * Fetch site blocks for a community, ordered by block_order.
+ * When isPreview is true, fetches draft blocks instead of published ones.
  * Uses createScopedClient since site_blocks has a communityId column.
  */
-async function fetchPublishedBlocks(communityId: number) {
+async function fetchBlocks(communityId: number, isPreview: boolean) {
   const scoped = createScopedClient(communityId);
 
   return scoped.selectFrom(
@@ -40,7 +42,7 @@ async function fetchPublishedBlocks(communityId: number) {
       blockOrder: siteBlocks.blockOrder,
       content: siteBlocks.content,
     },
-    eq(siteBlocks.isDraft, false),
+    eq(siteBlocks.isDraft, isPreview),
   )
     .orderBy(asc(siteBlocks.blockOrder)) as unknown as Promise<
     Array<{
@@ -74,7 +76,20 @@ function ComingSoon({ communityName }: { communityName: string }) {
   );
 }
 
-export default async function PublicSitePage() {
+export const revalidate = 300;
+
+export default async function PublicSitePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
+  const params = await searchParams;
+  const isPreview = params.preview === 'true';
+
+  if (isPreview) {
+    noStore();
+  }
+
   const communityId = await resolveCommunityId();
   if (!communityId) {
     return (
@@ -103,8 +118,8 @@ export default async function PublicSitePage() {
   const cssVars = toCssVars(theme);
   const fontLinks = toFontLinks(theme);
 
-  // If the site has not been published, show Coming Soon
-  if (!community.sitePublishedAt) {
+  // If the site has not been published (and not in preview mode), show Coming Soon
+  if (!community.sitePublishedAt && !isPreview) {
     return (
       <>
         {fontLinks.map((href) => (
@@ -122,8 +137,8 @@ export default async function PublicSitePage() {
     );
   }
 
-  // Fetch and render published blocks (pre-sorted by block_order in DB)
-  const blocks = await fetchPublishedBlocks(community.id);
+  // Fetch blocks (drafts in preview, published otherwise — pre-sorted by block_order in DB)
+  const blocks = await fetchBlocks(community.id, isPreview);
 
   return (
     <>
