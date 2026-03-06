@@ -5,8 +5,9 @@
  */
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { ArrowLeft, Users, FileText, CheckCircle, BadgeCheck, Globe } from 'lucide-react';
+import { ArrowLeft, Users, FileText, CheckCircle, BadgeCheck, Globe, AlertTriangle } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
@@ -201,12 +202,231 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'settings' && (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-500">Community settings</p>
-              <p className="mt-1 text-xs text-gray-400">
-                Settings editor coming in a future phase
+          <SettingsTab community={community} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Settings Tab ──────────────────────────────────────────────────── */
+
+const PLAN_OPTIONS = [
+  { value: 'starter', label: 'Starter', price: '$99/mo' },
+  { value: 'professional', label: 'Professional', price: '$199/mo' },
+  { value: 'enterprise', label: 'Enterprise', price: '$399/mo' },
+];
+
+function SettingsTab({ community }: { community: Community }) {
+  const router = useRouter();
+  const [editName, setEditName] = useState(community.name);
+  const [editAddress, setEditAddress] = useState(community.address_line1 ?? '');
+  const [editCity, setEditCity] = useState(community.city ?? '');
+  const [editState, setEditState] = useState(community.state ?? 'FL');
+  const [editZip, setEditZip] = useState(community.zip_code ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch(`/api/admin/clients/${community.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          address_line1: editAddress || null,
+          city: editCity || null,
+          state: editState || null,
+          zip_code: editZip || null,
+        }),
+      });
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+        router.refresh();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${community.id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        router.push('/clients');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const statusEntry = SUBSCRIPTION_STATUS_LABELS[community.subscription_status ?? ''];
+  const planEntry = PLAN_OPTIONS.find((p) => p.value === community.subscription_plan);
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Subscription */}
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-sm font-semibold text-gray-700">Subscription</h2>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs text-gray-500">Plan</dt>
+            <dd className="mt-0.5 text-sm text-gray-900 capitalize">
+              {planEntry ? `${planEntry.label} (${planEntry.price})` : community.subscription_plan ?? '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Status</dt>
+            <dd className="mt-0.5">
+              {community.subscription_status ? (
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusEntry?.className ?? 'bg-gray-100 text-gray-600'}`}>
+                  {statusEntry?.label ?? community.subscription_status}
+                </span>
+              ) : (
+                <span className="text-sm text-gray-400">—</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Created</dt>
+            <dd className="mt-0.5 text-sm text-gray-900">
+              {format(new Date(community.created_at), 'MMMM d, yyyy')}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      {/* Community Details */}
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-sm font-semibold text-gray-700">Community Details</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Slug</label>
+            <p className="text-sm text-gray-400 font-mono">
+              {community.slug}.propertyprofl.com
+              <span className="ml-2 text-xs text-gray-300">(read-only)</span>
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Address</label>
+              <input
+                type="text"
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">City</label>
+              <input
+                type="text"
+                value={editCity}
+                onChange={(e) => setEditCity(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">State</label>
+              <input
+                type="text"
+                value={editState}
+                onChange={(e) => setEditState(e.target.value)}
+                maxLength={2}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">ZIP Code</label>
+              <input
+                type="text"
+                value={editZip}
+                onChange={(e) => setEditZip(e.target.value)}
+                maxLength={10}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+            {saveSuccess && (
+              <span className="text-xs text-green-600">Saved successfully</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="rounded-lg border border-red-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-red-700">
+          <AlertTriangle size={16} />
+          Danger Zone
+        </h2>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Delete Community</p>
+              <p className="text-xs text-gray-500">
+                Permanently remove this community and all associated data
               </p>
+            </div>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Delete Community
+            </button>
+          </div>
+        </div>
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900">Delete Community?</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                This will permanently delete <span className="font-medium">{community.name}</span> and all associated data including documents, meetings, and user accounts. This action cannot be undone.
+              </p>
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Permanently'}
+                </button>
+              </div>
             </div>
           </div>
         )}

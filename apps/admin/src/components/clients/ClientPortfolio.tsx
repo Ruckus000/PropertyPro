@@ -6,7 +6,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Search, ChevronDown, Trash2 } from 'lucide-react';
+import { Search, ChevronDown, Trash2, Plus } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
@@ -82,13 +82,22 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
-          {isFiltered
-            ? `${filtered.length} of ${communities.length} communities`
-            : `${communities.length} communities`}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {isFiltered
+              ? `${filtered.length} of ${communities.length} communities`
+              : `${communities.length} communities`}
+          </p>
+        </div>
+        <Link
+          href="/clients/new"
+          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={16} />
+          Create Client
+        </Link>
       </div>
 
       {/* Stale Demos card — positioned above filter controls */}
