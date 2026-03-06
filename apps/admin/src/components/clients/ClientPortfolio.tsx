@@ -43,6 +43,8 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
   const [page, setPage] = useState(1);
+  const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
+  const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -81,6 +83,10 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       setPage(totalPages);
     }
   }, [page, totalPages]);
+
+  useEffect(() => {
+    setCurrentStaleDemos(staleDemos);
+  }, [staleDemos]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -156,7 +162,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-gray-900">{c.name}</p>
+                      <p className="truncate font-medium text-gray-900" title={c.name}>{c.name}</p>
                       {(c.city || c.state) && (
                         <p className="mt-0.5 text-xs text-gray-500">
                           {[c.city, c.state].filter(Boolean).join(', ')}
@@ -212,18 +218,19 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       )}
 
       {/* Stale Demos card */}
-      {staleDemos.length > 0 && (
+      {currentStaleDemos.length > 0 && (
         <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
           <h2 className="mb-3 text-sm font-semibold text-gray-900">
             Stale Demos
             <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-              {staleDemos.length}
+              {currentStaleDemos.length}
             </span>
           </h2>
           <div className="space-y-2">
-            {staleDemos.map((demo) => {
+            {currentStaleDemos.map((demo) => {
               const badge = staleBadge(demo.created_at);
               const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+              const isDeleting = deletingDemoIds.includes(demo.id);
               return (
                 <div
                   key={demo.id}
@@ -239,11 +246,27 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                   <button
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    className="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isDeleting}
                     onClick={async () => {
                       if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
-                      await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
-                      window.location.reload();
+                      setDeletingDemoIds((previousIds) =>
+                        previousIds.includes(demo.id)
+                          ? previousIds
+                          : [...previousIds, demo.id],
+                      );
+                      try {
+                        const response = await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
+                        if (response.ok) {
+                          setCurrentStaleDemos((previousDemos) =>
+                            previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
+                          );
+                        }
+                      } finally {
+                        setDeletingDemoIds((previousIds) =>
+                          previousIds.filter((existingId) => existingId !== demo.id),
+                        );
+                      }
                     }}
                   >
                     <Trash2 size={14} />
