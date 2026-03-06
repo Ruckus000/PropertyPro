@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     '@propertypro/shared',
     '@propertypro/ui',
     '@propertypro/theme',
+    '@puckeditor/core',
   ],
   env: {
     NEXT_PUBLIC_APP_ROLE: 'admin',

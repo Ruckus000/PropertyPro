@@ -19,6 +19,7 @@
     "@propertypro/shared": "workspace:*",
     "@propertypro/theme": "workspace:*",
     "@propertypro/ui": "workspace:*",
+    "@puckeditor/core": "^0.21.1",
     "@sentry/nextjs": "^10.38.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",

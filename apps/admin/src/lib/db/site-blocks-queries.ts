@@ -109,25 +109,54 @@ export async function listDraftBlocks(communityId: number): Promise<{
     .order('block_order', { ascending: true });
 }
 
-/** Batch-update block_order for multiple blocks. */
+/**
+ * Batch-update block_order for multiple blocks.
+ *
+ * Uses a two-pass strategy to avoid unique constraint violations on
+ * (community_id, block_order, is_draft) during swaps:
+ *   Pass 1: Set all blocks to temporary negative orders (unique per row id).
+ *   Pass 2: Set all blocks to their final intended orders.
+ *
+ * Fixes ADR-002 Critical #2: parallel updates that swap order values
+ * (e.g., A: 1→2, B: 2→1) would violate the unique constraint when
+ * executed concurrently.
+ */
 export async function reorderBlocks(
   communityId: number,
   order: Array<{ id: number; blockOrder: number }>,
 ): Promise<{ error: { message: string } | null }> {
-  // Update all blocks in parallel — each targets a different row by id
-  const results = await Promise.all(
+  const timestamp = new Date().toISOString();
+
+  // Pass 1: Set all to temporary negative orders (safe — unique per row id)
+  const pass1Results = await Promise.all(
     order.map((item) =>
       from('site_blocks')
-        .update({ block_order: item.blockOrder, updated_at: new Date().toISOString() })
+        .update({ block_order: -(item.id + 1000), updated_at: timestamp })
         .eq('id', item.id)
         .eq('community_id', communityId)
         .is('deleted_at', null),
     ),
   );
 
-  for (const result of results) {
+  for (const result of pass1Results) {
     if (result.error) return { error: result.error };
   }
+
+  // Pass 2: Set to final orders
+  const pass2Results = await Promise.all(
+    order.map((item) =>
+      from('site_blocks')
+        .update({ block_order: item.blockOrder, updated_at: timestamp })
+        .eq('id', item.id)
+        .eq('community_id', communityId)
+        .is('deleted_at', null),
+    ),
+  );
+
+  for (const result of pass2Results) {
+    if (result.error) return { error: result.error };
+  }
+
   return { error: null };
 }
 
