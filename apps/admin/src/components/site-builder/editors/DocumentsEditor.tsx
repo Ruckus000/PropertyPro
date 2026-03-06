@@ -6,19 +6,23 @@
 import type { DocumentsBlockContent } from '@propertypro/shared/site-blocks';
 
 interface DocumentsEditorProps {
+  blockId: number;
   content: DocumentsBlockContent;
   onChange: (content: DocumentsBlockContent) => void;
 }
 
-export function DocumentsEditor({ content, onChange }: DocumentsEditorProps) {
+export function DocumentsEditor({ blockId, content, onChange }: DocumentsEditorProps) {
+  const titleId = `docs-title-${blockId}`;
+  const categoriesId = `docs-categories-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="docs-title" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={titleId} className="mb-1 block text-xs font-medium text-gray-700">
           Section Title
         </label>
         <input
-          id="docs-title"
+          id={titleId}
           type="text"
           value={content.title}
           onChange={(e) => onChange({ ...content, title: e.target.value })}
@@ -28,11 +32,11 @@ export function DocumentsEditor({ content, onChange }: DocumentsEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="docs-categories" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={categoriesId} className="mb-1 block text-xs font-medium text-gray-700">
           Category IDs (comma-separated, empty = all)
         </label>
         <input
-          id="docs-categories"
+          id={categoriesId}
           type="text"
           value={content.categoryIds.join(', ')}
           onChange={(e) => {

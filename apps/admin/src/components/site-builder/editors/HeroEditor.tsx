@@ -6,19 +6,26 @@
 import type { HeroBlockContent } from '@propertypro/shared/site-blocks';
 
 interface HeroEditorProps {
+  blockId: number;
   content: HeroBlockContent;
   onChange: (content: HeroBlockContent) => void;
 }
 
-export function HeroEditor({ content, onChange }: HeroEditorProps) {
+export function HeroEditor({ blockId, content, onChange }: HeroEditorProps) {
+  const headlineId = `hero-headline-${blockId}`;
+  const subheadlineId = `hero-subheadline-${blockId}`;
+  const backgroundImageId = `hero-bg-image-${blockId}`;
+  const ctaLabelId = `hero-cta-label-${blockId}`;
+  const ctaHrefId = `hero-cta-href-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="hero-headline" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={headlineId} className="mb-1 block text-xs font-medium text-gray-700">
           Headline
         </label>
         <input
-          id="hero-headline"
+          id={headlineId}
           type="text"
           maxLength={120}
           value={content.headline}
@@ -29,11 +36,11 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="hero-subheadline" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={subheadlineId} className="mb-1 block text-xs font-medium text-gray-700">
           Subheadline
         </label>
         <input
-          id="hero-subheadline"
+          id={subheadlineId}
           type="text"
           maxLength={300}
           value={content.subheadline}
@@ -44,11 +51,11 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="hero-bg-image" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={backgroundImageId} className="mb-1 block text-xs font-medium text-gray-700">
           Background Image URL
         </label>
         <input
-          id="hero-bg-image"
+          id={backgroundImageId}
           type="url"
           value={content.backgroundImageUrl ?? ''}
           onChange={(e) => onChange({ ...content, backgroundImageUrl: e.target.value || undefined })}
@@ -59,11 +66,11 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="hero-cta-label" className="mb-1 block text-xs font-medium text-gray-700">
+          <label htmlFor={ctaLabelId} className="mb-1 block text-xs font-medium text-gray-700">
             CTA Button Label
           </label>
           <input
-            id="hero-cta-label"
+            id={ctaLabelId}
             type="text"
             maxLength={40}
             value={content.ctaLabel}
@@ -73,11 +80,11 @@ export function HeroEditor({ content, onChange }: HeroEditorProps) {
           />
         </div>
         <div>
-          <label htmlFor="hero-cta-href" className="mb-1 block text-xs font-medium text-gray-700">
+          <label htmlFor={ctaHrefId} className="mb-1 block text-xs font-medium text-gray-700">
             CTA Button URL
           </label>
           <input
-            id="hero-cta-href"
+            id={ctaHrefId}
             type="text"
             value={content.ctaHref}
             onChange={(e) => onChange({ ...content, ctaHref: e.target.value })}

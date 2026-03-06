@@ -6,19 +6,25 @@
 import type { ContactBlockContent } from '@propertypro/shared/site-blocks';
 
 interface ContactEditorProps {
+  blockId: number;
   content: ContactBlockContent;
   onChange: (content: ContactBlockContent) => void;
 }
 
-export function ContactEditor({ content, onChange }: ContactEditorProps) {
+export function ContactEditor({ blockId, content, onChange }: ContactEditorProps) {
+  const boardEmailId = `contact-email-${blockId}`;
+  const managementCompanyId = `contact-mgmt-${blockId}`;
+  const phoneId = `contact-phone-${blockId}`;
+  const addressId = `contact-address-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="contact-email" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={boardEmailId} className="mb-1 block text-xs font-medium text-gray-700">
           Board Email
         </label>
         <input
-          id="contact-email"
+          id={boardEmailId}
           type="email"
           value={content.boardEmail}
           onChange={(e) => onChange({ ...content, boardEmail: e.target.value })}
@@ -28,11 +34,11 @@ export function ContactEditor({ content, onChange }: ContactEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="contact-mgmt" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={managementCompanyId} className="mb-1 block text-xs font-medium text-gray-700">
           Management Company (optional)
         </label>
         <input
-          id="contact-mgmt"
+          id={managementCompanyId}
           type="text"
           value={content.managementCompany ?? ''}
           onChange={(e) => onChange({ ...content, managementCompany: e.target.value || undefined })}
@@ -42,11 +48,11 @@ export function ContactEditor({ content, onChange }: ContactEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="contact-phone" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={phoneId} className="mb-1 block text-xs font-medium text-gray-700">
           Phone (optional)
         </label>
         <input
-          id="contact-phone"
+          id={phoneId}
           type="tel"
           value={content.phone ?? ''}
           onChange={(e) => onChange({ ...content, phone: e.target.value || undefined })}
@@ -56,11 +62,11 @@ export function ContactEditor({ content, onChange }: ContactEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="contact-address" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={addressId} className="mb-1 block text-xs font-medium text-gray-700">
           Address (optional)
         </label>
         <textarea
-          id="contact-address"
+          id={addressId}
           value={content.address ?? ''}
           onChange={(e) => onChange({ ...content, address: e.target.value || undefined })}
           rows={2}

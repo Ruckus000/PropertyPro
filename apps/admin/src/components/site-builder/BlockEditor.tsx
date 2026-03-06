@@ -189,6 +189,7 @@ function SortableBlock({
       {isExpanded && (
         <div className="p-4">
           <BlockContentEditor
+            blockId={block.id}
             blockType={block.block_type}
             content={block.content}
             onChange={onContentChange}
@@ -204,27 +205,70 @@ function SortableBlock({
 // ---------------------------------------------------------------------------
 
 interface BlockContentEditorProps {
+  blockId: number;
   blockType: BlockType;
   content: BlockContent;
   onChange: (content: BlockContent) => void;
 }
 
-function BlockContentEditor({ blockType, content, onChange }: BlockContentEditorProps) {
+function BlockContentEditor({ blockId, blockType, content, onChange }: BlockContentEditorProps) {
   switch (blockType) {
     case 'hero':
-      return <HeroEditor content={content as Parameters<typeof HeroEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <HeroEditor
+          blockId={blockId}
+          content={content as Parameters<typeof HeroEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'announcements':
-      return <AnnouncementsEditor content={content as Parameters<typeof AnnouncementsEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <AnnouncementsEditor
+          blockId={blockId}
+          content={content as Parameters<typeof AnnouncementsEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'documents':
-      return <DocumentsEditor content={content as Parameters<typeof DocumentsEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <DocumentsEditor
+          blockId={blockId}
+          content={content as Parameters<typeof DocumentsEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'meetings':
-      return <MeetingsEditor content={content as Parameters<typeof MeetingsEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <MeetingsEditor
+          blockId={blockId}
+          content={content as Parameters<typeof MeetingsEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'contact':
-      return <ContactEditor content={content as Parameters<typeof ContactEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <ContactEditor
+          blockId={blockId}
+          content={content as Parameters<typeof ContactEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'text':
-      return <TextEditor content={content as Parameters<typeof TextEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <TextEditor
+          blockId={blockId}
+          content={content as Parameters<typeof TextEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     case 'image':
-      return <ImageEditor content={content as Parameters<typeof ImageEditor>[0]['content']} onChange={onChange} />;
+      return (
+        <ImageEditor
+          blockId={blockId}
+          content={content as Parameters<typeof ImageEditor>[0]['content']}
+          onChange={onChange}
+        />
+      );
     default:
       return <p className="text-sm text-gray-500">Unknown block type: {blockType}</p>;
   }
@@ -344,7 +388,8 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<'publish' | 'discard' | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<'publish' | 'discard' | 'delete' | null>(null);
+  const [pendingDeleteBlock, setPendingDeleteBlock] = useState<SiteBlock | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Auto-save debounce ref
@@ -473,6 +518,19 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
       setError(err instanceof Error ? err.message : 'Failed to delete block');
     }
   }, []);
+
+  const handleRequestDeleteBlock = useCallback((block: SiteBlock) => {
+    setPendingDeleteBlock(block);
+    setConfirmDialog('delete');
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDeleteBlock) return;
+    const blockId = pendingDeleteBlock.id;
+    setConfirmDialog(null);
+    setPendingDeleteBlock(null);
+    await handleDeleteBlock(blockId);
+  }, [handleDeleteBlock, pendingDeleteBlock]);
 
   const handleContentChange = useCallback(
     (blockId: number, content: BlockContent) => {
@@ -678,7 +736,7 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
                   block={block}
                   isExpanded={expandedIds.has(block.id)}
                   onToggle={() => handleToggleExpand(block.id)}
-                  onDelete={() => handleDeleteBlock(block.id)}
+                  onDelete={() => handleRequestDeleteBlock(block)}
                   onContentChange={(content) => handleContentChange(block.id, content)}
                 />
               ))}
@@ -714,6 +772,24 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
           confirmVariant="danger"
           onConfirm={handleDiscard}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
+      {confirmDialog === 'delete' && pendingDeleteBlock && (
+        <ConfirmDialog
+          title="Delete Block"
+          message={`Are you sure you want to delete this ${
+            BLOCK_TYPE_LABELS[pendingDeleteBlock.block_type] ?? pendingDeleteBlock.block_type
+          } block? This action cannot be undone.`}
+          confirmLabel="Delete"
+          confirmVariant="danger"
+          onConfirm={() => {
+            void handleConfirmDelete();
+          }}
+          onCancel={() => {
+            setConfirmDialog(null);
+            setPendingDeleteBlock(null);
+          }}
         />
       )}
     </div>

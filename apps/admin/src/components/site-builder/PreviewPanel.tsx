@@ -21,6 +21,7 @@ export function PreviewPanel({ communitySlug }: PreviewPanelProps) {
   const [status, setStatus] = useState<ConnectionStatus>('checking');
 
   // Build the preview URL — in dev, use localhost with tenant query param
+  // plus preview=true to bypass authenticated dashboard redirect in middleware.
   // In production, use the subdomain
   const isDev = process.env.NODE_ENV === 'development';
   const previewUrl = isDev

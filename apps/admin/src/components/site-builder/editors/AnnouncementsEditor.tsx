@@ -6,19 +6,23 @@
 import type { AnnouncementsBlockContent } from '@propertypro/shared/site-blocks';
 
 interface AnnouncementsEditorProps {
+  blockId: number;
   content: AnnouncementsBlockContent;
   onChange: (content: AnnouncementsBlockContent) => void;
 }
 
-export function AnnouncementsEditor({ content, onChange }: AnnouncementsEditorProps) {
+export function AnnouncementsEditor({ blockId, content, onChange }: AnnouncementsEditorProps) {
+  const titleId = `announcements-title-${blockId}`;
+  const limitId = `announcements-limit-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="announcements-title" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={titleId} className="mb-1 block text-xs font-medium text-gray-700">
           Section Title
         </label>
         <input
-          id="announcements-title"
+          id={titleId}
           type="text"
           value={content.title}
           onChange={(e) => onChange({ ...content, title: e.target.value })}
@@ -28,11 +32,11 @@ export function AnnouncementsEditor({ content, onChange }: AnnouncementsEditorPr
       </div>
 
       <div>
-        <label htmlFor="announcements-limit" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={limitId} className="mb-1 block text-xs font-medium text-gray-700">
           Maximum Items to Show (1-10)
         </label>
         <input
-          id="announcements-limit"
+          id={limitId}
           type="number"
           min={1}
           max={10}

@@ -402,7 +402,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // --- Public site auth-split [Wave 5 / Task 3.3] ---
   // When a community subdomain requests '/' (the public site root):
   //   - Resolve tenant context and forward headers so the page can read community info
-  //   - If authenticated, redirect to /dashboard (existing logged-in experience)
+  //   - If authenticated, redirect to /dashboard unless preview=true
   //   - If NOT authenticated, let through to the public site renderer
   if (pathname === '/') {
     const tenantContext = resolveCommunityContext({
@@ -414,6 +414,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       tenantContext.source !== 'none' && !tenantContext.isReservedSubdomain;
 
     if (hasCommunityContext) {
+      const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
+
       // Resolve community ID from slug if needed
       if (tenantContext.communityId) {
         forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
@@ -436,7 +438,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         data: { user: publicSiteUser },
       } = await supabase.auth.getUser();
 
-      if (publicSiteUser) {
+      if (publicSiteUser && !isPreviewRequest) {
         const dashboardUrl = request.nextUrl.clone();
         dashboardUrl.pathname = '/dashboard';
         return finaliseResponse(

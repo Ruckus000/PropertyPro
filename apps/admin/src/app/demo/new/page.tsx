@@ -14,6 +14,7 @@ import { ALLOWED_FONTS } from '@propertypro/theme';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { AdminLayout } from '@/components/AdminLayout';
+import { hasInvalidHexColorValues, isSixDigitHexColor } from '@/lib/utils/hex-color';
 
 type WizardStep = 1 | 2 | 3 | 'creating' | 'done';
 
@@ -59,6 +60,19 @@ const DEFAULT_BRANDING = {
   logoPath: '',
 };
 
+const COLOR_FIELDS = [
+  { field: 'primaryColor', label: 'Primary Color' },
+  { field: 'secondaryColor', label: 'Secondary Color' },
+  { field: 'accentColor', label: 'Accent Color' },
+] as const;
+
+const FONT_FIELDS = [
+  { field: 'fontHeading', label: 'Heading Font' },
+  { field: 'fontBody', label: 'Body Font' },
+] as const;
+
+type BrandingField = keyof typeof DEFAULT_BRANDING;
+
 export default function DemoNewPage() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
@@ -70,9 +84,13 @@ export default function DemoNewPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DemoResult | null>(null);
 
-  const updateBranding = (field: string, value: string) => {
+  const updateBranding = (field: BrandingField, value: string) => {
     setBranding((prev) => ({ ...prev, [field]: value }));
   };
+
+  const hasInvalidHexColor = hasInvalidHexColorValues(
+    COLOR_FIELDS.map(({ field }) => branding[field]),
+  );
 
   const handleGenerate = async () => {
     if (!templateType) return;
@@ -205,39 +223,40 @@ export default function DemoNewPage() {
               </div>
 
               {/* Color pickers */}
-              {[
-                { field: 'primaryColor', label: 'Primary Color' },
-                { field: 'secondaryColor', label: 'Secondary Color' },
-                { field: 'accentColor', label: 'Accent Color' },
-              ].map(({ field, label }) => (
-                <div key={field}>
-                  <label className="block text-sm font-medium text-gray-700">{label}</label>
-                  <div className="mt-1 flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={branding[field as keyof typeof branding]}
-                      onChange={(e) => updateBranding(field, e.target.value)}
-                      className="h-9 w-12 cursor-pointer rounded border border-gray-300"
-                    />
-                    <input
-                      type="text"
-                      value={branding[field as keyof typeof branding]}
-                      onChange={(e) => updateBranding(field, e.target.value)}
-                      className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-mono"
-                    />
+              {COLOR_FIELDS.map(({ field, label }) => {
+                const colorValue = branding[field];
+                const hasInvalidHex = !isSixDigitHexColor(colorValue);
+
+                return (
+                  <div key={field}>
+                    <label className="block text-sm font-medium text-gray-700">{label}</label>
+                    <div className="mt-1 flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={hasInvalidHex ? DEFAULT_BRANDING[field] : colorValue}
+                        onChange={(e) => updateBranding(field, e.target.value)}
+                        className="h-9 w-12 cursor-pointer rounded border border-gray-300"
+                      />
+                      <input
+                        type="text"
+                        value={colorValue}
+                        onChange={(e) => updateBranding(field, e.target.value)}
+                        className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-mono"
+                      />
+                    </div>
+                    {hasInvalidHex && (
+                      <p className="mt-1 text-xs text-red-600">Invalid hex color</p>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Font selectors */}
-              {[
-                { field: 'fontHeading', label: 'Heading Font' },
-                { field: 'fontBody', label: 'Body Font' },
-              ].map(({ field, label }) => (
+              {FONT_FIELDS.map(({ field, label }) => (
                 <div key={field}>
                   <label className="block text-sm font-medium text-gray-700">{label}</label>
                   <select
-                    value={branding[field as keyof typeof branding]}
+                    value={branding[field]}
                     onChange={(e) => updateBranding(field, e.target.value)}
                     className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
@@ -259,7 +278,7 @@ export default function DemoNewPage() {
                 </button>
                 <button
                   onClick={() => setStep(3)}
-                  disabled={!prospectName.trim()}
+                  disabled={!prospectName.trim() || hasInvalidHexColor}
                   className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-blue-700"
                 >
                   Next

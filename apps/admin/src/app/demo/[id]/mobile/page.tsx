@@ -50,5 +50,5 @@ export default async function DemoMobilePage({ params }: PageProps) {
 
   const residentUrl = `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`;
 
-  return <MobilePreviewClient src={residentUrl} />;
+  return <MobilePreviewClient src={residentUrl} splitPreviewHref={`/demo/${demo.id}/preview`} />;
 }

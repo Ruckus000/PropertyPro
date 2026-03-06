@@ -6,19 +6,24 @@
 import type { ImageBlockContent } from '@propertypro/shared/site-blocks';
 
 interface ImageEditorProps {
+  blockId: number;
   content: ImageBlockContent;
   onChange: (content: ImageBlockContent) => void;
 }
 
-export function ImageEditor({ content, onChange }: ImageEditorProps) {
+export function ImageEditor({ blockId, content, onChange }: ImageEditorProps) {
+  const imageUrlId = `image-url-${blockId}`;
+  const imageAltId = `image-alt-${blockId}`;
+  const imageCaptionId = `image-caption-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="image-url" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={imageUrlId} className="mb-1 block text-xs font-medium text-gray-700">
           Image URL
         </label>
         <input
-          id="image-url"
+          id={imageUrlId}
           type="url"
           value={content.url}
           onChange={(e) => onChange({ ...content, url: e.target.value })}
@@ -28,11 +33,11 @@ export function ImageEditor({ content, onChange }: ImageEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="image-alt" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={imageAltId} className="mb-1 block text-xs font-medium text-gray-700">
           Alt Text
         </label>
         <input
-          id="image-alt"
+          id={imageAltId}
           type="text"
           maxLength={200}
           value={content.alt}
@@ -43,11 +48,11 @@ export function ImageEditor({ content, onChange }: ImageEditorProps) {
       </div>
 
       <div>
-        <label htmlFor="image-caption" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={imageCaptionId} className="mb-1 block text-xs font-medium text-gray-700">
           Caption (optional)
         </label>
         <input
-          id="image-caption"
+          id={imageCaptionId}
           type="text"
           maxLength={300}
           value={content.caption ?? ''}

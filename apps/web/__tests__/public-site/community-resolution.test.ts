@@ -142,6 +142,27 @@ describe('public site auth-split middleware', () => {
     expect(locationUrl.pathname).toBe('/dashboard');
   });
 
+  it('keeps authenticated user on public site when preview=true is present', async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'test@example.com',
+          email_confirmed_at: '2026-01-01T00:00:00Z',
+        },
+      },
+    });
+
+    const request = createRequest('http://sunset-condos.propertyprofl.com/?preview=true', {
+      host: 'sunset-condos.propertyprofl.com',
+    });
+
+    const response = await middleware(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
   it('passes through normally on root path without community context', async () => {
     const request = createRequest('http://localhost:3000/', {
       host: 'localhost:3000',

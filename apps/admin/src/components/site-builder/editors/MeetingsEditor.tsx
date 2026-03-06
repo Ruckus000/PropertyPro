@@ -6,19 +6,22 @@
 import type { MeetingsBlockContent } from '@propertypro/shared/site-blocks';
 
 interface MeetingsEditorProps {
+  blockId: number;
   content: MeetingsBlockContent;
   onChange: (content: MeetingsBlockContent) => void;
 }
 
-export function MeetingsEditor({ content, onChange }: MeetingsEditorProps) {
+export function MeetingsEditor({ blockId, content, onChange }: MeetingsEditorProps) {
+  const titleId = `meetings-title-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="meetings-title" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={titleId} className="mb-1 block text-xs font-medium text-gray-700">
           Section Title
         </label>
         <input
-          id="meetings-title"
+          id={titleId}
           type="text"
           value={content.title}
           onChange={(e) => onChange({ ...content, title: e.target.value })}
