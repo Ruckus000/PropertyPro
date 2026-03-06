@@ -3,7 +3,7 @@
 /**
  * P1-5: Client Portfolio — interactive grid with search/filter/sort.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { Search, ChevronDown, Trash2 } from 'lucide-react';
@@ -89,14 +89,48 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     setCurrentStaleDemos(staleDemos);
   }, [staleDemos]);
 
+  const isFiltered = filtered.length < communities.length;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleDeleteDemo = useCallback(async (demo: StaleDemo) => {
+    if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
+
+    setStaleDemoDeleteError(null);
+    setDeletingDemoIds((previousIds) =>
+      previousIds.includes(demo.id)
+        ? previousIds
+        : [...previousIds, demo.id],
+    );
+
+    try {
+      const response = await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setCurrentStaleDemos((previousDemos) =>
+          previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
+        );
+      } else {
+        setStaleDemoDeleteError('Failed to delete demo. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to delete demo:', error);
+      setStaleDemoDeleteError('Failed to delete demo. Please try again.');
+    } finally {
+      setDeletingDemoIds((previousIds) =>
+        previousIds.filter((existingId) => existingId !== demo.id),
+      );
+    }
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
-        <p className="mt-0.5 text-sm text-gray-500">{communities.length} communities</p>
+        <p className="mt-0.5 text-sm text-gray-500">
+          {isFiltered
+            ? `${filtered.length} of ${communities.length} communities`
+            : `${communities.length} communities`}
+        </p>
       </div>
 
       {/* Controls */}
@@ -252,30 +286,8 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isDeleting}
-                    onClick={async () => {
-                      if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
-                      setStaleDemoDeleteError(null);
-                      setDeletingDemoIds((previousIds) =>
-                        previousIds.includes(demo.id)
-                          ? previousIds
-                          : [...previousIds, demo.id],
-                      );
-                      try {
-                        const response = await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
-                        if (response.ok) {
-                          setCurrentStaleDemos((previousDemos) =>
-                            previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
-                          );
-                        } else {
-                          setStaleDemoDeleteError('Failed to delete demo. Please try again.');
-                        }
-                      } catch {
-                        setStaleDemoDeleteError('Failed to delete demo. Please try again.');
-                      } finally {
-                        setDeletingDemoIds((previousIds) =>
-                          previousIds.filter((existingId) => existingId !== demo.id),
-                        );
-                      }
+                    onClick={() => {
+                      void handleDeleteDemo(demo);
                     }}
                   >
                     <Trash2 size={14} />
