@@ -53,9 +53,13 @@ interface ProvisionInitialAdminInput {
   role: InitialAdminRole;
 }
 
-interface ProvisionInitialAdminResult {
-  invitationSent: boolean;
-}
+export type ProvisionInitialAdminResult =
+  | { success: true; invitationSent: true }
+  | {
+      success: false;
+      invitationSent: false;
+      reason: 'auth_user_creation_failed' | 'role_assignment_failed' | 'invitation_generation_failed';
+    };
 
 /**
  * Supabase Auth and Postgres writes do not share a transaction boundary here,
@@ -73,7 +77,11 @@ export async function provisionInitialAdmin(
 
   if (authError || !authUser?.user) {
     console.error('[Admin] Failed to create initial admin auth user:', authError);
-    return { invitationSent: false };
+    return {
+      success: false,
+      invitationSent: false,
+      reason: 'auth_user_creation_failed',
+    };
   }
 
   const { error: roleError } = await client.from('user_roles').insert({
@@ -100,7 +108,11 @@ export async function provisionInitialAdmin(
       );
     }
 
-    return { invitationSent: false };
+    return {
+      success: false,
+      invitationSent: false,
+      reason: 'role_assignment_failed',
+    };
   }
 
   const { error: invitationError } = await client.auth.admin.generateLink({
@@ -110,8 +122,28 @@ export async function provisionInitialAdmin(
 
   if (invitationError) {
     console.error('[Admin] Failed to generate initial admin invitation:', invitationError);
-    return { invitationSent: false };
+
+    try {
+      const cleanupResult = await client.auth.admin.deleteUser(authUser.user.id);
+      if (cleanupResult?.error) {
+        console.error(
+          '[Admin] Failed to clean up auth user after invitation generation failure:',
+          cleanupResult.error,
+        );
+      }
+    } catch (cleanupError) {
+      console.error(
+        '[Admin] Failed to clean up auth user after invitation generation failure:',
+        cleanupError,
+      );
+    }
+
+    return {
+      success: false,
+      invitationSent: false,
+      reason: 'invitation_generation_failed',
+    };
   }
 
-  return { invitationSent: true };
+  return { success: true, invitationSent: true };
 }

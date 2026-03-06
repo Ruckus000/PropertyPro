@@ -6,6 +6,7 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Dashboard } from '@/components/dashboard/Dashboard';
+import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,23 @@ interface RecentDemo {
   created_at: string;
 }
 
+interface QueryResult<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+}
+
+function getRows<T>(section: string, result: QueryResult<T>): T[] {
+  if (result.error) {
+    console.error(`[Dashboard] Failed to load ${section}:`, result.error);
+    return [];
+  }
+
+  return result.data ?? [];
+}
+
 export default async function DashboardPage() {
+  await requirePlatformAdmin();
+
   const db = createAdminClient();
 
   const now = new Date();
@@ -85,13 +102,16 @@ export default async function DashboardPage() {
       .limit(5),
   ]);
 
-  const communities = communitiesResult.data ?? [];
-  const demos = demosResult.error ? [] : (demosResult.data ?? []);
-  const staleDemos = staleDemosResult.error ? [] : (staleDemosResult.data ?? []);
-  const newClients = newClientsResult.data ?? [];
-  const pastDueCommunities = pastDueResult.data ?? [];
-  const recentCommunities: RecentCommunity[] = recentCommunitiesResult.data ?? [];
-  const recentDemos: RecentDemo[] = recentDemosResult.error ? [] : (recentDemosResult.data ?? []);
+  const communities = getRows('communities', communitiesResult);
+  const demos = getRows('demos', demosResult);
+  const staleDemos = getRows('stale demos', staleDemosResult);
+  const newClients = getRows('new clients', newClientsResult);
+  const pastDueCommunities = getRows('past-due communities', pastDueResult);
+  const recentCommunities = getRows<RecentCommunity>(
+    'recent communities',
+    recentCommunitiesResult,
+  );
+  const recentDemos = getRows<RecentDemo>('recent demos', recentDemosResult);
 
   // Build activity feed by merging recent communities and demos
   const activityItems = [

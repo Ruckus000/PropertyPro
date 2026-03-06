@@ -85,6 +85,9 @@ async function rollbackCreatedCommunity(
 }
 
 export async function POST(request: NextRequest) {
+  let db: ReturnType<typeof createTypedAdminClient> | null = null;
+  let createdCommunityId: number | null = null;
+
   const authError = await authorizeRequest();
   if (authError) {
     return authError;
@@ -111,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
-    const db = createTypedAdminClient();
+    db = createTypedAdminClient();
 
     // Check slug uniqueness
     const { data: existing } = await db
@@ -154,6 +157,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    createdCommunityId = community.id;
+
     // Create initial compliance items for the community
     const complianceCategories = getComplianceCategories(data.communityType);
     if (complianceCategories.length > 0) {
@@ -185,6 +190,14 @@ export async function POST(request: NextRequest) {
         role: data.initialAdmin.role,
       });
 
+      if (!initialAdminResult.success) {
+        await rollbackCreatedCommunity(db, community.id);
+        return NextResponse.json(
+          { error: { message: 'Failed to provision initial admin' } },
+          { status: 500 },
+        );
+      }
+
       invitationSent = initialAdminResult.invitationSent;
     }
 
@@ -199,6 +212,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (err) {
     console.error('[Admin] Create client error:', err);
+
+    if (db && createdCommunityId !== null) {
+      await rollbackCreatedCommunity(db, createdCommunityId);
+    }
+
     return NextResponse.json(
       { error: { message: 'Internal server error' } },
       { status: 500 },

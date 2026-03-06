@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { AlertTriangle } from 'lucide-react';
 import { SUBSCRIPTION_STATUS_LABELS } from '@/lib/constants/community-labels';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { extractApiError } from '@/lib/http/extract-api-error';
 import type { ClientWorkspaceCommunity } from './types';
 
 const PLAN_OPTIONS = [
@@ -26,12 +27,15 @@ export function SettingsTab({ community }: SettingsTabProps) {
   const [editState, setEditState] = useState(community.state ?? 'FL');
   const [editZip, setEditZip] = useState(community.zip_code ?? '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     setSaveSuccess(false);
     try {
       const res = await fetch(`/api/admin/clients/${community.id}`, {
@@ -45,11 +49,16 @@ export function SettingsTab({ community }: SettingsTabProps) {
           zip_code: editZip || null,
         }),
       });
-      if (res.ok) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
-        router.refresh();
+
+      if (!res.ok) {
+        throw new Error(await extractApiError(res));
       }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      router.refresh();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save changes');
     } finally {
       setSaving(false);
     }
@@ -57,14 +66,20 @@ export function SettingsTab({ community }: SettingsTabProps) {
 
   const handleDelete = async () => {
     setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/admin/clients/${community.id}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setShowDeleteConfirm(false);
-        router.push('/clients');
+
+      if (!res.ok) {
+        throw new Error(await extractApiError(res));
       }
+
+      setShowDeleteConfirm(false);
+      router.push('/clients');
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Failed to archive community');
     } finally {
       setDeleting(false);
     }
@@ -182,6 +197,11 @@ export function SettingsTab({ community }: SettingsTabProps) {
             </button>
             {saveSuccess && <span className="text-xs text-green-600">Saved successfully</span>}
           </div>
+          {saveError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {saveError}
+            </div>
+          )}
         </div>
       </div>
 
@@ -199,7 +219,10 @@ export function SettingsTab({ community }: SettingsTabProps) {
               </p>
             </div>
             <button
-              onClick={() => setShowDeleteConfirm(true)}
+              onClick={() => {
+                setDeleteError(null);
+                setShowDeleteConfirm(true);
+              }}
               className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
             >
               Archive Community
@@ -223,11 +246,15 @@ export function SettingsTab({ community }: SettingsTabProps) {
                 </p>
               </>
             }
+            errorMessage={deleteError}
             confirmLabel={deleting ? 'Archiving...' : 'Archive Community'}
             confirmVariant="danger"
             isPending={deleting}
             onConfirm={handleDelete}
-            onCancel={() => setShowDeleteConfirm(false)}
+            onCancel={() => {
+              setDeleteError(null);
+              setShowDeleteConfirm(false);
+            }}
           />
         )}
       </div>

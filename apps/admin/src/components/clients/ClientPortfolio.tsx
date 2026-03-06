@@ -12,6 +12,7 @@ import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
+import { extractApiError } from '@/lib/http/extract-api-error';
 import { staleBadge } from '@/lib/utils/stale-badge';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 
@@ -48,6 +49,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [page, setPage] = useState(1);
   const [demoToDelete, setDemoToDelete] = useState<StaleDemo | null>(null);
   const [deletingDemoId, setDeletingDemoId] = useState<number | null>(null);
+  const [deleteDemoError, setDeleteDemoError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -89,12 +91,18 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     if (!demoToDelete) return;
 
     setDeletingDemoId(demoToDelete.id);
+    setDeleteDemoError(null);
     try {
       const res = await fetch(`/api/admin/demos/${demoToDelete.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setDemoToDelete(null);
-        router.refresh();
+
+      if (!res.ok) {
+        throw new Error(await extractApiError(res));
       }
+
+      setDemoToDelete(null);
+      router.refresh();
+    } catch (error) {
+      setDeleteDemoError(error instanceof Error ? error.message : 'Failed to delete demo');
     } finally {
       setDeletingDemoId(null);
     }
@@ -158,7 +166,10 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    onClick={() => setDemoToDelete(demo)}
+                    onClick={() => {
+                      setDeleteDemoError(null);
+                      setDemoToDelete(demo);
+                    }}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -185,9 +196,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           }
           confirmLabel={isDeletingDemo ? 'Deleting...' : 'Delete Demo'}
           confirmVariant="danger"
+          errorMessage={deleteDemoError}
           isPending={isDeletingDemo}
           onConfirm={handleDeleteDemo}
-          onCancel={() => setDemoToDelete(null)}
+          onCancel={() => {
+            setDeleteDemoError(null);
+            setDemoToDelete(null);
+          }}
         />
       )}
 

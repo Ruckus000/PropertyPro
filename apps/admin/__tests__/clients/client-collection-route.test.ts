@@ -109,7 +109,7 @@ describe('admin clients collection route', () => {
       role: 'super_admin' as const,
     });
     createTypedAdminClientMock.mockReturnValue(mockDb);
-    provisionInitialAdminMock.mockResolvedValue({ invitationSent: true });
+    provisionInitialAdminMock.mockResolvedValue({ success: true, invitationSent: true });
     communitiesMaybeSingleMock.mockResolvedValue({ data: null });
     communitiesInsertSingleMock.mockResolvedValue({
       data: {
@@ -179,5 +179,37 @@ describe('admin clients collection route', () => {
     });
     expect(communitiesDeleteEqMock).toHaveBeenCalledWith('id', 101);
     expect(provisionInitialAdminMock).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the community when initial admin provisioning fails', async () => {
+    provisionInitialAdminMock.mockResolvedValueOnce({
+      success: false,
+      invitationSent: false,
+      reason: 'invitation_generation_failed',
+    });
+
+    const response = await route.POST(
+      jsonRequest(
+        '/api/admin/clients',
+        'POST',
+        JSON.stringify({
+          name: 'Sunrise Towers',
+          slug: 'sunrise-towers',
+          communityType: 'condo_718',
+          state: 'FL',
+          subscriptionPlan: 'professional',
+          initialAdmin: {
+            email: 'president@example.com',
+            role: 'board_president',
+          },
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await parseJson<{ error: { message: string } }>(response)).toEqual({
+      error: { message: 'Failed to provision initial admin' },
+    });
+    expect(communitiesDeleteEqMock).toHaveBeenCalledWith('id', 101);
   });
 });

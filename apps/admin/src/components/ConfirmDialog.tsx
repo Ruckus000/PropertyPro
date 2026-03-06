@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 interface ConfirmDialogProps {
   title: string;
   message: ReactNode;
+  errorMessage?: string | null;
   confirmLabel: string;
   cancelLabel?: string;
   confirmVariant?: 'danger' | 'primary';
@@ -18,6 +19,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   title,
   message,
+  errorMessage,
   confirmLabel,
   cancelLabel = 'Cancel',
   confirmVariant = 'primary',
@@ -48,6 +50,12 @@ export function ConfirmDialog({
         </div>
 
         <div className="mb-5 text-sm text-gray-600">{message}</div>
+
+        {errorMessage && (
+          <div className="mb-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <button

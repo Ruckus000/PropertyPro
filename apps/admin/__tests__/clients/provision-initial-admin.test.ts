@@ -45,7 +45,7 @@ describe('provisionInitialAdmin', () => {
       role: 'board_president',
     });
 
-    expect(result).toEqual({ invitationSent: true });
+    expect(result).toEqual({ success: true, invitationSent: true });
     expect(createUser).toHaveBeenCalledWith({
       email: 'president@example.com',
       email_confirm: true,
@@ -74,8 +74,33 @@ describe('provisionInitialAdmin', () => {
       role: 'cam',
     });
 
-    expect(result).toEqual({ invitationSent: false });
+    expect(result).toEqual({
+      success: false,
+      invitationSent: false,
+      reason: 'role_assignment_failed',
+    });
     expect(deleteUser).toHaveBeenCalledWith('user-2');
     expect(generateLink).not.toHaveBeenCalled();
+  });
+
+  it('deletes the auth user if invitation generation fails', async () => {
+    const { client, createUser, deleteUser, generateLink, insert } = createClientMock();
+    createUser.mockResolvedValue({ data: { user: { id: 'user-3' } }, error: null });
+    insert.mockResolvedValue({ error: null });
+    generateLink.mockResolvedValue({ error: { message: 'link failed' } });
+    deleteUser.mockResolvedValue({ error: null });
+
+    const result = await provisionInitialAdmin(client, {
+      communityId: 12,
+      email: 'manager@example.com',
+      role: 'site_manager',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      invitationSent: false,
+      reason: 'invitation_generation_failed',
+    });
+    expect(deleteUser).toHaveBeenCalledWith('user-3');
   });
 });
