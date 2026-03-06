@@ -175,9 +175,16 @@ export default function CreateClientPage() {
 
   const handleSlugChange = (value: string) => {
     setSlugManuallyEdited(true);
+    const sanitized = value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 63);
+
     dispatchForm({
       type: 'setValues',
-      values: { slug: value.toLowerCase().replace(/[^a-z0-9-]/g, '') },
+      values: { slug: sanitized },
     });
     setSlugAvailable(null);
   };

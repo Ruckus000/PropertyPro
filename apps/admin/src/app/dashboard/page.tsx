@@ -9,6 +9,7 @@ import { Dashboard } from '@/components/dashboard/Dashboard';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 
 export const dynamic = 'force-dynamic';
+const TEN_DAYS_IN_MS = 10 * 24 * 60 * 60 * 1000;
 
 interface RecentCommunity {
   id: number;
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
   const db = createAdminClient();
 
   const now = new Date();
-  const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
+  const tenDaysAgo = new Date(now.getTime() - TEN_DAYS_IN_MS).toISOString();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // Fetch all data in parallel
