@@ -8,7 +8,7 @@ interface MobilePreviewClientProps {
 
 export function MobilePreviewClient({ src }: MobilePreviewClientProps) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950">
+    <div className="flex flex-1 items-center justify-center bg-gray-950">
       <PhoneFrame src={src} />
     </div>
   );

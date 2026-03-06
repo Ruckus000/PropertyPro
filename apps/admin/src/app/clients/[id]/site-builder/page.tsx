@@ -2,6 +2,9 @@
  * Site Builder page — dedicated route for the community site builder.
  *
  * Two-column grid: 60% BlockEditor, 40% PreviewPanel.
+ *
+ * When opened from a demo preview (`?demoId=N`), the back link returns to
+ * the demo preview instead of the client workspace (which 404s for demos).
  */
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
@@ -15,6 +18,7 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ demoId?: string }>;
 }
 
 const CommunityRowSchema = z.object({
@@ -23,8 +27,9 @@ const CommunityRowSchema = z.object({
   slug: z.string(),
 });
 
-export default async function SiteBuilderPage({ params }: PageProps) {
+export default async function SiteBuilderPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { demoId: demoIdRaw } = await searchParams;
   const communityId = Number(id);
 
   if (!Number.isInteger(communityId) || communityId <= 0) {
@@ -45,17 +50,28 @@ export default async function SiteBuilderPage({ params }: PageProps) {
   }
   const community = communityParse.data;
 
+  // Determine back-link: demo preview if demoId is provided, else client workspace
+  const demoId = demoIdRaw ? Number(demoIdRaw) : null;
+  const backHref =
+    demoId && Number.isInteger(demoId) && demoId > 0
+      ? `/demo/${demoId}/preview`
+      : `/clients/${community.id}`;
+  const backLabel =
+    demoId && Number.isInteger(demoId) && demoId > 0
+      ? 'Back to Demo Preview'
+      : `Back to ${community.name}`;
+
   return (
     <AdminLayout>
       <div className="flex h-full flex-col">
         {/* Header */}
         <div className="border-b border-gray-200 bg-white px-6 py-4">
           <Link
-            href={`/clients/${community.id}`}
+            href={backHref}
             className="mb-2 inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft size={12} />
-            Back to {community.name}
+            {backLabel}
           </Link>
           <h1 className="text-lg font-semibold text-gray-900">
             Site Builder — {community.name}

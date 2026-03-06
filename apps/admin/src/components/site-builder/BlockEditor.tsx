@@ -419,13 +419,18 @@ export function BlockEditor({ communityId }: BlockEditorProps) {
     [flushSaves],
   );
 
-  // Cleanup on unmount
+  // Flush pending saves and cleanup on unmount
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
+      // Fire-and-forget flush so edits made in the last 500ms aren't lost
+      if (pendingSavesRef.current.size > 0) {
+        void flushSaves();
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------------------------------
