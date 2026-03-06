@@ -16,12 +16,12 @@ export function PreviewPanel({ communitySlug }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Build the preview URL — in dev, use localhost with tenant query param
-  // In production, use the subdomain
+  // Build the preview URL — in dev, use localhost with tenant query param.
+  // Include preview=true to bypass authenticated dashboard redirect in middleware.
   const previewUrl =
     process.env.NODE_ENV === 'development'
-      ? `http://localhost:3000?tenant=${communitySlug}`
-      : `https://${communitySlug}.propertyprofl.com`;
+      ? `http://localhost:3000?tenant=${communitySlug}&preview=true`
+      : `https://${communitySlug}.propertyprofl.com?preview=true`;
 
   // Clear spinner reliably when iframe finishes loading
   useEffect(() => {
