@@ -109,53 +109,42 @@ export async function listDraftBlocks(communityId: number): Promise<{
     .order('block_order', { ascending: true });
 }
 
-/** Batch-update block_order for multiple blocks. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rpc(name: string, params: Record<string, unknown>): PromiseLike<any> {
+  return createAdminClient().rpc(name as never, params as never);
+}
+
+/** Batch-update block_order for multiple blocks (transactional via RPC). */
 export async function reorderBlocks(
   communityId: number,
   order: Array<{ id: number; blockOrder: number }>,
 ): Promise<{ error: { message: string } | null }> {
-  // Update all blocks in parallel — each targets a different row by id
-  const results = await Promise.all(
-    order.map((item) =>
-      from('site_blocks')
-        .update({ block_order: item.blockOrder, updated_at: new Date().toISOString() })
-        .eq('id', item.id)
-        .eq('community_id', communityId)
-        .is('deleted_at', null),
-    ),
-  );
-
-  for (const result of results) {
-    if (result.error) return { error: result.error };
-  }
-  return { error: null };
+  const { error } = await rpc('reorder_site_blocks', {
+    p_community_id: communityId,
+    p_order: order,
+  });
+  return { error: error ? { message: error.message } : null };
 }
 
-/** Publish all draft blocks for a community. */
+/** Publish all draft blocks for a community (transactional via RPC with row locking). */
 export async function publishDrafts(communityId: number): Promise<{
   data: SiteBlockRow[] | null;
   error: { message: string } | null;
 }> {
-  const now = new Date().toISOString();
-  return from('site_blocks')
-    .update({
-      is_draft: false,
-      published_at: now,
-      updated_at: now,
-    })
-    .eq('community_id', communityId)
-    .eq('is_draft', true)
-    .is('deleted_at', null)
-    .select();
+  const { data, error } = await rpc('publish_community_drafts', {
+    p_community_id: communityId,
+  });
+  if (error) return { data: null, error: { message: error.message } };
+  return { data: (data as SiteBlockRow[] | null) ?? [], error: null };
 }
 
-/** Hard-delete all draft blocks for a community. */
+/** Soft-delete all draft blocks for a community. */
 export async function discardDrafts(communityId: number): Promise<{
   data: SiteBlockRow[] | null;
   error: { message: string } | null;
 }> {
   return from('site_blocks')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('community_id', communityId)
     .eq('is_draft', true)
     .is('deleted_at', null)
