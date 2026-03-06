@@ -39,12 +39,9 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
     },
   });
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (authError || !user) {
+  if (!session?.user) {
     throw new Response('Unauthorized', { status: 401 });
   }
 
@@ -52,7 +49,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
   const { data } = await adminDb
     .from('platform_admin_users')
     .select('role')
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .single();
 
   const adminRow = AdminRowSchema.safeParse(data);
@@ -61,8 +58,8 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
   }
 
   return {
-    id: user.id,
-    email: user.email ?? '',
+    id: session.user.id,
+    email: session.user.email ?? '',
     role: adminRow.data.role,
   };
 }
