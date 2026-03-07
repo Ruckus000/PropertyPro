@@ -58,7 +58,7 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
     setLoggingOut(true);
     const supabase = createBrowserClient();
     await supabase.auth.signOut();
-    window.location.href = '/auth/login';
+    // AuthSessionSync handles the redirect on SIGNED_OUT with returnTo logic
   }
 
   const settingsHref = communityId ? `/settings?communityId=${communityId}` : '/settings';

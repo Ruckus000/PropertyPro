@@ -491,7 +491,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
             forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
           }
           // If communityId is null (unknown slug): silently continue — no 404
-        } catch {
+        } catch (error) {
+          console.warn('[middleware] Failed to resolve community by slug for auth page:', error);
           // Non-fatal for auth pages — continue without community headers
         }
       }

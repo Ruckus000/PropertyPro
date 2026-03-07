@@ -53,7 +53,11 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
 
     const name = info?.name ?? null;
     const slug = info?.slug ?? null;
-    const type = (info?.communityType as 'condo_718' | 'hoa_720' | 'apartment') ?? 'condo_718';
+    const communityType = info?.communityType;
+    const type =
+      communityType && ['condo_718', 'hoa_720', 'apartment'].includes(communityType)
+        ? (communityType as 'condo_718' | 'hoa_720' | 'apartment')
+        : 'condo_718';
 
     // Generate presigned download URL for logo if it exists.
     // logoPath is a Supabase Storage path stored in the private "documents" bucket.
@@ -79,7 +83,8 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
       fontLinks: toFontLinks(theme),
       hasTenantContext: true,
     };
-  } catch {
+  } catch (error) {
+    console.error('[resolveAuthPageBranding] Failed to resolve branding, falling back to generic:', error);
     // If DB is down or community lookup fails, fall back to generic branding.
     // Login must NEVER crash — a broken branding fetch should not block authentication.
     return { ...GENERIC_BRANDING, hasTenantContext: true };
