@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { getFeaturesForCommunity, COMMUNITY_TYPES, COMMUNITY_ROLES } from '@propertypro/shared';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
@@ -110,6 +111,12 @@ export default async function AuthenticatedLayout({
   const communityData = user
     ? await resolveCommunity(requestHeaders, user.id)
     : null;
+
+  // User is on a community subdomain but has no role in this community
+  const hasTenantHeader = !!requestHeaders.get('x-community-id');
+  if (!communityData && hasTenantHeader && user) {
+    redirect('/select-community');
+  }
 
   const community = communityData?.community ?? null;
   const role = communityData?.role ?? null;

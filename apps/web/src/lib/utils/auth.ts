@@ -3,10 +3,14 @@
  *
  * Prevents open redirect attacks by requiring the value to start with `/`
  * but not `//` (which would be treated as a protocol-relative URL).
- * Defaults to `/select-community` if the value is absent or invalid.
+ * Defaults to `/dashboard` when tenant context is available, otherwise
+ * `/select-community`.
  */
-export function resolveReturnTo(value: string | string[] | undefined): string {
+export function resolveReturnTo(
+  value: string | string[] | undefined,
+  hasTenantContext: boolean = false,
+): string {
   const raw = Array.isArray(value) ? value[0] : value;
   if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  return '/select-community';
+  return hasTenantContext ? '/dashboard' : '/select-community';
 }

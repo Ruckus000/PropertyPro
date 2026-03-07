@@ -9,6 +9,7 @@
  */
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getCookieOptions } from './cookie-config';
 
 /**
  * Creates a Supabase server client that reads auth from cookies.
@@ -27,6 +28,7 @@ export async function createServerClient() {
   const cookieStore = await cookies();
 
   return createSupabaseServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: getCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();
