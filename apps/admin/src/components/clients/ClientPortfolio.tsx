@@ -6,7 +6,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Search, ChevronDown, Trash2 } from 'lucide-react';
+import { Search, ChevronDown, Trash2, X } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
@@ -46,6 +46,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
   const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
   const [staleDemoDeleteError, setStaleDemoDeleteError] = useState<string | null>(null);
+  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<StaleDemo | null>(null);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -92,9 +93,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
   const isFiltered = filtered.length < communities.length;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const handleDeleteDemo = useCallback(async (demo: StaleDemo) => {
-    if (!confirm(`Delete demo for ${demo.prospect_name}?`)) return;
-
+  const executeDeleteDemo = useCallback(async (demo: StaleDemo) => {
     setStaleDemoDeleteError(null);
     setDeletingDemoIds((previousIds) =>
       previousIds.includes(demo.id)
@@ -288,15 +287,53 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     aria-label={`Delete demo for ${demo.prospect_name}`}
                     className="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isDeleting}
-                    onClick={() => {
-                      void handleDeleteDemo(demo);
-                    }}
+                    onClick={() => setConfirmDeleteDemo(demo)}
                   >
                     <Trash2 size={14} />
                   </button>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteDemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-e3">
+            <div className="flex items-start justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">Delete Demo</h3>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteDemo(null)}
+                className="rounded p-1 text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">
+              Delete the demo for <strong>{confirmDeleteDemo.prospect_name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteDemo(null)}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void executeDeleteDemo(confirmDeleteDemo);
+                  setConfirmDeleteDemo(null);
+                }}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
