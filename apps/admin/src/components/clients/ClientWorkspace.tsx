@@ -11,11 +11,26 @@ import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
-import { SettingsTab } from './SettingsTab';
-import type { ClientWorkspaceCommunity } from './types';
+
+interface Community {
+  id: number;
+  name: string;
+  slug: string;
+  community_type: 'condo_718' | 'hoa_720' | 'apartment';
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  address_line1: string | null;
+  subscription_status: string | null;
+  subscription_plan: string | null;
+  created_at: string;
+  memberCount: number;
+  documentCount: number;
+  complianceScore: number | null;
+}
 
 interface ClientWorkspaceProps {
-  community: ClientWorkspaceCommunity;
+  community: Community;
 }
 
 type Tab = 'overview' | 'site-builder' | 'settings';
@@ -186,7 +201,14 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'settings' && (
-          <SettingsTab community={community} />
+          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Community settings</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Settings editor coming in a future phase
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>

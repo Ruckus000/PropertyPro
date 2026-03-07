@@ -6,19 +6,22 @@
 import type { TextBlockContent } from '@propertypro/shared/site-blocks';
 
 interface TextEditorProps {
+  blockId: number;
   content: TextBlockContent;
   onChange: (content: TextBlockContent) => void;
 }
 
-export function TextEditor({ content, onChange }: TextEditorProps) {
+export function TextEditor({ blockId, content, onChange }: TextEditorProps) {
+  const bodyId = `text-body-${blockId}`;
+
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="text-body" className="mb-1 block text-xs font-medium text-gray-700">
+        <label htmlFor={bodyId} className="mb-1 block text-xs font-medium text-gray-700">
           Body Text
         </label>
         <textarea
-          id="text-body"
+          id={bodyId}
           value={content.body}
           maxLength={5000}
           onChange={(e) => onChange({ ...content, body: e.target.value })}

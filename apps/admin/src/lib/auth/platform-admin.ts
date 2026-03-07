@@ -39,10 +39,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
     },
   });
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (authError || !user) {
     throw new Response('Unauthorized', { status: 401 });

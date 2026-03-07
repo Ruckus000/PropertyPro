@@ -3,18 +3,15 @@
 /**
  * P1-5: Client Portfolio — interactive grid with search/filter/sort.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { Search, ChevronDown, Trash2, Plus } from 'lucide-react';
+import { Search, ChevronDown, Trash2, X } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
-import { extractApiError } from '@/lib/http/extract-api-error';
 import { staleBadge } from '@/lib/utils/stale-badge';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const PAGE_SIZE = 20;
 
@@ -42,14 +39,14 @@ interface ClientPortfolioProps {
 }
 
 export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
   const [page, setPage] = useState(1);
-  const [demoToDelete, setDemoToDelete] = useState<StaleDemo | null>(null);
-  const [deletingDemoId, setDeletingDemoId] = useState<number | null>(null);
-  const [deleteDemoError, setDeleteDemoError] = useState<string | null>(null);
+  const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
+  const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
+  const [staleDemoDeleteError, setStaleDemoDeleteError] = useState<string | null>(null);
+  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<StaleDemo | null>(null);
 
   const filtered = useMemo(() => {
     let result = communities;
@@ -76,135 +73,66 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     return result;
   }, [communities, search, typeFilter, sort]);
 
-  // Reset page when filters change (not sort)
+  // Reset pagination when filters change.
   useEffect(() => {
     setPage(1);
   }, [search, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    setCurrentStaleDemos(staleDemos);
+  }, [staleDemos]);
+
+  const isFiltered = filtered.length < communities.length;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const isFiltered = filtered.length !== communities.length;
-  const isDeletingDemo = demoToDelete !== null && deletingDemoId === demoToDelete.id;
+  const executeDeleteDemo = useCallback(async (demo: StaleDemo) => {
+    setStaleDemoDeleteError(null);
+    setDeletingDemoIds((previousIds) =>
+      previousIds.includes(demo.id)
+        ? previousIds
+        : [...previousIds, demo.id],
+    );
 
-  const handleDeleteDemo = async () => {
-    if (!demoToDelete) return;
-
-    setDeletingDemoId(demoToDelete.id);
-    setDeleteDemoError(null);
     try {
-      const res = await fetch(`/api/admin/demos/${demoToDelete.id}`, { method: 'DELETE' });
-
-      if (!res.ok) {
-        throw new Error(await extractApiError(res));
+      const response = await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setCurrentStaleDemos((previousDemos) =>
+          previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
+        );
+      } else {
+        const errorData = await response.json().catch(() => null);
+        const message = errorData?.error?.message || 'Failed to delete demo. Please try again.';
+        setStaleDemoDeleteError(message);
       }
-
-      setDemoToDelete(null);
-      router.refresh();
     } catch (error) {
-      setDeleteDemoError(error instanceof Error ? error.message : 'Failed to delete demo');
+      console.error('Failed to delete demo:', error);
+      setStaleDemoDeleteError('A network error occurred. Please check your connection and try again.');
     } finally {
-      setDeletingDemoId(null);
+      setDeletingDemoIds((previousIds) =>
+        previousIds.filter((existingId) => existingId !== demo.id),
+      );
     }
-  };
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {isFiltered
-              ? `${filtered.length} of ${communities.length} communities`
-              : `${communities.length} communities`}
-          </p>
-        </div>
-        <Link
-          href="/clients/new"
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          Create Client
-        </Link>
+      <div>
+        <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
+        <p className="mt-0.5 text-sm text-gray-500">
+          {isFiltered
+            ? `${filtered.length} of ${communities.length} communities`
+            : `${communities.length} communities`}
+        </p>
       </div>
-
-      {/* Stale Demos card — positioned above filter controls */}
-      {staleDemos.length > 0 && (
-        <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">
-              Stale Demos
-              <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-                {staleDemos.length}
-              </span>
-            </h2>
-            <Link
-              href="/demo"
-              className="text-xs font-medium text-blue-600 hover:text-blue-700"
-            >
-              Manage demos &rarr;
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {staleDemos.map((demo) => {
-              const badge = staleBadge(demo.created_at);
-              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
-              return (
-                <div
-                  key={demo.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium text-gray-900">{demo.prospect_name}</span>
-                    <span className="ml-2 text-xs text-gray-500">{typeLabel}</span>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    onClick={() => {
-                      setDeleteDemoError(null);
-                      setDemoToDelete(demo);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {demoToDelete && (
-        <ConfirmDialog
-          title="Delete Demo?"
-          message={
-            <>
-              <p>
-                This will permanently delete the seeded demo workspace for{' '}
-                <span className="font-medium">{demoToDelete.prospect_name}</span>.
-              </p>
-              <p className="mt-2">
-                The demo community, seeded data, and demo user accounts will be removed.
-              </p>
-            </>
-          }
-          confirmLabel={isDeletingDemo ? 'Deleting...' : 'Delete Demo'}
-          confirmVariant="danger"
-          errorMessage={deleteDemoError}
-          isPending={isDeletingDemo}
-          onConfirm={handleDeleteDemo}
-          onCancel={() => {
-            setDeleteDemoError(null);
-            setDemoToDelete(null);
-          }}
-        />
-      )}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3">
@@ -299,14 +227,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             })}
           </div>
 
-          {/* Pagination controls */}
           {totalPages > 1 && (
             <nav aria-label="Pagination" className="flex items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => setPage((currentPage) => currentPage - 1)}
                 disabled={page === 1}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
               </button>
@@ -315,15 +242,100 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
               </span>
               <button
                 type="button"
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setPage((currentPage) => currentPage + 1)}
                 disabled={page === totalPages}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>
             </nav>
           )}
         </>
+      )}
+
+      {/* Stale Demos card */}
+      {currentStaleDemos.length > 0 && (
+        <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">
+            Stale Demos
+            <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+              {currentStaleDemos.length}
+            </span>
+          </h2>
+          {staleDemoDeleteError && (
+            <p className="mb-3 text-xs font-medium text-red-600">{staleDemoDeleteError}</p>
+          )}
+          <div className="space-y-2">
+            {currentStaleDemos.map((demo) => {
+              const badge = staleBadge(demo.created_at);
+              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+              const isDeleting = deletingDemoIds.includes(demo.id);
+              return (
+                <div
+                  key={demo.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate text-sm font-medium text-gray-900">{demo.prospect_name}</span>
+                    <span className="ml-2 text-xs text-gray-500">{typeLabel}</span>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Delete demo for ${demo.prospect_name}`}
+                    className="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isDeleting}
+                    onClick={() => setConfirmDeleteDemo(demo)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteDemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-e3">
+            <div className="flex items-start justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">Delete Demo</h3>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteDemo(null)}
+                className="rounded p-1 text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">
+              Delete the demo for <strong>{confirmDeleteDemo.prospect_name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteDemo(null)}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void executeDeleteDemo(confirmDeleteDemo);
+                  setConfirmDeleteDemo(null);
+                }}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
