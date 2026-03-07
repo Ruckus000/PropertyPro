@@ -429,7 +429,15 @@ export function mergeApplyResult(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Compare two content objects — shallow key check with deep JSON comparison for nested values. */
+/** Stable JSON.stringify that sorts object keys for order-insensitive comparison. */
+function stableStringify(val: unknown): string {
+  if (val === null || typeof val !== 'object') return JSON.stringify(val);
+  if (Array.isArray(val)) return '[' + val.map(stableStringify).join(',') + ']';
+  const sorted = Object.keys(val as Record<string, unknown>).sort();
+  return '{' + sorted.map(k => JSON.stringify(k) + ':' + stableStringify((val as Record<string, unknown>)[k])).join(',') + '}';
+}
+
+/** Compare two content objects — shallow key check with deep key-order-insensitive comparison for nested values. */
 export function contentEqual(
   a: Record<string, unknown>,
   b: Record<string, unknown>,
@@ -441,9 +449,8 @@ export function contentEqual(
     const valA = a[key];
     const valB = b[key];
     if (valA !== valB) {
-      // Deep compare arrays and objects
       if (typeof valA === 'object' && typeof valB === 'object' && valA !== null && valB !== null) {
-        if (JSON.stringify(valA) !== JSON.stringify(valB)) return false;
+        if (stableStringify(valA) !== stableStringify(valB)) return false;
       } else {
         return false;
       }

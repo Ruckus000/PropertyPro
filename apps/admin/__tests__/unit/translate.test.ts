@@ -328,6 +328,12 @@ describe('contentEqual', () => {
     expect(contentEqual({ meta: { a: 1 } }, { meta: { a: 1 } })).toBe(true);
     expect(contentEqual({ meta: { a: 1 } }, { meta: { a: 2 } })).toBe(false);
   });
+
+  it('returns true for objects with same content but different key order', () => {
+    const obj1 = { a: 1, b: { c: 3, d: 4 } };
+    const obj2 = { b: { d: 4, c: 3 }, a: 1 };
+    expect(contentEqual(obj1, obj2)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
