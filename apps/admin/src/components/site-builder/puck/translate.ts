@@ -248,7 +248,7 @@ export function diffPuckData(
   const knownExistingOrder = knownState.order.filter((id) => currentPuckIds.has(id));
 
   let reorder: ChangeSet['reorder'] = null;
-  if (!arraysEqual(existingOrder, knownExistingOrder)) {
+  if (!arraysEqual(existingOrder, knownExistingOrder) || creates.length > 0 || deletes.length > 0) {
     // Build reorder payload with new block_order values
     reorder = currentOrder
       .map((puckId, index) => {
