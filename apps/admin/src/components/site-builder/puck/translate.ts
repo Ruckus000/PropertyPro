@@ -8,6 +8,7 @@
  */
 import type { Data, ComponentData } from '@puckeditor/core';
 import type { BlockType, BlockContent } from '@propertypro/shared/site-blocks';
+import { extractApiError } from '../shared/extractApiError';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -300,7 +301,7 @@ export async function applyChangeSet(
         }),
       });
       if (!res.ok) {
-        const text = await safeErrorText(res);
+        const text = await extractApiError(res);
         errors.push(`Create ${create.blockType}: ${text}`);
         continue;
       }
@@ -320,7 +321,7 @@ export async function applyChangeSet(
         body: JSON.stringify({ content: update.content }),
       });
       if (!res.ok) {
-        const text = await safeErrorText(res);
+        const text = await extractApiError(res);
         errors.push(`Update block ${update.dbId}: ${text}`);
       }
     } catch (err) {
@@ -335,7 +336,7 @@ export async function applyChangeSet(
         method: 'DELETE',
       });
       if (!res.ok) {
-        const text = await safeErrorText(res);
+        const text = await extractApiError(res);
         errors.push(`Delete block ${del.dbId}: ${text}`);
       }
     } catch (err) {
@@ -366,7 +367,7 @@ export async function applyChangeSet(
         }),
       });
       if (!res.ok) {
-        const text = await safeErrorText(res);
+        const text = await extractApiError(res);
         errors.push(`Reorder: ${text}`);
       }
     } catch (err) {
@@ -467,19 +468,6 @@ function arraysEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-async function safeErrorText(res: Response): Promise<string> {
-  try {
-    const json = (await res.json()) as Record<string, unknown>;
-    const errObj = json?.['error'];
-    if (errObj && typeof errObj === 'object' && errObj !== null) {
-      const msg = (errObj as Record<string, unknown>)['message'];
-      if (typeof msg === 'string') return msg;
-    }
-  } catch {
-    // ignore parse errors
-  }
-  return res.statusText || `HTTP ${res.status}`;
-}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unknown error';

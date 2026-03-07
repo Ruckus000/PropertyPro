@@ -91,6 +91,14 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
   brandingRef.current = branding;
 
   // ---------------------------------------------------------------------------
+  // Error helper — avoids repeated instanceof checks (ADR-002 review feedback)
+  // ---------------------------------------------------------------------------
+
+  const handleError = useCallback((err: unknown, fallback: string) => {
+    setError(err instanceof Error ? err.message : fallback);
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Load blocks from API
   // ---------------------------------------------------------------------------
 
@@ -108,7 +116,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
       setInitialData(data);
       setHasDrafts(json.data.some((r) => r.is_draft));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load blocks');
+      handleError(err, 'Failed to load blocks');
     } finally {
       setIsLoading(false);
     }
@@ -175,7 +183,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Auto-save failed');
+      handleError(err, 'Auto-save failed');
       // Re-fetch on unexpected error
       await loadBlocks();
     } finally {
@@ -250,7 +258,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
       // Reload to reflect published state
       await loadBlocks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to publish');
+      handleError(err, 'Failed to publish');
     } finally {
       setIsPublishing(false);
     }
@@ -268,7 +276,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
       if (!res.ok) throw new Error(await extractApiError(res));
       await loadBlocks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discard drafts');
+      handleError(err, 'Failed to discard drafts');
     }
   }, [communityId, loadBlocks]);
 
@@ -278,6 +286,10 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
 
   const handlePuckPublish = useCallback(
     async (_data: Data) => {
+      if (isSavingRef.current) {
+        setError('A save is currently in progress. Please try publishing again in a moment.');
+        return;
+      }
       // Save the latest state first, then show confirm dialog
       latestDataRef.current = _data;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
