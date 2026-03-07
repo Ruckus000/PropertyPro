@@ -120,7 +120,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
     } finally {
       setIsLoading(false);
     }
-  }, [communityId]);
+  }, [communityId, handleError]);
 
   useEffect(() => {
     void loadBlocks();
@@ -190,7 +190,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
       isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [communityId, loadBlocks]);
+  }, [communityId, handleError, loadBlocks]);
 
   const handleChange = useCallback(
     (data: Data) => {
@@ -262,7 +262,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
     } finally {
       setIsPublishing(false);
     }
-  }, [communityId, flushSaves, loadBlocks]);
+  }, [communityId, flushSaves, handleError, loadBlocks]);
 
   const handleDiscard = useCallback(async () => {
     setConfirmDialog(null);
@@ -278,7 +278,7 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
     } catch (err) {
       handleError(err, 'Failed to discard drafts');
     }
-  }, [communityId, loadBlocks]);
+  }, [communityId, handleError, loadBlocks]);
 
   // ---------------------------------------------------------------------------
   // Puck publish button callback (triggers our publish confirmation)
