@@ -8,6 +8,7 @@
 import { headers } from 'next/headers';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityTheme } from '@propertypro/theme';
+import { COMMUNITY_TYPES } from '@propertypro/shared';
 import { getCommunityPublicInfo, getBrandingForCommunity } from '@/lib/api/branding';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 
@@ -35,6 +36,14 @@ const GENERIC_BRANDING: AuthPageBranding = (() => {
   };
 })();
 
+/** Allowed image extensions for logo presigned URLs (prevents IDOR on non-image files). */
+const ALLOWED_LOGO_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'];
+
+function isAllowedLogoPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return ALLOWED_LOGO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
   const requestHeaders = await headers();
   const communityIdStr = requestHeaders.get('x-community-id');
@@ -55,14 +64,14 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
     const slug = info?.slug ?? null;
     const communityType = info?.communityType;
     const type =
-      communityType && ['condo_718', 'hoa_720', 'apartment'].includes(communityType)
-        ? (communityType as 'condo_718' | 'hoa_720' | 'apartment')
+      communityType && (COMMUNITY_TYPES as readonly string[]).includes(communityType)
+        ? (communityType as (typeof COMMUNITY_TYPES)[number])
         : 'condo_718';
 
     // Generate presigned download URL for logo if it exists.
-    // logoPath is a Supabase Storage path stored in the private "documents" bucket.
+    // Security: only allow image file extensions to prevent IDOR on sensitive documents.
     let logoUrl: string | null = null;
-    if (branding?.logoPath) {
+    if (branding?.logoPath && isAllowedLogoPath(branding.logoPath)) {
       try {
         logoUrl = await createPresignedDownloadUrl('documents', branding.logoPath);
       } catch {

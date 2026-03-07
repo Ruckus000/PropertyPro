@@ -233,6 +233,48 @@ async function findCommunityIdBySlug(
   return communityId;
 }
 
+type TenantResolveMode = 'strict' | 'lenient';
+
+/**
+ * Shared helper: resolve a community slug → ID and forward tenant headers.
+ *
+ * @param mode
+ *   - `strict`: unknown slug returns `'not-found'`, DB errors return `'error'`
+ *   - `lenient`: unknown slug or DB errors are logged and silently ignored
+ * @returns `'ok'` on success, `'not-found'`/`'error'` in strict mode, or `'ok'` in lenient mode
+ */
+async function resolveAndForwardTenantHeaders(
+  tenantContext: ReturnType<typeof resolveCommunityContext>,
+  supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
+  forwardedHeaders: Headers,
+  mode: TenantResolveMode,
+): Promise<'ok' | 'not-found' | 'error'> {
+  if (tenantContext.communityId) {
+    forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+    forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+    return 'ok';
+  }
+
+  if (tenantContext.tenantSlug) {
+    try {
+      const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+      if (communityId == null) {
+        if (mode === 'strict') return 'not-found';
+        // lenient: unknown slug — silently continue without headers
+        return 'ok';
+      }
+      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+      forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+      forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+    } catch (error) {
+      if (mode === 'strict') return 'error';
+      console.warn('[middleware] Failed to resolve community by slug:', error);
+    }
+  }
+
+  return 'ok';
+}
+
 function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Headers {
   const headers = new Headers(request.headers);
   headers.delete(COMMUNITY_ID_HEADER);
@@ -303,24 +345,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
     }
 
-    // Forward community ID from query param so layouts can read it from headers
-    if (tenantContext.communityId) {
-      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
-      forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+    const result = await resolveAndForwardTenantHeaders(tenantContext, supabase, forwardedHeaders, 'strict');
+    if (result === 'not-found') {
+      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
     }
-
-    if (tenantContext.tenantSlug) {
-      try {
-        const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
-        if (communityId == null) {
-          return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
-        }
-        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
-        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-      } catch {
-        return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
-      }
+    if (result === 'error') {
+      return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
     }
   }
 
@@ -418,22 +448,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (hasCommunityContext) {
       const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
 
-      // Resolve community ID from slug if needed
-      if (tenantContext.communityId) {
-        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
-        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-      } else if (tenantContext.tenantSlug) {
-        try {
-          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
-          if (communityId != null) {
-            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
-            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-          }
-        } catch {
-          // Non-fatal for public site — continue without community headers
-        }
-      }
+      await resolveAndForwardTenantHeaders(tenantContext, supabase, forwardedHeaders, 'lenient');
 
       // Check auth: authenticated users go to dashboard, unauthenticated see public site
       const {
@@ -479,23 +494,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
 
     if (!authTenantContext.isReservedSubdomain && authTenantContext.source !== 'none') {
-      if (authTenantContext.communityId) {
-        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(authTenantContext.communityId));
-        forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
-      } else if (authTenantContext.tenantSlug) {
-        try {
-          const communityId = await findCommunityIdBySlug(supabase, authTenantContext.tenantSlug);
-          if (communityId != null) {
-            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-            forwardedHeaders.set(TENANT_SLUG_HEADER, authTenantContext.tenantSlug);
-            forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
-          }
-          // If communityId is null (unknown slug): silently continue — no 404
-        } catch (error) {
-          console.warn('[middleware] Failed to resolve community by slug for auth page:', error);
-          // Non-fatal for auth pages — continue without community headers
-        }
-      }
+      await resolveAndForwardTenantHeaders(authTenantContext, supabase, forwardedHeaders, 'lenient');
     }
   }
 
