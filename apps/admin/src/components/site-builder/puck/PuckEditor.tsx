@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Puck } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
-import type { Data } from '@puckeditor/core';
+import type { Data, PuckAction } from '@puckeditor/core';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 import { puckConfig } from './config';
@@ -211,23 +211,26 @@ export function PuckEditor({ communityId, communitySlug, branding }: PuckEditorP
   // ---------------------------------------------------------------------------
 
   const handleAction = useCallback(
-    (action: { type: string; destinationIndex?: number; index?: number }, appState: { data: Data }) => {
+    (action: PuckAction, appState: { data: Data }) => {
       const kind = classifyAction(action.type);
       if (kind === null) return; // UI-only action, ignore
 
       if (kind === 'structural') {
-        // Structural change (insert, remove, reorder, etc.) — needs full diff
         needsFullDiffRef.current = true;
-      } else {
-        // Content change (replace) — mark the specific block as dirty
-        const idx = action.destinationIndex ?? action.index;
-        if (idx !== undefined && appState.data.content[idx]) {
-          const puckId = appState.data.content[idx].props.id as string;
+        return;
+      }
+
+      // Content change (e.g., 'replace', 'replaceRoot')
+      if (action.type === 'replace') {
+        const puckId = appState.data.content[action.destinationIndex]?.props.id as string;
+        if (puckId) {
           dirtyPuckIdsRef.current.add(puckId);
         } else {
-          // Can't identify the block — fall back to full diff
           needsFullDiffRef.current = true;
         }
+      } else {
+        // Other content actions affect the whole structure
+        needsFullDiffRef.current = true;
       }
     },
     [],

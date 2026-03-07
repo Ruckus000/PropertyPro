@@ -15,7 +15,6 @@ import {
   Phone,
   Type,
   ImageIcon,
-  LayoutTemplate,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
