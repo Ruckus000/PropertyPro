@@ -1,17 +1,22 @@
 import { SetPasswordForm } from '@/components/auth/set-password-form';
+import { BrandedAuthLayout } from '@/components/auth/branded-auth-layout';
+import { resolveAuthPageBranding } from '@/lib/auth/resolve-auth-page-branding';
 
 export const metadata = {
   title: 'Accept Invitation',
   description: 'Set your password to activate your PropertyPro account.',
 };
 
-export default function AcceptInvitePage({
+export default async function AcceptInvitePage({
   searchParams,
 }: {
-  searchParams: { token?: string; communityId?: string };
+  searchParams: Promise<{ token?: string; communityId?: string }>;
 }) {
-  const token = searchParams.token ?? '';
-  const communityId = Number(searchParams.communityId ?? '');
+  const params = await searchParams;
+  const token = params.token ?? '';
+  const communityId = Number(params.communityId ?? '');
+
+  const branding = await resolveAuthPageBranding();
 
   if (!token || !communityId || Number.isNaN(communityId)) {
     return (
@@ -22,14 +27,18 @@ export default function AcceptInvitePage({
     );
   }
 
+  const heading = branding.communityName
+    ? `Join ${branding.communityName}`
+    : 'Set your password';
+
   return (
-    <div className="mx-auto max-w-md">
-      <h1 className="mb-3 text-2xl font-semibold text-gray-900">Set your password</h1>
-      <p className="mb-6 text-gray-600">
-        Choose a password to activate your account.
-      </p>
+    <BrandedAuthLayout
+      branding={branding}
+      heading={heading}
+      description="Choose a password to activate your account."
+      maxWidth="max-w-md"
+    >
       <SetPasswordForm token={token} communityId={communityId} />
-    </div>
+    </BrandedAuthLayout>
   );
 }
-
