@@ -146,6 +146,7 @@
   --surface-muted: var(--gray-100);
   --surface-elevated: var(--gray-0);
   --surface-sunken: var(--gray-50);
+  --surface-hover: var(--gray-50);
   --surface-inverse: var(--gray-950);
   --surface-inverse-subtle: var(--gray-900);
 

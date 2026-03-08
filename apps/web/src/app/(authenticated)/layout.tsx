@@ -8,6 +8,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { AppShell, type AppShellUser, type AppShellCommunity } from '@/components/layout/app-shell';
+import { AppQueryProvider } from '@/components/providers/query-provider';
 
 /**
  * Resolve authenticated user info from Supabase session.
@@ -139,9 +140,11 @@ export default async function AuthenticatedLayout({
       ))}
       <div style={cssVars as React.CSSProperties}>
         <AuthSessionSync />
-        <AppShell user={user} community={community} role={role} features={features}>
-          {children}
-        </AppShell>
+        <AppQueryProvider>
+          <AppShell user={user} community={community} role={role} features={features}>
+            {children}
+          </AppShell>
+        </AppQueryProvider>
       </div>
     </>
   );
