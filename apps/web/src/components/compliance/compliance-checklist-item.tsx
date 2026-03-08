@@ -16,6 +16,7 @@ export interface ChecklistItemData {
   documentPostedAt?: string | null; // ISO string
   deadline?: string | null; // ISO string
   rollingWindow?: { months: number } | null;
+  isConditional?: boolean;
   status: ComplianceStatus;
 }
 
@@ -23,7 +24,7 @@ function formatDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export interface ComplianceChecklistItemProps {
@@ -45,13 +46,17 @@ export function ComplianceChecklistItem({ item }: ComplianceChecklistItemProps) 
         : "neutral"
     }>
       <Card.Header>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           <Card.Title>{item.title}</Card.Title>
           <Card.Subtitle>
-            <span className="mr-3">Category: {item.category}</span>
             {item.statuteReference ? (
-              <span className="text-[var(--text-tertiary)]">{item.statuteReference}</span>
+              <span className="font-medium text-gray-500 dark:text-gray-400">{item.statuteReference}</span>
             ) : null}
+            {item.isConditional && (
+              <span className="ml-2 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">
+                Conditional
+              </span>
+            )}
           </Card.Subtitle>
         </div>
         <Card.Actions>
@@ -60,7 +65,7 @@ export function ComplianceChecklistItem({ item }: ComplianceChecklistItemProps) 
       </Card.Header>
       <Card.Body className="flex flex-col gap-3">
         {item.description ? (
-          <p className="text-sm text-[var(--text-secondary)] dark:text-gray-300">{item.description}</p>
+          <p className="text-sm text-[var(--text-secondary)] dark:text-gray-300 leading-relaxed">{item.description}</p>
         ) : null}
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {deadline ? (
@@ -83,4 +88,3 @@ export function ComplianceChecklistItem({ item }: ComplianceChecklistItemProps) 
 }
 
 export default ComplianceChecklistItem;
-
