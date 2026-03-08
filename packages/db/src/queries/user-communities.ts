@@ -43,3 +43,23 @@ export async function findUserCommunitiesUnscoped(
     )
     .orderBy(communities.name);
 }
+
+/**
+ * Returns a count of distinct non-deleted communities the user belongs to.
+ * More efficient than fetching the full list when only the count is needed.
+ */
+export async function countUserCommunitiesUnscoped(
+  userId: string,
+): Promise<number> {
+  const rows = await db
+    .selectDistinct({ communityId: userRoles.communityId })
+    .from(userRoles)
+    .innerJoin(communities, eq(communities.id, userRoles.communityId))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        isNull(communities.deletedAt),
+      ),
+    );
+  return rows.length;
+}

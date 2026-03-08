@@ -138,6 +138,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     statuteReference: item.statuteReference,
     deadline: item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null,
     rollingWindow: item.rollingMonths ? { months: item.rollingMonths } : null,
+    isConditional: item.isConditional ?? false,
     documentId: null,
     documentPostedAt: null,
     lastModifiedBy: userId,

@@ -61,6 +61,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/internal/payment-reminders', method: 'POST' },
   // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
   { path: '/api/v1/auth/demo-login', method: 'GET' },
+  // Public transparency page data endpoint (community opt-in gated)
+  { path: '/api/v1/transparency', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
@@ -88,6 +90,11 @@ function isProtectedPath(pathname: string): boolean {
 }
 
 function shouldResolveTenant(pathname: string): boolean {
+  // /select-community is a cross-tenant page that lists all communities the
+  // user belongs to. It never reads x-community-id. Injecting tenant context
+  // here would cause an infinite redirect loop when the authenticated layout
+  // detects a wrong-community condition and redirects back here.
+  if (pathname === '/select-community') return false;
   return isProtectedPath(pathname);
 }
 
@@ -468,6 +475,36 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // --- Tenant resolution for auth pages (branded login) ---
+  // When a community subdomain serves an auth page (e.g. sunset-condos.propertyprofl.com/auth/login),
+  // inject x-community-id so the page can display community branding.
+  // Non-blocking: unknown subdomains silently fall through to generic login.
+  if (pathname.startsWith(AUTH_PATH_PREFIX)) {
+    const authTenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+    });
+
+    if (!authTenantContext.isReservedSubdomain && authTenantContext.source !== 'none') {
+      if (authTenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(authTenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
+      } else if (authTenantContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, authTenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, authTenantContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
+          }
+          // If communityId is null (unknown slug): silently continue — no 404
+        } catch {
+          // Non-fatal for auth pages — continue without community headers
+        }
+      }
+    }
+  }
+
   // Redirect already-authenticated users away from auth pages (except verify-email)
   if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== VERIFY_EMAIL_PATH) {
     const {
@@ -494,7 +531,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
       const returnTo = request.nextUrl.searchParams.get('returnTo');
       const destination = request.nextUrl.clone();
-      destination.pathname = returnTo || '/dashboard';
+      const hasTenantContext = forwardedHeaders.has(COMMUNITY_ID_HEADER);
+      destination.pathname = returnTo || (hasTenantContext ? '/dashboard' : '/select-community');
       destination.searchParams.delete('returnTo');
       return finaliseResponse(
         response as unknown as NextResponse,

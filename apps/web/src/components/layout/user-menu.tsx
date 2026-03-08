@@ -5,7 +5,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { LogOut, Settings, Download, ChevronDown } from 'lucide-react';
+import { LogOut, Settings, Download, ChevronDown, ArrowRightLeft } from 'lucide-react';
 import { toInitials } from '@propertypro/shared';
 import { createBrowserClient } from '@/lib/supabase/client';
 
@@ -18,6 +18,8 @@ interface UserMenuProps {
 export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [communityCount, setCommunityCount] = useState<number | null>(null);
+  const [hasFetchedCommunities, setHasFetchedCommunities] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setOpen(false), []);
@@ -40,6 +42,17 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [open, close]);
+
+  // Lazy-load community count on first dropdown open.
+  // Cached in state so subsequent opens don't re-fetch.
+  useEffect(() => {
+    if (!open || hasFetchedCommunities) return;
+    setHasFetchedCommunities(true);
+    fetch('/api/v1/user/communities')
+      .then((res) => res.json())
+      .then((json: { data?: { count?: number } }) => setCommunityCount(json.data?.count ?? 0))
+      .catch(() => setCommunityCount(0));
+  }, [open, hasFetchedCommunities]);
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -106,6 +119,17 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
               <Download size={14} className="text-gray-400" />
               Data Export
             </Link>
+            {communityCount != null && communityCount > 1 && (
+              <Link
+                href="/select-community"
+                onClick={close}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                role="menuitem"
+              >
+                <ArrowRightLeft size={14} className="text-gray-400" />
+                Switch Community
+              </Link>
+            )}
           </div>
 
           <div className="border-t border-gray-100 py-1">

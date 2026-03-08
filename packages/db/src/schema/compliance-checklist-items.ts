@@ -8,7 +8,7 @@
  * not stored as a column — this prevents stale status values.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documents } from './documents';
 
@@ -52,6 +52,8 @@ export const complianceChecklistItems = pgTable(
      * stores the window configuration as JSON.
      */
     rollingWindow: jsonb('rolling_window'),
+    /** Marks checklist items that may not apply to every community. */
+    isConditional: boolean('is_conditional').notNull().default(false),
     /** Who last modified this item */
     lastModifiedBy: uuid('last_modified_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -1,5 +1,12 @@
 import { pathToFileURL } from 'node:url';
 import {
+  communities,
+  complianceChecklistItems,
+  documents,
+  meetings,
+} from '@propertypro/db';
+import { and, eq, inArray, isNull } from '@propertypro/db/filters';
+import {
   ensureNotificationPreference,
   seedCommunity,
   seedRoles,
@@ -8,7 +15,9 @@ import {
   type SeedUserConfig,
 } from '@propertypro/db/seed/seed-community';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { getComplianceTemplate, type CommunityType } from '@propertypro/shared';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { runBackfill } from './backfill-compliance-templates';
 
 const db = createUnscopedClient();
 
@@ -121,6 +130,248 @@ function resolveUserId(userIdsByEmail: Record<string, string>, email: string): s
   return userId;
 }
 
+function addDays(source: Date, days: number): Date {
+  const value = new Date(source);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value;
+}
+
+function subDays(source: Date, days: number): Date {
+  const value = new Date(source);
+  value.setUTCDate(value.getUTCDate() - days);
+  return value;
+}
+
+function addHours(source: Date, hours: number): Date {
+  const value = new Date(source);
+  value.setUTCHours(value.getUTCHours() + hours);
+  return value;
+}
+
+function monthKey(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+async function upsertDocument(
+  communityId: number,
+  filePath: string,
+  title: string,
+  uploadedBy: string,
+  postedAt: Date,
+): Promise<number> {
+  const existing = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(
+      and(
+        eq(documents.communityId, communityId),
+        eq(documents.filePath, filePath),
+        isNull(documents.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(documents)
+      .set({
+        title,
+        description: `${title} (demo transparency seed)`,
+        fileName: filePath.split('/').at(-1) ?? `${title}.pdf`,
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+        uploadedBy,
+        createdAt: postedAt,
+        updatedAt: postedAt,
+      })
+      .where(eq(documents.id, existing[0].id));
+    return existing[0].id;
+  }
+
+  const [created] = await db
+    .insert(documents)
+    .values({
+      communityId,
+      title,
+      description: `${title} (demo transparency seed)`,
+      filePath,
+      fileName: filePath.split('/').at(-1) ?? `${title}.pdf`,
+      fileSize: 1024,
+      mimeType: 'application/pdf',
+      uploadedBy,
+      createdAt: postedAt,
+      updatedAt: postedAt,
+    })
+    .returning({ id: documents.id });
+
+  if (!created) {
+    throw new Error(`Failed to create document for ${filePath}`);
+  }
+
+  return created.id;
+}
+
+async function setChecklistDocument(
+  communityId: number,
+  templateKey: string,
+  documentId: number | null,
+  postedAt: Date | null,
+): Promise<void> {
+  await db
+    .update(complianceChecklistItems)
+    .set({
+      documentId,
+      documentPostedAt: postedAt,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(complianceChecklistItems.communityId, communityId),
+        eq(complianceChecklistItems.templateKey, templateKey),
+        isNull(complianceChecklistItems.deletedAt),
+      ),
+    );
+}
+
+async function upsertMeeting(
+  communityId: number,
+  title: string,
+  meetingType: 'board' | 'annual' | 'special' | 'budget' | 'committee',
+  startsAt: Date,
+  noticePostedAt: Date | null,
+): Promise<void> {
+  const existing = await db
+    .select({ id: meetings.id })
+    .from(meetings)
+    .where(
+      and(
+        eq(meetings.communityId, communityId),
+        eq(meetings.title, title),
+        isNull(meetings.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(meetings)
+      .set({
+        meetingType,
+        startsAt,
+        noticePostedAt,
+        location: 'Community Clubhouse',
+        updatedAt: new Date(),
+      })
+      .where(eq(meetings.id, existing[0].id));
+    return;
+  }
+
+  await db.insert(meetings).values({
+    communityId,
+    title,
+    meetingType,
+    startsAt,
+    noticePostedAt,
+    location: 'Community Clubhouse',
+  });
+}
+
+async function seedTransparencyDemoData(
+  communityId: number,
+  communityType: CommunityType,
+  slug: DemoCommunitySlug,
+  uploadedBy: string,
+): Promise<void> {
+  const template = getComplianceTemplate(communityType);
+  if (template.length === 0) {
+    return;
+  }
+
+  const conditionalNotRequired = slug === 'sunset-condos'
+    ? new Set(['718_conflict_contracts', '718_sirs'])
+    : slug === 'palm-shores-hoa'
+      ? new Set(['720_bids'])
+      : new Set<string>();
+
+  const intentionallyNotPosted = slug === 'sunset-condos'
+    ? new Set(['718_insurance'])
+    : slug === 'palm-shores-hoa'
+      ? new Set(['720_contracts'])
+      : new Set<string>();
+
+  const now = new Date();
+  for (const item of template) {
+    if (conditionalNotRequired.has(item.templateKey) || intentionallyNotPosted.has(item.templateKey)) {
+      await setChecklistDocument(communityId, item.templateKey, null, null);
+      continue;
+    }
+
+    const postedAt = subDays(now, Math.floor(Math.random() * 40) + 2);
+    const documentId = await upsertDocument(
+      communityId,
+      `transparency/${slug}/${item.templateKey}.pdf`,
+      `${item.title} (${slug})`,
+      uploadedBy,
+      postedAt,
+    );
+
+    await setChecklistDocument(communityId, item.templateKey, documentId, postedAt);
+  }
+
+  // Seed 10/12 months of minutes documents for condo demo community.
+  if (slug === 'sunset-condos') {
+    for (let offset = 11; offset >= 2; offset -= 1) {
+      const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 15, 14, 0, 0));
+      await upsertDocument(
+        communityId,
+        `transparency/${slug}/minutes/${monthKey(monthDate)}.pdf`,
+        `Board Minutes ${monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`,
+        uploadedBy,
+        monthDate,
+      );
+    }
+  }
+
+  // Seed meeting notice timing examples.
+  const annualMeetingStart = addDays(now, 30);
+  await upsertMeeting(
+    communityId,
+    `${slug} Owner Meeting (21-day notice)`,
+    'annual',
+    annualMeetingStart,
+    subDays(annualMeetingStart, 21),
+  );
+
+  const missedAnnualStart = addDays(now, 45);
+  await upsertMeeting(
+    communityId,
+    `${slug} Owner Meeting (10-day notice)`,
+    'annual',
+    missedAnnualStart,
+    subDays(missedAnnualStart, 10),
+  );
+
+  const boardMeetingStart = addDays(now, 12);
+  await upsertMeeting(
+    communityId,
+    `${slug} Board Meeting (52-hour notice)`,
+    'board',
+    boardMeetingStart,
+    addHours(boardMeetingStart, -52),
+  );
+
+  const missedBoardStart = addDays(now, 18);
+  await upsertMeeting(
+    communityId,
+    `${slug} Board Meeting (36-hour notice)`,
+    'board',
+    missedBoardStart,
+    addHours(missedBoardStart, -36),
+  );
+}
+
 export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> {
   const syncAuthUsers = options.syncAuthUsers ?? true;
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
@@ -176,6 +427,53 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
       });
     }),
   );
+
+  await runBackfill();
+
+  const condoAndHoa = await db
+    .select({
+      id: communities.id,
+      slug: communities.slug,
+      communityType: communities.communityType,
+    })
+    .from(communities)
+    .where(
+      and(
+        inArray(communities.slug, ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments']),
+        isNull(communities.deletedAt),
+      ),
+    );
+
+  const boardPresidentId = resolveUserId(userIdsByEmail, 'board.president@sunset.local');
+  for (const community of condoAndHoa) {
+    if (community.communityType === 'apartment') {
+      await db
+        .update(communities)
+        .set({
+          transparencyEnabled: false,
+          transparencyAcknowledgedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(communities.id, community.id));
+      continue;
+    }
+
+    await seedTransparencyDemoData(
+      community.id,
+      community.communityType,
+      community.slug as DemoCommunitySlug,
+      boardPresidentId,
+    );
+
+    await db
+      .update(communities)
+      .set({
+        transparencyEnabled: true,
+        transparencyAcknowledgedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(communities.id, community.id));
+  }
 
   debugSeed('cross-community role and notification fixups complete');
   debugSeed('runDemoSeed complete');

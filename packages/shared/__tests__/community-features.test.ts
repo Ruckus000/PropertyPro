@@ -20,6 +20,7 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'requiresPublicWebsite',
   'hasMaintenanceRequests',
   'hasAnnouncements',
+  'hasTransparencyPage',
 ] as const;
 
 describe('CommunityFeatures config', () => {
@@ -86,6 +87,10 @@ describe('CommunityFeatures config', () => {
     it('has announcements', () => {
       expect(features.hasAnnouncements).toBe(true);
     });
+
+    it('has transparency page support', () => {
+      expect(features.hasTransparencyPage).toBe(true);
+    });
   });
 
   describe('hoa_720 features', () => {
@@ -127,6 +132,10 @@ describe('CommunityFeatures config', () => {
     it('has announcements', () => {
       expect(features.hasAnnouncements).toBe(true);
     });
+
+    it('has transparency page support', () => {
+      expect(features.hasTransparencyPage).toBe(true);
+    });
   });
 
   describe('apartment features', () => {
@@ -167,6 +176,10 @@ describe('CommunityFeatures config', () => {
 
     it('has announcements', () => {
       expect(features.hasAnnouncements).toBe(true);
+    });
+
+    it('does not have transparency page support', () => {
+      expect(features.hasTransparencyPage).toBe(false);
     });
   });
 

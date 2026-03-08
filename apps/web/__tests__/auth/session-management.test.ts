@@ -112,6 +112,14 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
+  it('allows unauthenticated GET /api/v1/transparency', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/transparency?slug=sunset-condos', {}, 'GET'),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it('keeps unauthenticated POST /api/v1/invitations protected', async () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/invitations', {}, 'POST'),
@@ -270,7 +278,7 @@ describe('p1-22 session middleware', () => {
     expect(getUserMock).toHaveBeenCalledTimes(2);
   });
 
-  it('redirects authenticated users away from auth pages to dashboard by default', async () => {
+  it('redirects authenticated users on root domain auth pages to /select-community (no tenant context)', async () => {
     getUserMock.mockResolvedValue({
       data: {
         user: {
@@ -283,7 +291,7 @@ describe('p1-22 session middleware', () => {
     const response = await middleware(request('http://localhost:3000/auth/login'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/dashboard');
+    expect(response.headers.get('location')).toContain('/select-community');
   });
 
   it('redirects authenticated users to returnTo when present on auth pages', async () => {

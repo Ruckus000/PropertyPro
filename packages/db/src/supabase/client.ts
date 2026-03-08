@@ -5,6 +5,7 @@
  * @module supabase/client
  */
 import { createBrowserClient as createSupabaseBrowserClient } from '@supabase/ssr';
+import { getCookieOptions } from './cookie-config';
 
 let client: ReturnType<typeof createSupabaseBrowserClient> | null = null;
 
@@ -24,6 +25,8 @@ export function createBrowserClient() {
     );
   }
 
-  client = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey);
+  client = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: getCookieOptions(),
+  });
   return client;
 }

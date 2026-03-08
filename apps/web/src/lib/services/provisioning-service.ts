@@ -30,6 +30,8 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
+import { getComplianceTemplate } from '@propertypro/shared';
+import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 
 // ---------------------------------------------------------------------------
 // State machine constants — must match PHASE2_EXECUTION_PLAN.md exactly
@@ -56,122 +58,6 @@ function nextStep(last: string | null): ProvisioningStepSuccess {
   }
   return STEP_SEQUENCE[idx + 1] as ProvisioningStepSuccess;
 }
-
-// ---------------------------------------------------------------------------
-// Static compliance checklist templates
-// ---------------------------------------------------------------------------
-
-type ChecklistTemplate = {
-  templateKey: string;
-  title: string;
-  description: string;
-  category: string;
-  statuteReference: string;
-};
-
-const CONDO_718_CHECKLIST: ChecklistTemplate[] = [
-  {
-    templateKey: '718_articles_of_incorporation',
-    title: 'Articles of Incorporation',
-    description: 'Association articles of incorporation must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§718.111(12)(a)1',
-  },
-  {
-    templateKey: '718_bylaws',
-    title: 'Bylaws',
-    description: 'Association bylaws must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§718.111(12)(a)2',
-  },
-  {
-    templateKey: '718_rules',
-    title: 'Rules and Regulations',
-    description: 'Current rules and regulations must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§718.111(12)(a)3',
-  },
-  {
-    templateKey: '718_declaration',
-    title: 'Declaration of Condominium',
-    description: 'Declaration of condominium must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§718.111(12)(a)4',
-  },
-  {
-    templateKey: '718_budget_current',
-    title: 'Current Year Budget',
-    description: 'Current year adopted budget must be posted within 30 days of adoption.',
-    category: 'financial_records',
-    statuteReference: '§718.111(12)(a)5',
-  },
-  {
-    templateKey: '718_financial_report',
-    title: 'Annual Financial Report',
-    description: 'Most recent annual financial report or financial statement.',
-    category: 'financial_records',
-    statuteReference: '§718.111(12)(a)6',
-  },
-  {
-    templateKey: '718_meeting_minutes',
-    title: 'Board Meeting Minutes',
-    description: 'Minutes of all board meetings for the past 12 months.',
-    category: 'meeting_records',
-    statuteReference: '§718.111(12)(a)7',
-  },
-  {
-    templateKey: '718_notice_annual',
-    title: 'Annual Meeting Notice',
-    description: '14-day advance notice required for annual owner meetings.',
-    category: 'meeting_records',
-    statuteReference: '§718.112(2)(d)',
-  },
-];
-
-const HOA_720_CHECKLIST: ChecklistTemplate[] = [
-  {
-    templateKey: '720_articles_of_incorporation',
-    title: 'Articles of Incorporation',
-    description: 'Association articles of incorporation must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§720.303(5)(a)1',
-  },
-  {
-    templateKey: '720_bylaws',
-    title: 'Bylaws',
-    description: 'Association bylaws must be posted on the website.',
-    category: 'governing_documents',
-    statuteReference: '§720.303(5)(a)2',
-  },
-  {
-    templateKey: '720_declaration',
-    title: 'Declaration of Covenants',
-    description: 'Declaration of covenants, conditions, and restrictions.',
-    category: 'governing_documents',
-    statuteReference: '§720.303(5)(a)3',
-  },
-  {
-    templateKey: '720_rules',
-    title: 'Rules and Regulations',
-    description: 'Current rules and regulations must be posted.',
-    category: 'governing_documents',
-    statuteReference: '§720.303(5)(a)4',
-  },
-  {
-    templateKey: '720_budget_current',
-    title: 'Current Year Budget',
-    description: 'Current year adopted budget must be posted within 30 days of adoption.',
-    category: 'financial_records',
-    statuteReference: '§720.303(5)(a)5',
-  },
-  {
-    templateKey: '720_meeting_minutes',
-    title: 'Board Meeting Minutes',
-    description: 'Minutes of all board meetings for the past 12 months.',
-    category: 'meeting_records',
-    statuteReference: '§720.303(5)(b)',
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Default document categories
@@ -331,8 +217,8 @@ async function stepChecklistGenerated(ctx: JobContext): Promise<void> {
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] checklist_generated: communityId not set');
 
-  const templates =
-    ctx.signup.communityType === 'condo_718' ? CONDO_718_CHECKLIST : HOA_720_CHECKLIST;
+  const templates = getComplianceTemplate(ctx.signup.communityType);
+  const now = new Date();
 
   const rows = templates.map((t) => ({
     communityId,
@@ -341,6 +227,9 @@ async function stepChecklistGenerated(ctx: JobContext): Promise<void> {
     description: t.description,
     category: t.category,
     statuteReference: t.statuteReference,
+    deadline: t.deadlineDays ? calculatePostingDeadline(now, t.deadlineDays) : null,
+    rollingWindow: t.rollingMonths ? { months: t.rollingMonths } : null,
+    isConditional: t.isConditional ?? false,
   }));
 
   await db

@@ -181,6 +181,10 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/test', 'OPTIONS')).toBe('read');
   });
 
+  it('classifies public transparency endpoint as public tier', () => {
+    expect(classifyRoute('/api/v1/transparency', 'GET')).toBe('public');
+  });
+
   it('classifies API write methods as write', () => {
     expect(classifyRoute('/api/v1/documents', 'POST')).toBe('write');
     expect(classifyRoute('/api/v1/documents/1', 'PATCH')).toBe('write');
@@ -296,6 +300,19 @@ describe('checkRateLimit', () => {
     expect(result!.allowed).toBe(true);
     expect(result!.category).toBe('auth');
     expect(result!.limit).toBe(10);
+  });
+
+  it('uses public 60/min tier for GET /api/v1/transparency', () => {
+    const request = createRequest('http://localhost:3000/api/v1/transparency?slug=sunset-condos', {
+      method: 'GET',
+      headers: { 'x-real-ip': '10.0.0.2' },
+    });
+    const result = checkRateLimit(request, null);
+
+    expect(result).not.toBeNull();
+    expect(result!.category).toBe('public');
+    expect(result!.limit).toBe(60);
+    expect(result!.allowed).toBe(true);
   });
 
   it('enforces auth route limit (10 req/min)', () => {

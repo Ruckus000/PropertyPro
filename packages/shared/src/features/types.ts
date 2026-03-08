@@ -21,6 +21,8 @@ export interface CommunityFeatures {
   readonly hasMeetings: boolean;
   /** Public notices page for statutory posting requirements (condo/HOA only) */
   readonly hasPublicNoticesPage: boolean;
+  /** Public compliance transparency page (condo/HOA only) */
+  readonly hasTransparencyPage: boolean;
   /** Owner role is valid in this community type (condo/HOA only) */
   readonly hasOwnerRole: boolean;
   /** Voting features for board elections and owner votes (condo/HOA only) */
