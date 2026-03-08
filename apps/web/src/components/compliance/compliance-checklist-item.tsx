@@ -42,6 +42,7 @@ function statusDotColor(status: ComplianceStatus): string {
     case "overdue": return "bg-[var(--status-danger)]";
     case "unsatisfied": return "bg-[var(--status-warning)]";
     case "not_applicable": return "bg-[var(--status-neutral)]";
+    default: return "bg-[var(--border-default)]";
   }
 }
 

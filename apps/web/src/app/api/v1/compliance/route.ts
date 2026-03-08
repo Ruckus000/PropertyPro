@@ -225,41 +225,38 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const scoped = createScopedClient(communityId);
 
   // Build the update payload based on the action
-  let updateData: Record<string, unknown>;
+  let payload: Record<string, unknown>;
   switch (patchAction) {
     case 'link_document': {
       // Verify the document belongs to this community (scoped query enforces tenant isolation)
       const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, documentId!));
-      if ((docRows as unknown as unknown[]).length === 0) {
+      if (!Array.isArray(docRows) || docRows.length === 0) {
         throw new ValidationError('Document not found or does not belong to this community');
       }
-      updateData = {
+      payload = {
         documentId: documentId!,
         documentPostedAt: new Date(),
-        lastModifiedBy: userId,
       };
       break;
     }
     case 'unlink_document':
-      updateData = {
+      payload = {
         documentId: null,
         documentPostedAt: null,
-        lastModifiedBy: userId,
       };
       break;
     case 'mark_not_applicable':
-      updateData = {
+      payload = {
         isApplicable: false,
-        lastModifiedBy: userId,
       };
       break;
     case 'mark_applicable':
-      updateData = {
+      payload = {
         isApplicable: true,
-        lastModifiedBy: userId,
       };
       break;
   }
+  const updateData = { ...payload, lastModifiedBy: userId };
 
   const updated = await scoped.update(
     complianceChecklistItems,

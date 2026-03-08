@@ -5,7 +5,7 @@
  * assert on the byte content. Produces a professional multi-page report
  * with category grouping, status indicators, and summary statistics.
  */
-import type { ComplianceStatus } from "./compliance-calculator";
+import { groupByCategory, type ComplianceStatus } from "./compliance-calculator";
 
 export interface PdfChecklistItem {
   title: string;
@@ -74,20 +74,7 @@ function formatDeadline(deadline: string | null | undefined): string {
 /**
  * Group items by category, preserving a defined order.
  */
-function groupByCategory(items: PdfChecklistItem[]): Map<string, PdfChecklistItem[]> {
-  const order = ["governing_documents", "financial_records", "meeting_records", "insurance", "operations"];
-  const grouped = new Map<string, PdfChecklistItem[]>();
-  for (const cat of order) {
-    const matching = items.filter((i) => i.category === cat);
-    if (matching.length > 0) grouped.set(cat, matching);
-  }
-  for (const item of items) {
-    if (!grouped.has(item.category)) {
-      grouped.set(item.category, items.filter((i) => i.category === item.category));
-    }
-  }
-  return grouped;
-}
+
 
 // ── Page Builder ───────────────────────────────────────
 
