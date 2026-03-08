@@ -2,7 +2,7 @@
 
 **Complexity:** Small
 **Tier:** 3 (defer — assess after Tier 1 ships)
-**Migration Range:** 0085-0089
+**Migration Range:** 0086-0090
 **Depends on:** WS 65 (RBAC resources, feature flags, test harness)
 
 ---
@@ -20,8 +20,6 @@ Enable front desk/concierge tracking of package deliveries and visitor check-ins
 - Notification to resident on package arrival
 - Visitor pass creation (name, purpose, expected arrival, host unit)
 - Visitor check-in/check-out logging
-- Data retention policies (configurable auto-purge for visitor logs)
-
 ---
 
 ## 3. Out Of Scope
@@ -30,6 +28,7 @@ Enable front desk/concierge tracking of package deliveries and visitor check-ins
 - Package locker hardware integration
 - Visitor photo capture
 - Background check integration
+- Data retention policies (configurable auto-purge for visitor logs) — deferred; requires policy engine design and legal review of retention periods before implementation
 
 ---
 
@@ -45,7 +44,7 @@ Enable front desk/concierge tracking of package deliveries and visitor check-ins
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0085-0089 range)
+### New Tables (migrations 0086-0090 range)
 
 **package_log** — Package tracking
 - id, communityId, unitId, recipientName, carrier, trackingNumber, status (received/notified/picked_up), receivedByStaffId, pickedUpAt, pickedUpByName, notes, createdAt, updatedAt, deletedAt
@@ -93,6 +92,7 @@ GET    /api/v1/visitors/my             — My expected visitors (resident view)
 |---|---|---|---|---|
 | owner | yes (own unit) | no | yes | no |
 | tenant | yes (own unit) | no | yes | no |
+| board_member | no | no | no | no |
 | board_president / cam | yes | yes | yes | yes |
 | site_manager | yes | yes | yes | yes |
 | property_manager_admin | yes | yes | yes | yes |

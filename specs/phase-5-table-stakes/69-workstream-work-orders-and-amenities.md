@@ -2,7 +2,7 @@
 
 **Complexity:** Medium
 **Tier:** 2 (expand)
-**Migration Range:** 0070-0079
+**Migration Range:** 0071-0080
 **Depends on:** WS 65 (RBAC resources, feature flags, test harness)
 
 ---
@@ -48,7 +48,13 @@ Enable vendor dispatch work orders for maintenance beyond resident self-service 
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0070-0079 range)
+### New Tables (migrations 0071-0080 range)
+
+**Important:** The first migration in WS 69's range must enable the `btree_gist` extension before creating the `amenity_reservations` table:
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+Supabase includes `btree_gist` in its PostgreSQL distribution but it is not enabled by default.
 
 **vendors** — Vendor directory
 - id, communityId, name, company, phone, email, specialties (JSONB array), isActive, createdAt, updatedAt, deletedAt
@@ -74,6 +80,12 @@ Enable vendor dispatch work orders for maintenance beyond resident self-service 
   This requires the `btree_gist` extension (already available in Supabase). The application-level check remains as a user-friendly pre-validation, but the constraint is the authoritative guard against race conditions.
 
 All tables: communityId FK, RLS enabled, soft-delete support.
+
+### Vendor Specialties
+
+Initial values: `plumbing`, `electrical`, `hvac`, `landscaping`, `painting`, `roofing`, `general_maintenance`, `pest_control`, `cleaning`, `security`, `other`
+
+Stored as JSONB array of TEXT values. No FK enforcement — specialties are display labels, not relational data.
 
 ---
 

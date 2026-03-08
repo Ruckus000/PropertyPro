@@ -2,8 +2,8 @@
 
 **Complexity:** Medium
 **Tier:** 3 (defer — assess after Tier 1 ships)
-**Migration Range:** 0080-0084
-**Depends on:** WS 65 (RBAC resources, feature flags, test harness)
+**Migration Range:** 0081-0085
+**Depends on:** WS 65 (RBAC resources, feature flags, test harness), WS 66 (ledger entries for accounting export)
 
 ---
 
@@ -44,13 +44,26 @@ Provide ICS calendar feeds for meetings, enable Google Calendar sync, and build 
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0080-0084 range)
+### New Tables (migrations 0081-0085 range)
 
 **calendar_sync_tokens** — Per-user sync state for Google Calendar
-- id, communityId, userId, provider (google), accessToken (encrypted), refreshToken (encrypted), syncToken, channelId, channelExpiry, lastSyncAt, createdAt, updatedAt
+- id, communityId, userId, provider (google), accessToken (TEXT, AES-256-GCM encrypted at application layer), refreshToken (TEXT, AES-256-GCM encrypted at application layer), syncToken, channelId, channelExpiry, lastSyncAt, createdAt, updatedAt, deletedAt
 
 **accounting_connections** — Per-community accounting system connections
-- id, communityId, provider (quickbooks/xero), accessToken (encrypted), refreshToken (encrypted), tenantId, lastSyncAt, mappingConfig (JSONB), createdAt, updatedAt
+- id, communityId, provider (quickbooks/xero), accessToken (TEXT, AES-256-GCM encrypted at application layer), refreshToken (TEXT, AES-256-GCM encrypted at application layer), tenantId, lastSyncAt, mappingConfig (JSONB), createdAt, updatedAt, deletedAt
+
+### Token Encryption Strategy
+
+OAuth tokens (access_token, refresh_token) are encrypted at the application layer before storage and decrypted on read.
+
+- **Algorithm:** AES-256-GCM (authenticated encryption)
+- **Key source:** `TOKEN_ENCRYPTION_KEY` environment variable (32-byte hex string)
+- **Implementation:** `packages/db/src/crypto/token-encryption.ts` exports `encryptToken(plaintext: string): string` and `decryptToken(ciphertext: string): string`
+- **Storage format:** Base64-encoded ciphertext with prepended IV (12 bytes)
+- **Key rotation:** Not in Phase 5 scope. Document as future work.
+- **Column type:** `TEXT` (stores base64-encoded ciphertext, not raw bytes)
+
+Environment requirement: `TOKEN_ENCRYPTION_KEY` must be set in production. Tests use a hardcoded test key. Add to `.env.example`.
 
 ---
 
@@ -80,10 +93,10 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 
 ## 7. Authorization + RLS Policy Family Mapping
 
-- ICS public feed: no auth (community-scoped by slug in URL)
+- ICS public feed: no auth required. Community is resolved via subdomain middleware (same as all other tenant-scoped routes). The feed URL is `https://[slug].propertyprofl.com/api/v1/calendar/meetings.ics`. Calendar apps bookmark this URL directly.
 - ICS user feed: authenticated, returns only user's relevant meetings
-- Google Calendar sync: board_president, cam, property_manager_admin only
-- Accounting connectors: cam, property_manager_admin only
+- Google Calendar sync: board_president, cam, site_manager, property_manager_admin only
+- Accounting connectors: cam, site_manager, property_manager_admin only
 
 ---
 

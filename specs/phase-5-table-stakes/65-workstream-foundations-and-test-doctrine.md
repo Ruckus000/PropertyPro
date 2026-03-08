@@ -53,9 +53,13 @@ Establish the shared infrastructure, contracts, and quality gates that all Phase
 
 ## 5. Data Model And Migrations
 
-### Migration Range: 0036-0039
+### Migration Range: 0037-0040
 
-### 0036: Ledger Entries Table
+### Pre-task 0: Journal Reconciliation
+
+Before creating any new migrations, reconcile the Drizzle journal with migration files on disk. Migrations 0028-0036 exist as files but may not all be registered in `packages/db/migrations/meta/_journal.json`. Run `drizzle-kit generate` or manually register the missing entries so journal entries match files on disk. Verify with `scripts/verify-migration-ordering.ts`.
+
+### 0037: Ledger Entries Table
 
 ```sql
 CREATE TABLE ledger_entries (
@@ -103,7 +107,7 @@ export const ledgerEntries = pgTable('ledger_entries', {
   sourceId: text('source_id'),
   unitId: bigint('unit_id', { mode: 'number' }).references(() => units.id),
   userId: uuid('user_id').references(() => users.id),
-  effectiveDate: date('effective_date').notNull().defaultNow(),
+  effectiveDate: date('effective_date').notNull().default(sql`CURRENT_DATE`), // requires: import { sql } from 'drizzle-orm' (via @propertypro/db/filters)
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   createdByUserId: uuid('created_by_user_id').references(() => users.id),
@@ -152,7 +156,7 @@ export interface LedgerMetadata {
 ### Ledger Write Interface
 
 ```typescript
-// packages/db/src/queries/ledger.ts (or apps/web/src/lib/services/ledger-service.ts)
+// packages/db/src/queries/ledger.ts
 export async function postLedgerEntry(
   scopedClient: ScopedClient,
   entry: {
@@ -390,9 +394,9 @@ Also handle: `apps/web/__tests__/billing/subscription-guard-integration.test.ts`
 - [ ] **Legacy allowlist empty** — All 13 existing integration tests migrated to use test providers; no allowlist entries remain
 - [ ] **Admin vitest config** — `apps/admin/vitest.integration.config.ts` created; `apps/admin/vitest.config.ts` updated to exclude `*.integration.test.ts`
 - [ ] **Migration ordering check** — `scripts/verify-migration-ordering.ts` created and passing
-- [ ] **Ledger table** — Migration 0036 applied, Drizzle schema added, `postLedgerEntry()` implemented with audit logging
-- [ ] **RBAC resources** — 8 new resources added to `rbac-matrix.ts` with `satisfies` exhaustiveness
-- [ ] **Feature flags** — 9 new flags added to `CommunityFeatures` with exhaustiveness check, all defaulting to `false`
+- [ ] **Ledger table** — Migration 0037 applied, Drizzle schema added, `postLedgerEntry()` implemented with audit logging
+- [ ] **RBAC resources** — 10 new resources added to `rbac-matrix.ts` with `satisfies` exhaustiveness
+- [ ] **Feature flags** — 11 new flags added to `CommunityFeatures` with exhaustiveness check, all defaulting to `false`
 - [ ] **Playwright** — Installed, configured, base fixtures created, 1-2 smoke tests passing
 - [ ] **CI workflows** — New required jobs added (`no-mock-guard`, `migration-ordering`); `integration-tests.yml` conditional removed
 - [ ] **Audit evidence verifier** — `scripts/verify-audit-evidence.ts` created

@@ -2,7 +2,7 @@
 
 **Complexity:** Large
 **Tier:** 1 (ship first)
-**Migration Range:** 0040-0054
+**Migration Range:** 0041-0055
 **Depends on:** WS 65 (ledger contract, RBAC resources, feature flags, test harness)
 
 ---
@@ -49,22 +49,34 @@ Enable associations to manage assessments, collect dues via Stripe Connect, trac
 | Stripe Connect account provisioning | New (this workstream) | — |
 | Stripe test mode API key (`sk_test_*`) | Environment setup | Must provision |
 
+### Inbound from WS 67 (Violations)
+
+WS 67 creates `assessment_line_items` for fine payments. The `assessmentId` column must be nullable to support one-off charges (fines are not recurring assessments). On payment completion, WS 66 updates `violation_fines.status` to `'paid'`.
+
 ---
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0040-0054 range)
+### New Tables (migrations 0041-0055 range)
 
 **assessments** — Recurring or one-time charges
 - id, communityId, title, description, amountCents, frequency (monthly/quarterly/annual/one_time), dueDay, lateFeeAmountCents, lateFeeDaysGrace, startDate, endDate, isActive, createdByUserId, createdAt, updatedAt, deletedAt
 
 **assessment_line_items** — Per-unit billing records
-- id, assessmentId, communityId, unitId, amountCents, dueDate, status (pending/paid/overdue/waived), paidAt, paymentIntentId, lateFeeCents, createdAt, updatedAt, deletedAt
+- id, assessmentId (nullable — NULL for one-off charges like fines), communityId, unitId, amountCents, dueDate, status (pending/paid/overdue/waived), paidAt, paymentIntentId, lateFeeCents, createdAt, updatedAt, deletedAt
 
 **stripe_connected_accounts** — Per-association Stripe Connect
-- id, communityId (unique), stripeAccountId, onboardingComplete, chargesEnabled, payoutsEnabled, createdAt, updatedAt
+- id, communityId (unique), stripeAccountId, onboardingComplete, chargesEnabled, payoutsEnabled, createdAt, updatedAt, deletedAt
 
-All tables: communityId FK, RLS enabled, soft-delete support.
+**stripe_webhook_events** — Webhook idempotency log (append-only)
+- id, communityId, stripeEventId (TEXT, NOT NULL, UNIQUE), eventType (TEXT, NOT NULL), processedAt (TIMESTAMPTZ, NOT NULL, DEFAULT NOW()), payload (JSONB), createdAt (TIMESTAMPTZ, NOT NULL, DEFAULT NOW())
+- RLS: `tenant_crud` family (scoped by communityId)
+- No soft-delete (event log is append-only)
+- Index on `stripeEventId` (unique, used for dedup lookups)
+
+**Webhook Idempotency:** Before processing any Stripe webhook, check `stripe_webhook_events` for a matching `stripeEventId`. If found, return 200 without re-processing. If not found, insert the event row, then process. Use a transaction to prevent TOCTOU races.
+
+All tables: communityId FK, RLS enabled, soft-delete support (except `stripe_webhook_events`).
 
 ---
 
@@ -109,6 +121,7 @@ All routes: `withErrorHandler`, tenant-scoped, audit-logged, subscription-guarde
 | board_member | r / — | r / — | r | r / — |
 | board_president | r / w | r / — | r | r / w |
 | cam | r / w | r / — | r | r / w |
+| site_manager | r / w | r / — | r | r / w |
 | property_manager_admin | r / w | r / — | r | r / w |
 
 ---

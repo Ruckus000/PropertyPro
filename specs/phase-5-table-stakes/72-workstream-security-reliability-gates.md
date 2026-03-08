@@ -2,7 +2,7 @@
 
 **Complexity:** Medium
 **Tier:** Final (last to merge — cross-cutting hardening gate)
-**Migration Range:** 0090-0094
+**Migration Range:** 0091-0095
 **Depends on:** All other workstreams (66-71)
 
 ---

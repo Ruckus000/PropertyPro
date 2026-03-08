@@ -2,7 +2,7 @@
 
 **Complexity:** Small
 **Tier:** 2 (expand)
-**Migration Range:** 0065-0069
+**Migration Range:** 0066-0070
 **Depends on:** WS 65 (RBAC resources, feature flags, test harness)
 
 ---
@@ -44,7 +44,7 @@ Enable informal polling and community discussion forums for association members.
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0065-0069 range)
+### New Tables (migrations 0066-0070 range)
 
 **polls** — Poll definitions
 - id, communityId, title, description, pollType (single_choice/multiple_choice), options (JSONB array), endsAt, createdByUserId, isActive, createdAt, updatedAt, deletedAt
@@ -52,6 +52,9 @@ Enable informal polling and community discussion forums for association members.
 **poll_votes** — Individual votes
 - id, communityId, pollId, userId, selectedOptions (JSONB array), createdAt
 - UNIQUE(pollId, userId) — one vote per user per poll
+- No `deletedAt`: votes are immutable once cast. Retracting a vote is not supported (prevents vote manipulation).
+
+Votes are **immutable once cast**. The `POST /api/v1/polls/:id/vote` endpoint rejects requests if the user has already voted (409 Conflict). No UPDATE or DELETE is supported for votes. Rationale: mutable votes create governance disputes in association elections. If vote changing is needed in the future, it should be a new poll type with explicit audit trail, not a modification to this table.
 
 **forum_threads** — Discussion threads
 - id, communityId, title, body, authorUserId, isPinned, isLocked, createdAt, updatedAt, deletedAt

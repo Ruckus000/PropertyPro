@@ -22,7 +22,7 @@ Each workstream has a single canonical spec file in `specs/phase-5-table-stakes/
 | **Tier 1** | 65 (Foundations) | First — prerequisite for all | Test harness, shared contracts, migration model |
 | **Tier 1** | 66 (Finance), 67 (Violations/ARC) | After 65 lands, parallel to each other | Core compliance + revenue features |
 | **Tier 2** | 68 (Polls), 69 (Work Orders) | After 65 lands | Operational features |
-| **Tier 3** | 70 (Calendar/Connectors), 71 (Package/Visitor) | Assess after Tier 1 ships | Nice-to-have features |
+| **Tier 3** | 70 (Calendar/Connectors), 71 (Package/Visitor) | Assess after Tier 1 ships. **WS 70 accounting export depends on WS 66 ledger.** Calendar sync features can proceed independently. | Nice-to-have features |
 | **Final** | 72 (Security/Hardening) | Last — cross-cutting gate | Security boundary tests, production readiness |
 
 **WS 65 is a harness-only prerequisite PR.** Must merge before any 66-72 work begins.
@@ -125,18 +125,18 @@ apps/admin/__tests__/**/*integration.test.ts
 ## 6) Migration Coordination
 
 ### Reserved Migration Ranges
-Current state: highest file is `0035`, journal idx 27. Phase 5 starts at 0036.
+Current state: highest file is `0036`, journal idx 27. Phase 5 starts at 0037.
 
 | Workstream | Migration Range | Journal idx Range |
 |---|---|---|
-| 65 Foundations | 0036-0039 | 28-31 |
-| 66 Finance | 0040-0054 | 32-46 |
-| 67 Violations/ARC | 0055-0064 | 47-56 |
-| 68 Polls/Board | 0065-0069 | 57-61 |
-| 69 Work Orders | 0070-0079 | 62-71 |
-| 70 Calendar/Connectors | 0080-0084 | 72-76 |
-| 71 Package/Visitor | 0085-0089 | 77-81 |
-| 72 Security/Hardening | 0090-0094 | 82-86 |
+| 65 Foundations | 0037-0040 | 28-31 |
+| 66 Finance | 0041-0055 | 32-46 |
+| 67 Violations/ARC | 0056-0065 | 47-56 |
+| 68 Polls/Board | 0066-0070 | 57-61 |
+| 69 Work Orders | 0071-0080 | 62-71 |
+| 70 Calendar/Connectors | 0081-0085 | 72-76 |
+| 71 Package/Visitor | 0086-0090 | 77-81 |
+| 72 Security/Hardening | 0091-0095 | 82-86 |
 
 ### Schema Owner
 - One designated person rebases/renumbers and verifies Drizzle journal snapshots before merge to main.
@@ -225,6 +225,23 @@ WS 65 defines the ledger table schema and write interface. WS 66 and 67 implemen
 WS 65 defines new RBAC resources for Phase 5 features in `rbac-matrix.ts`:
 - `finances`, `violations`, `arc_submissions`, `polls`, `work_orders`, `amenities`, `packages`, `visitors`, `calendar_sync`, `accounting`
 - Downstream workstreams implement authorization against these pre-defined resources
+
+### Board Member Permission Philosophy
+
+Board members in Phase 5 receive **read access to all community data** but
+**write access only to collaborative features** (polls, forum, work order creation).
+
+Financial mutations (assessments, delinquency waivers), violation status changes,
+and fine imposition require `board_president`, `cam`, or `site_manager` authority.
+This reflects the distinction between individual board member actions vs.
+board-as-a-body decisions (which the president executes after a vote).
+
+Board members have zero access to package/visitor logging because these are
+operational (staff) functions, not governance functions.
+
+If a board member is also a unit owner, they exercise owner-level permissions
+for resident-facing features (paying assessments, submitting ARC requests,
+reporting violations, reserving amenities).
 
 ### Feature Flag Extensions
 WS 65 defines new community feature flags:

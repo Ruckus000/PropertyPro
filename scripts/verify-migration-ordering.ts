@@ -25,14 +25,14 @@ const journalPath = join(migrationsDir, 'meta', '_journal.json');
 // ---------------------------------------------------------------------------
 
 const RESERVED_RANGES: Array<{ workstream: string; start: number; end: number }> = [
-  { workstream: 'WS-65 Foundations', start: 36, end: 39 },
-  { workstream: 'WS-66 Finance', start: 40, end: 54 },
-  { workstream: 'WS-67 Violations/ARC', start: 55, end: 64 },
-  { workstream: 'WS-68 Polls/Board', start: 65, end: 69 },
-  { workstream: 'WS-69 Work Orders', start: 70, end: 79 },
-  { workstream: 'WS-70 Calendar/Connectors', start: 80, end: 84 },
-  { workstream: 'WS-71 Package/Visitor', start: 85, end: 89 },
-  { workstream: 'WS-72 Security/Hardening', start: 90, end: 94 },
+  { workstream: 'WS-65 Foundations', start: 37, end: 40 },
+  { workstream: 'WS-66 Finance', start: 41, end: 55 },
+  { workstream: 'WS-67 Violations/ARC', start: 56, end: 65 },
+  { workstream: 'WS-68 Polls/Board', start: 66, end: 70 },
+  { workstream: 'WS-69 Work Orders', start: 71, end: 80 },
+  { workstream: 'WS-70 Calendar/Connectors', start: 81, end: 85 },
+  { workstream: 'WS-71 Package/Visitor', start: 86, end: 90 },
+  { workstream: 'WS-72 Security/Hardening', start: 91, end: 95 },
 ];
 
 // ---------------------------------------------------------------------------
