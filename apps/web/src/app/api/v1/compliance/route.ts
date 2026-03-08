@@ -2,9 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   complianceChecklistItems,
+  documents,
   createScopedClient,
   logAuditEvent,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
@@ -23,6 +25,28 @@ import {
 } from '@/lib/utils/compliance-calculator';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
+
+/** Enrich a raw checklist row with a computed compliance status. */
+function enrichRowWithStatus(row: Record<string, unknown>) {
+  const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
+  const documentPostedAt = row['documentPostedAt']
+    ? new Date(row['documentPostedAt'] as string)
+    : null;
+  const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
+  const rollingWindowMonths =
+    typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
+
+  return {
+    ...row,
+    status: calculateComplianceStatus({
+      isApplicable: row['isApplicable'] as boolean | undefined,
+      documentId: (row['documentId'] as number | null) ?? null,
+      documentPostedAt,
+      deadline,
+      rollingWindowMonths,
+    }),
+  };
+}
 
 const generateChecklistSchema = z
   .object({
@@ -69,28 +93,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const rows = await scoped.query(complianceChecklistItems);
 
-  const data = rows.map((row) => {
-    const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-    const documentPostedAt = row['documentPostedAt']
-      ? new Date(row['documentPostedAt'] as string)
-      : null;
-
-    const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-    const rollingWindowMonths =
-      typeof rollingWindowRecord?.months === 'number'
-        ? rollingWindowRecord.months
-        : null;
-
-    return {
-      ...row,
-      status: calculateComplianceStatus({
-        documentId: (row['documentId'] as number | null) ?? null,
-        documentPostedAt,
-        deadline,
-        rollingWindowMonths,
-      }),
-    };
-  });
+  const data = rows.map(enrichRowWithStatus);
 
   return NextResponse.json({ data });
 });
@@ -177,4 +180,105 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 
   return NextResponse.json({ data: inserted }, { status: 201 });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/v1/compliance — link/unlink documents, mark applicable/not-applicable
+// ---------------------------------------------------------------------------
+
+const patchSchema = z
+  .object({
+    id: z.number().int().positive(),
+    communityId: z.number().int().positive(),
+    action: z.enum([
+      'link_document',
+      'unlink_document',
+      'mark_not_applicable',
+      'mark_applicable',
+    ]),
+    documentId: z.number().int().positive().optional(),
+  })
+  .strict()
+  .refine(
+    (d) => d.action !== 'link_document' || d.documentId != null,
+    { message: 'documentId is required when action is link_document', path: ['documentId'] },
+  );
+
+export const PATCH = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
+
+  const body: unknown = await req.json();
+  const parsed = patchSchema.safeParse(body);
+
+  if (!parsed.success) {
+    throw new ValidationError('Invalid compliance patch payload', {
+      fields: formatZodErrors(parsed.error),
+    });
+  }
+
+  const { id, action: patchAction, documentId } = parsed.data;
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const membership = await requireCommunityMembership(communityId, userId);
+  requireCondoCommunity(membership.communityType);
+  requirePermission(membership.role, membership.communityType, 'compliance', 'write');
+
+  const scoped = createScopedClient(communityId);
+
+  // Build the update payload based on the action
+  let payload: Record<string, unknown>;
+  switch (patchAction) {
+    case 'link_document': {
+      // Verify the document belongs to this community (scoped query enforces tenant isolation)
+      const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, documentId!));
+      if (!Array.isArray(docRows) || docRows.length === 0) {
+        throw new ValidationError('Document not found or does not belong to this community');
+      }
+      payload = {
+        documentId: documentId!,
+        documentPostedAt: new Date(),
+      };
+      break;
+    }
+    case 'unlink_document':
+      payload = {
+        documentId: null,
+        documentPostedAt: null,
+      };
+      break;
+    case 'mark_not_applicable':
+      payload = {
+        isApplicable: false,
+      };
+      break;
+    case 'mark_applicable':
+      payload = {
+        isApplicable: true,
+      };
+      break;
+  }
+  const updateData = { ...payload, lastModifiedBy: userId };
+
+  const updated = await scoped.update(
+    complianceChecklistItems,
+    updateData,
+    eq(complianceChecklistItems.id, id),
+  );
+
+  const row = updated[0];
+  if (!row) {
+    throw new ValidationError('Checklist item not found or does not belong to this community');
+  }
+
+  const result = enrichRowWithStatus(row);
+
+  await logAuditEvent({
+    userId,
+    action: 'update',
+    resourceType: 'compliance_checklist_item',
+    resourceId: String(id),
+    communityId,
+    newValues: { action: patchAction, documentId: documentId ?? null },
+  });
+
+  return NextResponse.json({ data: result });
 });

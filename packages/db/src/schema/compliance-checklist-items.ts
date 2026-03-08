@@ -54,6 +54,11 @@ export const complianceChecklistItems = pgTable(
     rollingWindow: jsonb('rolling_window'),
     /** Marks checklist items that may not apply to every community. */
     isConditional: boolean('is_conditional').notNull().default(false),
+    /**
+     * Runtime applicability flag — set by user to exclude items from compliance scoring.
+     * Distinct from isConditional (template-level hint); isApplicable is the user's decision.
+     */
+    isApplicable: boolean('is_applicable').notNull().default(true),
     /** Who last modified this item */
     lastModifiedBy: uuid('last_modified_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
