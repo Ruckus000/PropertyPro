@@ -6,6 +6,7 @@
  */
 import { createServerClient } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
+import { getCookieOptions } from './cookie-config';
 
 /**
  * Creates a Supabase client inside Next.js middleware.
@@ -29,6 +30,7 @@ export async function createMiddlewareClient(request: NextRequest) {
   });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: getCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll();

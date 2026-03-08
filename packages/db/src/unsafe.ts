@@ -35,6 +35,7 @@ export {
  */
 export {
   findUserCommunitiesUnscoped,
+  countUserCommunitiesUnscoped,
   type UserCommunityRow,
 } from './queries/user-communities';
 

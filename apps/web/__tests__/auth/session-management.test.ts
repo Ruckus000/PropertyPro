@@ -270,7 +270,7 @@ describe('p1-22 session middleware', () => {
     expect(getUserMock).toHaveBeenCalledTimes(2);
   });
 
-  it('redirects authenticated users away from auth pages to dashboard by default', async () => {
+  it('redirects authenticated users on root domain auth pages to select-community', async () => {
     getUserMock.mockResolvedValue({
       data: {
         user: {
@@ -283,7 +283,7 @@ describe('p1-22 session middleware', () => {
     const response = await middleware(request('http://localhost:3000/auth/login'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/dashboard');
+    expect(response.headers.get('location')).toContain('/select-community');
   });
 
   it('redirects authenticated users to returnTo when present on auth pages', async () => {

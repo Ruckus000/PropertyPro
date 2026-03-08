@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, countDistinct } from 'drizzle-orm';
 import { db } from '../drizzle';
 import { communities } from '../schema/communities';
 import { userRoles } from '../schema/user-roles';
@@ -42,4 +42,24 @@ export async function findUserCommunitiesUnscoped(
       ),
     )
     .orderBy(communities.name);
+}
+
+/**
+ * Returns a count of distinct non-deleted communities the user belongs to.
+ * More efficient than fetching the full list when only the count is needed.
+ */
+export async function countUserCommunitiesUnscoped(
+  userId: string,
+): Promise<number> {
+  const [result] = await db
+    .select({ count: countDistinct(userRoles.communityId) })
+    .from(userRoles)
+    .innerJoin(communities, eq(communities.id, userRoles.communityId))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        isNull(communities.deletedAt),
+      ),
+    );
+  return Number(result?.count ?? 0);
 }
