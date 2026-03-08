@@ -43,14 +43,13 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
     };
   }, [open, close]);
 
-  // Lazy-load community count on first dropdown open.
-  // Cached in state so subsequent opens don't re-fetch.
+  // Fetch community count when menu opens for the first time
   useEffect(() => {
     if (!open || hasFetchedCommunities) return;
     setHasFetchedCommunities(true);
     fetch('/api/v1/user/communities')
       .then((res) => res.json())
-      .then((json: { data?: { count?: number } }) => setCommunityCount(json.data?.count ?? 0))
+      .then((json) => setCommunityCount(json.data?.count ?? 0))
       .catch(() => setCommunityCount(0));
   }, [open, hasFetchedCommunities]);
 
@@ -59,7 +58,7 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
     setLoggingOut(true);
     const supabase = createBrowserClient();
     await supabase.auth.signOut();
-    window.location.href = '/auth/login';
+    // AuthSessionSync handles the redirect on SIGNED_OUT with returnTo logic
   }
 
   const settingsHref = communityId ? `/settings?communityId=${communityId}` : '/settings';
@@ -119,7 +118,10 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
               <Download size={14} className="text-gray-400" />
               Data Export
             </Link>
-            {communityCount != null && communityCount > 1 && (
+          </div>
+
+          {communityCount != null && communityCount > 1 && (
+            <div className="border-t border-gray-100 py-1">
               <Link
                 href="/select-community"
                 onClick={close}
@@ -129,8 +131,8 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
                 <ArrowRightLeft size={14} className="text-gray-400" />
                 Switch Community
               </Link>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="border-t border-gray-100 py-1">
             <button

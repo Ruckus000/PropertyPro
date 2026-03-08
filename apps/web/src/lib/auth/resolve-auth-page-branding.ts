@@ -1,24 +1,21 @@
 /**
  * Resolves community branding for auth pages (login, forgot-password, etc.).
  *
- * When middleware injects `x-community-id` (from a community subdomain or
- * query param), this helper fetches the community's branding and theme so
- * auth pages can display the community's logo, colours, and fonts.
- *
- * Error boundary: If the DB is unreachable or the community lookup fails,
- * we fall back to generic PropertyPro branding. Login must NEVER crash due
- * to a branding fetch failure.
+ * When a user visits a community subdomain's auth page, this fetches the
+ * community's name, logo, and theme so the page can render branded UI.
+ * Falls back to generic PropertyPro branding on any error.
  */
 import { headers } from 'next/headers';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityTheme } from '@propertypro/theme';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { COMMUNITY_TYPES } from '@propertypro/shared';
 import { getCommunityPublicInfo, getBrandingForCommunity } from '@/lib/api/branding';
+import { createPresignedDownloadUrl } from '@propertypro/db';
 
 export interface AuthPageBranding {
   communityName: string | null;
   communitySlug: string | null;
-  /** Presigned download URL (time-limited) for the community logo. NOT a storage path. */
+  /** Presigned download URL (time-limited) — NOT a storage path */
   logoUrl: string | null;
   theme: CommunityTheme;
   cssVars: Record<string, string>;
@@ -26,7 +23,6 @@ export interface AuthPageBranding {
   hasTenantContext: boolean;
 }
 
-/** Default branding when no tenant context is available. */
 const GENERIC_BRANDING: AuthPageBranding = (() => {
   const theme = resolveTheme(null, '', 'condo_718');
   return {
@@ -40,6 +36,14 @@ const GENERIC_BRANDING: AuthPageBranding = (() => {
   };
 })();
 
+/** Allowed image extensions for logo presigned URLs (prevents IDOR on non-image files). */
+const ALLOWED_LOGO_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'];
+
+function isAllowedLogoPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return ALLOWED_LOGO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
   const requestHeaders = await headers();
   const communityIdStr = requestHeaders.get('x-community-id');
@@ -50,8 +54,7 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
 
   try {
     const communityId = Number(communityIdStr);
-
-    // Fetch community info + branding in parallel — reuse existing helpers from branding.ts
+    // Fetch in parallel — reuse existing functions from branding.ts
     const [info, branding] = await Promise.all([
       getCommunityPublicInfo(communityId),
       getBrandingForCommunity(communityId),
@@ -59,13 +62,16 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
 
     const name = info?.name ?? null;
     const slug = info?.slug ?? null;
-    const type = (info?.communityType as 'condo_718' | 'hoa_720' | 'apartment') ?? 'condo_718';
+    const communityType = info?.communityType;
+    const type =
+      communityType && (COMMUNITY_TYPES as readonly string[]).includes(communityType)
+        ? (communityType as (typeof COMMUNITY_TYPES)[number])
+        : 'condo_718';
 
-    // Generate presigned download URL for logo.
-    // logoPath is a Supabase Storage path (e.g. "communities/123/documents/uuid/logo.webp")
-    // stored in the private "documents" bucket — must generate a signed URL for rendering.
+    // Generate presigned download URL for logo if it exists.
+    // Security: only allow image file extensions to prevent IDOR on sensitive documents.
     let logoUrl: string | null = null;
-    if (branding?.logoPath) {
+    if (branding?.logoPath && isAllowedLogoPath(branding.logoPath)) {
       try {
         logoUrl = await createPresignedDownloadUrl('documents', branding.logoPath);
       } catch {
@@ -73,7 +79,7 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
       }
     }
 
-    // resolveTheme expects branding.logoUrl (not logoPath) for the CommunityTheme
+    // Pass logoUrl into branding so resolveTheme picks it up
     const brandingForTheme = branding ? { ...branding, logoUrl } : null;
     const theme = resolveTheme(brandingForTheme, name ?? '', type);
 
@@ -86,10 +92,10 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
       fontLinks: toFontLinks(theme),
       hasTenantContext: true,
     };
-  } catch {
+  } catch (error) {
+    console.error('[resolveAuthPageBranding] Failed to resolve branding, falling back to generic:', error);
     // If DB is down or community lookup fails, fall back to generic branding.
     // Login must NEVER crash — a broken branding fetch should not block authentication.
-    // Preserve hasTenantContext: true so post-login routing still works correctly.
     return { ...GENERIC_BRANDING, hasTenantContext: true };
   }
 }

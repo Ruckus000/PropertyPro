@@ -112,10 +112,7 @@ export default async function AuthenticatedLayout({
     ? await resolveCommunity(requestHeaders, user.id)
     : null;
 
-  // If the user is on a community subdomain but has no role in that community,
-  // redirect to /select-community so they can pick a community they belong to.
-  // Safe from infinite loop: middleware excludes /select-community from tenant
-  // resolution (see shouldResolveTenant), so x-community-id won't be set there.
+  // User is on a community subdomain but has no role in this community
   const hasTenantHeader = !!requestHeaders.get('x-community-id');
   if (!communityData && hasTenantHeader && user) {
     redirect('/select-community');
