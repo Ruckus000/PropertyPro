@@ -125,7 +125,8 @@ function addLine(
 
   current.y -= fontSize + extraSpacing;
   current.lines.push(`${fontKey} ${fontSize} Tf`);
-  current.lines.push(`${x} ${current.y} Td (${escapePdfText(text)}) Tj`);
+  // Use Tm (text matrix) for absolute positioning instead of Td (relative)
+  current.lines.push(`1 0 0 1 ${x} ${current.y} Tm (${escapePdfText(text)}) Tj`);
 }
 
 // ── Main Export Function ───────────────────────────────
@@ -166,7 +167,8 @@ export function generateChecklistPdf(
   addLine(pages, summaryText, 9, "/F1", MARGIN_LEFT, SECTION_GAP);
 
   // ── Horizontal rule (conceptual — drawn as a thin line of dashes) ──
-  addLine(pages, "─".repeat(80), 6, "/F1", MARGIN_LEFT, 8);
+  // Use ASCII hyphens to avoid UTF-8 multi-byte offset issues in the xref table
+  addLine(pages, "-".repeat(80), 6, "/F1", MARGIN_LEFT, 8);
 
   // ── Category sections ──
   for (const [cat, catItems] of grouped) {
@@ -235,6 +237,7 @@ export function generateChecklistPdf(
   objectStrings.push(`${font2Idx} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`);
 
   // Page and content objects
+  const encoder = new TextEncoder();
   const pageObjIds: number[] = [];
   for (let p = 0; p < pages.length; p++) {
     const contentStr = pages[p]!.lines.join("\n");
@@ -242,9 +245,10 @@ export function generateChecklistPdf(
     const pageObjIdx = objIdx++;
     pageObjIds.push(pageObjIdx);
 
-    // Content stream
+    // Content stream — use byte length for the /Length field
+    const contentByteLength = encoder.encode(contentStr).byteLength;
     objectStrings.push(
-      `${contentObjIdx} 0 obj\n<< /Length ${contentStr.length} >>\nstream\n${contentStr}\nendstream\nendobj\n`,
+      `${contentObjIdx} 0 obj\n<< /Length ${contentByteLength} >>\nstream\n${contentStr}\nendstream\nendobj\n`,
     );
 
     // Page object
@@ -262,14 +266,14 @@ export function generateChecklistPdf(
     `${pagesObjIdx} 0 obj\n<< /Type /Pages /Kids [${kidsStr}] /Count ${pages.length} >>\nendobj\n`,
   );
 
-  // Build xref table
+  // Build xref table — use byte lengths for correct offsets
   let body = "";
   const offsets: number[] = [];
-  let cursor = header.length;
+  let cursor = encoder.encode(header).byteLength;
   for (const obj of objectStrings) {
     offsets.push(cursor);
     body += obj;
-    cursor += obj.length;
+    cursor += encoder.encode(obj).byteLength;
   }
   const xrefStart = cursor;
   let xref = `xref\n0 ${objectStrings.length + 1}\n0000000000 65535 f \n`;
@@ -279,6 +283,5 @@ export function generateChecklistPdf(
   const trailer = `trailer\n<< /Size ${objectStrings.length + 1} /Root ${catalogIdx} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
   const pdfString = header + body + xref + trailer;
-  const encoder = new TextEncoder();
   return encoder.encode(pdfString);
 }

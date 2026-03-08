@@ -42,11 +42,11 @@ export function useComplianceMutations(communityId: number) {
   const qc = useQueryClient();
   const queryKey = [COMPLIANCE_QUERY_KEY, communityId];
 
-  function optimisticUpdate(
+  async function optimisticUpdate(
     itemId: number,
     updater: (item: ChecklistItemData) => Partial<ChecklistItemData>,
   ) {
-    qc.cancelQueries({ queryKey });
+    await qc.cancelQueries({ queryKey });
     const prev = qc.getQueryData<ChecklistItemData[]>(queryKey);
     if (prev) {
       qc.setQueryData<ChecklistItemData[]>(

@@ -7,7 +7,7 @@ import type { ChecklistItemData } from "./compliance-checklist-item";
 
 // ── Constants ─────────────────────────────────────────
 
-const STORAGE_KEY = "propertypro:compliance-onboarding-dismissed";
+const STORAGE_KEY_PREFIX = "propertypro:compliance-onboarding-dismissed";
 
 /** Priority template keys — governing docs that should be uploaded first. */
 const PRIORITY_KEYS = [
@@ -61,21 +61,31 @@ function getPriorityItems(items: ChecklistItemData[]): ChecklistItemData[] {
 
 export interface ComplianceOnboardingProps {
   items: ChecklistItemData[];
+  communityId: number;
   onUpload: (item: ChecklistItemData) => void;
 }
 
-export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingProps) {
+export function ComplianceOnboarding({ items, communityId, onUpload }: ComplianceOnboardingProps) {
   const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash
+  const storageKey = `${STORAGE_KEY_PREFIX}:${communityId}`;
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setDismissed(stored === "true");
-  }, []);
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setDismissed(stored === "true");
+    } catch {
+      // localStorage unavailable (e.g. private browsing) — stay hidden
+    }
+  }, [storageKey]);
 
   const handleDismiss = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, "true");
+    try {
+      localStorage.setItem(storageKey, "true");
+    } catch {
+      // localStorage unavailable — dismiss in memory only
+    }
     setDismissed(true);
-  }, []);
+  }, [storageKey]);
 
   if (dismissed) return null;
   if (!isFreshChecklist(items)) return null;
@@ -83,7 +93,15 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
   const priorityItems = getPriorityItems(items);
   if (priorityItems.length === 0) return null;
 
-  const completedCount = priorityItems.filter((i) => i.status === "satisfied").length;
+  // Count how many priority-key items are satisfied (checked against the full items list,
+  // since getPriorityItems only returns unsatisfied items)
+  const allPriorityKeys = PRIORITY_KEYS.filter((key) =>
+    items.some((i) => i.templateKey === key),
+  );
+  const completedCount = items.filter(
+    (i) => allPriorityKeys.includes(i.templateKey) && i.status === "satisfied",
+  ).length;
+  const totalPriorityCount = priorityItems.length + completedCount;
 
   return (
     <div
@@ -139,8 +157,8 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
                 className={`
                   flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold
                   ${isSatisfied
-                    ? "bg-[var(--status-success)] text-white"
-                    : "bg-[var(--status-brand)] text-white"
+                    ? "bg-[var(--status-success)] text-[var(--surface-page)]"
+                    : "bg-[var(--status-brand)] text-[var(--surface-page)]"
                   }
                 `}
               >
@@ -183,9 +201,9 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
       {/* Footer with progress dots */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-[var(--status-brand-border)]/50 bg-[var(--status-brand-bg)]">
         <div className="flex items-center gap-1.5">
-          {priorityItems.map((item, i) => (
+          {Array.from({ length: totalPriorityCount }, (_, i) => (
             <span
-              key={item.id}
+              key={i}
               className={`
                 h-1.5 w-1.5 rounded-full transition-colors duration-200
                 ${i < completedCount

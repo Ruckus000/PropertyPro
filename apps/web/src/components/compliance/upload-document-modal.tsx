@@ -55,12 +55,14 @@ export function UploadDocumentModal({
         title: title.trim(),
         file,
       });
-      // The result should include the document id
-      const docId = (result as Record<string, unknown>).id as number;
+      // Safely extract the document id from the result
+      const resultObj = result as Record<string, unknown> | null | undefined;
+      const docId = typeof resultObj?.id === 'number' ? resultObj.id : null;
       if (docId) {
         onUploaded(docId);
+        onClose();
       }
-      onClose();
+      // If no docId, keep modal open so user sees something went wrong
     } catch {
       // error state is handled by the hook
     }
@@ -74,6 +76,9 @@ export function UploadDocumentModal({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-modal-title"
         className="
           w-full max-w-lg mx-4
           rounded-[var(--radius-lg)] bg-[var(--surface-card)]
@@ -85,11 +90,12 @@ export function UploadDocumentModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">Upload Document</h3>
+          <h3 id="upload-modal-title" className="text-base font-semibold text-[var(--text-primary)]">Upload Document</h3>
           <button
             type="button"
             onClick={onClose}
             disabled={isUploading}
+            aria-label="Close"
             className="rounded-[var(--radius-sm)] p-1 hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-50"
           >
             <X size={16} className="text-[var(--text-tertiary)]" />
@@ -160,6 +166,7 @@ export function UploadDocumentModal({
             <input
               ref={fileInputRef}
               type="file"
+              accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.png,.jpg,.jpeg"
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files)}
               disabled={isUploading}

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   complianceChecklistItems,
+  documents,
   createScopedClient,
   logAuditEvent,
 } from '@propertypro/db';
@@ -24,6 +25,28 @@ import {
 } from '@/lib/utils/compliance-calculator';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
+
+/** Enrich a raw checklist row with a computed compliance status. */
+function enrichRowWithStatus(row: Record<string, unknown>) {
+  const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
+  const documentPostedAt = row['documentPostedAt']
+    ? new Date(row['documentPostedAt'] as string)
+    : null;
+  const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
+  const rollingWindowMonths =
+    typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
+
+  return {
+    ...row,
+    status: calculateComplianceStatus({
+      isApplicable: row['isApplicable'] as boolean | undefined,
+      documentId: (row['documentId'] as number | null) ?? null,
+      documentPostedAt,
+      deadline,
+      rollingWindowMonths,
+    }),
+  };
+}
 
 const generateChecklistSchema = z
   .object({
@@ -70,29 +93,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const rows = await scoped.query(complianceChecklistItems);
 
-  const data = rows.map((row) => {
-    const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-    const documentPostedAt = row['documentPostedAt']
-      ? new Date(row['documentPostedAt'] as string)
-      : null;
-
-    const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-    const rollingWindowMonths =
-      typeof rollingWindowRecord?.months === 'number'
-        ? rollingWindowRecord.months
-        : null;
-
-    return {
-      ...row,
-      status: calculateComplianceStatus({
-        isApplicable: row['isApplicable'] as boolean | undefined,
-        documentId: (row['documentId'] as number | null) ?? null,
-        documentPostedAt,
-        deadline,
-        rollingWindowMonths,
-      }),
-    };
-  });
+  const data = rows.map(enrichRowWithStatus);
 
   return NextResponse.json({ data });
 });
@@ -226,13 +227,19 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   // Build the update payload based on the action
   let updateData: Record<string, unknown>;
   switch (patchAction) {
-    case 'link_document':
+    case 'link_document': {
+      // Verify the document belongs to this community (scoped query enforces tenant isolation)
+      const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, documentId!));
+      if ((docRows as unknown as unknown[]).length === 0) {
+        throw new ValidationError('Document not found or does not belong to this community');
+      }
       updateData = {
         documentId: documentId!,
         documentPostedAt: new Date(),
         lastModifiedBy: userId,
       };
       break;
+    }
     case 'unlink_document':
       updateData = {
         documentId: null,
@@ -265,24 +272,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Checklist item not found or does not belong to this community');
   }
 
-  const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-  const documentPostedAt = row['documentPostedAt']
-    ? new Date(row['documentPostedAt'] as string)
-    : null;
-  const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-  const rollingWindowMonths =
-    typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
-
-  const result = {
-    ...row,
-    status: calculateComplianceStatus({
-      isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId: (row['documentId'] as number | null) ?? null,
-      documentPostedAt,
-      deadline,
-      rollingWindowMonths,
-    }),
-  };
+  const result = enrichRowWithStatus(row);
 
   await logAuditEvent({
     userId,

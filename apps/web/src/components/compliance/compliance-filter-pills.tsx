@@ -41,13 +41,14 @@ export function ComplianceFilterPills({ active, counts, total, onChange }: Filte
             key={key}
             type="button"
             onClick={() => onChange(key)}
+            aria-pressed={isActive}
             className={`
               inline-flex items-center gap-1.5 rounded-[var(--radius-full)]
               px-3 py-1.5 min-h-[44px] sm:min-h-0 text-sm font-medium
               transition-colors duration-150 whitespace-nowrap
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-strong)]
               ${isActive
-                ? "bg-[var(--text-primary)] text-white"
+                ? "bg-[var(--text-primary)] text-[var(--surface-page)]"
                 : `bg-transparent text-[var(--text-secondary)]
                    border border-[var(--border-subtle)]
                    hover:bg-[var(--surface-hover)]

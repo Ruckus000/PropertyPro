@@ -105,6 +105,7 @@ function CategoryGroup({
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className={`
           group flex items-center gap-3 w-full px-4 py-3
           text-left transition-colors duration-150 cursor-pointer
@@ -311,8 +312,10 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
   const [linkModalItem, setLinkModalItem] = useState<ChecklistItemData | null>(null);
   const [uploadModalItem, setUploadModalItem] = useState<ChecklistItemData | null>(null);
 
-  const filters: ChecklistFilters = { status: statusFilter, category: categoryFilter };
-  const filtered = useMemo(() => filterChecklistItems(items, filters), [items, filters]);
+  const filtered = useMemo(
+    () => filterChecklistItems(items, { status: statusFilter, category: categoryFilter }),
+    [items, statusFilter, categoryFilter],
+  );
 
   const statusCounts = useMemo(() => {
     const counts = { satisfied: 0, unsatisfied: 0, overdue: 0, not_applicable: 0 };
@@ -342,11 +345,14 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
     const bytes = generateChecklistPdf(toPdfItems(filtered));
     const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "compliance-checklist.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "compliance-checklist.pdf";
+      a.click();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   function renderActions(item: ChecklistItemData) {
@@ -387,6 +393,7 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
       {/* ── Onboarding ── */}
       <ComplianceOnboarding
         items={items}
+        communityId={communityId}
         onUpload={(item) => setUploadModalItem(item)}
       />
 

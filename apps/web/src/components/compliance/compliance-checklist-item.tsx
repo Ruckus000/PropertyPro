@@ -104,6 +104,7 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className={`
           group flex w-full items-center gap-3 px-4 py-3
           text-left transition-colors duration-150
