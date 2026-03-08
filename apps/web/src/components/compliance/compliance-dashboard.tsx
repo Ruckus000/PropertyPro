@@ -1,19 +1,26 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Button, Card, Badge } from "@propertypro/ui";
+import React, { useMemo, useState } from "react";
+import { Button } from "@propertypro/ui";
 import { ComplianceChecklistItem, type ChecklistItemData } from "./compliance-checklist-item";
-import { ComplianceStatusBadge } from "./compliance-badge";
-import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import { ComplianceFilterPills, type StatusFilter } from "./compliance-filter-pills";
+import { ComplianceItemActions } from "./compliance-item-actions";
+import { LinkDocumentModal } from "./link-document-modal";
+import { UploadDocumentModal } from "./upload-document-modal";
+import { DeadlineRibbon } from "./deadline-ribbon";
+import { ComplianceOnboarding } from "./compliance-onboarding";
+import { ComplianceActivityFeed } from "./compliance-activity-feed";
+import { groupByCategory, type ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
+import { useComplianceMutations } from "@/hooks/useComplianceMutations";
 import { generateChecklistPdf } from "@/lib/utils/pdf-export";
 import {
-  Clock,
-  Filter,
-  FileDown,
   ChevronDown,
   ChevronRight,
+  FileDown,
   Shield,
   XCircle,
+  CheckCircle2,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────
@@ -50,21 +57,6 @@ export function filterChecklistItems(
   });
 }
 
-async function fetchChecklist(communityId: number): Promise<ChecklistItemData[]> {
-  const res = await fetch(`/api/v1/compliance?communityId=${communityId}`);
-  if (!res.ok) {
-    throw new Error(`Failed to load checklist (${res.status})`);
-  }
-  const json = (await res.json()) as { data: ChecklistItemData[] };
-  return json.data ?? [];
-}
-
-function uniqueCategories(items: ChecklistItemData[]): string[] {
-  const set = new Set<string>();
-  for (const i of items) set.add(i.category);
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
-}
-
 function toPdfItems(items: ChecklistItemData[]) {
   return items.map((i) => ({
     title: i.title,
@@ -74,208 +66,221 @@ function toPdfItems(items: ChecklistItemData[]) {
   }));
 }
 
-function daysUntil(isoDate: string): number {
-  const now = new Date();
-  const target = new Date(isoDate);
-  const diff = target.getTime() - now.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function formatDeadlineDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 /** Group items by category, preserving a defined order. */
-function groupByCategory(items: ChecklistItemData[]): Map<string, ChecklistItemData[]> {
-  const order = ["governing_documents", "financial_records", "meeting_records", "insurance", "operations"];
-  const grouped = new Map<string, ChecklistItemData[]>();
-  for (const cat of order) {
-    const matching = items.filter((i) => i.category === cat);
-    if (matching.length > 0) grouped.set(cat, matching);
-  }
-  // Catch any categories not in the predefined order
-  for (const item of items) {
-    if (!grouped.has(item.category)) {
-      grouped.set(item.category, items.filter((i) => i.category === item.category));
-    }
-  }
-  return grouped;
-}
 
-// ── Subcomponents ───────────────────────────────────
 
-function DeadlineCountdownCard({ item }: { item: ChecklistItemData }) {
-  const days = daysUntil(item.deadline!);
-  const isOverdue = days < 0;
-  const isUrgent = days >= 0 && days <= 7;
-
-  return (
-    <div
-      className={`
-        relative flex flex-col gap-1.5 rounded-lg border px-4 py-3
-        ${isOverdue
-          ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40"
-          : isUrgent
-          ? "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40"
-          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
-        }
-      `}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-          {item.title}
-        </span>
-        <ComplianceStatusBadge status={item.status} />
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          {formatDeadlineDate(item.deadline!)}
-        </span>
-        <span
-          className={`text-xs font-semibold tabular-nums ${
-            isOverdue
-              ? "text-red-600 dark:text-red-400"
-              : isUrgent
-              ? "text-amber-600 dark:text-amber-400"
-              : "text-gray-600 dark:text-gray-300"
-          }`}
-        >
-          {isOverdue ? `${Math.abs(days)}d overdue` : `${days}d remaining`}
-        </span>
-      </div>
-      {item.statuteReference && (
-        <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
-          {item.statuteReference}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ComplianceScoreRing({ satisfied, total }: { satisfied: number; total: number }) {
-  const pct = total === 0 ? 0 : Math.round((satisfied / total) * 100);
-  const circumference = 2 * Math.PI * 36; // r=36
-  const dashOffset = circumference - (pct / 100) * circumference;
-
-  const color =
-    pct >= 80
-      ? "stroke-emerald-500"
-      : pct >= 50
-      ? "stroke-amber-500"
-      : "stroke-red-500";
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: 88, height: 88 }}>
-      <svg className="absolute inset-0" viewBox="0 0 80 80" width={88} height={88}>
-        <circle
-          cx="40" cy="40" r="36"
-          fill="none"
-          strokeWidth="6"
-          className="stroke-gray-100 dark:stroke-gray-700"
-        />
-        <circle
-          cx="40" cy="40" r="36"
-          fill="none"
-          strokeWidth="6"
-          strokeLinecap="round"
-          className={`${color} transition-[stroke-dashoffset] duration-700 ease-out`}
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          transform="rotate(-90 40 40)"
-        />
-      </svg>
-      <div className="relative flex flex-col items-center leading-none">
-        <span className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{pct}%</span>
-        <span className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">compliant</span>
-      </div>
-    </div>
-  );
-}
-
-function StatusBreakdownBar({
-  counts,
-}: {
-  counts: { satisfied: number; unsatisfied: number; overdue: number; not_applicable: number };
-}) {
-  const total = counts.satisfied + counts.unsatisfied + counts.overdue + counts.not_applicable;
-  if (total === 0) return null;
-
-  const segments = [
-    { key: "satisfied", count: counts.satisfied, color: "bg-emerald-500", label: "Satisfied" },
-    { key: "unsatisfied", count: counts.unsatisfied, color: "bg-amber-400", label: "Pending" },
-    { key: "overdue", count: counts.overdue, color: "bg-red-500", label: "Overdue" },
-    { key: "not_applicable", count: counts.not_applicable, color: "bg-gray-300 dark:bg-gray-600", label: "N/A" },
-  ].filter((s) => s.count > 0);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-        {segments.map((seg) => (
-          <div
-            key={seg.key}
-            className={`${seg.color} transition-all duration-500`}
-            style={{ width: `${(seg.count / total) * 100}%` }}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {segments.map((seg) => (
-          <div key={seg.key} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-            <span className={`inline-block h-2 w-2 rounded-full ${seg.color}`} />
-            <span>{seg.label}</span>
-            <span className="font-medium text-gray-900 dark:text-gray-200 tabular-nums">{seg.count}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// ── Category Header ─────────────────────────────────
 
 function CategoryGroup({
   category,
   items,
-  defaultOpen = true,
+  defaultOpen = false,
+  renderActions,
 }: {
   category: string;
   items: ChecklistItemData[];
   defaultOpen?: boolean;
+  renderActions?: (item: ChecklistItemData) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const satisfiedCount = items.filter((i) => i.status === "satisfied").length;
+  const satisfiedCount = items.filter((i) => i.status === "satisfied" || i.status === "not_applicable").length;
+  const allSatisfied = satisfiedCount === items.length;
 
   return (
     <div className="flex flex-col">
+      {/* Category row */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="group flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-3"
+        aria-expanded={open}
+        className={`
+          group flex items-center gap-3 w-full px-4 py-3
+          text-left transition-colors duration-150 cursor-pointer
+          hover:bg-[var(--surface-hover)]
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--border-strong)]
+          min-h-[44px]
+          ${allSatisfied ? "bg-[var(--status-success-bg)]/30" : ""}
+        `}
       >
-        {open ? (
-          <ChevronDown size={16} className="text-gray-400 shrink-0" />
-        ) : (
-          <ChevronRight size={16} className="text-gray-400 shrink-0" />
-        )}
-        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+        {/* Category label */}
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
           {formatCategoryLabel(category)}
         </span>
-        <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
-          {satisfiedCount}/{items.length}
+
+        {/* Count */}
+        <span className="text-xs text-[var(--text-tertiary)] tabular-nums">
+          {satisfiedCount} of {items.length}
         </span>
-        <span className="ml-auto flex h-1.5 w-16 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-          {items.length > 0 && (
-            <span
-              className="bg-emerald-500 transition-all duration-300"
-              style={{ width: `${(satisfiedCount / items.length) * 100}%` }}
-            />
+
+        {/* Progress dots (max 10) */}
+        {items.length <= 10 && (
+          <span className="flex items-center gap-1 ml-1">
+            {items.map((item) => (
+              <span
+                key={item.id}
+                className={`h-1.5 w-1.5 rounded-full ${
+                  item.status === "satisfied" || item.status === "not_applicable"
+                    ? "bg-[var(--status-success)]"
+                    : "bg-[var(--border-default)]"
+                }`}
+              />
+            ))}
+          </span>
+        )}
+
+        {/* Chevron or check */}
+        <span className="ml-auto shrink-0">
+          {allSatisfied ? (
+            <CheckCircle2 size={14} className="text-[var(--status-success)]" />
+          ) : open ? (
+            <ChevronDown size={14} className="text-[var(--text-tertiary)]" />
+          ) : (
+            <ChevronRight size={14} className="text-[var(--text-tertiary)]" />
           )}
         </span>
       </button>
-      {open && (
-        <div className="grid grid-cols-1 gap-3 pt-1 pb-2">
+
+      {/* Items */}
+      <div
+        className={`
+          overflow-hidden transition-all duration-200 ease-out
+          ${open ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"}
+        `}
+      >
+        <div className="border-t border-[var(--border-subtle)]">
           {items.map((item) => (
-            <ComplianceChecklistItem key={item.id} item={item} />
+            <ComplianceChecklistItem
+              key={item.id}
+              item={item}
+              actions={renderActions?.(item)}
+            />
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Loading Skeleton ────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col gap-8 animate-pulse">
+      {/* Hero placeholder */}
+      <div className="flex items-center justify-between py-4 border-b border-[var(--border-subtle)]">
+        <div className="flex items-center gap-3">
+          <div className="h-6 w-6 rounded-full bg-[var(--surface-muted)]" />
+          <div className="flex flex-col gap-1.5">
+            <div className="h-5 w-48 rounded bg-[var(--surface-muted)]" />
+            <div className="h-3.5 w-32 rounded bg-[var(--surface-muted)]" />
+          </div>
+        </div>
+        <div className="h-4 w-20 rounded bg-[var(--surface-muted)]" />
+      </div>
+
+      {/* Filter pills placeholder */}
+      <div className="flex items-center gap-1.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            className="h-8 rounded-full bg-[var(--surface-muted)]"
+            style={{ width: `${60 + i * 8}px`, animationDelay: `${i * 50}ms` }}
+          />
+        ))}
+      </div>
+
+      {/* Category row placeholders */}
+      {[1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ animationDelay: `${150 + i * 50}ms` }}
+        >
+          <div className="h-3 w-32 rounded bg-[var(--surface-muted)]" />
+          <div className="h-3 w-10 rounded bg-[var(--surface-muted)]" />
+          <div className="flex gap-1 ml-auto">
+            {[1, 2, 3].map((j) => (
+              <div key={j} className="h-1.5 w-1.5 rounded-full bg-[var(--surface-muted)]" />
+            ))}
+          </div>
+          <div className="h-3.5 w-3.5 rounded bg-[var(--surface-muted)]" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Hero Metric ─────────────────────────────────────
+
+function HeroMetric({
+  statusCounts,
+  applicableTotal,
+  primaryStatute,
+}: {
+  statusCounts: { satisfied: number; unsatisfied: number; overdue: number; not_applicable: number };
+  applicableTotal: number;
+  primaryStatute: string | null;
+}) {
+  const pct = applicableTotal === 0 ? 0 : Math.round((statusCounts.satisfied / applicableTotal) * 100);
+  const allSatisfied = statusCounts.overdue === 0 && statusCounts.unsatisfied === 0 && applicableTotal > 0;
+  const hasOverdue = statusCounts.overdue > 0;
+
+  return (
+    <div
+      className={`
+        flex items-center justify-between py-4 border-b border-[var(--border-subtle)]
+        sticky top-0 z-10 bg-[var(--surface-page)] sm:static sm:z-auto
+        ${allSatisfied ? "sm:bg-[var(--status-success-bg)]/30 -mx-4 px-4 rounded-[var(--radius-md)]" : ""}
+      `}
+    >
+      <div className="flex items-center gap-3">
+        {allSatisfied ? (
+          <CheckCircle2 size={24} className="text-[var(--status-success)] shrink-0" />
+        ) : hasOverdue ? (
+          <span className="flex h-6 w-6 items-center justify-center text-[var(--status-danger)] shrink-0 text-lg leading-none">&#9650;</span>
+        ) : (
+          <span className="flex h-6 w-6 items-center justify-center text-[var(--status-warning)] shrink-0 text-lg leading-none">&#9684;</span>
+        )}
+        <div className="flex flex-col">
+          <span className={`text-lg font-semibold ${hasOverdue ? "text-[var(--status-danger)]" : "text-[var(--text-primary)]"}`}>
+            {allSatisfied
+              ? "All requirements satisfied"
+              : hasOverdue
+              ? `${statusCounts.overdue} item${statusCounts.overdue !== 1 ? "s" : ""} overdue`
+              : `${statusCounts.unsatisfied} item${statusCounts.unsatisfied !== 1 ? "s" : ""} need attention`
+            }
+          </span>
+          <span className="text-sm text-[var(--text-tertiary)]">
+            {statusCounts.satisfied} of {applicableTotal} items
+            {primaryStatute ? ` \u00b7 Florida Statute ${primaryStatute}` : ""}
+          </span>
+        </div>
+      </div>
+
+      {/* Mini progress */}
+      {!allSatisfied && (
+        <div className="hidden sm:flex flex-col items-end gap-1">
+          <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{pct}%</span>
+          <div className="flex h-1 w-24 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+            {statusCounts.satisfied > 0 && (
+              <div
+                className="bg-[var(--status-success)] transition-all duration-500"
+                style={{ width: `${(statusCounts.satisfied / applicableTotal) * 100}%` }}
+              />
+            )}
+            {statusCounts.unsatisfied > 0 && (
+              <div
+                className="bg-[var(--status-warning)] transition-all duration-500"
+                style={{ width: `${(statusCounts.unsatisfied / applicableTotal) * 100}%` }}
+              />
+            )}
+            {statusCounts.overdue > 0 && (
+              <div
+                className="bg-[var(--status-danger)] transition-all duration-500"
+                style={{ width: `${(statusCounts.overdue / applicableTotal) * 100}%` }}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -285,36 +290,19 @@ function CategoryGroup({
 // ── Main Dashboard ──────────────────────────────────
 
 export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
-  const [items, setItems] = useState<ChecklistItemData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ChecklistFilters>({ status: "all", category: "all" });
+  const { data: items = [], isLoading, error } = useComplianceChecklist(communityId);
+  const mutations = useComplianceMutations(communityId);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | string>("all");
 
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    fetchChecklist(communityId)
-      .then((rows) => mounted && setItems(rows))
-      .catch((err) => mounted && setError(err.message))
-      .finally(() => mounted && setLoading(false));
-    return () => {
-      mounted = false;
-    };
-  }, [communityId]);
+  // Modal state
+  const [linkModalItem, setLinkModalItem] = useState<ChecklistItemData | null>(null);
+  const [uploadModalItem, setUploadModalItem] = useState<ChecklistItemData | null>(null);
 
-  const categories = useMemo(() => uniqueCategories(items), [items]);
-  const filtered = useMemo(() => filterChecklistItems(items, filters), [items, filters]);
-
-  const upcoming = useMemo(() => {
-    const pending = items.filter(
-      (i) => i.deadline && (i.status === "unsatisfied" || i.status === "overdue"),
-    );
-    return [...pending].sort((a, b) => {
-      const da = a.deadline ? new Date(a.deadline).getTime() : Number.POSITIVE_INFINITY;
-      const db = b.deadline ? new Date(b.deadline).getTime() : Number.POSITIVE_INFINITY;
-      return da - db;
-    });
-  }, [items]);
+  const filtered = useMemo(
+    () => filterChecklistItems(items, { status: statusFilter, category: categoryFilter }),
+    [items, statusFilter, categoryFilter],
+  );
 
   const statusCounts = useMemo(() => {
     const counts = { satisfied: 0, unsatisfied: 0, overdue: 0, not_applicable: 0 };
@@ -327,184 +315,207 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
   const applicableTotal = items.length - statusCounts.not_applicable;
   const groupedItems = useMemo(() => groupByCategory(filtered), [filtered]);
 
-  // Detect statute type from items for contextual display
   const primaryStatute = useMemo(() => {
     const refs = items.map((i) => i.statuteReference ?? "").filter(Boolean);
-    if (refs.some((r) => r.includes("718"))) return "§718";
-    if (refs.some((r) => r.includes("720"))) return "§720";
+    if (refs.some((r) => r.includes("718"))) return "\u00a7718";
+    if (refs.some((r) => r.includes("720"))) return "\u00a7720";
     return null;
+  }, [items]);
+
+  const categories = useMemo(() => {
+    const order = ["governing_documents", "financial_records", "meeting_records", "insurance", "operations"];
+    const present = new Set(items.map((i) => i.category));
+    return order.filter((c) => present.has(c));
   }, [items]);
 
   function handleExportPdf() {
     const bytes = generateChecklistPdf(toPdfItems(filtered));
     const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "compliance-checklist.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "compliance-checklist.pdf";
+      a.click();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
-  if (loading) {
+  function renderActions(item: ChecklistItemData) {
     return (
-      <div className="flex flex-col gap-4 animate-pulse">
-        <div className="h-28 rounded-xl bg-gray-100 dark:bg-gray-800" />
-        <div className="h-40 rounded-xl bg-gray-100 dark:bg-gray-800" />
-        <div className="h-64 rounded-xl bg-gray-100 dark:bg-gray-800" />
-      </div>
+      <ComplianceItemActions
+        item={item}
+        onUpload={() => setUploadModalItem(item)}
+        onLink={() => setLinkModalItem(item)}
+        onMarkNA={() => mutations.markNotApplicable.mutate({ itemId: item.id })}
+        onMarkApplicable={() => mutations.markApplicable.mutate({ itemId: item.id })}
+        onUnlink={() => mutations.unlinkDocument.mutate({ itemId: item.id })}
+      />
     );
+  }
+
+  if (isLoading) {
+    return <DashboardSkeleton />;
   }
 
   if (error) {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+      <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3 text-sm text-[var(--status-danger)]">
         <XCircle size={16} />
-        {error}
+        {error.message}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* ── Section 1: Urgent Deadlines (TOP — most actionable) ── */}
-      {upcoming.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Clock size={16} className="text-amber-500" />
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
-              Upcoming Deadlines
-            </h2>
-            <span className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-bold text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 tabular-nums">
-              {upcoming.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {upcoming.slice(0, 6).map((item) => (
-              <DeadlineCountdownCard key={`deadline-${item.id}`} item={item} />
-            ))}
-          </div>
-          {upcoming.length > 6 && (
-            <p className="mt-2 text-xs text-gray-400">
-              +{upcoming.length - 6} more deadline{upcoming.length - 6 > 1 ? "s" : ""} below
-            </p>
-          )}
-        </section>
+    <div className="flex flex-col gap-8">
+      {/* ── Hero Metric ── */}
+      <HeroMetric
+        statusCounts={statusCounts}
+        applicableTotal={applicableTotal}
+        primaryStatute={primaryStatute}
+      />
+
+      {/* ── Onboarding ── */}
+      <ComplianceOnboarding
+        items={items}
+        communityId={communityId}
+        onUpload={(item) => setUploadModalItem(item)}
+      />
+
+      {/* ── Deadline Ribbon ── */}
+      <DeadlineRibbon items={items} />
+
+      {/* ── Filter Pills + Export ── */}
+      <div className="flex items-center justify-between gap-4">
+        <ComplianceFilterPills
+          active={statusFilter}
+          counts={statusCounts}
+          total={items.length}
+          onChange={(f) => {
+            setStatusFilter(f);
+            setCategoryFilter("all");
+          }}
+        />
+        <Button variant="secondary" size="sm" onClick={handleExportPdf} className="shrink-0">
+          <FileDown size={14} className="mr-1.5" />
+          Export
+        </Button>
+      </div>
+
+      {/* ── Category sub-filter ── */}
+      {statusFilter !== "all" && categories.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide -mt-4">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("all")}
+            className={`
+              text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] transition-colors duration-150
+              ${categoryFilter === "all"
+                ? "bg-[var(--surface-muted)] text-[var(--text-primary)] font-medium"
+                : "text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"}
+            `}
+          >
+            All categories
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategoryFilter(cat)}
+              className={`
+                text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-150
+                ${categoryFilter === cat
+                  ? "bg-[var(--surface-muted)] text-[var(--text-primary)] font-medium"
+                  : "text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"}
+              `}
+            >
+              {formatCategoryLabel(cat)}
+            </button>
+          ))}
+        </div>
       )}
 
-      {/* ── Section 2: Compliance Summary + Filters ── */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900">
-        <div className="flex flex-col sm:flex-row gap-6 items-start">
-          {/* Score ring */}
-          <div className="flex items-center gap-5">
-            <ComplianceScoreRing satisfied={statusCounts.satisfied} total={applicableTotal} />
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {statusCounts.satisfied} of {applicableTotal} items satisfied
-              </span>
-              {primaryStatute && (
-                <span className="text-xs text-gray-400">
-                  Florida Statute {primaryStatute}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Breakdown bar */}
-          <div className="flex-1 min-w-0">
-            <StatusBreakdownBar counts={statusCounts} />
-          </div>
-        </div>
-
-        {/* Filters row */}
-        <div className="flex flex-wrap items-end gap-3 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-1.5 text-gray-400">
-            <Filter size={14} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="status" className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-              Status
-            </label>
-            <select
-              id="status"
-              value={filters.status}
-              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as ChecklistFilters["status"] }))}
-              className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors"
+      {/* ── Mobile Category Quick-Jump ── */}
+      {statusFilter === "all" && categories.length > 1 && (
+        <div className="flex sm:hidden items-center gap-1.5 overflow-x-auto scrollbar-hide -mt-4 pb-1">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => {
+                const el = document.getElementById(`cat-${cat}`);
+                el?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="
+                text-xs px-3 py-2 min-h-[44px] flex items-center
+                rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-150
+                text-[var(--text-tertiary)] border border-[var(--border-subtle)]
+                hover:bg-[var(--surface-hover)] active:bg-[var(--surface-muted)]
+              "
             >
-              <option value="all">All Statuses</option>
-              <option value="satisfied">Satisfied</option>
-              <option value="unsatisfied">Unsatisfied</option>
-              <option value="overdue">Overdue</option>
-              <option value="not_applicable">Not Applicable</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="category" className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-              Category
-            </label>
-            <select
-              id="category"
-              value={filters.category}
-              onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
-              className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {formatCategoryLabel(c)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="ml-auto">
-            <Button variant="secondary" size="sm" onClick={handleExportPdf}>
-              <FileDown size={14} className="mr-1.5" />
-              Export PDF
-            </Button>
-          </div>
+              {formatCategoryLabel(cat)}
+            </button>
+          ))}
         </div>
-      </section>
+      )}
 
-      {/* ── Section 3: Checklist Items (grouped by category) ── */}
+      {/* ── Checklist ── */}
       <section>
-        <div className="flex items-center gap-2 mb-3">
-          <Shield size={16} className="text-gray-400" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
-            Compliance Checklist
-          </h2>
-          <span className="text-xs text-gray-400 tabular-nums">
-            {filtered.length} item{filtered.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 py-12 text-center dark:border-gray-700">
-            <Shield size={32} className="text-gray-300 dark:text-gray-600 mb-2" />
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="flex flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] py-12 text-center">
+            <Shield size={32} className="text-[var(--text-tertiary)] mb-2" />
+            <p className="text-sm text-[var(--text-secondary)]">
               No items match the current filters.
             </p>
           </div>
-        ) : filters.category !== "all" ? (
-          /* When a specific category is selected, show flat list */
-          <div className="grid grid-cols-1 gap-3">
+        ) : categoryFilter !== "all" || statusFilter !== "all" ? (
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-card)] overflow-hidden">
             {filtered.map((item) => (
-              <ComplianceChecklistItem key={item.id} item={item} />
+              <ComplianceChecklistItem key={item.id} item={item} actions={renderActions(item)} />
             ))}
           </div>
         ) : (
-          /* Default: grouped by category with collapsible sections */
-          <div className="flex flex-col gap-4">
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-card)] overflow-hidden divide-y divide-[var(--border-subtle)]">
             {Array.from(groupedItems.entries()).map(([cat, catItems]) => (
-              <CategoryGroup
-                key={cat}
-                category={cat}
-                items={catItems}
-                defaultOpen={catItems.some((i) => i.status === "overdue" || i.status === "unsatisfied")}
-              />
+              <div key={cat} id={`cat-${cat}`} className="scroll-mt-20">
+                <CategoryGroup
+                  category={cat}
+                  items={catItems}
+                  defaultOpen={catItems.some((i) => i.status === "overdue")}
+                  renderActions={renderActions}
+                />
+              </div>
             ))}
           </div>
         )}
       </section>
+
+      {/* ── Activity Feed ── */}
+      <ComplianceActivityFeed communityId={communityId} />
+
+      {/* ── Modals ── */}
+      {linkModalItem && (
+        <LinkDocumentModal
+          communityId={communityId}
+          onSelect={(documentId) => {
+            mutations.linkDocument.mutate({ itemId: linkModalItem.id, documentId });
+            setLinkModalItem(null);
+          }}
+          onClose={() => setLinkModalItem(null)}
+        />
+      )}
+      {uploadModalItem && (
+        <UploadDocumentModal
+          communityId={communityId}
+          defaultTitle={uploadModalItem.title}
+          onUploaded={(documentId) => {
+            mutations.linkDocument.mutate({ itemId: uploadModalItem.id, documentId });
+          }}
+          onClose={() => setUploadModalItem(null)}
+        />
+      )}
     </div>
   );
 }

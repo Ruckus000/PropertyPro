@@ -82,3 +82,23 @@ export function calculateComplianceStatus(input: ComplianceStatusInput): Complia
 export function isOverdue(deadline: Date, now: Date = new Date()): boolean {
   return isAfter(now, deadline);
 }
+
+const CATEGORY_ORDER = ["governing_documents", "financial_records", "meeting_records", "insurance", "operations"];
+
+/**
+ * Group items by category in a stable order.
+ * Works with any object that has a `category` string property.
+ */
+export function groupByCategory<T extends { category: string }>(items: T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const cat of CATEGORY_ORDER) {
+    const matching = items.filter((i) => i.category === cat);
+    if (matching.length > 0) grouped.set(cat, matching);
+  }
+  for (const item of items) {
+    if (!grouped.has(item.category)) {
+      grouped.set(item.category, items.filter((i) => i.category === item.category));
+    }
+  }
+  return grouped;
+}
