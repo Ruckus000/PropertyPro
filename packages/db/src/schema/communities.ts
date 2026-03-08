@@ -56,6 +56,10 @@ export const communities = pgTable('communities', {
   customDomain: text('custom_domain'),
   /** Phase 3: When the community's public site was last published. */
   sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
+  /** Public compliance transparency page opt-in toggle. */
+  transparencyEnabled: boolean('transparency_enabled').notNull().default(false),
+  /** Timestamp when transparency scope disclosure was acknowledged by an authorized user. */
+  transparencyAcknowledgedAt: timestamp('transparency_acknowledged_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

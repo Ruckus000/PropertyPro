@@ -61,6 +61,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/internal/payment-reminders', method: 'POST' },
   // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
   { path: '/api/v1/auth/demo-login', method: 'GET' },
+  // Public transparency page data endpoint (community opt-in gated)
+  { path: '/api/v1/transparency', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

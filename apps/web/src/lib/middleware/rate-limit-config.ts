@@ -80,6 +80,11 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
     return 'auth';
   }
 
+  // Public unauthenticated API endpoint (tenant opt-in gated at handler level)
+  if (pathname === '/api/v1/transparency' && method === 'GET') {
+    return 'public';
+  }
+
   // API routes are classified by HTTP method
   if (pathname.startsWith(API_PREFIX)) {
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {

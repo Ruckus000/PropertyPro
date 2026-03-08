@@ -59,7 +59,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: FileText,
     href: (cid) => `/communities/${cid}/documents?communityId=${cid}`,
     group: 'main',
-    matchPrefixes: ['/communities/', '/documents'],
+    matchPrefixes: ['/documents'],
   },
   {
     id: 'meetings',
@@ -165,8 +165,9 @@ export function getVisibleItems(
 
 /**
  * Determine the active nav item ID based on the current pathname.
- * Finds the longest matching prefix across all items to guarantee
- * the most specific match regardless of item order.
+ * Uses segment-aware matching: a prefix matches if the pathname starts
+ * with it OR contains it as a path segment (e.g. '/compliance' matches
+ * '/communities/1/compliance'). The longest matching prefix wins.
  */
 export function getActiveItemId(
   items: readonly NavItemConfig[],
@@ -176,7 +177,11 @@ export function getActiveItemId(
 
   for (const item of items) {
     for (const prefix of item.matchPrefixes) {
-      if (pathname.startsWith(prefix)) {
+      const matches =
+        pathname.startsWith(prefix) ||
+        pathname.includes(prefix + '/') ||
+        pathname.endsWith(prefix);
+      if (matches) {
         if (!bestMatch || prefix.length > bestMatch.prefixLength) {
           bestMatch = { id: item.id, prefixLength: prefix.length };
         }
@@ -194,7 +199,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   meetings: { title: 'Meetings', subtitle: 'Schedule & notices' },
   announcements: { title: 'Announcements', subtitle: 'Community updates' },
   maintenance: { title: 'Maintenance', subtitle: 'Submit & track requests' },
-  compliance: { title: 'Compliance', subtitle: 'Florida Statute §718' },
+  compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },

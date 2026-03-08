@@ -833,6 +833,7 @@ async function seedCommunityCompliance(
       description: complianceChecklistItems.description,
       category: complianceChecklistItems.category,
       statuteReference: complianceChecklistItems.statuteReference,
+      isConditional: complianceChecklistItems.isConditional,
     })
     .from(complianceChecklistItems)
     .where(eq(complianceChecklistItems.communityId, communityId));
@@ -850,6 +851,7 @@ async function seedCommunityCompliance(
         description: item.description,
         category: item.category,
         statuteReference: item.statuteReference,
+        isConditional: item.isConditional ?? false,
       });
       continue;
     }
@@ -857,7 +859,8 @@ async function seedCommunityCompliance(
     const changed = existing.title !== item.title
       || existing.description !== item.description
       || existing.category !== item.category
-      || (existing.statuteReference ?? null) !== (item.statuteReference ?? null);
+      || (existing.statuteReference ?? null) !== (item.statuteReference ?? null)
+      || existing.isConditional !== (item.isConditional ?? false);
     if (!changed) {
       continue;
     }
@@ -869,6 +872,7 @@ async function seedCommunityCompliance(
         description: item.description,
         category: item.category,
         statuteReference: item.statuteReference,
+        isConditional: item.isConditional ?? false,
         updatedAt: new Date(),
       })
       .where(eq(complianceChecklistItems.id, existing.id));

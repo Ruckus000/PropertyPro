@@ -2,14 +2,14 @@ import React from "react";
 import ComplianceDashboard from "@/components/compliance/compliance-dashboard";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default function CompliancePage({ params }: PageProps) {
-  const communityId = Number(params.id);
+export default async function CompliancePage({ params }: PageProps) {
+  const { id } = await params;
+  const communityId = Number(id);
   if (!Number.isFinite(communityId) || communityId <= 0) {
     return <div>Invalid community ID</div>;
   }
   return <ComplianceDashboard communityId={communityId} />;
 }
-

@@ -1,78 +1,99 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// We need to test getCookieOptions in isolation, manipulating env vars per test.
+// Dynamic import after setting env vars ensures fresh module evaluation.
+
 describe('getCookieOptions', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    // Reset module cache so getCookieOptions re-reads env
+    // Reset module cache so each test gets a fresh import
     vi.resetModules();
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    // Restore original env
+    process.env = { ...originalEnv };
   });
 
-  async function loadGetCookieOptions() {
+  async function importGetCookieOptions() {
     const mod = await import('../src/supabase/cookie-config');
     return mod.getCookieOptions;
   }
 
-  it('returns domain and secure when set in production', async () => {
+  it('returns domain and secure when NEXT_PUBLIC_COOKIE_DOMAIN is set in production', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
     process.env.NODE_ENV = 'production';
-    const getCookieOptions = await loadGetCookieOptions();
-    expect(getCookieOptions()).toEqual({ domain: '.propertyprofl.com', secure: true });
+    const getCookieOptions = await importGetCookieOptions();
+
+    const result = getCookieOptions();
+    expect(result).toEqual({ domain: '.propertyprofl.com', secure: true });
   });
 
   it('returns domain without secure in development', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
     process.env.NODE_ENV = 'development';
-    const getCookieOptions = await loadGetCookieOptions();
-    expect(getCookieOptions()).toEqual({ domain: '.propertyprofl.com' });
+    const getCookieOptions = await importGetCookieOptions();
+
+    const result = getCookieOptions();
+    expect(result).toEqual({ domain: '.propertyprofl.com' });
   });
 
-  it('returns undefined when cookie domain is empty', async () => {
+  it('returns undefined when NEXT_PUBLIC_COOKIE_DOMAIN is empty', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '';
-    const getCookieOptions = await loadGetCookieOptions();
+    const getCookieOptions = await importGetCookieOptions();
+
     expect(getCookieOptions()).toBeUndefined();
   });
 
-  it('returns undefined when cookie domain is unset', async () => {
+  it('returns undefined when NEXT_PUBLIC_COOKIE_DOMAIN is not set', async () => {
     delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
-    const getCookieOptions = await loadGetCookieOptions();
+    const getCookieOptions = await importGetCookieOptions();
+
     expect(getCookieOptions()).toBeUndefined();
   });
 
-  it('trims whitespace from domain', async () => {
+  it('trims whitespace from NEXT_PUBLIC_COOKIE_DOMAIN', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '  .example.com  ';
     process.env.NODE_ENV = 'development';
-    const getCookieOptions = await loadGetCookieOptions();
-    expect(getCookieOptions()).toEqual({ domain: '.example.com' });
+    const getCookieOptions = await importGetCookieOptions();
+
+    const result = getCookieOptions();
+    expect(result).toEqual({ domain: '.example.com' });
   });
 
-  it('warns when domain does not start with dot', async () => {
+  it('returns undefined when NEXT_PUBLIC_COOKIE_DOMAIN is only whitespace', async () => {
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '   ';
+    const getCookieOptions = await importGetCookieOptions();
+
+    expect(getCookieOptions()).toBeUndefined();
+  });
+
+  it('logs a warning when domain does not start with "."', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = 'example.com';
     process.env.NODE_ENV = 'development';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const getCookieOptions = await loadGetCookieOptions();
-    getCookieOptions();
+    const getCookieOptions = await importGetCookieOptions();
+
+    const result = getCookieOptions();
+    expect(result).toEqual({ domain: 'example.com' });
+    expect(warnSpy).toHaveBeenCalledOnce();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('should start with "."'),
     );
+
     warnSpy.mockRestore();
   });
 
-  it('returns whitespace-only as undefined', async () => {
-    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '   ';
-    const getCookieOptions = await loadGetCookieOptions();
-    expect(getCookieOptions()).toBeUndefined();
-  });
+  it('does not log a warning when domain starts with "."', async () => {
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
+    process.env.NODE_ENV = 'development';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const getCookieOptions = await importGetCookieOptions();
 
-  it('does not include secure when NODE_ENV is test', async () => {
-    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.test.com';
-    process.env.NODE_ENV = 'test';
-    const getCookieOptions = await loadGetCookieOptions();
-    expect(getCookieOptions()).toEqual({ domain: '.test.com' });
+    getCookieOptions();
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });
