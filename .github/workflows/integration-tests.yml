@@ -48,6 +48,42 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Stub Supabase primitives
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+          -- Stub Supabase auth schema, roles, and functions so migrations
+          -- can run against plain Postgres 16 in CI.
+
+          -- Roles used by RLS policies
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+              CREATE ROLE service_role NOLOGIN;
+            END IF;
+          END $$;
+
+          -- Grant usage so policies referencing these roles can be created
+          GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+          -- Auth schema and helpers
+          CREATE SCHEMA IF NOT EXISTS auth;
+
+          CREATE OR REPLACE FUNCTION auth.uid()
+            RETURNS uuid
+            LANGUAGE sql
+            STABLE
+          AS $$ SELECT NULL::uuid; $$;
+
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+          );
+          SQL
+
       - name: Run migrations
         run: pnpm --filter @propertypro/db db:migrate
 
