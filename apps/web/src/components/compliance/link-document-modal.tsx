@@ -46,9 +46,6 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
   useEffect(() => {
     fetchDocs("");
     inputRef.current?.focus();
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
   }, [fetchDocs]);
 
   function handleSearchChange(value: string) {
@@ -74,9 +71,6 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
       }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="link-modal-title"
         className="
           w-full max-w-lg mx-4
           rounded-[var(--radius-lg)] bg-[var(--surface-card)]
@@ -88,11 +82,10 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-          <h3 id="link-modal-title" className="text-base font-semibold text-[var(--text-primary)]">Link Document</h3>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">Link Document</h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
             className="rounded-[var(--radius-sm)] p-1 hover:bg-[var(--surface-hover)] transition-colors"
           >
             <X size={16} className="text-[var(--text-tertiary)]" />

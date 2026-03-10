@@ -133,8 +133,8 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
       <div className="flex flex-col">
         {entries.map((entry, idx) => {
           const itemTitle =
-            (typeof entry.metadata?.itemTitle === 'string' && entry.metadata.itemTitle) ||
-            (typeof entry.metadata?.documentTitle === 'string' && entry.metadata.documentTitle) ||
+            (entry.metadata?.itemTitle as string) ??
+            (entry.metadata?.documentTitle as string) ??
             entry.resourceId;
 
           return (
