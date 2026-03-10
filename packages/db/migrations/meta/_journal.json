@@ -330,6 +330,27 @@
       "when": 1772990000000,
       "tag": "0086_package_and_visitor_logging",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1773000000000,
+      "tag": "0087_add_token_encryption_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1773010000000,
+      "tag": "0088_force_rls_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1773020000000,
+      "tag": "0089_fix_anon_rls_graceful_fail",
+      "breakpoints": true
     }
   ]
 }
