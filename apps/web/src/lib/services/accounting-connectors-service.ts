@@ -10,11 +10,12 @@ import {
   type LedgerEntryRow,
 } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
-import { NotFoundError } from '@/lib/api/errors';
+import { BadRequestError, ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import {
   getAccountingAdapter,
   type AccountingMappingOption,
 } from '@/lib/accounting/adapters';
+import { signPayload, verifySignature } from '@/lib/services/calendar-sync-service';
 
 interface AccountingConnectionRow extends AccountingConnection {
   [key: string]: unknown;
@@ -38,14 +39,50 @@ function serializeState(
   userId: string,
   provider: AccountingProvider,
 ): string {
-  return Buffer.from(
-    JSON.stringify({
-      communityId,
-      userId,
-      provider,
-      ts: Date.now(),
-    }),
-  ).toString('base64url');
+  const payload = JSON.stringify({ communityId, userId, provider, ts: Date.now() });
+  const sig = signPayload(payload);
+  return Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64url');
+}
+
+const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+export function validateAccountingOAuthState(
+  stateParam: string | null,
+  expectedCommunityId: number,
+  expectedUserId: string,
+  expectedProvider: AccountingProvider,
+): void {
+  if (!stateParam) {
+    throw new BadRequestError('Missing OAuth state parameter');
+  }
+
+  let outer: { p: string; s: string };
+  try {
+    outer = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+  } catch {
+    throw new BadRequestError('Invalid OAuth state parameter');
+  }
+
+  if (!outer.p || !outer.s || !verifySignature(outer.p, outer.s)) {
+    throw new ForbiddenError('OAuth state signature invalid');
+  }
+
+  let parsed: { communityId: number; userId: string; provider: string; ts: number };
+  try {
+    parsed = JSON.parse(outer.p);
+  } catch {
+    throw new BadRequestError('Invalid OAuth state payload');
+  }
+
+  if (parsed.communityId !== expectedCommunityId || parsed.userId !== expectedUserId) {
+    throw new ForbiddenError('OAuth state mismatch');
+  }
+  if (parsed.provider !== expectedProvider) {
+    throw new BadRequestError('OAuth state provider mismatch');
+  }
+  if (Date.now() - parsed.ts > STATE_MAX_AGE_MS) {
+    throw new BadRequestError('OAuth state expired');
+  }
 }
 
 function normalizeMappingConfig(value: unknown): Record<string, string> {

@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server';
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockGetSession = vi.fn();
+const mockGetUser = vi.fn();
 const mockSingleFrom = vi.fn();
 const mockAdminDb = {
   from: vi.fn(() => ({
@@ -25,7 +25,7 @@ const mockAdminDb = {
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async (_req: NextRequest) => {
     return {
-      supabase: { auth: { getSession: mockGetSession } },
+      supabase: { auth: { getUser: mockGetUser } },
       response: {
         headers: new Headers(),
         status: 200,
@@ -59,7 +59,7 @@ describe('admin middleware', () => {
     const req = makeRequest('/auth/login');
     const res = await middleware(req);
     expect(res.status).not.toBe(302);
-    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 
   it('passes through /api/health without session check', async () => {
@@ -67,11 +67,11 @@ describe('admin middleware', () => {
     const req = makeRequest('/api/health');
     const res = await middleware(req);
     expect(res.status).not.toBe(302);
-    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 
   it('redirects unauthenticated request to /clients → /auth/login', async () => {
-    mockGetSession.mockResolvedValue({ data: { session: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import('@/middleware');
     const req = makeRequest('/clients');
@@ -83,8 +83,8 @@ describe('admin middleware', () => {
   });
 
   it('redirects authenticated non-admin user to /auth/login?error=access_denied', async () => {
-    mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: 'user-123', email: 'notadmin@example.com' } } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-123', email: 'notadmin@example.com' } },
     });
     mockSingleFrom.mockResolvedValue({ data: null });
 
@@ -99,8 +99,8 @@ describe('admin middleware', () => {
   });
 
   it('passes through authenticated platform admin', async () => {
-    mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: 'admin-456', email: 'admin@propertyprofl.com' } } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'admin-456', email: 'admin@propertyprofl.com' } },
     });
     mockSingleFrom.mockResolvedValue({ data: { user_id: 'admin-456' } });
 
@@ -114,7 +114,7 @@ describe('admin middleware', () => {
   it('returns 429 on rate limit exceeded', async () => {
     // The rate limiter is stateful; this test is basic verification
     // In real tests you would mock Date.now() to control the window
-    mockGetSession.mockResolvedValue({ data: { session: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import('@/middleware');
 

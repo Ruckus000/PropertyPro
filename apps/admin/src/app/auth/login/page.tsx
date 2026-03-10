@@ -12,10 +12,17 @@ import { createBrowserClient } from '@supabase/ssr';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
+function safeReturnTo(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return '/clients';
+  }
+  return value;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get('returnTo') ?? '/clients';
+  const returnTo = safeReturnTo(searchParams.get('returnTo'));
   const accessDenied = searchParams.get('error') === 'access_denied';
 
   const [email, setEmail] = useState('');

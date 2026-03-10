@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const mockGetSession = vi.fn();
+const mockGetUser = vi.fn();
 const mockSingle = vi.fn();
 const mockAdminDb = {
   from: vi.fn(() => ({
@@ -21,7 +21,7 @@ const mockAdminDb = {
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async () => ({
-    supabase: { auth: { getSession: mockGetSession } },
+    supabase: { auth: { getUser: mockGetUser } },
     response: { headers: new Headers(), status: 200 },
   })),
 }));
@@ -37,8 +37,8 @@ describe('cross-subdomain session', () => {
 
   it('accepts session from a platform_admin_users member', async () => {
     const adminUserId = 'platform-admin-uuid';
-    mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: adminUserId, email: 'admin@propertyprofl.com' } } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: adminUserId, email: 'admin@propertyprofl.com' } },
     });
     mockSingle.mockResolvedValue({ data: { user_id: adminUserId } });
 
@@ -53,8 +53,8 @@ describe('cross-subdomain session', () => {
 
   it('rejects session for user not in platform_admin_users', async () => {
     const nonAdminId = 'regular-user-uuid';
-    mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: nonAdminId, email: 'user@sunset-condos.propertyprofl.com' } } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: nonAdminId, email: 'user@sunset-condos.propertyprofl.com' } },
     });
     mockSingle.mockResolvedValue({ data: null }); // No platform_admin_users row
 
@@ -68,7 +68,7 @@ describe('cross-subdomain session', () => {
   });
 
   it('rejects request with no session at all', async () => {
-    mockGetSession.mockResolvedValue({ data: { session: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import('@/middleware');
     const req = new NextRequest('http://admin.propertyprofl.com/clients');

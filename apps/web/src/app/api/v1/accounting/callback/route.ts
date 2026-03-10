@@ -10,7 +10,7 @@ import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
-import { completeAccountingConnect } from '@/lib/services/accounting-connectors-service';
+import { completeAccountingConnect, validateAccountingOAuthState } from '@/lib/services/accounting-connectors-service';
 
 const callbackSchema = z.object({
   provider: z.enum(['quickbooks', 'xero']),
@@ -39,6 +39,13 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       fields: formatZodErrors(parsed.error),
     });
   }
+
+  validateAccountingOAuthState(
+    searchParams.get('state'),
+    communityId,
+    actorUserId,
+    parsed.data.provider,
+  );
 
   const requestId = req.headers.get('x-request-id');
   const data = await completeAccountingConnect(

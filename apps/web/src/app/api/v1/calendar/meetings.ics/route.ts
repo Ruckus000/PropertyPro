@@ -15,6 +15,14 @@ interface CommunityRow {
   communityType: string;
 }
 
+/**
+ * Public ICS calendar feed — intentionally unauthenticated.
+ *
+ * ICS feeds must be accessible without auth so calendar applications
+ * (Google Calendar, Apple Calendar, Outlook) can subscribe and poll
+ * for updates. Community is resolved via subdomain middleware.
+ * Access is gated by the `hasCalendarSync` feature flag.
+ */
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQueryOrHeader(req);
   const scoped = createScopedClient(communityId);

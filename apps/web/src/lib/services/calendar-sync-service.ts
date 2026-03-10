@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   calendarSyncTokens,
   createScopedClient,
@@ -8,7 +9,7 @@ import {
   type CalendarSyncProvider,
 } from '@propertypro/db';
 import { and, asc, eq } from '@propertypro/db/filters';
-import { NotFoundError } from '@/lib/api/errors';
+import { BadRequestError, ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { deterministicGoogleCalendarAdapter } from '@/lib/calendar/google-calendar-adapter';
 import { buildMeetingsIcs, type IcsMeetingInput } from '@/lib/calendar/ics';
 
@@ -48,14 +49,69 @@ function getCalendarCallbackUrl(): string {
   return 'http://localhost:3000/api/v1/calendar/google/callback';
 }
 
+// ---------------------------------------------------------------------------
+// HMAC helpers — sign OAuth state to prevent forgery (per Google / Intuit / Xero guidance)
+// ---------------------------------------------------------------------------
+
+function getStateSecret(): string {
+  const secret = process.env.OAUTH_STATE_SECRET;
+  if (!secret) throw new Error('OAUTH_STATE_SECRET is not configured');
+  return secret;
+}
+
+export function signPayload(payload: string): string {
+  return createHmac('sha256', getStateSecret())
+    .update(payload)
+    .digest('base64url');
+}
+
+export function verifySignature(payload: string, signature: string): boolean {
+  const expected = signPayload(payload);
+  if (expected.length !== signature.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+}
+
 function serializeState(communityId: number, userId: string): string {
-  return Buffer.from(
-    JSON.stringify({
-      communityId,
-      userId,
-      ts: Date.now(),
-    }),
-  ).toString('base64url');
+  const payload = JSON.stringify({ communityId, userId, ts: Date.now() });
+  const sig = signPayload(payload);
+  return Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64url');
+}
+
+const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+export function validateOAuthState(
+  stateParam: string | null,
+  expectedCommunityId: number,
+  expectedUserId: string,
+): void {
+  if (!stateParam) {
+    throw new BadRequestError('Missing OAuth state parameter');
+  }
+
+  let outer: { p: string; s: string };
+  try {
+    outer = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+  } catch {
+    throw new BadRequestError('Invalid OAuth state parameter');
+  }
+
+  if (!outer.p || !outer.s || !verifySignature(outer.p, outer.s)) {
+    throw new ForbiddenError('OAuth state signature invalid');
+  }
+
+  let parsed: { communityId: number; userId: string; ts: number };
+  try {
+    parsed = JSON.parse(outer.p);
+  } catch {
+    throw new BadRequestError('Invalid OAuth state payload');
+  }
+
+  if (parsed.communityId !== expectedCommunityId || parsed.userId !== expectedUserId) {
+    throw new ForbiddenError('OAuth state mismatch');
+  }
+  if (Date.now() - parsed.ts > STATE_MAX_AGE_MS) {
+    throw new BadRequestError('OAuth state expired');
+  }
 }
 
 async function listCommunityMeetings(

@@ -8,7 +8,7 @@ import {
   requireCalendarSyncEnabledForMembership,
   requireCalendarSyncWritePermission,
 } from '@/lib/calendar/common';
-import { completeGoogleCalendarConnect } from '@/lib/services/calendar-sync-service';
+import { completeGoogleCalendarConnect, validateOAuthState } from '@/lib/services/calendar-sync-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -19,6 +19,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requireCalendarSyncWritePermission(membership);
 
   const { searchParams } = new URL(req.url);
+
+  validateOAuthState(searchParams.get('state'), communityId, actorUserId);
+
   const code = searchParams.get('code');
   if (!code || code.trim().length === 0) {
     throw new BadRequestError('code query parameter is required');

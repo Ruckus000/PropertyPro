@@ -26,7 +26,7 @@ const createVisitorSchema = z.object({
   visitorName: z.string().trim().min(1).max(240),
   purpose: z.string().trim().min(1).max(240),
   hostUnitId: z.number().int().positive(),
-  expectedArrival: z.string().trim().min(1),
+  expectedArrival: z.string().datetime({ offset: true }),
   notes: z.string().trim().max(2000).nullable().optional(),
 });
 
@@ -53,13 +53,20 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  const data = await listVisitorsForCommunity(communityId, {
+  const visitors = await listVisitorsForCommunity(communityId, {
     hostUnitId,
     onlyActive,
     allowedUnitIds,
   });
 
-  return NextResponse.json({ data });
+  // Strip sensitive access-control field from resident responses
+  if (isResidentRole(membership.role)) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const sanitized = visitors.map(({ passCode, ...rest }) => rest);
+    return NextResponse.json({ data: sanitized });
+  }
+
+  return NextResponse.json({ data: visitors });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
