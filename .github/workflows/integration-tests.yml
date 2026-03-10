@@ -84,6 +84,9 @@ jobs:
           );
           SQL
 
+      - name: Build packages
+        run: pnpm --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db build
+
       - name: Run migrations
         run: pnpm --filter @propertypro/db db:migrate
 
