@@ -73,6 +73,9 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
       process.env.TOKEN_ENCRYPTION_KEY
       ?? '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+    process.env.OAUTH_STATE_SECRET =
+      process.env.OAUTH_STATE_SECRET ?? 'test-oauth-state-secret-32bytes!!';
+
     state = await initTestKit();
 
     const selectedCommunities = MULTI_TENANT_COMMUNITIES.filter((community) =>
@@ -240,12 +243,12 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
       }),
     );
     expect(connectResponse.status).toBe(200);
-    const connectJson = await parseJson<{ data: { authorizationUrl: string } }>(connectResponse);
+    const connectJson = await parseJson<{ data: { authorizationUrl: string; state: string } }>(connectResponse);
     expect(connectJson.data.authorizationUrl).toContain('oauth.google.example');
 
     const callbackResponse = await routeModules.googleCallback.GET(
       new NextRequest(
-        apiUrl(`/api/v1/calendar/google/callback?communityId=${communityA.id}&code=google-code-123`),
+        apiUrl(`/api/v1/calendar/google/callback?communityId=${communityA.id}&code=google-code-123&state=${connectJson.data.state}`),
       ),
     );
     expect(callbackResponse.status).toBe(200);
@@ -295,10 +298,11 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
       }),
     );
     expect(connectResponse.status).toBe(200);
+    const acctConnectJson = await parseJson<{ data: { authorizationUrl: string; state: string } }>(connectResponse);
 
     const callbackResponse = await routeModules.accountingCallback.GET(
       new NextRequest(
-        apiUrl(`/api/v1/accounting/callback?communityId=${communityC.id}&provider=quickbooks&code=qbo-code-456`),
+        apiUrl(`/api/v1/accounting/callback?communityId=${communityC.id}&provider=quickbooks&code=qbo-code-456&state=${acctConnectJson.data.state}`),
       ),
     );
     expect(callbackResponse.status).toBe(200);

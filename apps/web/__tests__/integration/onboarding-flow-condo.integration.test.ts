@@ -134,7 +134,7 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         vi.clearAllMocks();
         const kit = requireState();
         requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
-        setActor(kit, 'siteManagerA');
+        setActor(kit, 'actorA');
     });
 
     afterAll(async () => {

@@ -4,7 +4,7 @@
  * Verifies the full compliance flow:
  *   1. Generate compliance checklist for a condo community → items created
  *   2. Idempotent re-generation returns existing items
- *   3. GET returns items with calculated status (non_compliant initially)
+ *   3. GET returns items with calculated status (unsatisfied initially)
  *   4. Feature gate: apartment community → 403
  *   5. Role gate: tenant cannot generate checklist
  */
@@ -182,11 +182,11 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
     const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
     expect(json.data.length).toBeGreaterThan(0);
 
-    // Items without documents should be non_compliant or overdue
+    // Items without documents should be unsatisfied or overdue
     for (const item of json.data) {
       expect(item).toHaveProperty('status');
-      // Since no documents have been linked, status should indicate non-compliance
-      expect(['non_compliant', 'overdue', 'not_applicable']).toContain(item['status']);
+      // Since no documents have been linked, status should indicate unsatisfied
+      expect(['unsatisfied', 'overdue', 'not_applicable']).toContain(item['status']);
     }
   });
 
