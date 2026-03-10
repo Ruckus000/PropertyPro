@@ -60,7 +60,9 @@ const INVALID_MAGIC = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 
 
 const { requireAuthenticatedUserIdMock, mockStorageBytes } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
-  mockStorageBytes: { current: PDF_MAGIC as Uint8Array },
+  mockStorageBytes: {
+    current: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]) as Uint8Array,
+  },
 }));
 
 vi.mock('@/lib/api/auth', () => ({
