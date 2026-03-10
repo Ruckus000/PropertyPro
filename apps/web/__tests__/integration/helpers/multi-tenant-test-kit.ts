@@ -12,11 +12,13 @@ import { inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { NextRequest } from 'next/server';
 import postgres from 'postgres';
+import { describe } from 'vitest';
 import type {
   MultiTenantCommunityFixture,
   MultiTenantCommunityKey,
 } from '../../fixtures/multi-tenant-communities';
 import type { MultiTenantUserFixture, MultiTenantUserKey } from '../../fixtures/multi-tenant-users';
+import { clearTestAuthState, registerTestAuthState } from '../providers/test-auth-provider';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,7 +66,7 @@ export async function initTestKit(): Promise<TestKitState> {
   const sqlClient = postgres(databaseUrl, { prepare: false });
   const db = drizzle(sqlClient);
 
-  return {
+  const state: TestKitState = {
     dbModule,
     db,
     sqlClient,
@@ -74,6 +76,9 @@ export async function initTestKit(): Promise<TestKitState> {
     runtimeCleanupUserIds: new Set(),
     currentActorUserId: null,
   };
+
+  registerTestAuthState(state);
+  return state;
 }
 
 /**
@@ -175,6 +180,7 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
       }
     }
   } finally {
+    clearTestAuthState();
     await state.sqlClient.end();
   }
 }

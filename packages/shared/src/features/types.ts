@@ -33,4 +33,26 @@ export interface CommunityFeatures {
   readonly hasMaintenanceRequests: boolean;
   /** Community announcements and bulletin board */
   readonly hasAnnouncements: boolean;
+  /** Assessment billing, payments, and delinquency workflows */
+  readonly hasFinance: boolean;
+  /** Violation case lifecycle management */
+  readonly hasViolations: boolean;
+  /** Architectural Review Committee applications */
+  readonly hasARC: boolean;
+  /** Informal community polls */
+  readonly hasPolls: boolean;
+  /** Community forum / board */
+  readonly hasCommunityBoard: boolean;
+  /** Vendor dispatch work orders */
+  readonly hasWorkOrders: boolean;
+  /** Amenity reservation management */
+  readonly hasAmenities: boolean;
+  /** Staff package intake/pickup logging */
+  readonly hasPackageLogging: boolean;
+  /** Visitor pass and check-in/out logging */
+  readonly hasVisitorLogging: boolean;
+  /** External calendar sync (ICS/Google) */
+  readonly hasCalendarSync: boolean;
+  /** Accounting platform connectors */
+  readonly hasAccountingConnectors: boolean;
 }

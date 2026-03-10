@@ -284,6 +284,31 @@ describe('policy invariants', () => {
     expect(checkPermission('tenant', 'apartment', 'documents', 'write')).toBe(false);
   });
 
+  // --- WS70/WS71 resources ---
+
+  it('condo board_president can write calendar sync but not accounting connectors', () => {
+    expect(checkPermission('board_president', 'condo_718', 'calendar_sync', 'write')).toBe(true);
+    expect(checkPermission('board_president', 'condo_718', 'accounting', 'write')).toBe(false);
+  });
+
+  it('condo cam can write accounting connectors', () => {
+    expect(checkPermission('cam', 'condo_718', 'accounting', 'write')).toBe(true);
+  });
+
+  it('condo board_member cannot read or write packages/visitors', () => {
+    expect(checkPermission('board_member', 'condo_718', 'packages', 'read')).toBe(false);
+    expect(checkPermission('board_member', 'condo_718', 'packages', 'write')).toBe(false);
+    expect(checkPermission('board_member', 'condo_718', 'visitors', 'read')).toBe(false);
+    expect(checkPermission('board_member', 'condo_718', 'visitors', 'write')).toBe(false);
+  });
+
+  it('condo tenant can read packages and manage own visitor passes', () => {
+    expect(checkPermission('tenant', 'condo_718', 'packages', 'read')).toBe(true);
+    expect(checkPermission('tenant', 'condo_718', 'packages', 'write')).toBe(false);
+    expect(checkPermission('tenant', 'condo_718', 'visitors', 'read')).toBe(true);
+    expect(checkPermission('tenant', 'condo_718', 'visitors', 'write')).toBe(true);
+  });
+
   // --- ROLE_COMMUNITY_CONSTRAINTS consistency ---
   // Invalid role/community combos must be false for ALL resources and actions
 
