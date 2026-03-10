@@ -116,6 +116,14 @@ function buildReturnTo(request: NextRequest): string {
   return `${request.nextUrl.pathname}${request.nextUrl.search}`;
 }
 
+/** Reject returnTo values that could cause open-redirect or path-traversal. */
+function safeReturnTo(value: string | null, fallback: string): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return fallback;
+  }
+  return value;
+}
+
 function attachResponseCookies(source: NextResponse, target: NextResponse): void {
   for (const { name, value, ...options } of source.cookies.getAll()) {
     target.cookies.set(name, value, options);
@@ -518,7 +526,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         const verifyUrl = request.nextUrl.clone();
         verifyUrl.pathname = VERIFY_EMAIL_PATH;
         const returnTo = request.nextUrl.searchParams.get('returnTo');
-        if (returnTo) {
+        if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
           verifyUrl.searchParams.set('returnTo', returnTo);
         }
         return finaliseResponse(
@@ -531,10 +539,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const returnTo = request.nextUrl.searchParams.get('returnTo');
       const destination = request.nextUrl.clone();
       const hasTenantContext = forwardedHeaders.has(COMMUNITY_ID_HEADER);
-      destination.pathname = returnTo || (hasTenantContext ? '/dashboard' : '/select-community');
+      const fallback = hasTenantContext ? '/dashboard' : '/select-community';
+      destination.pathname = safeReturnTo(request.nextUrl.searchParams.get('returnTo'), fallback);
       destination.searchParams.delete('returnTo');
       return finaliseResponse(
         response as unknown as NextResponse,
