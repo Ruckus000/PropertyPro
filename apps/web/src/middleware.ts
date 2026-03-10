@@ -63,6 +63,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/demo-login', method: 'GET' },
   // Public transparency page data endpoint (community opt-in gated)
   { path: '/api/v1/transparency', method: 'GET' },
+  // Public tenant ICS feed (community-scoped via middleware tenant headers)
+  { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
@@ -90,7 +92,10 @@ function isProtectedPath(pathname: string): boolean {
 }
 
 function shouldResolveTenant(pathname: string): boolean {
-  // /select-community is a cross-tenant page — never inject tenant context
+  // /select-community is a cross-tenant page that lists all communities the
+  // user belongs to. It never reads x-community-id. Injecting tenant context
+  // here would cause an infinite redirect loop when the authenticated layout
+  // detects a wrong-community condition and redirects back here.
   if (pathname === '/select-community') return false;
   return isProtectedPath(pathname);
 }
@@ -235,48 +240,6 @@ async function findCommunityIdBySlug(
   return communityId;
 }
 
-type TenantResolveMode = 'strict' | 'lenient';
-
-/**
- * Shared helper: resolve a community slug → ID and forward tenant headers.
- *
- * @param mode
- *   - `strict`: unknown slug returns `'not-found'`, DB errors return `'error'`
- *   - `lenient`: unknown slug or DB errors are logged and silently ignored
- * @returns `'ok'` on success, `'not-found'`/`'error'` in strict mode, or `'ok'` in lenient mode
- */
-async function resolveAndForwardTenantHeaders(
-  tenantContext: ReturnType<typeof resolveCommunityContext>,
-  supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
-  forwardedHeaders: Headers,
-  mode: TenantResolveMode,
-): Promise<'ok' | 'not-found' | 'error'> {
-  if (tenantContext.communityId) {
-    forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
-    forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-    return 'ok';
-  }
-
-  if (tenantContext.tenantSlug) {
-    try {
-      const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
-      if (communityId == null) {
-        if (mode === 'strict') return 'not-found';
-        // lenient: unknown slug — silently continue without headers
-        return 'ok';
-      }
-      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-      forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
-      forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-    } catch (error) {
-      if (mode === 'strict') return 'error';
-      console.warn('[middleware] Failed to resolve community by slug:', error);
-    }
-  }
-
-  return 'ok';
-}
-
 function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Headers {
   const headers = new Headers(request.headers);
   headers.delete(COMMUNITY_ID_HEADER);
@@ -347,12 +310,24 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
     }
 
-    const result = await resolveAndForwardTenantHeaders(tenantContext, supabase, forwardedHeaders, 'strict');
-    if (result === 'not-found') {
-      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
+    // Forward community ID from query param so layouts can read it from headers
+    if (tenantContext.communityId) {
+      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+      forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
     }
-    if (result === 'error') {
-      return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
+
+    if (tenantContext.tenantSlug) {
+      try {
+        const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+        if (communityId == null) {
+          return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
+        }
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } catch {
+        return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
+      }
     }
   }
 
@@ -450,7 +425,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (hasCommunityContext) {
       const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
 
-      await resolveAndForwardTenantHeaders(tenantContext, supabase, forwardedHeaders, 'lenient');
+      // Resolve community ID from slug if needed
+      if (tenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } else if (tenantContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+          }
+        } catch {
+          // Non-fatal for public site — continue without community headers
+        }
+      }
 
       // Check auth: authenticated users go to dashboard, unauthenticated see public site
       const {
@@ -488,6 +478,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // --- Tenant resolution for auth pages (branded login) ---
+  // When a community subdomain serves an auth page (e.g. sunset-condos.propertyprofl.com/auth/login),
+  // inject x-community-id so the page can display community branding.
   // Non-blocking: unknown subdomains silently fall through to generic login.
   if (pathname.startsWith(AUTH_PATH_PREFIX)) {
     const authTenantContext = resolveCommunityContext({
@@ -496,7 +488,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
 
     if (!authTenantContext.isReservedSubdomain && authTenantContext.source !== 'none') {
-      await resolveAndForwardTenantHeaders(authTenantContext, supabase, forwardedHeaders, 'lenient');
+      if (authTenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(authTenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
+      } else if (authTenantContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, authTenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, authTenantContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, authTenantContext.source);
+          }
+          // If communityId is null (unknown slug): silently continue — no 404
+        } catch {
+          // Non-fatal for auth pages — continue without community headers
+        }
+      }
     }
   }
 

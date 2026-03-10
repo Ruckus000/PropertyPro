@@ -42,8 +42,14 @@ const CONTEXT_REQUIRED_FIELDS = [
   { pattern: /date/i, label: 'date' },
 ];
 
-/** Phase 5 evidence files match this pattern */
-const PHASE5_EVIDENCE_PATTERN = /^phase5-\d{2}-\d{4}-\d{2}-\d{2}\.md$/;
+/** Phase 5 workstream evidence files match this pattern */
+const PHASE5_WORKSTREAM_EVIDENCE_PATTERN = /^phase5-\d{2}-\d{4}-\d{2}-\d{2}\.md$/;
+
+/** Final gate evidence files match this pattern */
+const PHASE5_GATE_EVIDENCE_PATTERN = /^phase5-gate-\d{4}-\d{2}-\d{2}\.md$/;
+
+/** WS72 evidence file pattern */
+const PHASE5_WS72_EVIDENCE_PATTERN = /^phase5-72-\d{4}-\d{2}-\d{2}\.md$/;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,12 +121,10 @@ function main(): void {
   console.log('🔍 Audit Evidence Verifier');
   console.log('='.repeat(60));
 
-  // Find Phase 5 evidence files
-  let evidenceFiles: string[];
+  // Find Phase 5 workstream + gate evidence files
+  let allFiles: string[];
   try {
-    evidenceFiles = readdirSync(auditsDir)
-      .filter(f => PHASE5_EVIDENCE_PATTERN.test(f))
-      .sort();
+    allFiles = readdirSync(auditsDir).sort();
   } catch {
     console.log(`\nℹ️  No audits directory found at ${auditsDir}`);
     console.log('   This is expected before any Phase 5 workstream is complete.');
@@ -128,14 +132,27 @@ function main(): void {
     process.exit(0);
   }
 
+  const workstreamFiles = allFiles.filter(f => PHASE5_WORKSTREAM_EVIDENCE_PATTERN.test(f));
+  const gateFiles = allFiles.filter(f => PHASE5_GATE_EVIDENCE_PATTERN.test(f));
+  const ws72Files = allFiles.filter(f => PHASE5_WS72_EVIDENCE_PATTERN.test(f));
+  const evidenceFiles = [...workstreamFiles, ...gateFiles].sort();
+
   if (evidenceFiles.length === 0) {
-    console.log('\nℹ️  No Phase 5 evidence files found (pattern: phase5-XX-YYYY-MM-DD.md)');
+    console.log('\nℹ️  No Phase 5 evidence files found (patterns: phase5-XX-YYYY-MM-DD.md, phase5-gate-YYYY-MM-DD.md)');
     console.log('   This is expected before any Phase 5 workstream is complete.');
     console.log('\n✅ No evidence files to validate yet.');
     process.exit(0);
   }
 
+  if (ws72Files.length > 0 && gateFiles.length === 0) {
+    console.log('\n❌ WS72 evidence exists but final gate evidence is missing.');
+    console.log('   Expected at least one file matching: phase5-gate-YYYY-MM-DD.md');
+    process.exit(1);
+  }
+
   console.log(`\nFound ${evidenceFiles.length} Phase 5 evidence file(s):`);
+  console.log(`  - Workstream evidence: ${workstreamFiles.length}`);
+  console.log(`  - Gate evidence: ${gateFiles.length}`);
 
   const allProblems: Problem[] = [];
 
