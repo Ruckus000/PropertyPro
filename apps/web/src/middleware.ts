@@ -65,6 +65,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/transparency', method: 'GET' },
   // Public tenant ICS feed (community-scoped via middleware tenant headers)
   { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
+  // DocuSeal webhook: secret-header-verified by handler, no session required
+  { path: '/api/v1/webhooks/docuseal', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

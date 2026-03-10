@@ -46,6 +46,7 @@ export const RBAC_RESOURCES = [
   'visitors',
   'calendar_sync',
   'accounting',
+  'esign',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -77,6 +78,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'visitors',
   'calendar_sync',
   'accounting',
+  'esign',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -369,6 +371,7 @@ const PHASE5_DEFAULTS: Record<Phase5Resource, RbacCell> = {
   visitors: { read: false, write: false },
   calendar_sync: { read: false, write: false },
   accounting: { read: false, write: false },
+  esign: { read: false, write: false },
 };
 
 const PHASE5_FINANCE_POLICY: Record<CommunityRole, RbacCell> = {
@@ -471,6 +474,25 @@ const PHASE5_ACCOUNTING_POLICY: Record<CommunityRole, RbacCell> = {
   property_manager_admin: { read: true, write: true },
 };
 
+/**
+ * E-signature RBAC policy.
+ * - read:own for owner/tenant (can see submissions where they are a signer)
+ * - read:all + write for elevated roles (can manage templates and submissions)
+ * - sign permission is universal (handled at application layer, not RBAC)
+ *
+ * Note: The RBAC matrix grants read=true for all roles (own vs all scoping
+ * is enforced at the query layer). write=true only for elevated roles.
+ */
+const PHASE5_ESIGN_POLICY: Record<CommunityRole, RbacCell> = {
+  owner: { read: true, write: false },
+  tenant: { read: true, write: false },
+  board_member: { read: true, write: true },
+  board_president: { read: true, write: true },
+  cam: { read: true, write: true },
+  site_manager: { read: true, write: true },
+  property_manager_admin: { read: true, write: true },
+};
+
 const ROLE_CONSTRAINTS: Record<CommunityType, readonly CommunityRole[]> = {
   condo_718: ['owner', 'tenant', 'board_member', 'board_president', 'cam', 'property_manager_admin'],
   hoa_720: ['owner', 'tenant', 'board_member', 'board_president', 'cam', 'property_manager_admin'],
@@ -501,6 +523,7 @@ function withPhase5Defaults(
     merged.visitors = PHASE5_VISITORS_POLICY[role];
     merged.calendar_sync = PHASE5_CALENDAR_SYNC_POLICY[role];
     merged.accounting = PHASE5_ACCOUNTING_POLICY[role];
+    merged.esign = PHASE5_ESIGN_POLICY[role];
   }
 
   return {

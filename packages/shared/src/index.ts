@@ -84,6 +84,7 @@ export * from './ledger';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
+export * from './esign-constants';
 
 export type {
   BlockType, BlockContent, BlockContentMap,
