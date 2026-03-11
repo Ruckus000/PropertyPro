@@ -15,8 +15,8 @@ interface Signer {
 interface Submission {
   id: number;
   status: string;
-  createdAt: string;
-  completedAt: string | null;
+  createdAt: Date | string;
+  completedAt: Date | string | null;
 }
 
 interface EsignSigningPageProps {

@@ -14,7 +14,7 @@ import * as esignService from '@/lib/services/esign-service';
 const webhookPayloadSchema = z.object({
   event_type: z.string(),
   timestamp: z.string(),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
 });
 
 export async function POST(req: NextRequest) {
@@ -67,6 +67,15 @@ export async function POST(req: NextRequest) {
         const externalId = String(data.external_id ?? '');
         const communityId = parseCommunityIdFromExternalId(externalId);
         if (communityId && submitterId) {
+          // Idempotency fence: skip if this webhook event was already processed
+          const alreadyProcessed = await esignService.isWebhookEventProcessed(
+            communityId,
+            webhookEventId,
+          );
+          if (alreadyProcessed) {
+            return NextResponse.json({ received: true, duplicate: true });
+          }
+
           const values = (data.values ?? {}) as Record<string, unknown>;
           await esignService.processFormCompleted(
             communityId,
@@ -85,6 +94,15 @@ export async function POST(req: NextRequest) {
         const firstExternalId = submitters?.[0]?.external_id;
         const communityId = parseCommunityIdFromExternalId(String(firstExternalId ?? ''));
         if (communityId && submissionId) {
+          // Idempotency fence: skip if this webhook event was already processed
+          const alreadyProcessed = await esignService.isWebhookEventProcessed(
+            communityId,
+            webhookEventId,
+          );
+          if (alreadyProcessed) {
+            return NextResponse.json({ received: true, duplicate: true });
+          }
+
           await esignService.processSubmissionCompleted(
             communityId,
             submissionId,
@@ -101,10 +119,10 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[webhooks/docuseal] Error processing webhook:', error);
-    return NextResponse.json(
-      { error: { code: 'PROCESSING_ERROR', message: 'Webhook processing failed' } },
-      { status: 500 },
-    );
+    // Always return 200 after accepting webhook to prevent DocuSeal retries.
+    // Errors are logged and can be investigated via server logs.
+    // The idempotency fence makes manual replay safe if needed.
+    return NextResponse.json({ received: true, error: true });
   }
 
   return NextResponse.json({ received: true });

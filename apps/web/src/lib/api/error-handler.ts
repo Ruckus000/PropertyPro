@@ -13,10 +13,8 @@ import * as Sentry from '@sentry/nextjs';
 import { AppError } from './errors/AppError';
 import { extractSentryRequestContext } from '../sentry/request-context';
 
-type RouteHandler = (
-  req: NextRequest,
-  context?: { params: Promise<Record<string, string>> },
-) => Promise<NextResponse>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RouteHandler = (req: NextRequest, context?: any) => Promise<NextResponse>;
 
 /**
  * Wrap a Route Handler with structured error handling.

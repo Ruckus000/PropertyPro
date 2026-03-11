@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { checkPermission } from '@propertypro/shared';
 import * as esignService from '@/lib/services/esign-service';
@@ -13,18 +13,17 @@ export default async function NewTemplatePage({ params }: PageProps) {
   const { id } = await params;
   const communityId = Number(id);
 
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
+  const user = await requireAuthenticatedUser();
+  const membership = await requireCommunityMembership(communityId, user.id);
 
   if (!checkPermission(membership.role, membership.communityType, 'esign', 'write')) {
     redirect(`/communities/${communityId}/esign?communityId=${communityId}`);
   }
 
-  // Generate a short-lived JWT for the builder
-  // In production, we'd look up the user's email from the session
+  // Generate a short-lived JWT for the builder using the authenticated user's email
   const token = esignService.getBuilderToken(
     communityId,
-    'builder@propertyprofl.com',
+    user.email ?? 'unknown@propertyprofl.com',
     'New Template',
   );
 

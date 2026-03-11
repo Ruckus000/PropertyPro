@@ -6,6 +6,7 @@
  *
  * Security: DOCUSEAL_API_KEY is server-only; never exposed to the client.
  */
+import { timingSafeEqual } from 'crypto';
 
 // ---------------------------------------------------------------------------
 // Environment validation
@@ -267,7 +268,15 @@ export async function getSubmitter(submitterId: number): Promise<DocuSealSubmitt
 export function verifyWebhookSecret(headerValue: string | null): boolean {
   const config = getDocuSealConfig();
   if (!headerValue) return false;
-  return headerValue === config.webhookSecret;
+
+  const expected = Buffer.from(config.webhookSecret);
+  const received = Buffer.from(headerValue);
+
+  // timingSafeEqual throws if lengths differ
+  if (expected.length !== received.length) return false;
+
+  // Use the Node.js built-in to prevent timing side-channel attacks
+  return timingSafeEqual(expected, received);
 }
 
 // ---------------------------------------------------------------------------

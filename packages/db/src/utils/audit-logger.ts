@@ -15,7 +15,12 @@ export type AuditAction =
   | 'meeting_notice_posted' | 'meeting_minutes_approved'       // Meeting events
   | 'announcement_email_sent' | 'document_deleted'             // Domain events
   | 'document_accessed' | 'validation_failed'                  // Read-path + validation audit
-  | 'notification_sent';                                       // Email notification dispatch (P2-41)
+  | 'notification_sent'                                        // Email notification dispatch (P2-41)
+  | 'esign_template_created' | 'esign_template_archived'       // E-sign template lifecycle
+  | 'esign_template_cloned'                                    // E-sign template cloning
+  | 'esign_submission_created' | 'esign_submission_completed'  // E-sign submission lifecycle
+  | 'esign_submission_cancelled' | 'esign_reminder_sent'       // E-sign submission actions
+  | 'esign_document_verified';                                 // E-sign document verification
 
 export interface AuditEventParams {
   userId: string;

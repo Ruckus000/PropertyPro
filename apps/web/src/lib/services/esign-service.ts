@@ -5,6 +5,7 @@
  * All functions require a communityId for tenant scoping.
  */
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
+import type { AuditAction } from '@propertypro/db';
 import {
   esignTemplates,
   esignSubmissions,
@@ -12,7 +13,7 @@ import {
   esignEvents,
   esignConsent,
 } from '@propertypro/db';
-import { eq, and } from '@propertypro/db/filters';
+import { eq } from '@propertypro/db/filters';
 import {
   buildTemplateExternalId,
   buildSubmissionExternalId,
@@ -22,6 +23,21 @@ import {
 } from '@propertypro/shared';
 import * as docuseal from './docuseal-client';
 import { generateBuilderToken } from './docuseal-jwt';
+
+// ---------------------------------------------------------------------------
+// Inferred row types for scoped client results
+// ---------------------------------------------------------------------------
+
+type TemplateRow = typeof esignTemplates.$inferSelect;
+type SubmissionRow = typeof esignSubmissions.$inferSelect;
+type SignerRow = typeof esignSigners.$inferSelect;
+type EventRow = typeof esignEvents.$inferSelect;
+type ConsentRow = typeof esignConsent.$inferSelect;
+
+/** Helper to audit-log esign actions (avoids repeating `as AuditAction` casts). */
+function esignAudit(params: Omit<Parameters<typeof logAuditEvent>[0], 'action'> & { action: string }) {
+  return logAuditEvent({ ...params, action: params.action as AuditAction });
+}
 
 // ---------------------------------------------------------------------------
 // Template operations
@@ -64,7 +80,7 @@ export async function createTemplate(input: CreateTemplateInput) {
     throw new Error('Either html or documentUrl must be provided');
   }
 
-  const [template] = await scoped.insert(esignTemplates, {
+  const [template] = (await scoped.insert(esignTemplates, {
     docusealTemplateId: dsTemplate.id,
     externalId,
     name: input.name,
@@ -74,9 +90,10 @@ export async function createTemplate(input: CreateTemplateInput) {
     fieldsSchema: dsTemplate.fields,
     status: 'active',
     createdBy: input.userId,
-  });
+  })) as TemplateRow[];
+  if (!template) throw new Error('Failed to insert template');
 
-  await logAuditEvent({
+  await esignAudit({
     userId: input.userId,
     action: 'esign_template_created',
     resourceType: 'esign_template',
@@ -90,7 +107,7 @@ export async function createTemplate(input: CreateTemplateInput) {
 
 export async function listTemplates(communityId: number, status?: string) {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(esignTemplates);
+  const rows = (await scoped.query(esignTemplates)) as TemplateRow[];
   if (status) {
     return rows.filter((r) => r.status === status);
   }
@@ -99,7 +116,7 @@ export async function listTemplates(communityId: number, status?: string) {
 
 export async function getTemplate(communityId: number, templateId: number) {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(esignTemplates);
+  const rows = (await scoped.query(esignTemplates)) as TemplateRow[];
   return rows.find((r) => r.id === templateId) ?? null;
 }
 
@@ -113,13 +130,13 @@ export async function archiveTemplate(
   if (!template) return null;
 
   await docuseal.archiveTemplate(template.docusealTemplateId);
-  const [updated] = await scoped.update(
+  const [updated] = (await scoped.update(
     esignTemplates,
     { status: 'archived' },
     eq(esignTemplates.id, templateId),
-  );
+  )) as TemplateRow[];
 
-  await logAuditEvent({
+  await esignAudit({
     userId,
     action: 'esign_template_archived',
     resourceType: 'esign_template',
@@ -151,7 +168,7 @@ export async function cloneTemplate(
   );
 
   const scoped = createScopedClient(communityId);
-  const [clone] = await scoped.insert(esignTemplates, {
+  const [clone] = (await scoped.insert(esignTemplates, {
     docusealTemplateId: dsClone.id,
     externalId,
     name: newName,
@@ -161,9 +178,10 @@ export async function cloneTemplate(
     fieldsSchema: dsClone.fields,
     status: 'active',
     createdBy: userId,
-  });
+  })) as TemplateRow[];
+  if (!clone) throw new Error('Failed to insert cloned template');
 
-  await logAuditEvent({
+  await esignAudit({
     userId,
     action: 'esign_template_cloned',
     resourceType: 'esign_template',
@@ -231,7 +249,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     email: s.email,
     name: s.name,
     role: s.role,
-    external_id: buildSignerExternalId(input.communityId, signerUuids[i]),
+    external_id: buildSignerExternalId(input.communityId, signerUuids[i]!),
     fields: s.fields,
     send_email: input.sendEmail ?? false,
   }));
@@ -246,7 +264,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
   });
 
   // Store submission locally
-  const [submission] = await scoped.insert(esignSubmissions, {
+  const [submission] = (await scoped.insert(esignSubmissions, {
     templateId: input.templateId,
     docusealSubmissionId: dsResult[0]?.submission_id ?? null,
     externalId: submissionExternalId,
@@ -256,25 +274,27 @@ export async function createSubmission(input: CreateSubmissionInput) {
     messageSubject: input.message?.subject ?? null,
     messageBody: input.message?.body ?? null,
     createdBy: input.userId,
-  });
+  })) as SubmissionRow[];
+  if (!submission) throw new Error('Failed to insert submission');
 
   // Store signers locally
-  const signerRecords = [];
+  const signerRecords: SignerRow[] = [];
   for (let i = 0; i < input.signers.length; i++) {
     const ds = dsResult[i];
-    const [signer] = await scoped.insert(esignSigners, {
+    const inputSigner = input.signers[i]!;
+    const [signer] = (await scoped.insert(esignSigners, {
       submissionId: submission.id,
       docusealSubmitterId: ds?.id ?? null,
-      externalId: buildSignerExternalId(input.communityId, signerUuids[i]),
-      userId: input.signers[i].userId ?? null,
-      email: input.signers[i].email,
-      name: input.signers[i].name ?? null,
-      role: input.signers[i].role,
+      externalId: buildSignerExternalId(input.communityId, signerUuids[i]!),
+      userId: inputSigner.userId ?? null,
+      email: inputSigner.email,
+      name: inputSigner.name ?? null,
+      role: inputSigner.role,
       slug: ds?.slug ?? null,
       status: 'pending',
-      prefilledFields: input.signers[i].fields ?? null,
-    });
-    signerRecords.push(signer);
+      prefilledFields: inputSigner.fields ?? null,
+    })) as SignerRow[];
+    if (signer) signerRecords.push(signer);
   }
 
   // Log creation event
@@ -287,7 +307,7 @@ export async function createSubmission(input: CreateSubmissionInput) {
     },
   });
 
-  await logAuditEvent({
+  await esignAudit({
     userId: input.userId,
     action: 'esign_submission_created',
     resourceType: 'esign_submission',
@@ -311,7 +331,7 @@ export async function listSubmissions(
   },
 ) {
   const scoped = createScopedClient(communityId);
-  let submissions = await scoped.query(esignSubmissions);
+  let submissions = (await scoped.query(esignSubmissions)) as SubmissionRow[];
 
   if (opts?.status) {
     submissions = submissions.filter((s) => s.status === opts.status);
@@ -319,7 +339,7 @@ export async function listSubmissions(
 
   // For non-elevated roles, filter to only submissions where user is a signer
   if (opts?.userId && (opts?.role === 'owner' || opts?.role === 'tenant')) {
-    const signers = await scoped.query(esignSigners);
+    const signers = (await scoped.query(esignSigners)) as SignerRow[];
     const userSubmissionIds = new Set(
       signers
         .filter((s) => s.userId === opts.userId)
@@ -333,7 +353,7 @@ export async function listSubmissions(
 
 export async function getSubmission(communityId: number, submissionId: number) {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(esignSubmissions);
+  const rows = (await scoped.query(esignSubmissions)) as SubmissionRow[];
   return rows.find((r) => r.id === submissionId) ?? null;
 }
 
@@ -342,7 +362,7 @@ export async function getSubmissionSigners(
   submissionId: number,
 ) {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(esignSigners);
+  const rows = (await scoped.query(esignSigners)) as SignerRow[];
   return rows.filter((r) => r.submissionId === submissionId);
 }
 
@@ -366,11 +386,11 @@ export async function cancelSubmission(
   if (!submission || submission.status !== 'pending') return null;
 
   const scoped = createScopedClient(communityId);
-  const [updated] = await scoped.update(
+  const [updated] = (await scoped.update(
     esignSubmissions,
     { status: 'cancelled' },
     eq(esignSubmissions.id, submissionId),
-  );
+  )) as SubmissionRow[];
 
   await scoped.insert(esignEvents, {
     submissionId,
@@ -378,7 +398,7 @@ export async function cancelSubmission(
     eventData: { cancelledBy: userId },
   });
 
-  await logAuditEvent({
+  await esignAudit({
     userId,
     action: 'esign_submission_cancelled',
     resourceType: 'esign_submission',
@@ -387,6 +407,24 @@ export async function cancelSubmission(
   });
 
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Webhook idempotency
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a webhook event has already been processed (idempotency fence).
+ * Queries the esign_events table for an existing record with the given webhookEventId.
+ */
+export async function isWebhookEventProcessed(
+  communityId: number,
+  webhookEventId: string,
+): Promise<boolean> {
+  if (!webhookEventId) return false;
+  const scoped = createScopedClient(communityId);
+  const events = (await scoped.query(esignEvents)) as EventRow[];
+  return events.some((e) => e.webhookEventId === webhookEventId);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +438,7 @@ export async function processFormCompleted(
   webhookEventId?: string,
 ) {
   const scoped = createScopedClient(communityId);
-  const signers = await scoped.query(esignSigners);
+  const signers = (await scoped.query(esignSigners)) as SignerRow[];
   const signer = signers.find(
     (s) => s.docusealSubmitterId === submitterId,
   );
@@ -433,7 +471,7 @@ export async function processSubmissionCompleted(
   webhookEventId?: string,
 ) {
   const scoped = createScopedClient(communityId);
-  const submissions = await scoped.query(esignSubmissions);
+  const submissions = (await scoped.query(esignSubmissions)) as SubmissionRow[];
   const submission = submissions.find(
     (s) => s.docusealSubmissionId === docusealSubmissionId,
   );
@@ -454,7 +492,7 @@ export async function processSubmissionCompleted(
     webhookEventId,
   });
 
-  await logAuditEvent({
+  await esignAudit({
     userId: submission.createdBy,
     action: 'esign_submission_completed',
     resourceType: 'esign_submission',
@@ -474,7 +512,7 @@ export async function getAuditTrail(
   submissionId: number,
 ) {
   const scoped = createScopedClient(communityId);
-  const events = await scoped.query(esignEvents);
+  const events = (await scoped.query(esignEvents)) as EventRow[];
   return events
     .filter((e) => e.submissionId === submissionId)
     .sort(
@@ -492,7 +530,7 @@ export async function hasActiveConsent(
   userId: string,
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(esignConsent);
+  const rows = (await scoped.query(esignConsent)) as ConsentRow[];
   return rows.some(
     (r) => r.userId === userId && r.consentGiven && !r.revokedAt,
   );
@@ -506,25 +544,25 @@ export async function grantConsent(
 ) {
   const scoped = createScopedClient(communityId);
 
-  // Revoke any existing consent first
-  const existing = await scoped.query(esignConsent);
+  // Check for existing active consent
+  const existing = (await scoped.query(esignConsent)) as ConsentRow[];
   const active = existing.find(
     (r) => r.userId === userId && r.consentGiven && !r.revokedAt,
   );
   if (active) return active; // Already has active consent
 
-  const [consent] = await scoped.insert(esignConsent, {
+  const [consent] = (await scoped.insert(esignConsent, {
     userId,
     consentGiven: true,
     consentText: ESIGN_CONSENT_TEXT,
     ipAddress: ipAddress ?? null,
     userAgent: userAgent ?? null,
-  });
+  })) as ConsentRow[];
 
   await scoped.insert(esignEvents, {
     submissionId: 0, // No submission yet — consent is user-level
     eventType: 'consent_given',
-    eventData: { consentId: consent.id },
+    eventData: { consentId: consent!.id },
     ipAddress: ipAddress ?? null,
     userAgent: userAgent ?? null,
   });
@@ -537,26 +575,18 @@ export async function revokeConsent(
   userId: string,
 ) {
   const scoped = createScopedClient(communityId);
-  const existing = await scoped.query(esignConsent);
+  const existing = (await scoped.query(esignConsent)) as ConsentRow[];
   const active = existing.find(
     (r) => r.userId === userId && r.consentGiven && !r.revokedAt,
   );
   if (!active) return null;
 
-  // esign_consent doesn't have deletedAt, so we update revokedAt directly
-  // We need to use the raw approach since consent has no updatedAt
-  const rows = await scoped.query(esignConsent);
-  const activeConsent = rows.find(
-    (r) => r.userId === userId && !r.revokedAt,
-  );
-  if (!activeConsent) return null;
-
   // Insert a new revoked record
-  const [revoked] = await scoped.insert(esignConsent, {
+  const [revoked] = (await scoped.insert(esignConsent, {
     userId,
     consentGiven: false,
     consentText: ESIGN_CONSENT_TEXT,
-  });
+  })) as ConsentRow[];
 
   return revoked;
 }
@@ -572,19 +602,21 @@ export async function sendReminder(
   userId: string,
 ) {
   const scoped = createScopedClient(communityId);
-  const signers = await scoped.query(esignSigners);
+  const signers = (await scoped.query(esignSigners)) as SignerRow[];
   const signer = signers.find((s) => s.id === signerId);
   if (!signer || signer.status !== 'pending') return null;
 
-  if (signer.reminderCount >= 3) {
+  if ((signer.reminderCount ?? 0) >= 3) {
     throw new Error('Maximum reminder count reached');
   }
+
+  const newReminderCount = (signer.reminderCount ?? 0) + 1;
 
   await scoped.update(
     esignSigners,
     {
       lastReminderAt: new Date(),
-      reminderCount: signer.reminderCount + 1,
+      reminderCount: newReminderCount,
     },
     eq(esignSigners.id, signerId),
   );
@@ -593,10 +625,10 @@ export async function sendReminder(
     submissionId,
     signerId,
     eventType: 'reminder_sent',
-    eventData: { reminderCount: signer.reminderCount + 1 },
+    eventData: { reminderCount: newReminderCount },
   });
 
-  await logAuditEvent({
+  await esignAudit({
     userId,
     action: 'esign_reminder_sent',
     resourceType: 'esign_signer',

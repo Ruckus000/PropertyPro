@@ -15,7 +15,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership.role, membership.communityType, 'esign', 'read');
 
-  const formData = await req.formData();
+  const formData = await req.formData() as unknown as globalThis.FormData;
   const file = formData.get('file');
   if (!file || !(file instanceof File)) {
     throw new ValidationError('A PDF file is required');

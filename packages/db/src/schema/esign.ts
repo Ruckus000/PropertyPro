@@ -8,6 +8,7 @@
  * - esign_events: Append-only audit trail for all e-sign actions
  * - esign_consent: UETA/ESIGN Act consent records per user
  */
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -192,6 +193,6 @@ export const esignConsent = pgTable(
   (table) => [
     uniqueIndex('idx_esign_consent_active')
       .on(table.communityId, table.userId)
-      .where(/* revokedAt IS NULL — applied in migration SQL */),
+      .where(sql`${table.revokedAt} is null`),
   ],
 );

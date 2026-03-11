@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const envVar = ROLE_ENV_MAP[role];
+  const envVar = ROLE_ENV_MAP[role]!;
   const email = process.env[envVar];
 
   if (!email) {
