@@ -154,7 +154,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_esign_consent_active"
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------
--- 6. RLS: Enable + Force + Policies for all 5 esign tables
+-- 6. RLS: Enable + Force on each table (explicit for static analysis guard)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE "public"."esign_templates" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."esign_templates" FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE "public"."esign_submissions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."esign_submissions" FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE "public"."esign_signers" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."esign_signers" FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE "public"."esign_events" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."esign_events" FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE "public"."esign_consent" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."esign_consent" FORCE ROW LEVEL SECURITY;
+
+--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------
+-- 7. RLS: Policies for all 5 esign tables
 -- ---------------------------------------------------------------------------
 
 DO $$
@@ -171,9 +192,7 @@ BEGIN
       'esign_consent'
     ]::text[])
   LOOP
-    EXECUTE format('ALTER TABLE "public".%I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('ALTER TABLE "public".%I FORCE ROW LEVEL SECURITY', t);
-
+    -- RLS already enabled above; create policies here.
     -- Drop existing policies (idempotent)
     EXECUTE format('DROP POLICY IF EXISTS "pp_tenant_select" ON "public".%I', t);
     EXECUTE format('DROP POLICY IF EXISTS "pp_tenant_insert" ON "public".%I', t);
