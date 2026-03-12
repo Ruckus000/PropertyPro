@@ -73,7 +73,7 @@ const SPOOFED_HEADERS = [
 ] as const;
 
 // Routes that bypass admin auth check
-const PUBLIC_PATH_PREFIXES = ['/auth/', '/api/health'];
+const PUBLIC_PATH_PREFIXES = ['/auth/', '/api/health', '/dev/'];
 const PUBLIC_EXACT_PATHS = ['/auth/login'];
 
 function isPublicPath(pathname: string): boolean {
