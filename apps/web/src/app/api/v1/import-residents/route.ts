@@ -19,6 +19,7 @@ import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { requireCommunityType } from "@/lib/utils/community-validators";
+import { listCommunitiesForUser } from "@/lib/api/user-communities";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
@@ -162,6 +163,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       });
       skippedCount++;
       continue;
+    }
+
+    // Tenants belong to exactly one community. Block if this user already
+    // has a tenant role in any other community.
+    if (role === "tenant") {
+      const existingCommunities = await listCommunitiesForUser(userId);
+      const hasTenantElsewhere = existingCommunities.some(
+        (c) => c.role === "tenant" && c.communityId !== communityId,
+      );
+      if (hasTenantElsewhere) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          column: "role",
+          message: `Tenant '${email}' already belongs to another community`,
+        });
+        skippedCount++;
+        continue;
+      }
     }
 
     await scoped.insert(userRoles, {
