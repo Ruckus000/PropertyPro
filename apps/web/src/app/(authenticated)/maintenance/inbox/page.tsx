@@ -9,15 +9,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { isAdminRole } from '@propertypro/shared';
 import { AdminInbox } from '@/components/maintenance/AdminInbox';
-
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -42,7 +35,7 @@ export default async function MaintenanceInboxPage({ searchParams }: PageProps) 
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  if (!ADMIN_ROLES.has(membership.role)) {
+  if (!isAdminRole(membership.role)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 

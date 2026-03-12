@@ -11,6 +11,12 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
  *
  * Uses resolveCommunityContext for consistent tenant resolution
  * across all authenticated pages.
+ *
+ * RBAC note: The RBAC matrix's 'settings' resource governs community-level
+ * settings (branding, configuration), not personal notification preferences.
+ * All community members can manage their own notification preferences
+ * regardless of role. When community-level settings are added to this page,
+ * gate those sections with checkPermission(role, communityType, 'settings', 'read').
  */
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [resolvedSearchParams, requestHeaders] = await Promise.all([

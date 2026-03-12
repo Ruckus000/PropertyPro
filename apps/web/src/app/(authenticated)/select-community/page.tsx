@@ -7,6 +7,12 @@ export const metadata = {
   title: 'Select Community | PropertyPro',
 };
 
+/**
+ * Community picker page. The CommunityPickerGrid is intentionally role-agnostic:
+ * it shows simple cards linking to /dashboard with no admin-specific UI.
+ * Tenants with one community are auto-redirected; tenants with multiple see
+ * the same read-only grid as any other role.
+ */
 export default async function SelectCommunityPage() {
   const userId = await requireAuthenticatedUserId();
   const communities = await listCommunitiesForUser(userId);

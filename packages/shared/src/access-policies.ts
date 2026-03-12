@@ -93,6 +93,20 @@ export const ELEVATED_ROLES: readonly CommunityRole[] = [
   'property_manager_admin',
 ] as const;
 
+/**
+ * Management roles that can access admin pages (compliance, audit trail,
+ * contracts, maintenance inbox). Excludes owner and tenant.
+ *
+ * Not the same as ELEVATED_ROLES (which includes owner for document access).
+ */
+export const ADMIN_ROLES: readonly CommunityRole[] = [
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+] as const;
+
 export const RESTRICTED_ROLES: readonly CommunityRole[] = [
   'tenant',
   'cam',
@@ -155,6 +169,10 @@ export function normalizeCategoryName(name: string | null | undefined): Document
 
 export function isElevatedRole(role: CommunityRole): boolean {
   return ELEVATED_ROLES.includes(role);
+}
+
+export function isAdminRole(role: CommunityRole): boolean {
+  return (ADMIN_ROLES as readonly string[]).includes(role);
 }
 
 export function isRestrictedRole(role: CommunityRole): boolean {
