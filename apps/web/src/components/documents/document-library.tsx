@@ -80,18 +80,20 @@ export function DocumentLibrary({
           >
             {searchMode ? 'Hide Search' : 'Search'}
           </button>
-          <button
-            type="button"
-            onClick={() => setShowEsignBanner(!showEsignBanner)}
-            className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-              showEsignBanner
-                ? 'border-blue-600 bg-blue-50 text-blue-700'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <PenTool size={16} />
-            E-Sign
-          </button>
+          {canUpload && (
+            <button
+              type="button"
+              onClick={() => setShowEsignBanner(!showEsignBanner)}
+              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                showEsignBanner
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <PenTool size={16} />
+              E-Sign
+            </button>
+          )}
           {canUpload && (
             <button
               type="button"
