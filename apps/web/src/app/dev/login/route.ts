@@ -81,8 +81,9 @@ export async function GET(request: Request) {
     const userId = data.user?.id;
     if (userId) {
       const communities = await findUserCommunitiesUnscoped(userId);
-      if (communities.length > 0) {
-        redirectPath = `${redirectPath}?communityId=${communities[0].communityId}`;
+      const first = communities[0];
+      if (first) {
+        redirectPath = `${redirectPath}?communityId=${first.communityId}`;
       }
     }
   }

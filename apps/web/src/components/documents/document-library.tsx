@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { PenTool, X } from 'lucide-react';
 import { isElevatedRole, type CommunityRole } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { DocumentList, type DocumentListItem } from './document-list';
@@ -28,6 +29,7 @@ export function DocumentLibrary({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(false);
+  const [showEsignBanner, setShowEsignBanner] = useState(false);
 
   const canUpload = isElevatedRole(userRole);
 
@@ -78,6 +80,18 @@ export function DocumentLibrary({
           >
             {searchMode ? 'Hide Search' : 'Search'}
           </button>
+          <button
+            type="button"
+            onClick={() => setShowEsignBanner(!showEsignBanner)}
+            className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+              showEsignBanner
+                ? 'border-blue-600 bg-blue-50 text-blue-700'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <PenTool size={16} />
+            E-Sign
+          </button>
           {canUpload && (
             <button
               type="button"
@@ -93,6 +107,32 @@ export function DocumentLibrary({
           )}
         </div>
       </div>
+
+      {showEsignBanner && (
+        <div className="relative rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <button
+            type="button"
+            onClick={() => setShowEsignBanner(false)}
+            className="absolute right-3 top-3 text-blue-400 hover:text-blue-600"
+            aria-label="Dismiss"
+          >
+            <X size={16} />
+          </button>
+          <div className="flex items-start gap-3">
+            <PenTool size={20} className="mt-0.5 shrink-0 text-blue-600" />
+            <div>
+              <h3 className="text-sm font-semibold text-blue-900">
+                E-Signatures Coming Soon
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">
+                Built-in document signing is on the way. Create templates,
+                send for signature, and track completions — all without
+                leaving PropertyPro.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUpload && canUpload && (
         <div className="rounded-lg border border-gray-200 bg-white p-6">

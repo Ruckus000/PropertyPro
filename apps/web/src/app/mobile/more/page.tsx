@@ -3,15 +3,14 @@ export const dynamic = 'force-dynamic';
 /**
  * Mobile "More" page — overflow menu for sections not in the bottom tab bar.
  *
- * Shows links to: Maintenance, Settings, E-Signatures (if enabled), and Sign Out.
+ * Shows links to: Maintenance, Settings, and Sign Out.
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import Link from 'next/link';
-import { Wrench, Settings, PenTool, LogOut } from 'lucide-react';
+import { Wrench, Settings, LogOut } from 'lucide-react';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
 
 interface MoreLink {
@@ -35,28 +34,16 @@ export default async function MobileMorePage() {
     redirect('/auth/login');
   }
 
-  let communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'];
   try {
-    const membership = await requireCommunityMembership(communityId, userId!);
-    communityType = membership.communityType;
+    await requireCommunityMembership(communityId, userId!);
   } catch {
     redirect('/auth/login');
   }
-
-  const features = getFeaturesForCommunity(communityType!);
 
   const links: MoreLink[] = [
     { label: 'Maintenance', href: `/mobile/maintenance?communityId=${communityId}`, icon: Wrench },
     { label: 'Settings', href: `/settings?communityId=${communityId}`, icon: Settings },
   ];
-
-  if (features.hasEsign) {
-    links.push({
-      label: 'E-Signatures',
-      href: `/communities/${communityId}/esign?communityId=${communityId}`,
-      icon: PenTool,
-    });
-  }
 
   return (
     <div>

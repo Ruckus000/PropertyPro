@@ -17,7 +17,6 @@ import {
   History,
   Building2,
   Paintbrush,
-  PenTool,
 } from 'lucide-react';
 import { ADMIN_ROLES, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -78,16 +77,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/maintenance/submit?communityId=${cid}`,
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
-  },
-
-  {
-    id: 'esign',
-    label: 'E-Signatures',
-    icon: PenTool,
-    href: (cid) => `/communities/${cid}/esign?communityId=${cid}`,
-    featureKey: 'hasEsign',
-    group: 'main',
-    matchPrefixes: ['/esign'],
   },
 
   // ── Admin ──
@@ -206,7 +195,6 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
-  esign: { title: 'E-Signatures', subtitle: 'Sign & manage documents' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
 };

@@ -1,6 +1,10 @@
 /**
  * E-signature shared types and constants.
  *
+ * NOTE: These constants are retained for the upcoming native e-signature builder.
+ * The DocuSeal CE integration has been removed. DocuSeal-specific helpers
+ * (external ID builders, folder name builder) have been deleted.
+ *
  * Used across web app, API routes, and shared packages.
  */
 
@@ -65,26 +69,6 @@ export const ESIGN_EVENT_TYPES = [
   'submission_completed',
 ] as const;
 export type EsignEventType = (typeof ESIGN_EVENT_TYPES)[number];
-
-// ---------------------------------------------------------------------------
-// External ID formats
-// ---------------------------------------------------------------------------
-
-export function buildTemplateExternalId(communityId: number, uuid: string): string {
-  return `community:${communityId}:template:${uuid}`;
-}
-
-export function buildSubmissionExternalId(communityId: number, uuid: string): string {
-  return `community:${communityId}:submission:${uuid}`;
-}
-
-export function buildSignerExternalId(communityId: number, uuid: string): string {
-  return `community:${communityId}:signer:${uuid}`;
-}
-
-export function buildDocuSealFolderName(communityId: number): string {
-  return `community_${communityId}`;
-}
 
 // ---------------------------------------------------------------------------
 // Roles that can manage e-sign templates and submissions

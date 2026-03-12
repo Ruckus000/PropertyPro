@@ -476,6 +476,10 @@ const PHASE5_ACCOUNTING_POLICY: Record<CommunityRole, RbacCell> = {
 
 /**
  * E-signature RBAC policy.
+ *
+ * NOTE: Retained for the upcoming native e-signature builder.
+ * The DocuSeal CE integration has been removed.
+ *
  * - read:own for owner/tenant (can see submissions where they are a signer)
  * - read:all + write for elevated roles (can manage templates and submissions)
  * - sign permission is universal (handled at application layer, not RBAC)

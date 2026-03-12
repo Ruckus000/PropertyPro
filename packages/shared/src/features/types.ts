@@ -55,6 +55,6 @@ export interface CommunityFeatures {
   readonly hasCalendarSync: boolean;
   /** Accounting platform connectors */
   readonly hasAccountingConnectors: boolean;
-  /** DocuSeal e-signature integration */
+  /** Native e-signature builder (coming soon) */
   readonly hasEsign: boolean;
 }

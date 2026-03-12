@@ -16,6 +16,7 @@ export type AuditAction =
   | 'announcement_email_sent' | 'document_deleted'             // Domain events
   | 'document_accessed' | 'validation_failed'                  // Read-path + validation audit
   | 'notification_sent'                                        // Email notification dispatch (P2-41)
+  // E-sign audit actions — retained for native e-signature builder
   | 'esign_template_created' | 'esign_template_archived'       // E-sign template lifecycle
   | 'esign_template_cloned'                                    // E-sign template cloning
   | 'esign_submission_created' | 'esign_submission_completed'  // E-sign submission lifecycle
