@@ -11,6 +11,7 @@
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
+    "@docuseal/react": "^1.0.71",
     "@propertypro/db": "workspace:*",
     "@propertypro/email": "workspace:*",
     "@propertypro/shared": "workspace:*",

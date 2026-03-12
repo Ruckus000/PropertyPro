@@ -105,6 +105,55 @@ export async function createTemplate(input: CreateTemplateInput) {
   return template;
 }
 
+/**
+ * Register a template created via the embedded DocuSeal builder.
+ *
+ * The builder saves the template directly on DocuSeal. This function
+ * fetches the template details from DocuSeal and creates the corresponding
+ * record in our database so it appears in the app.
+ */
+export async function registerBuilderTemplate(input: {
+  communityId: number;
+  userId: string;
+  docusealTemplateId: number;
+  name?: string;
+  description?: string;
+  templateType?: string;
+}) {
+  const scoped = createScopedClient(input.communityId);
+
+  // Fetch the template from DocuSeal to get fields and metadata
+  const dsTemplate = await docuseal.getTemplate(input.docusealTemplateId);
+
+  const externalId =
+    dsTemplate.external_id ??
+    buildTemplateExternalId(input.communityId, crypto.randomUUID());
+
+  const [template] = (await scoped.insert(esignTemplates, {
+    docusealTemplateId: dsTemplate.id,
+    externalId,
+    name: input.name ?? dsTemplate.name,
+    description: input.description ?? null,
+    sourceDocumentPath: null,
+    templateType: input.templateType ?? null,
+    fieldsSchema: dsTemplate.fields,
+    status: 'active',
+    createdBy: input.userId,
+  })) as TemplateRow[];
+  if (!template) throw new Error('Failed to insert template');
+
+  await esignAudit({
+    userId: input.userId,
+    action: 'esign_template_created',
+    resourceType: 'esign_template',
+    resourceId: String(template.id),
+    communityId: input.communityId,
+    metadata: { docusealTemplateId: dsTemplate.id, name: template.name, source: 'builder' },
+  });
+
+  return template;
+}
+
 export async function listTemplates(communityId: number, status?: string) {
   const scoped = createScopedClient(communityId);
   const rows = (await scoped.query(esignTemplates)) as TemplateRow[];

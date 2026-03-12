@@ -3,7 +3,7 @@ import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { checkPermission } from '@propertypro/shared';
 import * as esignService from '@/lib/services/esign-service';
-import { EsignBuilder } from '@/components/esign/EsignBuilder';
+import { NewTemplateClient } from './new-template-client';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -35,7 +35,7 @@ export default async function NewTemplatePage({ params }: PageProps) {
           Design your e-signature template using the builder below
         </p>
       </div>
-      <EsignBuilder token={token} />
+      <NewTemplateClient token={token} communityId={communityId} />
     </div>
   );
 }
