@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * P1-6: Client Workspace — tab layout with Overview, Site Builder, Settings.
+ * P1-6: Client Workspace — tab layout with Overview and Settings.
  */
 import { useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeft, Users, FileText, CheckCircle, BadgeCheck, Globe } from 'lucide-react';
+import { ArrowLeft, Users, FileText, CheckCircle, BadgeCheck } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
@@ -33,7 +33,7 @@ interface ClientWorkspaceProps {
   community: Community;
 }
 
-type Tab = 'overview' | 'site-builder' | 'settings';
+type Tab = 'overview' | 'settings';
 
 export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -82,7 +82,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
       {/* Tabs */}
       <div className="border-b border-gray-200 bg-white px-6">
         <div className="flex gap-1">
-          {(['overview', 'site-builder', 'settings'] as Tab[]).map((tab) => (
+          {(['overview', 'settings'] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -94,7 +94,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700',
               ].join(' ')}
             >
-              {tab === 'overview' ? 'Overview' : tab === 'site-builder' ? 'Site Builder' : 'Settings'}
+              {tab === 'overview' ? 'Overview' : 'Settings'}
             </button>
           ))}
         </div>
@@ -177,25 +177,6 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                   </dd>
                 </div>
               </dl>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'site-builder' && (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-            <div className="text-center">
-              <Globe size={32} className="mx-auto mb-3 text-blue-500" />
-              <p className="text-sm font-medium text-gray-700">Community Site Builder</p>
-              <p className="mt-1 text-xs text-gray-400 mb-4">
-                Drag-and-drop editor for the community public website
-              </p>
-              <Link
-                href={`/clients/${community.id}/site-builder`}
-                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                <Globe size={14} />
-                Open Site Builder
-              </Link>
             </div>
           </div>
         )}

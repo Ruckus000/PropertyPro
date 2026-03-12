@@ -3,15 +3,15 @@
 /**
  * Apartment Onboarding Wizard — P2-38 closeout
  *
- * 4-step flow:
- * 0 Profile -> 1 Units -> 2 Rules -> 3 Invite
+ * 5-step flow:
+ * 0 Profile -> 1 Branding -> 2 Units -> 3 Rules -> 4 Invite
  */
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProgressIndicator } from './progress-indicator';
-import { ProfileStep, UnitsStep, RulesStep, InviteStep } from './steps';
-import type { InviteData, UnitData } from './steps';
+import { ProfileStep, UnitsStep, RulesStep, InviteStep, BrandingStep } from './steps';
+import type { InviteData, UnitData, BrandingStepData } from './steps';
 import type {
   ApartmentWizardStatePayload,
   ProfileStepData,
@@ -24,7 +24,7 @@ interface ApartmentWizardProps {
   initialState?: ApartmentWizardStatePayload;
 }
 
-const STEP_TITLES = ['Profile', 'Units', 'Rules', 'Invite'];
+const STEP_TITLES = ['Profile', 'Branding', 'Units', 'Rules', 'Invite'];
 
 interface ApiErrorResponse {
   error?: string | { code?: string; message?: string };
@@ -126,9 +126,18 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
     }
   }
 
+  async function handleBrandingNext(data: BrandingStepData): Promise<void> {
+    try {
+      await saveStep(1, { branding: data });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save branding step');
+      setIsSaving(false);
+    }
+  }
+
   async function handleUnitsNext(units: UnitData[]): Promise<void> {
     try {
-      await saveStep(1, { units });
+      await saveStep(2, { units });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save units step');
       setIsSaving(false);
@@ -137,7 +146,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
 
   async function handleRulesNext(rules: RulesStepData | null): Promise<void> {
     try {
-      await saveStep(2, { rules });
+      await saveStep(3, { rules });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save rules step');
       setIsSaving(false);
@@ -146,7 +155,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
 
   async function handleInviteSubmit(data: InviteData | null): Promise<void> {
     try {
-      await saveStep(3, { invite: data });
+      await saveStep(4, { invite: data });
       await completeWizard('complete');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save invite step');
@@ -166,7 +175,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Welcome to PropertyPro</h1>
-        <p className="mt-2 text-gray-600">Set up your apartment community in four quick steps.</p>
+        <p className="mt-2 text-gray-600">Set up your apartment community in five quick steps.</p>
       </div>
 
       <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
@@ -193,28 +202,36 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
         )}
 
         {currentStep === 1 && (
-          <UnitsStep
-            onNext={handleUnitsNext}
+          <BrandingStep
+            onNext={handleBrandingNext}
             onBack={() => setCurrentStep(0)}
-            initialData={stepData.units}
+            initialData={stepData.branding}
           />
         )}
 
         {currentStep === 2 && (
-          <RulesStep
-            communityId={communityId}
-            onNext={handleRulesNext}
+          <UnitsStep
+            onNext={handleUnitsNext}
             onBack={() => setCurrentStep(1)}
-            initialData={stepData.rules ?? null}
+            initialData={stepData.units}
           />
         )}
 
         {currentStep === 3 && (
+          <RulesStep
+            communityId={communityId}
+            onNext={handleRulesNext}
+            onBack={() => setCurrentStep(2)}
+            initialData={stepData.rules ?? null}
+          />
+        )}
+
+        {currentStep === 4 && (
           <InviteStep
             units={stepData.units ?? []}
             initialData={stepData.invite ?? null}
             onNext={handleInviteSubmit}
-            onBack={() => setCurrentStep(2)}
+            onBack={() => setCurrentStep(3)}
             onSkip={handleSkipInvite}
           />
         )}

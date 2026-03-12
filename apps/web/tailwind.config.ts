@@ -11,6 +11,8 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "SF Mono", "ui-monospace", "monospace"],
+        heading: ["var(--theme-font-heading, Inter)", "var(--font-sans)", "sans-serif"],
+        body: ["var(--theme-font-body, Inter)", "var(--font-sans)", "sans-serif"],
       },
       fontSize: {
         xs: "var(--font-size-xs, 0.6875rem)",
@@ -52,6 +54,17 @@ const config: Config = {
         e3: "0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03)",
       },
       colors: {
+        primary: {
+          DEFAULT: 'var(--brand-primary)',
+          hover: 'var(--brand-primary-hover)',
+          light: 'var(--brand-accent)',
+        },
+        secondary: {
+          DEFAULT: 'var(--brand-secondary)',
+        },
+        accent: {
+          DEFAULT: 'var(--brand-accent)',
+        },
         blue: {
           50: "#EFF6FF",
           100: "#DBEAFE",

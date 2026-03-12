@@ -158,9 +158,15 @@
   --border-focus: var(--blue-500);
   --border-error: var(--red-500);
 
+  /* Brand-overridable — resolve to community theme vars when injected */
+  --brand-primary: var(--theme-primary, var(--blue-600));
+  --brand-primary-hover: var(--theme-primary-hover, var(--blue-700));
+  --brand-secondary: var(--theme-secondary, var(--gray-500));
+  --brand-accent: var(--theme-accent, var(--blue-200));
+
   /* Interactive */
-  --interactive-primary: var(--blue-600);
-  --interactive-primary-hover: var(--blue-700);
+  --interactive-primary: var(--brand-primary);
+  --interactive-primary-hover: var(--brand-primary-hover);
   --interactive-primary-active: var(--blue-800);
   --interactive-disabled: var(--gray-300);
   --interactive-subtle: var(--blue-50);
@@ -173,7 +179,7 @@
   --status-success-border: var(--green-200);
   --status-success-subtle: var(--green-100);
 
-  --status-brand: var(--blue-600);
+  --status-brand: var(--brand-primary);
   --status-brand-bg: var(--blue-50);
   --status-brand-border: var(--blue-200);
   --status-brand-subtle: var(--blue-100);

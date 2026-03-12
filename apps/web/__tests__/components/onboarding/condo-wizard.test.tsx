@@ -90,7 +90,7 @@ describe('CondoWizard', () => {
         expect(currentStep?.textContent).toBe('1');
     });
 
-    it('resume from lastCompletedStep=1 lands on units step', async () => {
+    it('resume from lastCompletedStep=2 lands on units step', async () => {
         await act(async () => {
             root.render(
                 <CondoWizard
@@ -98,8 +98,8 @@ describe('CondoWizard', () => {
                     communityType="condo_718"
                     initialState={{
                         status: 'in_progress',
-                        lastCompletedStep: 1,
-                        nextStep: 2,
+                        lastCompletedStep: 2,
+                        nextStep: 3,
                         completedAt: null,
                         stepData: {
                             profile: {
@@ -124,7 +124,7 @@ describe('CondoWizard', () => {
         expect(heading?.textContent).toBe('Add Units');
 
         const currentStep = container.querySelector('[aria-current="step"]');
-        expect(currentStep?.textContent).toBe('3'); // 0: statutory, 1: profile, 2: units. 2 is step '3'.
+        expect(currentStep?.textContent).toBe('4'); // 0: statutory, 1: profile, 2: branding, 3: units. 3 is step '4'.
     });
 
     it('clamps malformed persisted nextStep to the last valid step', async () => {
@@ -160,7 +160,7 @@ describe('CondoWizard', () => {
         expect(heading?.textContent).toBe('Add Units');
 
         const currentStep = container.querySelector('[aria-current="step"]');
-        expect(currentStep?.textContent).toBe('3');
+        expect(currentStep?.textContent).toBe('4');
     });
 
     it('skip wizard sends canonical POST action=skip', async () => {
@@ -215,8 +215,8 @@ describe('CondoWizard', () => {
                     communityType="condo_718"
                     initialState={{
                         status: 'in_progress',
-                        lastCompletedStep: 1,
-                        nextStep: 2,
+                        lastCompletedStep: 2,
+                        nextStep: 3,
                         completedAt: null,
                         stepData: {
                             statutory: { items: [] },
@@ -248,6 +248,6 @@ describe('CondoWizard', () => {
         expect(fetchMock).not.toHaveBeenCalled();
 
         const heading = container.querySelector('h2');
-        expect(heading?.textContent).toBe('Community Profile');
+        expect(heading?.textContent).toBe('Choose Your Branding');
     });
 });
