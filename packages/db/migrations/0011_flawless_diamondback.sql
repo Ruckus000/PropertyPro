@@ -69,11 +69,11 @@ ALTER TABLE "communities" ADD COLUMN "payment_failed_at" timestamp with time zon
 ALTER TABLE "communities" ADD COLUMN "next_reminder_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "communities" ADD COLUMN "subscription_canceled_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "provisioning_jobs" ADD CONSTRAINT "provisioning_jobs_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "pending_signups_signup_request_unique" ON "pending_signups" USING btree ("signup_request_id");--> statement-breakpoint
 ALTER TABLE "provisioning_jobs" ADD CONSTRAINT "provisioning_jobs_signup_request_id_pending_signups_signup_request_id_fk" FOREIGN KEY ("signup_request_id") REFERENCES "public"."pending_signups"("signup_request_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "maintenance_requests" ADD CONSTRAINT "maintenance_requests_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "maintenance_requests" ADD CONSTRAINT "maintenance_requests_unit_id_units_id_fk" FOREIGN KEY ("unit_id") REFERENCES "public"."units"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "maintenance_requests" ADD CONSTRAINT "maintenance_requests_submitted_by_id_users_id_fk" FOREIGN KEY ("submitted_by_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "pending_signups_signup_request_unique" ON "pending_signups" USING btree ("signup_request_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "pending_signups_email_normalized_unique" ON "pending_signups" USING btree ("email_normalized");--> statement-breakpoint
 CREATE UNIQUE INDEX "pending_signups_candidate_slug_active_unique" ON "pending_signups" USING btree ("candidate_slug") WHERE "pending_signups"."status" NOT IN ('expired', 'completed');--> statement-breakpoint
 CREATE INDEX "pending_signups_status_idx" ON "pending_signups" USING btree ("status","created_at");--> statement-breakpoint

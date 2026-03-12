@@ -450,11 +450,18 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
   // ---------------------------------------------------------------------------
 
   describe('feature flag consistency', () => {
-    it('verifies condo and HOA have identical feature flags', () => {
+    it('verifies condo and HOA share baseline flags with package/visitor exceptions', () => {
       const condoFeatures = getFeaturesForCommunity('condo_718');
       const hoaFeatures = getFeaturesForCommunity('hoa_720');
 
-      expect(condoFeatures).toEqual(hoaFeatures);
+      const { hasPackageLogging: _cp, hasVisitorLogging: _cv, ...condoRest } = condoFeatures;
+      const { hasPackageLogging: _hp, hasVisitorLogging: _hv, ...hoaRest } = hoaFeatures;
+      expect(condoRest).toEqual(hoaRest);
+
+      expect(condoFeatures.hasPackageLogging).toBe(true);
+      expect(hoaFeatures.hasPackageLogging).toBe(false);
+      expect(condoFeatures.hasVisitorLogging).toBe(true);
+      expect(hoaFeatures.hasVisitorLogging).toBe(false);
     });
 
     it('verifies apartment differs from condo on compliance-related flags', () => {

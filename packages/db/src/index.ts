@@ -31,6 +31,14 @@ export {
 export { logAuditEvent } from './utils/audit-logger';
 export type { AuditAction, AuditEventParams } from './utils/audit-logger';
 
+// Token encryption
+export {
+  encryptToken,
+  decryptToken,
+  parseTokenEncryptionKeyHex,
+  getTokenEncryptionKeyFromEnv,
+} from './crypto/token-encryption';
+
 // Schema & types
 export * from './schema';
 
@@ -51,6 +59,17 @@ export type {
   DocumentExtractionFailureParams,
   DocumentExtractionSuccessParams,
 } from './queries/document-extraction';
+
+export {
+  postLedgerEntry,
+  listLedgerEntries,
+  getUnitLedgerBalance,
+} from './queries/ledger';
+export type {
+  PostLedgerEntryParams,
+  ListLedgerEntriesParams,
+  LedgerEntryRow,
+} from './queries/ledger';
 
 // Document access control
 export {

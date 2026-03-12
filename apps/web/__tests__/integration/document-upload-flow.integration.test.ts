@@ -48,8 +48,13 @@ const describeDb = getDescribeDb();
 /** Minimal PDF magic bytes: %PDF-1.4 header */
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
 
-/** PNG magic bytes: 8-byte signature */
-const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+/** Minimal valid PNG (1x1 RGBA): signature + IHDR + IDAT + IEND (~67 bytes).
+ * The file-type library parses the IHDR chunk, so 8-byte signature alone is insufficient. */
+const PNG_MAGIC = new Uint8Array(
+  '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000000020001E221BC330000000049454E44AE426082'
+    .match(/.{1,2}/g)!
+    .map((b) => parseInt(b, 16)),
+);
 
 /** Invalid magic bytes: random data */
 const INVALID_MAGIC = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00]);
@@ -60,7 +65,9 @@ const INVALID_MAGIC = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 
 
 const { requireAuthenticatedUserIdMock, mockStorageBytes } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
-  mockStorageBytes: { current: PDF_MAGIC as Uint8Array },
+  mockStorageBytes: {
+    current: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]) as Uint8Array,
+  },
 }));
 
 vi.mock('@/lib/api/auth', () => ({

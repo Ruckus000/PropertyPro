@@ -30,6 +30,7 @@ import {
   sendSubscriptionCanceledEmail,
 } from '@/lib/services/payment-alert-scheduler';
 import { runProvisioning } from '@/lib/services/provisioning-service';
+import { processFinanceStripeEvent } from '@/lib/services/finance-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -310,6 +311,9 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       // Unhandled event type — safe to ignore
       break;
   }
+
+  // WS-66: Finance payment lifecycle events share the Stripe webhook endpoint.
+  await processFinanceStripeEvent(event);
 }
 
 // ---------------------------------------------------------------------------

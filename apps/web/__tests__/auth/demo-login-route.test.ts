@@ -98,6 +98,8 @@ describe('demo-login route hardening', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', '');
+    vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY', '');
     state.rows = [];
 
     extractDemoIdFromTokenMock.mockReturnValue(101);

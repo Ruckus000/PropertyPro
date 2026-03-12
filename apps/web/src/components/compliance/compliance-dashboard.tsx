@@ -10,7 +10,7 @@ import { UploadDocumentModal } from "./upload-document-modal";
 import { DeadlineRibbon } from "./deadline-ribbon";
 import { ComplianceOnboarding } from "./compliance-onboarding";
 import { ComplianceActivityFeed } from "./compliance-activity-feed";
-import { groupByCategory, type ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
 import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
 import { useComplianceMutations } from "@/hooks/useComplianceMutations";
 import { generateChecklistPdf } from "@/lib/utils/pdf-export";
@@ -67,7 +67,20 @@ function toPdfItems(items: ChecklistItemData[]) {
 }
 
 /** Group items by category, preserving a defined order. */
-
+function groupByCategory(items: ChecklistItemData[]): Map<string, ChecklistItemData[]> {
+  const order = ["governing_documents", "financial_records", "meeting_records", "insurance", "operations"];
+  const grouped = new Map<string, ChecklistItemData[]>();
+  for (const cat of order) {
+    const matching = items.filter((i) => i.category === cat);
+    if (matching.length > 0) grouped.set(cat, matching);
+  }
+  for (const item of items) {
+    if (!grouped.has(item.category)) {
+      grouped.set(item.category, items.filter((i) => i.category === item.category));
+    }
+  }
+  return grouped;
+}
 
 // ── Category Header ─────────────────────────────────
 
@@ -92,7 +105,6 @@ function CategoryGroup({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        aria-expanded={open}
         className={`
           group flex items-center gap-3 w-full px-4 py-3
           text-left transition-colors duration-150 cursor-pointer
@@ -299,10 +311,8 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
   const [linkModalItem, setLinkModalItem] = useState<ChecklistItemData | null>(null);
   const [uploadModalItem, setUploadModalItem] = useState<ChecklistItemData | null>(null);
 
-  const filtered = useMemo(
-    () => filterChecklistItems(items, { status: statusFilter, category: categoryFilter }),
-    [items, statusFilter, categoryFilter],
-  );
+  const filters: ChecklistFilters = { status: statusFilter, category: categoryFilter };
+  const filtered = useMemo(() => filterChecklistItems(items, filters), [items, filters]);
 
   const statusCounts = useMemo(() => {
     const counts = { satisfied: 0, unsatisfied: 0, overdue: 0, not_applicable: 0 };
@@ -332,14 +342,11 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
     const bytes = generateChecklistPdf(toPdfItems(filtered));
     const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    try {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "compliance-checklist.pdf";
-      a.click();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "compliance-checklist.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function renderActions(item: ChecklistItemData) {
@@ -380,7 +387,6 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
       {/* ── Onboarding ── */}
       <ComplianceOnboarding
         items={items}
-        communityId={communityId}
         onUpload={(item) => setUploadModalItem(item)}
       />
 

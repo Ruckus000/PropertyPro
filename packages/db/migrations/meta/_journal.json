@@ -197,6 +197,160 @@
       "when": 1772800000000,
       "tag": "0027_p4_55h_rls_force_all_tenant_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1772810000000,
+      "tag": "0028_fix_audit_log_rls_deleted_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1772820000000,
+      "tag": "0029_create_platform_admin_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1772830000000,
+      "tag": "0030_add_demo_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1772840000000,
+      "tag": "0031_extend_branding_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1772850000000,
+      "tag": "0032_create_demo_instances",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1772860000000,
+      "tag": "0033_create_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1772870000000,
+      "tag": "0034_fix_site_blocks_anon_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1772880000000,
+      "tag": "0035_add_transparency_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1772890000000,
+      "tag": "0036_add_is_applicable",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1772900000000,
+      "tag": "0037_create_ledger_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1772910000000,
+      "tag": "0038_ledger_entries_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1772920000000,
+      "tag": "0039_ledger_entries_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1772930000000,
+      "tag": "0040_ledger_entries_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1772940000000,
+      "tag": "0041_finance_dues_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1772950000000,
+      "tag": "0056_create_violations_arc",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1772960000000,
+      "tag": "0066_create_polls_forum",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1772970000000,
+      "tag": "0071_create_work_orders_amenities",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1772980000000,
+      "tag": "0081_calendar_sync_and_accounting_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1772990000000,
+      "tag": "0086_package_and_visitor_logging",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1773000000000,
+      "tag": "0087_add_token_encryption_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1773010000000,
+      "tag": "0088_force_rls_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1773020000000,
+      "tag": "0089_fix_anon_rls_graceful_fail",
+      "breakpoints": true
     }
   ]
 }

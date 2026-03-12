@@ -28,6 +28,26 @@ export interface RlsGlobalTableExclusion {
 export const RLS_TENANT_TABLES = [
   { tableName: 'announcement_delivery_log', policyFamily: 'service_only' },
   {
+    tableName: 'assessments',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Assessment lifecycle mutations are finance-admin actions. Resident payment flows read generated line items.',
+  },
+  {
+    tableName: 'assessment_line_items',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Finance service creates recurring and one-off line items; write access remains admin-gated at route layer.',
+  },
+  {
+    tableName: 'calendar_sync_tokens',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Calendar sync credentials are scoped per user/community and mutated only through authenticated calendar-sync routes.',
+  },
+  {
+    tableName: 'accounting_connections',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Accounting connector credentials and mappings are admin-managed and encrypted at application layer.',
+  },
+  {
     tableName: 'announcements',
     policyFamily: 'tenant_member_configurable',
     notes: 'Writes configurable per-community via community_settings.announcementsWriteLevel. Default (absent or all_members): any community member may write. admin_only: only admin-tier roles may write. SELECT remains open to all community members.',
@@ -70,6 +90,81 @@ export const RLS_TENANT_TABLES = [
     notes: 'Writes configurable via community_settings.leasesWriteLevel. Apartment-only feature. Communities may restrict lease mutations to admin-tier roles for financial integrity.',
   },
   {
+    tableName: 'ledger_entries',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Writes are expected through postLedgerEntry() and role-gated route handlers; soft-delete enabled for reconciliation workflows.',
+  },
+  {
+    tableName: 'finance_stripe_webhook_events',
+    policyFamily: 'tenant_append_only',
+    notes: 'Webhook idempotency/event journal for community payment flows; append-only by design.',
+  },
+  {
+    tableName: 'violations',
+    policyFamily: 'tenant_crud',
+    notes: 'Violation cases are community-scoped. Fine/resolve transitions are RBAC-gated in service and route layers.',
+  },
+  {
+    tableName: 'violation_fines',
+    policyFamily: 'tenant_crud',
+    notes: 'Fine records remain community-scoped; paid/waived transitions are controlled by workflow rules.',
+  },
+  {
+    tableName: 'arc_submissions',
+    policyFamily: 'tenant_crud',
+    notes: 'ARC submissions are community-scoped with owner submit and admin review/decide controls at app layer.',
+  },
+  {
+    tableName: 'polls',
+    policyFamily: 'tenant_crud',
+    notes: 'Poll definitions are community-scoped; role-specific create/close controls are enforced in route/service layers.',
+  },
+  {
+    tableName: 'poll_votes',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Vote rows are immutable once cast. SELECT/INSERT are constrained to actor rows for non-admin users.',
+  },
+  {
+    tableName: 'forum_threads',
+    policyFamily: 'tenant_crud',
+    notes: 'Community board threads are tenant-scoped with moderation rules enforced at app layer.',
+  },
+  {
+    tableName: 'forum_replies',
+    policyFamily: 'tenant_crud',
+    notes: 'Community board replies are tenant-scoped; thread lock/moderation rules are enforced at app layer.',
+  },
+  {
+    tableName: 'vendors',
+    policyFamily: 'tenant_crud',
+    notes: 'Vendor directory is tenant-scoped; create/update actions are role-gated in API routes.',
+  },
+  {
+    tableName: 'work_orders',
+    policyFamily: 'tenant_crud',
+    notes: 'Work orders are tenant-scoped; assignment and status transitions are guarded by role checks.',
+  },
+  {
+    tableName: 'amenities',
+    policyFamily: 'tenant_crud',
+    notes: 'Amenity definitions are tenant-scoped; management actions are restricted to admin roles in app logic.',
+  },
+  {
+    tableName: 'amenity_reservations',
+    policyFamily: 'tenant_crud',
+    notes: 'Reservations are tenant-scoped; conflict prevention is enforced by a DB exclusion constraint.',
+  },
+  {
+    tableName: 'package_log',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Package intake/pickup writes are staff-controlled; resident visibility is unit-filtered by route/service logic.',
+  },
+  {
+    tableName: 'visitor_log',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Visitor check-in/out writes are staff-controlled; resident visibility is host/unit-filtered by route/service logic.',
+  },
+  {
     tableName: 'maintenance_comments',
     policyFamily: 'tenant_append_only',
     notes: 'Append-only: UPDATE/DELETE dropped at RLS level, consistent with scoped-client APPEND_ONLY_TABLES. INSERT (pp_maintenance_comments_insert) requires the commenter to be authorized to view the associated request: admin-tier or the original submitter (submitted_by_id = auth.uid() on the parent maintenance_request).',
@@ -101,6 +196,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Community-shared wizard state: a single row per (community, wizardType) shared across all admins. All writes (INSERT/UPDATE/DELETE) restricted to admin-tier roles (pp_rls_can_read_audit_log) at the DB layer, hardened in 0026. SELECT remains open to all community members (pp_tenant_select).',
   },
   { tableName: 'provisioning_jobs', policyFamily: 'service_only' },
+  {
+    tableName: 'stripe_connected_accounts',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Connect account lifecycle is managed by finance admins only.',
+  },
   {
     tableName: 'units',
     policyFamily: 'tenant_member_configurable',
@@ -135,7 +235,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 21;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 41;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

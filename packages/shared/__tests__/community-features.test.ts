@@ -20,6 +20,17 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'requiresPublicWebsite',
   'hasMaintenanceRequests',
   'hasAnnouncements',
+  'hasFinance',
+  'hasViolations',
+  'hasARC',
+  'hasPolls',
+  'hasCommunityBoard',
+  'hasWorkOrders',
+  'hasAmenities',
+  'hasPackageLogging',
+  'hasVisitorLogging',
+  'hasCalendarSync',
+  'hasAccountingConnectors',
   'hasTransparencyPage',
 ] as const;
 
@@ -201,11 +212,16 @@ describe('CommunityFeatures config', () => {
   });
 
   describe('feature flag consistency across community types', () => {
-    it('condo_718 and hoa_720 share the same feature flags', () => {
+    it('condo_718 and hoa_720 share baseline flags with package/visitor exceptions', () => {
       const condo = getFeaturesForCommunity('condo_718');
       const hoa = getFeaturesForCommunity('hoa_720');
       for (const key of ALL_FEATURE_KEYS) {
-        expect(condo[key]).toBe(hoa[key]);
+        if (key === 'hasPackageLogging' || key === 'hasVisitorLogging') {
+          expect(condo[key]).toBe(true);
+          expect(hoa[key]).toBe(false);
+        } else {
+          expect(condo[key]).toBe(hoa[key]);
+        }
       }
     });
 
@@ -234,6 +250,33 @@ describe('CommunityFeatures config', () => {
         expect(features.hasMeetings).toBe(true);
         expect(features.hasMaintenanceRequests).toBe(true);
         expect(features.hasAnnouncements).toBe(true);
+      }
+    });
+
+    it('phase 5 finance is enabled for all types and violations/ARC are condo/HOA only', () => {
+      for (const communityType of COMMUNITY_TYPES) {
+        const features = getFeaturesForCommunity(communityType);
+        expect(features.hasFinance).toBe(true);
+        if (communityType === 'apartment') {
+          expect(features.hasViolations).toBe(false);
+          expect(features.hasARC).toBe(false);
+        } else {
+          expect(features.hasViolations).toBe(true);
+          expect(features.hasARC).toBe(true);
+        }
+        expect(features.hasPolls).toBe(true);
+        expect(features.hasCommunityBoard).toBe(true);
+        expect(features.hasWorkOrders).toBe(true);
+        expect(features.hasAmenities).toBe(true);
+        expect(features.hasCalendarSync).toBe(true);
+        expect(features.hasAccountingConnectors).toBe(true);
+        if (communityType === 'hoa_720') {
+          expect(features.hasPackageLogging).toBe(false);
+          expect(features.hasVisitorLogging).toBe(false);
+        } else {
+          expect(features.hasPackageLogging).toBe(true);
+          expect(features.hasVisitorLogging).toBe(true);
+        }
       }
     });
   });

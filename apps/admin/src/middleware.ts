@@ -141,12 +141,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 6. Verify Supabase session
+  // 6. Verify Supabase user (server-side JWT revalidation)
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);
@@ -157,7 +157,7 @@ export async function middleware(request: NextRequest) {
   const { data: adminRow } = await adminDb
     .from('platform_admin_users')
     .select('user_id')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!adminRow) {
@@ -167,7 +167,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Forward verified user ID for route handlers
-  response.headers.set('x-user-id', session.user.id);
+  response.headers.set('x-user-id', user.id);
 
   return response;
 }
