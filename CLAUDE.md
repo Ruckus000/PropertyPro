@@ -220,29 +220,61 @@ The setup script creates a symlink at `apps/web/.env.local` pointing to the root
 ### Turbo
 - Build orchestration via Turbo (`turbo.json`) — `pnpm build`/`dev`/`lint` are turbo-orchestrated
 
-## Agent Testing
+## Agent Testing — IMPORTANT: Read This Before Testing Any Authenticated Feature
 
-Agents can test different user roles without reading `.env.local` by using the dev agent-login endpoint.
+**DO NOT read `.env.local` or try to extract credentials.** Use the `/dev/agent-login` endpoint instead.
 
-### Quick Login (Development Only)
+### How to Log In as a Demo User
 
-**Via preview tools (UI testing):**
+The dev server exposes `/dev/agent-login?as=<role>` which authenticates the browser session as a demo user without needing any passwords or env vars. This is the **only** way agents should authenticate.
+
+**Step 1 — Start the dev server** (if not already running):
 ```
 preview_start("web")
+```
+
+**Step 2 — Navigate to the agent-login endpoint:**
+```
 preview_eval: window.location.href = '/dev/agent-login?as=owner'
-preview_snapshot()  // verify login succeeded
 ```
 
-**Switch roles:**
+**Step 3 — Verify the login worked:**
 ```
-preview_eval: window.location.href = '/dev/agent-login?as=board_president'
+preview_snapshot()
 ```
 
-**Available roles:** `owner`, `tenant`, `board_president`, `board_member`, `cam`, `pm_admin`, `site_manager`
+### Available Roles
 
-**Making authenticated API calls after login:**
+| `?as=` value | Role | Email | Community |
+|---|---|---|---|
+| `owner` | Unit Owner | owner.one@sunset.local | Sunset Condos |
+| `tenant` | Tenant/Renter | tenant.one@sunset.local | Sunset Condos |
+| `board_president` | Board President | board.president@sunset.local | Sunset Condos |
+| `board_member` | Board Member | board.member@sunset.local | Sunset Condos |
+| `cam` | Community Assoc. Manager | cam.one@sunset.local | Sunset Condos |
+| `pm_admin` | PM Company Admin | pm.admin@sunset.local | Sunset Condos |
+| `site_manager` | Site Manager | site.manager@sunsetridge.local | Sunset Ridge Apartments |
+
+### Switching Roles Mid-Session
+
+Just navigate to the endpoint again with a different role:
+```
+preview_eval: window.location.href = '/dev/agent-login?as=cam'
+```
+
+### Making Authenticated API Calls
+
+After logging in, the session cookies are set. Use `fetch()` in the preview browser:
 ```javascript
 preview_eval: fetch('/api/v1/documents').then(r => r.json()).then(d => JSON.stringify(d, null, 2))
+```
+
+### JSON Mode (for programmatic use)
+
+Add `Accept: application/json` header to get a JSON response instead of a redirect:
+```javascript
+preview_eval: fetch('/dev/agent-login?as=owner', { headers: { 'Accept': 'application/json' } }).then(r => r.json())
+// Returns: { ok: true, user: {...}, community: {...}, portal: "..." }
 ```
 
 ## Documentation
