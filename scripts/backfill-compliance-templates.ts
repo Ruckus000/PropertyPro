@@ -121,7 +121,7 @@ async function backfillCommunity(
   });
 }
 
-async function runBackfill(): Promise<void> {
+export async function runBackfill(): Promise<void> {
   const targetTypes: CommunityType[] = ['condo_718', 'hoa_720'];
 
   const targetCommunities = await db
