@@ -11,8 +11,8 @@
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
-import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getBrandingForCommunity } from '@/lib/api/branding';
@@ -23,12 +23,11 @@ import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
   children: ReactNode;
-  searchParams: Promise<SearchParams>;
 }
 
-export default async function MobileLayout({ children, searchParams }: MobileLayoutProps) {
-  const params = await searchParams;
-  const rawId = Number(params['communityId']);
+export default async function MobileLayout({ children }: MobileLayoutProps) {
+  const requestHeaders = await headers();
+  const rawId = Number(requestHeaders.get('x-community-id'));
 
   if (!Number.isInteger(rawId) || rawId <= 0) {
     redirect('/auth/login');
