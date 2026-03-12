@@ -8,6 +8,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 
 const ROLE_ENV_MAP: Record<string, string> = {
   owner: 'DEV_LOGIN_OWNER_EMAIL',
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const redirectPath = ADMIN_ROLES.has(role) ? '/dashboard' : '/mobile';
+  let redirectPath = ADMIN_ROLES.has(role) ? '/dashboard' : '/mobile';
   const redirectTo = new URL(redirectPath, baseUrl).toString();
 
   const supabase = createAdminClient();
@@ -75,7 +76,22 @@ export async function GET(request: Request) {
     );
   }
 
-  const response = NextResponse.redirect(data.properties.action_link);
+  // For non-admin roles that redirect to /mobile, resolve communityId
+  if (!ADMIN_ROLES.has(role)) {
+    const userId = data.user?.id;
+    if (userId) {
+      const communities = await findUserCommunitiesUnscoped(userId);
+      if (communities.length > 0) {
+        redirectPath = `${redirectPath}?communityId=${communities[0].communityId}`;
+      }
+    }
+  }
+
+  // Rewrite the action_link's redirect_to with the resolved path (including communityId)
+  const actionUrl = new URL(data.properties.action_link);
+  actionUrl.searchParams.set('redirect_to', new URL(redirectPath, baseUrl).toString());
+
+  const response = NextResponse.redirect(actionUrl.toString());
   response.headers.set('Cache-Control', 'no-store');
   return response;
 }

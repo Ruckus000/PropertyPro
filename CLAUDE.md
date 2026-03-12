@@ -220,6 +220,31 @@ The setup script creates a symlink at `apps/web/.env.local` pointing to the root
 ### Turbo
 - Build orchestration via Turbo (`turbo.json`) — `pnpm build`/`dev`/`lint` are turbo-orchestrated
 
+## Agent Testing
+
+Agents can test different user roles without reading `.env.local` by using the dev agent-login endpoint.
+
+### Quick Login (Development Only)
+
+**Via preview tools (UI testing):**
+```
+preview_start("web")
+preview_eval: window.location.href = '/dev/agent-login?as=owner'
+preview_snapshot()  // verify login succeeded
+```
+
+**Switch roles:**
+```
+preview_eval: window.location.href = '/dev/agent-login?as=board_president'
+```
+
+**Available roles:** `owner`, `tenant`, `board_president`, `board_member`, `cam`, `pm_admin`, `site_manager`
+
+**Making authenticated API calls after login:**
+```javascript
+preview_eval: fetch('/api/v1/documents').then(r => r.json()).then(d => JSON.stringify(d, null, 2))
+```
+
 ## Documentation
 
 See `/docs` for detailed documentation:
