@@ -1,6 +1,7 @@
 import React from 'react';
 import { headers } from 'next/headers';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
+import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -42,12 +43,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   await requireCommunityMembership(context.communityId, userId);
 
   return (
-    <>
-      <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
-      <p className="mb-4 text-sm text-gray-600">
-        Choose which emails you receive and when they should be delivered.
-      </p>
-      <NotificationPreferencesForm communityId={context.communityId} />
-    </>
+    <div className="space-y-8">
+      <div>
+        <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
+        <p className="mb-4 text-sm text-gray-600">
+          Choose which emails you receive and when they should be delivered.
+        </p>
+        <NotificationPreferencesForm communityId={context.communityId} />
+      </div>
+      <AccessibilitySettings />
+    </div>
   );
 }

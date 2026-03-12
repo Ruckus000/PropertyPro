@@ -18,7 +18,7 @@ export function DashboardAnnouncements({ items }: DashboardAnnouncementsProps) {
       <h2 className="text-lg font-semibold text-gray-900">Recent Announcements</h2>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
-          <p className="text-sm text-gray-600">No announcements yet.</p>
+          <p className="text-base text-gray-600">No announcements yet.</p>
         ) : (
           items.map((item) => (
             <article key={item.id} className="rounded-md border border-gray-100 p-3">

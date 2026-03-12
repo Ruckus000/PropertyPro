@@ -45,9 +45,9 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
           <Menu size={20} />
         </button>
         <div>
-          <h1 className="text-lg font-semibold leading-tight text-gray-900">{title}</h1>
+          <h1 className="text-xl font-semibold leading-tight text-gray-900">{title}</h1>
           {subtitle && (
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
+            <p className="text-sm font-medium uppercase tracking-wider text-gray-600">
               {subtitle}
             </p>
           )}
@@ -64,7 +64,7 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         >
           <Search size={14} />
           <span className="hidden sm:inline">Search...</span>
-          <kbd className="hidden rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-400 sm:inline">
+          <kbd className="hidden rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-500 sm:inline">
             ⌘K
           </kbd>
         </button>

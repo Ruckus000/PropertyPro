@@ -289,3 +289,31 @@
     animation: fadeIn var(--duration-standard) var(--ease-enter);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVIGATION — SIDEBAR SEMANTIC TOKENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --nav-text-active: rgba(255, 255, 255, 1);
+  --nav-text-inactive: rgba(255, 255, 255, 0.85);
+  --nav-text-muted: rgba(255, 255, 255, 0.65);
+  --nav-bg-active: rgba(255, 255, 255, 0.15);
+  --nav-bg-hover: rgba(255, 255, 255, 0.07);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LARGE TEXT MODE — Accessibility
+   Activated by adding .large-text class to <html>.
+   Scales all typography tokens up for users with poor vision.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.large-text {
+  --font-size-xs: 0.8125rem;   /* 13px (default 11px) */
+  --font-size-sm: 0.9375rem;   /* 15px (default 13px) */
+  --font-size-base: 1.125rem;  /* 18px (default 16px) */
+  --font-size-lg: 1.25rem;     /* 20px (default 18px) */
+  --font-size-xl: 1.5rem;      /* 24px (default 20px) */
+  --font-size-2xl: 1.75rem;    /* 28px (default 24px) */
+  --font-size-3xl: 2.125rem;   /* 34px (default 30px) */
+}

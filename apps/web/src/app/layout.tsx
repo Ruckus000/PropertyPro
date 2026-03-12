@@ -12,7 +12,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('propertypro.large-text')==='true')document.documentElement.classList.add('large-text')}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
         <a
           href="#main-content"
