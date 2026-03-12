@@ -41,11 +41,29 @@ export async function requireCommunityMembership(
     scoped.selectFrom(userRoles, {}, eq(userRoles.userId, userId)),
     scoped.selectFrom(communities, {}, eq(communities.id, communityId)),
   ]);
-  const membership = (roleRows as unknown as Record<string, unknown>[])[0];
-  const community = (communityRows as unknown as Record<string, unknown>[])[0];
+  const roleResult = roleRows as unknown as Record<string, unknown>[];
+  const communityResult = communityRows as unknown as Record<string, unknown>[];
+  const membership = roleResult[0];
+  const community = communityResult[0];
 
-  if (!membership || !community) {
-    throw new ForbiddenError('You are not a member of this community');
+  if (!community) {
+    // eslint-disable-next-line no-console
+    console.warn('[requireCommunityMembership] community not found or soft-deleted', {
+      communityId,
+      userId,
+      communityRowCount: communityResult.length,
+    });
+    throw new ForbiddenError('Community not found');
+  }
+
+  if (!membership) {
+    // eslint-disable-next-line no-console
+    console.warn('[requireCommunityMembership] no role assignment for user', {
+      communityId,
+      userId,
+      roleRowCount: roleResult.length,
+    });
+    throw new ForbiddenError('User is not a member of this community');
   }
 
   const role = requireNewCommunityRole(

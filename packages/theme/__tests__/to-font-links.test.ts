@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toFontLinks } from '../src';
 
 describe('toFontLinks', () => {
-  it('returns one URL when heading and body fonts are the same', () => {
+  it('returns empty array when heading and body fonts are both Inter (self-hosted)', () => {
     const links = toFontLinks({
       primaryColor: '#2563EB',
       secondaryColor: '#6B7280',
@@ -14,8 +14,23 @@ describe('toFontLinks', () => {
       communityType: 'condo_718',
     });
 
+    expect(links).toEqual([]);
+  });
+
+  it('returns only non-Inter font link when one font is Inter', () => {
+    const links = toFontLinks({
+      primaryColor: '#2563EB',
+      secondaryColor: '#6B7280',
+      accentColor: '#DBEAFE',
+      fontHeading: 'Playfair Display',
+      fontBody: 'Inter',
+      logoUrl: null,
+      communityName: 'Test',
+      communityType: 'condo_718',
+    });
+
     expect(links).toEqual([
-      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+      'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap',
     ]);
   });
 

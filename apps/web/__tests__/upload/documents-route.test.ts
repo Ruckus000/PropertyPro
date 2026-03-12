@@ -314,7 +314,7 @@ describe('p1-11 documents route', () => {
 
   it('GET requires community membership', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(
-      new ForbiddenError('You are not a member of this community'),
+      new ForbiddenError('User is not a member of this community'),
     );
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents?communityId=8');
@@ -409,7 +409,7 @@ describe('p1-15 documents route DELETE', () => {
 
   it('DELETE requires community membership', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(
-      new ForbiddenError('You are not a member of this community'),
+      new ForbiddenError('User is not a member of this community'),
     );
 
     const req = new NextRequest(

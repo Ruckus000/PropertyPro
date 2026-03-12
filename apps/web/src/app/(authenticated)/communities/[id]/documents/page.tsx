@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { DocumentLibrary } from '@/components/documents/document-library';

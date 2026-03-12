@@ -75,7 +75,7 @@ describe('resolvePmDashboardTarget', () => {
   describe('missing or revoked membership', () => {
     it('returns null when requireCommunityMembership throws ForbiddenError', async () => {
       requireCommunityMembershipMock.mockRejectedValueOnce(
-        new ForbiddenError('You are not a member of this community'),
+        new ForbiddenError('User is not a member of this community'),
       );
 
       const result = await resolvePmDashboardTarget(PM_USER_ID, CONDO_COMMUNITY_ID);

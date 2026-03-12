@@ -214,7 +214,7 @@ describe('p1-15 document versions route', () => {
 
   it('returns 403 for non-member', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(
-      new ForbiddenError('You are not a member of this community'),
+      new ForbiddenError('User is not a member of this community'),
     );
 
     const req = new NextRequest(

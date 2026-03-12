@@ -172,7 +172,7 @@ describe('StatutoryDocumentsStep', () => {
                     ok: false,
                     status: 403,
                     json: async () => ({
-                        error: { message: 'You are not a member of this community' },
+                        error: { message: 'User is not a member of this community' },
                     }),
                 });
             }
@@ -190,7 +190,7 @@ describe('StatutoryDocumentsStep', () => {
             await flushEffects();
         });
 
-        expect(container.textContent).toContain('You are not a member of this community');
+        expect(container.textContent).toContain('User is not a member of this community');
     });
 
     it('falls back to default 403 message when compliance error response body is invalid', async () => {
