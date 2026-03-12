@@ -7,13 +7,7 @@ import { requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finan
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { getConnectStatus } from '@/lib/services/finance-service';
 
-const CONNECT_STATUS_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+const CONNECT_STATUS_ROLES = new Set(['manager', 'pm_admin']);
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();

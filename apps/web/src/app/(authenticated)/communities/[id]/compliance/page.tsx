@@ -39,7 +39,7 @@ export default async function CompliancePage({ params }: PageProps) {
   }
 
   // RBAC check: owner can read in condo/HOA, tenant cannot
-  if (!checkPermission(membership.role, membership.communityType, 'compliance', 'read')) {
+  if (!checkPermission(membership.role, membership.communityType, 'compliance', 'read', { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions })) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 

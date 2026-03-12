@@ -30,7 +30,7 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-import { getComplianceTemplate } from '@propertypro/shared';
+import { getComplianceTemplate, getPresetPermissions, PRESET_METADATA, type CommunityType } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 
 // ---------------------------------------------------------------------------
@@ -150,10 +150,12 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] user_linked: communityId not set');
 
-  const role =
+  const presetKey =
     ctx.signup.communityType === 'condo_718' || ctx.signup.communityType === 'hoa_720'
-      ? 'board_president'
-      : 'site_manager';
+      ? 'board_president' as const
+      : 'site_manager' as const;
+  const permissions = getPresetPermissions(presetKey, ctx.signup.communityType as CommunityType);
+  const displayTitle = PRESET_METADATA[presetKey].displayTitle;
 
   let userId: string;
 
@@ -204,7 +206,7 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   // Insert role — onConflictDoNothing satisfies ADR-001 one-role-per-community on retry.
   await db
     .insert(userRoles)
-    .values({ userId, communityId, role })
+    .values({ userId, communityId, role: 'manager', presetKey, displayTitle, permissions })
     .onConflictDoNothing();
 }
 
@@ -265,15 +267,10 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   if (!communityId) throw new Error('[provisioning] preferences_set: communityId not set');
 
   // Look up the admin userId from user_roles (set in user_linked step).
-  const role =
-    ctx.signup.communityType === 'condo_718' || ctx.signup.communityType === 'hoa_720'
-      ? 'board_president'
-      : 'site_manager';
-
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, role)))
+    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, 'manager')))
     .limit(1);
 
   if (!roleRow) {

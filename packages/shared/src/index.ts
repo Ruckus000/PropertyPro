@@ -85,6 +85,12 @@ export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
 export * from './esign-constants';
+export * from './manager-permissions';
+export * from './manager-presets';
+
+// Hybrid 4-role model types
+export const NEW_COMMUNITY_ROLES = ['resident', 'manager', 'pm_admin'] as const;
+export type NewCommunityRole = (typeof NEW_COMMUNITY_ROLES)[number];
 
 export type {
   BlockType, BlockContent, BlockContentMap,

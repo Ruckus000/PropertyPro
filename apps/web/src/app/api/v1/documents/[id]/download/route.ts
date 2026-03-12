@@ -53,6 +53,8 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
       communityId,
       role: membership.role,
       communityType: membership.communityType,
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
     },
     documentId,
   );

@@ -28,7 +28,7 @@ export const GET = withErrorHandler(async (
   requireFinanceEnabled(membership);
 
   let unitId = requestedUnitId;
-  if (membership.role === 'owner') {
+  if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitId = await findActorUnitId(communityId, actorUserId);
     if (!actorUnitId) {
       throw new ForbiddenError('No unit association found for this owner');

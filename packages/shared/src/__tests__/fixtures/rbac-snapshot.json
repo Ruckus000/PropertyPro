@@ -1,0 +1,1730 @@
+{
+  "condo_718": {
+    "owner": {
+      "documents": {
+        "read": true,
+        "write": false
+      },
+      "meetings": {
+        "read": true,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": false
+      },
+      "residents": {
+        "read": true,
+        "write": false
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": false
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": false
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": false
+      }
+    },
+    "tenant": {
+      "documents": {
+        "read": true,
+        "write": false
+      },
+      "meetings": {
+        "read": true,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": false
+      },
+      "residents": {
+        "read": true,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": false
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": false
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": false
+      }
+    },
+    "board_member": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": false
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": false
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "board_president": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": true
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "cam": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "site_manager": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "property_manager_admin": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": true
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    }
+  },
+  "hoa_720": {
+    "owner": {
+      "documents": {
+        "read": true,
+        "write": false
+      },
+      "meetings": {
+        "read": true,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": false
+      },
+      "residents": {
+        "read": true,
+        "write": false
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": false
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": false
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": false
+      }
+    },
+    "tenant": {
+      "documents": {
+        "read": true,
+        "write": false
+      },
+      "meetings": {
+        "read": true,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": false
+      },
+      "residents": {
+        "read": true,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": false
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": false
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": false
+      }
+    },
+    "board_member": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": false
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": false
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "board_president": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": true
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "cam": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "site_manager": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "property_manager_admin": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": true,
+        "write": true
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": true
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": true,
+        "write": true
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": true,
+        "write": true
+      },
+      "arc_submissions": {
+        "read": true,
+        "write": true
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    }
+  },
+  "apartment": {
+    "owner": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "tenant": {
+      "documents": {
+        "read": true,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": false
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": false
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": true,
+        "write": false
+      }
+    },
+    "board_member": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "board_president": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "cam": {
+      "documents": {
+        "read": false,
+        "write": false
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": false,
+        "write": false
+      },
+      "residents": {
+        "read": false,
+        "write": false
+      },
+      "settings": {
+        "read": false,
+        "write": false
+      },
+      "audit": {
+        "read": false,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": false,
+        "write": false
+      },
+      "contracts": {
+        "read": false,
+        "write": false
+      },
+      "finances": {
+        "read": false,
+        "write": false
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": false,
+        "write": false
+      },
+      "work_orders": {
+        "read": false,
+        "write": false
+      },
+      "amenities": {
+        "read": false,
+        "write": false
+      },
+      "packages": {
+        "read": false,
+        "write": false
+      },
+      "visitors": {
+        "read": false,
+        "write": false
+      },
+      "calendar_sync": {
+        "read": false,
+        "write": false
+      },
+      "accounting": {
+        "read": false,
+        "write": false
+      },
+      "esign": {
+        "read": false,
+        "write": false
+      }
+    },
+    "site_manager": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": false
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    },
+    "property_manager_admin": {
+      "documents": {
+        "read": true,
+        "write": true
+      },
+      "meetings": {
+        "read": false,
+        "write": false
+      },
+      "announcements": {
+        "read": true,
+        "write": true
+      },
+      "residents": {
+        "read": true,
+        "write": true
+      },
+      "settings": {
+        "read": true,
+        "write": true
+      },
+      "audit": {
+        "read": true,
+        "write": false
+      },
+      "compliance": {
+        "read": false,
+        "write": false
+      },
+      "maintenance": {
+        "read": true,
+        "write": true
+      },
+      "contracts": {
+        "read": true,
+        "write": true
+      },
+      "finances": {
+        "read": true,
+        "write": true
+      },
+      "violations": {
+        "read": false,
+        "write": false
+      },
+      "arc_submissions": {
+        "read": false,
+        "write": false
+      },
+      "polls": {
+        "read": true,
+        "write": true
+      },
+      "work_orders": {
+        "read": true,
+        "write": true
+      },
+      "amenities": {
+        "read": true,
+        "write": true
+      },
+      "packages": {
+        "read": true,
+        "write": true
+      },
+      "visitors": {
+        "read": true,
+        "write": true
+      },
+      "calendar_sync": {
+        "read": true,
+        "write": true
+      },
+      "accounting": {
+        "read": true,
+        "write": true
+      },
+      "esign": {
+        "read": true,
+        "write": true
+      }
+    }
+  }
+}

@@ -1,24 +1,17 @@
 import { userRoles, type ScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { getFeaturesForCommunity, type CommunityRole } from '@propertypro/shared';
+import type { NewCommunityRole } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
 
-const RESIDENT_ROLES = new Set<CommunityRole>(['owner', 'tenant']);
-const STAFF_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-export function isResidentRole(role: CommunityRole): boolean {
-  return RESIDENT_ROLES.has(role);
+export function isResidentRole(role: NewCommunityRole): boolean {
+  return role === 'resident';
 }
 
 export function requireStaffOperator(membership: CommunityMembership): void {
-  if (!STAFF_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only staff users can perform this action');
   }
 }
@@ -38,19 +31,19 @@ export function requireVisitorLoggingEnabled(membership: CommunityMembership): v
 }
 
 export function requirePackagesReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'packages', 'read');
+  requirePermission(membership, 'packages', 'read');
 }
 
 export function requirePackagesWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'packages', 'write');
+  requirePermission(membership, 'packages', 'write');
 }
 
 export function requireVisitorsReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'visitors', 'read');
+  requirePermission(membership, 'visitors', 'read');
 }
 
 export function requireVisitorsWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'visitors', 'write');
+  requirePermission(membership, 'visitors', 'write');
 }
 
 export async function getActorUnitIds(

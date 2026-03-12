@@ -24,7 +24,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq, inArray } from '@propertypro/db/filters';
-import { COMMUNITY_ROLES, type CommunityRole, type CommunityType } from '@propertypro/shared';
+import { NEW_COMMUNITY_ROLES, type NewCommunityRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -42,7 +42,7 @@ const createResidentSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1, 'Full name is required'),
   phone: z.string().nullable().optional(),
-  role: z.enum(COMMUNITY_ROLES) as z.ZodType<CommunityRole>,
+  role: z.enum(NEW_COMMUNITY_ROLES) as z.ZodType<NewCommunityRole>,
   unitId: z.number().int().positive().nullable().optional(),
 });
 
@@ -51,7 +51,7 @@ const updateResidentSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().min(1).optional(),
   phone: z.string().nullable().optional(),
-  role: (z.enum(COMMUNITY_ROLES) as z.ZodType<CommunityRole>).optional(),
+  role: (z.enum(NEW_COMMUNITY_ROLES) as z.ZodType<NewCommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
 });
 
@@ -90,11 +90,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership.role, membership.communityType, 'residents', 'read');
+  requirePermission(membership, 'residents', 'read');
   const scoped = createScopedClient(communityId);
 
   // Optional role filters pushed to the DB — avoids fetching and discarding unneeded rows
-  const validRoles = new Set(COMMUNITY_ROLES as unknown as string[]);
+  const validRoles = new Set(NEW_COMMUNITY_ROLES as unknown as string[]);
   const rolesParam = searchParams.get('roles');
   const roleParam = searchParams.get('role');
 
@@ -107,14 +107,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     roleRows = await scoped.selectFrom(
       userRoles,
       {},
-      inArray(userRoles.role, roleList as CommunityRole[]),
+      inArray(userRoles.role, roleList as unknown as ('resident' | 'manager' | 'pm_admin')[]),
     ) as unknown as Record<string, unknown>[];
   } else if (roleParam) {
     if (!validRoles.has(roleParam)) throw new ValidationError(`Invalid role filter: ${roleParam}`);
     roleRows = await scoped.selectFrom(
       userRoles,
       {},
-      eq(userRoles.role, roleParam as CommunityRole),
+      eq(userRoles.role, roleParam as 'resident' | 'manager' | 'pm_admin'),
     ) as unknown as Record<string, unknown>[];
   } else {
     roleRows = await scoped.query(userRoles) as unknown as Record<string, unknown>[];
@@ -173,7 +173,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const { email, fullName, phone, role, unitId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
+  requirePermission(actorMembership, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const communityType = await getCommunityType(communityId);
@@ -282,7 +282,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
+  requirePermission(actorMembership, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);
@@ -390,7 +390,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const { userId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(actorMembership.role, actorMembership.communityType, 'residents', 'write');
+  requirePermission(actorMembership, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);

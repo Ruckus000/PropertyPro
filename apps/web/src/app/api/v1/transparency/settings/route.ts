@@ -41,7 +41,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new NotFoundError('Transparency settings are not available for this community type');
   }
 
-  requirePermission(membership.role, membership.communityType, 'settings', 'read');
+  requirePermission(membership, 'settings', 'read');
 
   const scoped = createScopedClient(communityId);
   const communityRows = await scoped.query(communities);
@@ -82,7 +82,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new NotFoundError('Transparency settings are not available for this community type');
   }
 
-  requirePermission(membership.role, membership.communityType, 'settings', 'write');
+  requirePermission(membership, 'settings', 'write');
 
   const scoped = createScopedClient(communityId);
   const communityRows = await scoped.query(communities);

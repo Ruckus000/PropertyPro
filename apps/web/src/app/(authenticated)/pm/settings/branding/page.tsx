@@ -33,7 +33,7 @@ export default async function BrandingSettingsPage({ searchParams }: PageProps) 
   }
 
   const membership = await requireCommunityMembership(communityId, userId!);
-  if (membership.role !== 'property_manager_admin') {
+  if (membership.role !== 'pm_admin') {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 

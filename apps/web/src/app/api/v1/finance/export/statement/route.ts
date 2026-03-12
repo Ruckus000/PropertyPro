@@ -24,7 +24,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { startDate, endDate } = resolveStatementDateRange(rawStartDate, rawEndDate);
 
   let unitId: number;
-  if (membership.role === 'owner') {
+  if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitId = await findActorUnitId(communityId, actorUserId);
     if (!actorUnitId) {
       throw new ForbiddenError('No unit association found for this owner');

@@ -1,8 +1,10 @@
 import {
   isCommunityRole,
   isCommunityType,
+  isNewCommunityRole,
   type CommunityRole,
   type CommunityType,
+  type NewCommunityRole,
 } from '@propertypro/shared';
 import { DataIntegrityError } from '@/lib/api/errors';
 
@@ -26,6 +28,20 @@ export function requireCommunityRole(
 ): CommunityRole {
   if (!isCommunityRole(value)) {
     throw new DataIntegrityError(`Invalid community role in ${context}`, {
+      context,
+      value,
+    });
+  }
+
+  return value;
+}
+
+export function requireNewCommunityRole(
+  value: unknown,
+  context: string,
+): NewCommunityRole {
+  if (!isNewCommunityRole(value)) {
+    throw new DataIntegrityError(`Invalid community role (v2) in ${context}`, {
       context,
       value,
     });

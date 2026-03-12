@@ -1,28 +1,10 @@
 import { userRoles, type ScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import type { CommunityRole } from '@propertypro/shared';
+import type { NewCommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
-
-const VIOLATIONS_ADMIN_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-const ARC_REVIEW_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-const ARC_SUBMITTER_ROLES = new Set<CommunityRole>(['owner', 'tenant']);
-
-const RESIDENT_ROLES = new Set<CommunityRole>(['owner', 'tenant']);
 
 export function requireViolationsEnabled(membership: CommunityMembership): void {
   const features = getFeaturesForCommunity(membership.communityType);
@@ -39,41 +21,41 @@ export function requireArcEnabled(membership: CommunityMembership): void {
 }
 
 export function requireViolationsReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'violations', 'read');
+  requirePermission(membership, 'violations', 'read');
 }
 
 export function requireViolationsWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'violations', 'write');
+  requirePermission(membership, 'violations', 'write');
 }
 
 export function requireViolationAdminWrite(membership: CommunityMembership): void {
-  if (!VIOLATIONS_ADMIN_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only violation administrators can perform this action');
   }
 }
 
 export function requireArcReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'arc_submissions', 'read');
+  requirePermission(membership, 'arc_submissions', 'read');
 }
 
 export function requireArcWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'arc_submissions', 'write');
+  requirePermission(membership, 'arc_submissions', 'write');
 }
 
 export function requireArcReviewPermission(membership: CommunityMembership): void {
-  if (!ARC_REVIEW_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only ARC reviewers can perform this action');
   }
 }
 
 export function requireArcSubmitterRole(membership: CommunityMembership): void {
-  if (!ARC_SUBMITTER_ROLES.has(membership.role)) {
+  if (membership.role !== 'resident') {
     throw new ForbiddenError('Only residents can submit ARC applications');
   }
 }
 
-export function isResidentRole(role: CommunityRole): boolean {
-  return RESIDENT_ROLES.has(role);
+export function isResidentRole(role: NewCommunityRole): boolean {
+  return role === 'resident';
 }
 
 export async function getActorUnitIds(

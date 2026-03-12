@@ -193,7 +193,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'contracts', 'read');
+  requirePermission(membership, 'contracts', 'read');
 
   const scoped = createScopedClient(communityId);
   const contractRows = await scoped.query(contracts);
@@ -266,7 +266,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
+  requirePermission(membership, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -343,7 +343,7 @@ async function handleCreateContract(
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
+  requirePermission(membership, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -419,7 +419,7 @@ async function handleCreateBid(
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'contracts', 'write');
+  requirePermission(membership, 'contracts', 'write');
 
   const scoped = createScopedClient(communityId);
 

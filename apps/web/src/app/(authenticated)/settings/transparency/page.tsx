@@ -41,7 +41,7 @@ export default async function TransparencySettingsPage({ searchParams }: Props) 
     notFound();
   }
 
-  requirePermission(membership.role, membership.communityType, 'settings', 'read');
+  requirePermission(membership, 'settings', 'read');
 
   const scoped = createScopedClient(context.communityId);
   const rows = await scoped.query(communities);

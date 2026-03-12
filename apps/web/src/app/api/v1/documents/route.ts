@@ -126,6 +126,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       communityId: effectiveCommunityId,
       role: membership.role,
       communityType: membership.communityType,
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
     },
     categoryId != null ? eq(documents.categoryId, categoryId) : undefined,
   );
@@ -148,7 +150,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const payload = parseResult.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
-  requirePermission(membership.role, membership.communityType, 'documents', 'write');
+  requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
   const storageBytes = await downloadStorageBytes(payload.filePath);
@@ -295,7 +297,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   const { id } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
-  if (!isElevatedRole(membership.role)) {
+  if (!isElevatedRole(membership.role, { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions })) {
     throw new ForbiddenError('Only elevated roles can delete documents');
   }
   await requireActiveSubscriptionForMutation(communityId);

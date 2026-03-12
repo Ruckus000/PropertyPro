@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { PenTool, X } from 'lucide-react';
-import { isElevatedRole, type CommunityRole } from '@propertypro/shared';
+import { isElevatedRole, type CommunityRole, type NewCommunityRole, type ManagerPermissions } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { DocumentList, type DocumentListItem } from './document-list';
 import { DocumentViewer } from './document-viewer';
@@ -13,7 +13,9 @@ import { DocumentSearch } from './document-search';
 interface DocumentLibraryProps {
   communityId: number;
   userId: string;
-  userRole: CommunityRole;
+  userRole: CommunityRole | NewCommunityRole;
+  isUnitOwner?: boolean;
+  permissions?: ManagerPermissions;
 }
 
 type ViewMode = 'list' | 'viewer' | 'versions';
@@ -22,6 +24,8 @@ export function DocumentLibrary({
   communityId,
   userId,
   userRole,
+  isUnitOwner,
+  permissions,
 }: DocumentLibraryProps) {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DocumentListItem | null>(null);
@@ -31,7 +35,7 @@ export function DocumentLibrary({
   const [searchMode, setSearchMode] = useState(false);
   const [showEsignBanner, setShowEsignBanner] = useState(false);
 
-  const canUpload = isElevatedRole(userRole);
+  const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
 
   const handleDocumentUploaded = useCallback(() => {
     setRefreshKey((prev) => prev + 1);

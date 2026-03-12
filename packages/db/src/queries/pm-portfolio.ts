@@ -35,7 +35,7 @@ function toCountMap<T extends { communityId: number; count: number }>(
 }
 
 /**
- * Returns true when the given user holds `property_manager_admin` in at
+ * Returns true when the given user holds `pm_admin` in at
  * least one non-deleted community.  Intentionally unscoped — callers must
  * only expose this through `@propertypro/db/unsafe`.
  */
@@ -49,7 +49,7 @@ export async function isPmAdminInAnyCommunity(
     .where(
       and(
         eq(userRoles.userId, userId),
-        eq(userRoles.role, 'property_manager_admin'),
+        eq(userRoles.role, 'pm_admin'),
         isNull(communities.deletedAt),
       ),
     )
@@ -70,7 +70,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
 ): Promise<ManagedCommunityPortfolioRow[]> {
   const conditions: SQL[] = [
     eq(userRoles.userId, pmUserId),
-    eq(userRoles.role, 'property_manager_admin'),
+    eq(userRoles.role, 'pm_admin'),
     isNull(communities.deletedAt),
   ];
 

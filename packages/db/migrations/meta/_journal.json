@@ -330,6 +330,69 @@
       "when": 1772990000000,
       "tag": "0086_package_and_visitor_logging",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1773000000000,
+      "tag": "0087_add_token_encryption_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1773010000000,
+      "tag": "0088_force_rls_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1773020000000,
+      "tag": "0089_fix_anon_rls_graceful_fail",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1773030000000,
+      "tag": "0090_esign_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1773040000000,
+      "tag": "0091_role_simplification_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1773050000000,
+      "tag": "0092_role_simplification_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1773060000000,
+      "tag": "0093_role_simplification_swap",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1773070000000,
+      "tag": "0094_role_simplification_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1773080000000,
+      "tag": "0095_role_simplification_cleanup",
+      "breakpoints": true
     }
   ]
 }

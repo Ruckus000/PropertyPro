@@ -28,6 +28,7 @@ import {
   userRoles,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { ADMIN_ROLES as ADMIN_ROLES_LIST, RESIDENT_ROLES as RESIDENT_ROLES_LIST } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -41,14 +42,8 @@ import { formatRequest } from '../_formatRequest';
 // Constants
 // ---------------------------------------------------------------------------
 
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-const RESIDENT_ROLES = new Set(['owner', 'tenant']);
+const ADMIN_ROLES = new Set<string>(ADMIN_ROLES_LIST);
+const RESIDENT_ROLES = new Set<string>(RESIDENT_ROLES_LIST);
 
 /**
  * Valid status transitions.

@@ -125,7 +125,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireMeetingsEnabled(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'meetings', 'read');
+  requirePermission(membership, 'meetings', 'read');
 
   const scoped = createScopedClient(communityId);
 
@@ -170,7 +170,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireMeetingsEnabled(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'meetings', 'write');
+  requirePermission(membership, 'meetings', 'write');
   await requireActiveSubscriptionForMutation(communityId);
 
   if (action === 'update') return handleUpdate(normalizedBody, actorUserId);

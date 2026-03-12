@@ -40,7 +40,7 @@ export const GET = withErrorHandler(async (
   const rawUnitId = searchParams.get('unitId');
   let unitId: number | undefined;
 
-  if (membership.role === 'owner') {
+  if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitId = await findActorUnitId(communityId, actorUserId);
     if (!actorUnitId) {
       throw new ForbiddenError('No unit is associated with this owner in the selected community');

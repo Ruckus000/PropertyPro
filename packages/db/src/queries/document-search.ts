@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, ilike, lt, lte, or, sql, type SQL } from 'drizzle-orm';
-import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import type { CommunityRole, CommunityType, NewCommunityRole, ManagerPermissions } from '@propertypro/shared';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
 import { buildDocumentAccessFilter } from './document-access';
@@ -14,9 +14,11 @@ export interface DocumentSearchParams {
   cursor?: number | null;
   limit?: number;
   /** If provided, filters documents based on role-based access control */
-  role?: CommunityRole;
+  role?: CommunityRole | NewCommunityRole;
   /** Required with role to apply strict role x community_type policy filters */
   communityType?: CommunityType;
+  isUnitOwner?: boolean;
+  permissions?: ManagerPermissions;
 }
 
 export interface DocumentSearchItem {
@@ -88,6 +90,8 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
       communityId: params.communityId,
       role: params.role,
       communityType: params.communityType,
+      isUnitOwner: params.isUnitOwner,
+      permissions: params.permissions,
     });
     if (accessFilter) {
       additionalFilters.push(accessFilter);

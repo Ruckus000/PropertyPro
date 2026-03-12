@@ -26,7 +26,7 @@ export default async function SelectCommunityPage() {
   // Tenants belong to exactly one community. If a tenant somehow has
   // multiple memberships (data anomaly), route them to the first one
   // rather than showing the picker.
-  const allTenant = communities.length > 0 && communities.every((c) => c.role === 'tenant');
+  const allTenant = communities.length > 0 && communities.every((c) => c.role === 'resident' && !c.isUnitOwner);
   if (allTenant) {
     redirect(`/dashboard?communityId=${communities[0]!.communityId}`);
   }

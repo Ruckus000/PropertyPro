@@ -5,7 +5,9 @@
  * Unknown/unmapped categories remain visible only to elevated roles.
  */
 
-import type { CommunityRole, CommunityType } from './index';
+import type { CommunityRole, CommunityType, NewCommunityRole } from './index';
+import type { ManagerPermissions } from './manager-permissions';
+import { COMMUNITY_ROLES } from './index';
 
 export const KNOWN_DOCUMENT_CATEGORY_KEYS = [
   'declaration',
@@ -113,6 +115,26 @@ export const RESTRICTED_ROLES: readonly CommunityRole[] = [
   'site_manager',
 ] as const;
 
+/** Board-level roles (fiduciary duty, board-only meeting access). */
+export const BOARD_ROLES: readonly CommunityRole[] = [
+  'board_member',
+  'board_president',
+] as const;
+
+/** Non-admin resident roles. */
+export const RESIDENT_ROLES: readonly CommunityRole[] = [
+  'owner',
+  'tenant',
+] as const;
+
+/** Staff/management roles (board_president, cam, site_manager, property_manager_admin). */
+export const STAFF_ROLES: readonly CommunityRole[] = [
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+] as const;
+
 const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<CommunityRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',
@@ -167,34 +189,77 @@ export function normalizeCategoryName(name: string | null | undefined): Document
   return 'unknown';
 }
 
-export function isElevatedRole(role: CommunityRole): boolean {
-  return ELEVATED_ROLES.includes(role);
+/** Options for document access functions when using NewCommunityRole. */
+export interface DocumentAccessOpts {
+  isUnitOwner?: boolean;
+  permissions?: ManagerPermissions;
 }
 
-export function isAdminRole(role: CommunityRole): boolean {
+/**
+ * Resolve a role (old or new) to the legacy CommunityRole for policy lookup.
+ * Returns null for 'manager' role (which uses JSONB permissions).
+ */
+function resolveLegacyRole(
+  role: CommunityRole | NewCommunityRole,
+  opts?: DocumentAccessOpts,
+): CommunityRole | null {
+  if ((COMMUNITY_ROLES as readonly string[]).includes(role)) {
+    return role as CommunityRole;
+  }
+  if (role === 'pm_admin') return 'property_manager_admin';
+  if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
+  return null; // manager → uses JSONB
+}
+
+export function isElevatedRole(
+  role: CommunityRole | NewCommunityRole,
+  opts?: DocumentAccessOpts,
+): boolean {
+  const legacy = resolveLegacyRole(role, opts);
+  if (legacy) return ELEVATED_ROLES.includes(legacy);
+  // manager: elevated if document_categories === 'all'
+  return opts?.permissions?.document_categories === 'all';
+}
+
+export function isAdminRole(
+  role: CommunityRole | NewCommunityRole,
+): boolean {
+  if (role === 'manager' || role === 'pm_admin') return true;
   return (ADMIN_ROLES as readonly string[]).includes(role);
 }
 
-export function isRestrictedRole(role: CommunityRole): boolean {
-  return RESTRICTED_ROLES.includes(role);
+export function isRestrictedRole(
+  role: CommunityRole | NewCommunityRole,
+  opts?: DocumentAccessOpts,
+): boolean {
+  const legacy = resolveLegacyRole(role, opts);
+  if (legacy) return RESTRICTED_ROLES.includes(legacy);
+  return false;
 }
 
 export function getCategoryAccessForRole(
-  role: CommunityRole,
+  role: CommunityRole | NewCommunityRole,
   communityType: CommunityType,
+  opts?: DocumentAccessOpts,
 ): CategoryAccess {
-  return DOCUMENT_ACCESS_POLICY[communityType][role];
+  const legacy = resolveLegacyRole(role, opts);
+  if (legacy) return DOCUMENT_ACCESS_POLICY[communityType][legacy];
+  // manager: derive from JSONB
+  if (!opts?.permissions) return [];
+  const cats = opts.permissions.document_categories;
+  return cats === 'all' ? 'all' : cats;
 }
 
 export function getAccessibleKnownCategories(
-  role: CommunityRole,
+  role: CommunityRole | NewCommunityRole,
   communityType: CommunityType,
+  opts?: DocumentAccessOpts,
 ): KnownDocumentCategoryKey[] {
-  if (isElevatedRole(role)) {
+  if (isElevatedRole(role, opts)) {
     return [...KNOWN_DOCUMENT_CATEGORY_KEYS];
   }
 
-  const access = getCategoryAccessForRole(role, communityType);
+  const access = getCategoryAccessForRole(role, communityType, opts);
   if (access === 'all') {
     return [...KNOWN_DOCUMENT_CATEGORY_KEYS];
   }
@@ -202,11 +267,12 @@ export function getAccessibleKnownCategories(
 }
 
 export function canAccessCategory(
-  role: CommunityRole,
+  role: CommunityRole | NewCommunityRole,
   communityType: CommunityType,
   categoryKey: DocumentCategoryKey,
+  opts?: DocumentAccessOpts,
 ): boolean {
-  if (isElevatedRole(role)) {
+  if (isElevatedRole(role, opts)) {
     return true;
   }
 
@@ -214,7 +280,7 @@ export function canAccessCategory(
     return false;
   }
 
-  const access = getCategoryAccessForRole(role, communityType);
+  const access = getCategoryAccessForRole(role, communityType, opts);
   if (access === 'all') {
     return true;
   }
@@ -223,10 +289,11 @@ export function canAccessCategory(
 }
 
 export function canAccessDocument(
-  role: CommunityRole,
+  role: CommunityRole | NewCommunityRole,
   communityType: CommunityType,
   categoryName: string | null | undefined,
+  opts?: DocumentAccessOpts,
 ): boolean {
   const normalizedKey = normalizeCategoryName(categoryName);
-  return canAccessCategory(role, communityType, normalizedKey);
+  return canAccessCategory(role, communityType, normalizedKey, opts);
 }

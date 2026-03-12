@@ -28,6 +28,8 @@ export default async function DocumentsPage({ params }: PageProps) {
       communityId={communityId}
       userId={userId}
       userRole={membership.role}
+      isUnitOwner={membership.isUnitOwner}
+      permissions={membership.permissions}
     />
   );
 }

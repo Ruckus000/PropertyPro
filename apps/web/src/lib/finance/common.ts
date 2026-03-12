@@ -1,17 +1,9 @@
 import { userRoles, type ScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import type { CommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
-
-const FINANCE_ADMIN_WRITE_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
 
 export function requireFinanceEnabled(membership: CommunityMembership): void {
   const features = getFeaturesForCommunity(membership.communityType);
@@ -21,15 +13,15 @@ export function requireFinanceEnabled(membership: CommunityMembership): void {
 }
 
 export function requireFinanceReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'finances', 'read');
+  requirePermission(membership, 'finances', 'read');
 }
 
 export function requireFinanceWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'finances', 'write');
+  requirePermission(membership, 'finances', 'write');
 }
 
 export function requireFinanceAdminWrite(membership: CommunityMembership): void {
-  if (!FINANCE_ADMIN_WRITE_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only finance administrators can perform this action');
   }
 }
