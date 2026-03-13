@@ -120,7 +120,7 @@ describe('community-export', () => {
 
     it('joins user details from unscoped lookup', async () => {
       const roleRows = [
-        { userId: 'u1', role: 'owner', unitId: 10, createdAt: new Date('2026-01-01T00:00:00Z') },
+        { userId: 'u1', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner', unitId: 10, createdAt: new Date('2026-01-01T00:00:00Z') },
       ];
       const unitRows = [{ id: 10, unitNumber: 'A101' }];
       const scoped = makeScopedClient();
@@ -142,7 +142,7 @@ describe('community-export', () => {
 
     it('handles missing user gracefully', async () => {
       const roleRows = [
-        { userId: 'u-gone', role: 'tenant', unitId: null, createdAt: new Date('2026-02-01') },
+        { userId: 'u-gone', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', unitId: null, createdAt: new Date('2026-02-01') },
       ];
       // unitId is null → only userRoles selectFrom fires; units query skipped
       const scoped = makeScopedClient(roleRows);

@@ -39,7 +39,7 @@ describe('MobileHomePage', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'owner',
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityId: 1,
       userId: 'user-1',
       communityType: 'condo_718',

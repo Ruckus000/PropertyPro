@@ -143,6 +143,10 @@ export async function seedUsers(
     await scoped.insert(state.dbModule.userRoles, {
       userId,
       role: fixture.role,
+      isUnitOwner: fixture.isUnitOwner,
+      displayTitle: fixture.displayTitle,
+      presetKey: fixture.presetKey ?? null,
+      permissions: fixture.permissions ?? null,
       unitId: unitIds?.get(fixture.key) ?? null,
     });
   }

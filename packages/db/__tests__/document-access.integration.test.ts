@@ -132,7 +132,7 @@ describeDb('document access control (integration, strict matrix)', () => {
 
     const rows = await getAccessibleDocuments({
       communityId: condoId,
-      role: 'tenant',
+      role: 'resident', isUnitOwner: false,
       communityType: 'condo_718',
     });
     const names = rows.map((r) => r['fileName']);
@@ -164,7 +164,7 @@ describeDb('document access control (integration, strict matrix)', () => {
 
     const rows = await getAccessibleDocuments({
       communityId: apartmentId,
-      role: 'tenant',
+      role: 'resident', isUnitOwner: false,
       communityType: 'apartment',
     });
     const names = rows.map((r) => r['fileName']);
@@ -190,14 +190,14 @@ describeDb('document access control (integration, strict matrix)', () => {
 
     const restricted = await getDocumentWithAccessCheck({
       communityId: condoId,
-      role: 'tenant',
+      role: 'resident', isUnitOwner: false,
       communityType: 'condo_718',
     }, docId);
     expect(restricted).toBeNull();
 
     const elevated = await getDocumentWithAccessCheck({
       communityId: condoId,
-      role: 'owner',
+      role: 'resident', isUnitOwner: true,
       communityType: 'condo_718',
     }, docId);
     expect(elevated).not.toBeNull();

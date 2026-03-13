@@ -46,6 +46,10 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/api/user-communities', () => ({
+  listCommunitiesForUser: vi.fn().mockResolvedValue([]),
+}));
+
 import { POST } from '../../src/app/api/v1/import-residents/route';
 
 describe('p1-19 import-residents route', () => {

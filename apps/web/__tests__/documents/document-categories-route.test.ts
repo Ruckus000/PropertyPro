@@ -39,7 +39,7 @@ describe('document categories route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-123',
       communityId: 42,
-      role: 'owner',
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
     });
     createScopedClientMock.mockReturnValue({

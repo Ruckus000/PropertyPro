@@ -78,7 +78,7 @@ describe("NavRail", () => {
     it("renders active indicator", () => {
       renderNavRail({ activeView: "dashboard" });
       const active = screen.getByLabelText("Dashboard");
-      expect(active.querySelector(".w-\\[3px\\]")).toBeTruthy();
+      expect(active.querySelector(".w-\\[4px\\]")).toBeTruthy();
     });
   });
 
@@ -123,15 +123,15 @@ describe("NavRail", () => {
     it("uses expanded width classes", () => {
       renderNavRail({ expanded: true });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-60");
-      expect(nav.className).toContain("min-w-60");
+      expect(nav.className).toContain("w-[260px]");
+      expect(nav.className).toContain("min-w-[260px]");
     });
 
     it("uses collapsed width classes", () => {
       renderNavRail({ expanded: false });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-16");
-      expect(nav.className).toContain("min-w-16");
+      expect(nav.className).toContain("w-[72px]");
+      expect(nav.className).toContain("min-w-[72px]");
     });
 
     it("label container toggles opacity class", () => {

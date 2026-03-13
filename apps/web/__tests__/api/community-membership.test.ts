@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createScopedClientMock,
-  scopedQueryMock,
+  scopedSelectFromMock,
   communitiesTable,
   userRolesTable,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
-  scopedQueryMock: vi.fn(),
+  scopedSelectFromMock: vi.fn(),
   communitiesTable: Symbol('communities'),
   userRolesTable: Symbol('user_roles'),
 }));
@@ -25,14 +25,14 @@ describe('requireCommunityMembership', () => {
     vi.clearAllMocks();
 
     createScopedClientMock.mockReturnValue({
-      query: scopedQueryMock,
+      selectFrom: scopedSelectFromMock,
     });
   });
 
   it('returns typed membership when role and community type are valid', async () => {
-    scopedQueryMock.mockImplementation(async (table: unknown) => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
       if (table === userRolesTable) {
-        return [{ userId: 'user-1', role: 'owner' }];
+        return [{ userId: 'user-1', role: 'resident', isUnitOwner: true, displayTitle: 'Owner' }];
       }
 
       if (table === communitiesTable) {
@@ -48,14 +48,19 @@ describe('requireCommunityMembership', () => {
       userId: 'user-1',
       communityId: 42,
       communityName: '',
-      role: 'owner',
+      role: 'resident',
+      isAdmin: false,
+      isUnitOwner: true,
+      displayTitle: 'Owner',
       communityType: 'condo_718',
       timezone: 'America/New_York',
+      permissions: undefined,
+      presetKey: undefined,
     });
   });
 
   it('throws DATA_INTEGRITY_ERROR when role is invalid', async () => {
-    scopedQueryMock.mockImplementation(async (table: unknown) => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
       if (table === userRolesTable) {
         return [{ userId: 'user-1', role: 'superadmin' }];
       }
@@ -74,9 +79,9 @@ describe('requireCommunityMembership', () => {
   });
 
   it('throws DATA_INTEGRITY_ERROR when community type is invalid', async () => {
-    scopedQueryMock.mockImplementation(async (table: unknown) => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
       if (table === userRolesTable) {
-        return [{ userId: 'user-1', role: 'owner' }];
+        return [{ userId: 'user-1', role: 'resident', isUnitOwner: true, displayTitle: 'Owner' }];
       }
 
       if (table === communitiesTable) {

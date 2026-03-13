@@ -5,6 +5,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
+const FULL_PERMISSIONS = {
+  resources: {
+    documents: { read: true, write: true },
+    meetings: { read: true, write: true },
+    announcements: { read: true, write: true },
+    compliance: { read: true, write: true },
+    residents: { read: true, write: true },
+    financial: { read: true, write: true },
+    maintenance: { read: true, write: true },
+    violations: { read: true, write: true },
+    leases: { read: true, write: true },
+    contracts: { read: true, write: true },
+    polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true },
+  },
+};
+
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
@@ -51,10 +67,6 @@ const MOCK_VISITORS = [
   { id: 2, visitorName: 'Bob', purpose: 'Delivery', passCode: 'SECRET-XYZ-789', hostUnitId: 10 },
 ];
 
-function makeMembership(role: string) {
-  return { role, communityId: 1, userId: 'user-1', communityType: 'apartment' };
-}
-
 describe('visitors GET — passCode field stripping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,7 +76,10 @@ describe('visitors GET — passCode field stripping', () => {
   });
 
   it('strips passCode from response for tenant role', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('tenant'));
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);
@@ -80,7 +95,10 @@ describe('visitors GET — passCode field stripping', () => {
   });
 
   it('strips passCode from response for owner role', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('owner'));
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);
@@ -92,20 +110,28 @@ describe('visitors GET — passCode field stripping', () => {
     }
   });
 
-  it('preserves passCode for board_member role (not a resident role)', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('board_member'));
+  it('preserves passCode for manager role (not a resident role)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member',
+      permissions: FULL_PERMISSIONS,
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    // board_member is not in RESIDENT_ROLES (owner, tenant), so passCode is preserved
+    // manager is not 'resident', so passCode is preserved
     expect(json.data[0].passCode).toBe('SECRET-ABC-123');
   });
 
   it('preserves passCode in response for cam (staff) role', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('cam'));
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam',
+      permissions: FULL_PERMISSIONS,
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);
@@ -118,7 +144,11 @@ describe('visitors GET — passCode field stripping', () => {
   });
 
   it('preserves passCode in response for site_manager role', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('site_manager'));
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager',
+      permissions: FULL_PERMISSIONS,
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);
@@ -129,7 +159,10 @@ describe('visitors GET — passCode field stripping', () => {
   });
 
   it('preserves passCode in response for property_manager_admin role', async () => {
-    requireCommunityMembershipMock.mockResolvedValue(makeMembership('property_manager_admin'));
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'pm_admin', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin',
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1');
     const res = await GET(req);

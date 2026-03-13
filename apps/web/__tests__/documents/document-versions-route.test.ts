@@ -13,7 +13,7 @@ const {
   getAccessibleDocumentsMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    role: 'owner',
+    role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
     communityType: 'condo_718',
   }),
 }));

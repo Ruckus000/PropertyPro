@@ -69,13 +69,13 @@ import type {
 const COMMUNITY_ID = 5;
 
 const baseRoleRows = [
-  { userId: 'u-owner', role: 'owner' },
-  { userId: 'u-board', role: 'board_member' },
-  { userId: 'u-president', role: 'board_president' },
-  { userId: 'u-cam', role: 'cam' },
-  { userId: 'u-tenant', role: 'tenant' },
-  { userId: 'u-site-mgr', role: 'site_manager' },
-  { userId: 'u-pm-admin', role: 'property_manager_admin' },
+  { userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' },
+  { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-president', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' },
+  { userId: 'u-site-mgr', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-pm-admin', role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin' },
 ];
 
 const baseUserRows = [
@@ -232,7 +232,7 @@ describe('notification-service', () => {
       ];
       const rolesWithDeleted = [
         ...baseRoleRows,
-        { userId: 'u-deleted', role: 'owner' },
+        { userId: 'u-deleted', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' },
       ];
 
       setupMock(rolesWithDeleted, usersWithDeleted, []);
@@ -249,7 +249,7 @@ describe('notification-service', () => {
   describe('sendNotification', () => {
     it('sends meeting notice emails and returns count', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [],
       );
@@ -278,7 +278,7 @@ describe('notification-service', () => {
 
     it('sends maintenance update emails', async () => {
       setupMock(
-        [{ userId: 'u-tenant', role: 'tenant' }],
+        [{ userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' }],
         [{ id: 'u-tenant', email: 'tenant@example.com', fullName: 'Tenant', deletedAt: null }],
         [],
       );
@@ -302,7 +302,7 @@ describe('notification-service', () => {
 
     it('sends compliance alert emails', async () => {
       setupMock(
-        [{ userId: 'u-cam', role: 'cam' }],
+        [{ userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } }],
         [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
         [],
       );
@@ -325,7 +325,7 @@ describe('notification-service', () => {
 
     it('sends document posted emails', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [],
       );
@@ -348,7 +348,7 @@ describe('notification-service', () => {
 
     it('returns 0 when no eligible recipients', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [{ userId: 'u-owner', emailFrequency: 'immediate', emailAnnouncements: true, emailMeetings: false, inAppEnabled: true }],
       );
@@ -369,7 +369,7 @@ describe('notification-service', () => {
 
     it('queues digest rows instead of sending immediate emails for digest frequency', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [
           {
@@ -408,7 +408,7 @@ describe('notification-service', () => {
 
     it('suppresses non-critical notifications for frequency=never', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [
           {
@@ -440,7 +440,7 @@ describe('notification-service', () => {
 
     it('falls back to immediate when digest preference exists but event has no sourceId', async () => {
       setupMock(
-        [{ userId: 'u-cam', role: 'cam' }],
+        [{ userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } }],
         [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
         [
           {
@@ -468,7 +468,7 @@ describe('notification-service', () => {
 
     it('logs audit event with notification_sent action after sending', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [],
       );
@@ -502,7 +502,7 @@ describe('notification-service', () => {
 
     it('does not log audit event when no actorUserId provided', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [],
       );
@@ -520,7 +520,7 @@ describe('notification-service', () => {
 
     it('includes List-Unsubscribe by passing non-transactional category', async () => {
       setupMock(
-        [{ userId: 'u-owner', role: 'owner' }],
+        [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],
         [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
         [],
       );
@@ -547,8 +547,8 @@ describe('notification-service', () => {
     it('continues sending when one email fails', async () => {
       setupMock(
         [
-          { userId: 'u-owner', role: 'owner' },
-          { userId: 'u-board', role: 'board_member' },
+          { userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' },
+          { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
         ],
         [
           { id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null },
