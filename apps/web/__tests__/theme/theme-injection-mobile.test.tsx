@@ -97,12 +97,10 @@ describe('Mobile theme injection — toCssVars', () => {
 });
 
 describe('Mobile theme injection — toFontLinks', () => {
-  it('returns Google Fonts URLs for default Inter font', () => {
+  it('returns empty array for default Inter font (self-hosted via next/font)', () => {
     const theme = resolveTheme(null, 'Default', 'condo_718');
     const links = toFontLinks(theme);
-    expect(links.length).toBeGreaterThan(0);
-    expect(links[0]).toContain('fonts.googleapis.com');
-    expect(links[0]).toContain('Inter');
+    expect(links).toHaveLength(0);
   });
 
   it('returns separate font links for different heading and body fonts', () => {

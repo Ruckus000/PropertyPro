@@ -97,12 +97,12 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     communityCId = insertedCommunities.find((row) => row.slug === COMMUNITY_C_SLUG)!.id;
 
     await db.insert(userRoles).values([
-      { userId: pmUserId, communityId: communityAId, role: 'property_manager_admin' },
-      { userId: pmUserId, communityId: communityBId, role: 'property_manager_admin' },
-      { userId: outsiderUserId, communityId: communityCId, role: 'board_member' },
-      { userId: submittedByUserId, communityId: communityAId, role: 'tenant' },
-      { userId: submittedByUserId, communityId: communityBId, role: 'tenant' },
-      { userId: deletedOnlyPmUserId, communityId: communityCId, role: 'property_manager_admin' },
+      { userId: pmUserId, communityId: communityAId, role: 'pm_admin', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
+      { userId: pmUserId, communityId: communityBId, role: 'pm_admin', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
+      { userId: outsiderUserId, communityId: communityCId, role: 'manager', isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+      { userId: submittedByUserId, communityId: communityAId, role: 'resident', isUnitOwner: false, displayTitle: 'Tenant' },
+      { userId: submittedByUserId, communityId: communityBId, role: 'resident', isUnitOwner: false, displayTitle: 'Tenant' },
+      { userId: deletedOnlyPmUserId, communityId: communityCId, role: 'pm_admin', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
     ]);
   });
 

@@ -126,16 +126,16 @@ export function NavRail({
         {isActive && (
           <div
             aria-hidden="true"
-            className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-[6px] bg-[var(--interactive-primary)] dark:bg-blue-400"
+            className="absolute left-0 top-1/2 h-7 w-[4px] -translate-y-1/2 rounded-r-[6px] bg-[var(--interactive-primary)] dark:bg-blue-400"
           />
         )}
 
-        <div className="relative size-5">
+        <div className="relative size-[22px]">
           <div className="flex size-full items-center justify-center" aria-hidden="true">
             <Icon
-              size={20}
-              color={isActive ? "#FFFFFF" : "rgba(255, 255, 255, 0.6)"}
-              strokeWidth={isActive ? 2 : 1.5}
+              size={22}
+              color={isActive ? "#FFFFFF" : "rgba(255, 255, 255, 0.85)"}
+              strokeWidth={isActive ? 2 : 1.75}
             />
           </div>
 
@@ -158,8 +158,8 @@ export function NavRail({
         >
           <span
             className={cn(
-              "truncate text-sm",
-              isActive ? "font-medium text-white" : "font-normal text-white/70 dark:text-gray-300",
+              "truncate text-[0.9375rem] leading-snug",
+              isActive ? "font-semibold text-white" : "font-medium text-white/85 dark:text-gray-200",
             )}
           >
             {navItem.label}
@@ -183,10 +183,10 @@ export function NavRail({
 
   const itemClassName = (isActive: boolean) =>
     cn(
-      "relative flex h-11 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
+      "relative flex h-12 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
       isActive
-        ? "bg-white/10 text-[var(--text-inverse)]"
-        : "bg-transparent text-white/60 hover:bg-white/5 hover:text-white/80 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200",
+        ? "bg-white/[0.15] text-[var(--text-inverse)]"
+        : "bg-transparent text-white/85 hover:bg-white/[0.07] hover:text-white dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-200",
     );
 
   return (
@@ -194,7 +194,7 @@ export function NavRail({
       aria-label="Main navigation"
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--surface-inverse)] text-[var(--text-inverse)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] dark:bg-gray-900",
-        expanded ? "w-60 min-w-60" : "w-16 min-w-16",
+        expanded ? "w-[260px] min-w-[260px]" : "w-[72px] min-w-[72px]",
       )}
     >
       {header}

@@ -9,6 +9,8 @@ import {
 } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
+// Note: BOARD_ROLES from shared still use legacy role names.
+// The isAudienceMatch function below uses new role names + presetKey directly.
 import {
   isDigestFrequency,
   isNeverFrequency,
@@ -39,19 +41,22 @@ interface Recipient {
   frequency?: Extract<EmailFrequency, 'daily_digest' | 'weekly_digest'>;
 }
 
-const BOARD_ROLES = new Set(['board_member', 'board_president']);
-
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return 'http://localhost:3000';
 }
 
-function isAudienceMatch(role: string, audience: AnnouncementAudience): boolean {
+function isAudienceMatch(role: string, audience: AnnouncementAudience, opts?: { isUnitOwner?: boolean; presetKey?: string }): boolean {
   if (audience === 'all') return true;
-  if (audience === 'owners_only') return role === 'owner';
-  if (audience === 'board_only') return BOARD_ROLES.has(role);
-  if (audience === 'tenants_only') return role === 'tenant';
+  if (audience === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
+  if (audience === 'board_only') {
+    if (role === 'manager') {
+      return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
+    }
+    return false;
+  }
+  if (audience === 'tenants_only') return role === 'resident' && opts?.isUnitOwner !== true;
   return false;
 }
 
@@ -109,8 +114,10 @@ async function resolveRecipients(
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
+    const isUnitOwner = row['isUnitOwner'] === true;
+    const presetKey = row['presetKey'] as string | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isAudienceMatch(role, audience)) continue;
+    if (!isAudienceMatch(role, audience, { isUnitOwner, presetKey })) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? {
       emailAnnouncements: true,

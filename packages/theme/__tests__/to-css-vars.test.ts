@@ -16,6 +16,7 @@ describe('toCssVars', () => {
 
     expect(cssVars).toEqual({
       '--theme-primary': '#2563EB',
+      '--theme-primary-hover': '#1f54c8',
       '--theme-secondary': '#6B7280',
       '--theme-accent': '#DBEAFE',
       '--theme-font-heading': 'Inter',

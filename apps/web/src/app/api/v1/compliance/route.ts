@@ -64,7 +64,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
   const membership = await requireCommunityMembership(communityId, userId);
   requireCondoCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'compliance', 'read');
+  requirePermission(membership, 'compliance', 'read');
 
   const scoped = createScopedClient(communityId);
 
@@ -114,7 +114,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Feature gate: compliance is only available for condo/HOA communities
   requireCondoCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'compliance', 'write');
+  requirePermission(membership, 'compliance', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -219,7 +219,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   requireCondoCommunity(membership.communityType);
-  requirePermission(membership.role, membership.communityType, 'compliance', 'write');
+  requirePermission(membership, 'compliance', 'write');
 
   const scoped = createScopedClient(communityId);
 

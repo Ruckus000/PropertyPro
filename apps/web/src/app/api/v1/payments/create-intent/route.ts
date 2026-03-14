@@ -37,7 +37,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   await requireActiveSubscriptionForMutation(communityId);
 
   let allowedUnitId: number | undefined;
-  if (membership.role === 'owner') {
+  if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitId = await findActorUnitId(communityId, actorUserId);
     if (!actorUnitId) {
       throw new ForbiddenError('No unit association found for this owner');

@@ -18,8 +18,10 @@ import {
 } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { ALLOWED_FONTS } from '@propertypro/theme';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { updateBrandingForCommunity } from '@/lib/api/branding';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -47,7 +49,19 @@ import {
 } from '@/lib/onboarding/wizard-common';
 
 const WIZARD_TYPE = 'condo';
-const MAX_STEP_INDEX = 2; // 0 Statutory, 1 Profile, 2 Units
+const MAX_STEP_INDEX = 3; // 0 Statutory, 1 Profile, 2 Branding, 3 Units
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const allowedFontsSet = new Set<string>(ALLOWED_FONTS);
+
+const brandingSchema = z.object({
+    presetId: z.string().nullable().optional(),
+    primaryColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
+    secondaryColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
+    accentColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
+    fontHeading: z.string().refine((v) => allowedFontsSet.has(v), 'Invalid font'),
+    fontBody: z.string().refine((v) => allowedFontsSet.has(v), 'Invalid font'),
+});
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -118,7 +132,7 @@ const patchWizardSchema = z
     })
     .refine((payload) => payload.step !== undefined || payload.currentStep !== undefined, {
         path: ['step'],
-        message: 'step (0-2) or currentStep (1-3) is required',
+        message: 'step (0-3) or currentStep (1-4) is required',
     });
 
 const completeWizardSchema = z.object({
@@ -258,16 +272,24 @@ function validateStepPatch(step: number, rawStepData: unknown): Partial<CondoWiz
         return { profile: profileSchema.parse(normalized.profile) as ProfileStepData };
     }
 
+    if (step === 2) {
+        if (normalized.branding === undefined) {
+            throw new ValidationError('stepData.branding is required for step 2');
+        }
+        return { branding: brandingSchema.parse(normalized.branding) };
+    }
+
     if (normalized.units === undefined) {
-        throw new ValidationError('stepData.units is required for step 2');
+        throw new ValidationError('stepData.units is required for step 3');
     }
     const parsedUnits = z.array(unitSchema).min(1).parse(normalized.units) as UnitDraftData[];
     return { units: parsedUnits };
 }
 
-function sectionLabelForStep(step: number): 'statutory' | 'profile' | 'units' {
+function sectionLabelForStep(step: number): 'statutory' | 'profile' | 'branding' | 'units' {
     if (step === 0) return 'statutory';
     if (step === 1) return 'profile';
+    if (step === 2) return 'branding';
     return 'units';
 }
 
@@ -336,6 +358,16 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
     if (step === 1 && mergedStepData.profile) {
         await updateCommunityProfile(scoped, communityId, mergedStepData.profile);
+    }
+
+    if (step === 2 && mergedStepData.branding) {
+        await updateBrandingForCommunity(communityId, {
+            primaryColor: mergedStepData.branding.primaryColor,
+            secondaryColor: mergedStepData.branding.secondaryColor,
+            accentColor: mergedStepData.branding.accentColor,
+            fontHeading: mergedStepData.branding.fontHeading,
+            fontBody: mergedStepData.branding.fontBody,
+        });
     }
 
     const existingLastStep = wizard.lastCompletedStep ?? -1;

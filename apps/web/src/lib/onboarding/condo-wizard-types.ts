@@ -4,6 +4,7 @@
  * Canonical JSONB shape in onboarding_wizard_state.stepData:
  * - statutory
  * - profile
+ * - branding
  * - units
  * - completionMarkers
  */
@@ -43,9 +44,19 @@ export type CompletionMarkers = {
     unitsCreated?: boolean;
 };
 
+export interface BrandingStepData {
+    presetId?: string | null;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    fontHeading: string;
+    fontBody: string;
+}
+
 export interface CondoWizardStepData {
     statutory?: StatutoryStepData;
     profile?: ProfileStepData;
+    branding?: BrandingStepData;
     units?: UnitDraftData[];
     completionMarkers?: CompletionMarkers;
 }
@@ -106,9 +117,14 @@ export function normalizeCondoWizardStepData(input: unknown): CondoWizardStepDat
         ? (input.completionMarkers as CompletionMarkers)
         : undefined;
 
+    const branding = isRecord(input.branding)
+        ? (input.branding as unknown as BrandingStepData)
+        : undefined;
+
     return {
         statutory,
         profile,
+        branding,
         units,
         completionMarkers,
     };
@@ -123,6 +139,7 @@ export function normalizeCondoWizardStepPatch(input: unknown): Partial<CondoWiza
 
     if (normalized.statutory !== undefined) patch.statutory = normalized.statutory;
     if (normalized.profile !== undefined) patch.profile = normalized.profile;
+    if (normalized.branding !== undefined) patch.branding = normalized.branding;
     if (normalized.units !== undefined) patch.units = normalized.units;
     if (normalized.completionMarkers !== undefined) {
         patch.completionMarkers = normalized.completionMarkers;

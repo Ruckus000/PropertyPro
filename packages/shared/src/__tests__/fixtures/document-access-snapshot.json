@@ -1,0 +1,260 @@
+{
+  "condo_718": {
+    "owner": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "tenant": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "board_member": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "board_president": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "cam": {
+      "declaration": false,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "site_manager": {
+      "declaration": false,
+      "rules": false,
+      "inspection_reports": false,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "property_manager_admin": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    }
+  },
+  "hoa_720": {
+    "owner": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "tenant": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "board_member": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "board_president": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "cam": {
+      "declaration": false,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "site_manager": {
+      "declaration": false,
+      "rules": false,
+      "inspection_reports": false,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "property_manager_admin": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    }
+  },
+  "apartment": {
+    "owner": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "tenant": {
+      "declaration": false,
+      "rules": true,
+      "inspection_reports": false,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": false
+    },
+    "board_member": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "board_president": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    },
+    "cam": {
+      "declaration": false,
+      "rules": false,
+      "inspection_reports": false,
+      "meeting_minutes": false,
+      "announcements": false,
+      "maintenance_records": false,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "site_manager": {
+      "declaration": false,
+      "rules": true,
+      "inspection_reports": false,
+      "meeting_minutes": false,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": false,
+      "community_handbook": false,
+      "move_in_out_docs": false,
+      "unknown": false
+    },
+    "property_manager_admin": {
+      "declaration": true,
+      "rules": true,
+      "inspection_reports": true,
+      "meeting_minutes": true,
+      "announcements": true,
+      "maintenance_records": true,
+      "lease_docs": true,
+      "community_handbook": true,
+      "move_in_out_docs": true,
+      "unknown": true
+    }
+  }
+}

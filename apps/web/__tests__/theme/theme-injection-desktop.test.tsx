@@ -78,16 +78,16 @@ describe('Desktop theme injection — toCssVars', () => {
 });
 
 describe('Desktop theme injection — toFontLinks', () => {
-  it('returns Google Fonts stylesheet link', () => {
+  it('returns empty array for default Inter font (self-hosted via next/font)', () => {
     const theme = resolveTheme(null, 'Test', 'condo_718');
     const links = toFontLinks(theme);
-    expect(links.every((l) => l.startsWith('https://fonts.googleapis.com'))).toBe(true);
+    expect(links).toHaveLength(0);
   });
 
-  it('includes font weight variants in links', () => {
-    const theme = resolveTheme(null, 'Test', 'condo_718');
+  it('includes font weight variants in links for non-Inter fonts', () => {
+    const theme = resolveTheme({ fontHeading: 'Poppins', fontBody: 'Lato' }, 'Test', 'condo_718');
     const links = toFontLinks(theme);
-    // Should include multiple weights (400, 500, 600, 700)
+    expect(links.length).toBeGreaterThan(0);
     expect(links[0]).toContain('wght@');
   });
 

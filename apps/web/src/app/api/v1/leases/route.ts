@@ -206,10 +206,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Unit not found in this community');
   }
 
-  // Validate resident has a tenant role in this community
+  // Validate resident has a tenant (non-owner resident) role in this community
   const roleRows = await scoped.query(userRoles);
   const residentRole = roleRows.find(
-    (row) => row['userId'] === payload.residentId && row['role'] === 'tenant',
+    (row) => row['userId'] === payload.residentId && row['role'] === 'resident' && row['isUnitOwner'] !== true,
   );
   if (!residentRole) {
     throw new ValidationError('Resident must have a tenant role in this community');

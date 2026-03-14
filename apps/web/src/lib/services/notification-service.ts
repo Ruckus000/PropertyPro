@@ -20,6 +20,8 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
+// Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
+// The isRoleMatch function below uses new role names + presetKey directly.
 import {
   getDefaultPreferences,
   isDigestFrequency,
@@ -109,9 +111,6 @@ interface RecipientDelivery extends Recipient {
 // Constants
 // ---------------------------------------------------------------------------
 
-const BOARD_ROLES = new Set(['board_member', 'board_president']);
-const ADMIN_ROLES = new Set(['board_member', 'board_president', 'cam', 'site_manager', 'property_manager_admin']);
-
 const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   meeting_notice: 'meeting',
   maintenance_update: 'maintenance',
@@ -129,11 +128,20 @@ function getBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
-function isRoleMatch(role: string, filter: RecipientFilter, userId: string): boolean {
+function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; presetKey?: string }): boolean {
   if (filter === 'all') return true;
-  if (filter === 'owners_only') return role === 'owner';
-  if (filter === 'board_only') return BOARD_ROLES.has(role);
-  if (filter === 'community_admins') return ADMIN_ROLES.has(role);
+  if (filter === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
+  if (filter === 'board_only') {
+    // Board roles: manager with board preset (board_member or board_president)
+    if (role === 'manager') {
+      return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
+    }
+    return false;
+  }
+  if (filter === 'community_admins') {
+    // Admin roles: manager + pm_admin
+    return role === 'manager' || role === 'pm_admin';
+  }
   if (typeof filter === 'object' && filter.type === 'specific_user') return userId === filter.userId;
   return false;
 }
@@ -303,8 +311,10 @@ async function resolveRecipientDeliveries(
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
+    const isUnitOwner = row['isUnitOwner'] === true;
+    const presetKey = row['presetKey'] as string | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter, userId)) continue;
+    if (!isRoleMatch(role, filter, userId, { isUnitOwner, presetKey })) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
 

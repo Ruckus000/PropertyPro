@@ -51,6 +51,7 @@ export * from './demo-instances';
 export * from './onboarding-wizard-state';
 export * from './rls-config';
 export * from './site-blocks';
+export * from './esign';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -293,3 +294,27 @@ export type NewPlatformAdminUser = typeof platformAdminUsers.$inferInsert;
 // Site Blocks
 export type SiteBlock = typeof siteBlocks.$inferSelect;
 export type NewSiteBlock = typeof siteBlocks.$inferInsert;
+
+// E-Signature Templates
+import type { esignTemplates } from './esign';
+export type EsignTemplate = typeof esignTemplates.$inferSelect;
+export type NewEsignTemplate = typeof esignTemplates.$inferInsert;
+
+// E-Signature Submissions
+import type { esignSubmissions } from './esign';
+export type EsignSubmission = typeof esignSubmissions.$inferSelect;
+export type NewEsignSubmission = typeof esignSubmissions.$inferInsert;
+
+// E-Signature Signers
+import type { esignSigners } from './esign';
+export type EsignSigner = typeof esignSigners.$inferSelect;
+export type NewEsignSigner = typeof esignSigners.$inferInsert;
+
+// E-Signature Events (append-only)
+import type { esignEvents } from './esign';
+export type EsignEvent = typeof esignEvents.$inferSelect;
+
+// E-Signature Consent
+import type { esignConsent } from './esign';
+export type EsignConsentRecord = typeof esignConsent.$inferSelect;
+export type NewEsignConsentRecord = typeof esignConsent.$inferInsert;

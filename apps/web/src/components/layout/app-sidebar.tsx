@@ -68,7 +68,7 @@ export function AppSidebar({
     <div className="my-1 px-3">
       <div className="border-t border-white/10 dark:border-gray-800" />
       <span
-        className={`mt-2 block text-[11px] font-semibold uppercase tracking-wider text-white/40 transition-opacity duration-150 dark:text-gray-500 ${expanded ? 'opacity-100' : 'opacity-0'}`}
+        className={`mt-2 block text-xs font-semibold uppercase tracking-wider text-white/60 transition-opacity duration-150 dark:text-gray-500 ${expanded ? 'opacity-100' : 'opacity-0'}`}
       >
         Admin
       </span>
@@ -78,15 +78,15 @@ export function AppSidebar({
   // Brand header
   const header = (
     <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-3 dark:border-gray-800">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary,#2563EB)]">
-        <Building size={18} color="white" />
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary,#2563EB)]">
+        <Building size={20} color="white" />
       </div>
       <div
         className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}
       >
-        <span className="text-sm font-medium text-white">PropertyPro</span>
+        <span className="text-[15px] font-semibold text-white">PropertyPro</span>
         {communityName && (
-          <span className="truncate text-[11px] text-white/50">{communityName}</span>
+          <span className="truncate text-xs text-white/70">{communityName}</span>
         )}
       </div>
     </div>
@@ -96,15 +96,15 @@ export function AppSidebar({
   const footer = userName ? (
     <div className="border-t border-white/10 px-3 py-3 dark:border-gray-800">
       <div className="flex items-center gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-medium text-white">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white">
           {toInitials(userName)}
         </div>
         <div
           className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}
         >
-          <span className="truncate text-[11px] font-medium text-white">{userName}</span>
+          <span className="truncate text-xs font-medium text-white">{userName}</span>
           {role && (
-            <span className="truncate text-[11px] text-white/50">
+            <span className="truncate text-xs text-white/65">
               {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </span>
           )}

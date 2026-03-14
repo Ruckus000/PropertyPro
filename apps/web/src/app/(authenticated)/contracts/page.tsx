@@ -10,16 +10,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
 import { ContractTable } from '@/components/contracts/ContractTable';
-
-const ADMIN_ROLES = new Set([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -50,8 +42,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
-  // Admin role check
-  if (!ADMIN_ROLES.has(membership.role)) {
+  if (!isAdminRole(membership.role)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 

@@ -79,7 +79,7 @@ export function BottomTabBar({ features, communityId }: BottomTabBarProps) {
             aria-current={active ? 'page' : undefined}
             aria-label={tab.label}
           >
-            <Icon size={20} strokeWidth={active ? 2.5 : 1.8} aria-hidden="true" />
+            <Icon size={24} strokeWidth={active ? 2.5 : 1.8} aria-hidden="true" />
             <span>{tab.label}</span>
           </Link>
         );

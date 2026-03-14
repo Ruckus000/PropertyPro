@@ -68,6 +68,7 @@ export class UnscopedMutationError extends Error {
  */
 const SOFT_DELETE_EXEMPT_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
+  'esign_events',
 ]);
 
 /**
@@ -78,6 +79,7 @@ const SOFT_DELETE_EXEMPT_TABLES: ReadonlySet<string> = new Set([
 const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
   'maintenance_comments',
+  'esign_events',
 ]);
 
 /**

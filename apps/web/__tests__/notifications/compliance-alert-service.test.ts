@@ -57,7 +57,7 @@ function setupMock(
   const query = vi.fn(async (table: unknown) => {
     if (table === tables.complianceChecklistItems) return checklistRows;
     if (table === tables.userRoles) {
-      return [{ userId: 'u-cam', role: 'cam' }];
+      return [{ userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } }];
     }
     if (table === tables.users) {
       return [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }];

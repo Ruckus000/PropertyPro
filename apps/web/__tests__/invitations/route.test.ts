@@ -80,7 +80,7 @@ describe('p1-20 invitation auth flow', () => {
         { id: 'user-1', email: 'resident@example.com', fullName: 'Jane Resident' },
       ])
       // user_roles
-      .mockResolvedValueOnce([{ id: 1, userId: 'user-1', role: 'owner' }]);
+      .mockResolvedValueOnce([{ id: 1, userId: 'user-1', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }]);
 
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'POST',

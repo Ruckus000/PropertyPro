@@ -57,7 +57,7 @@ describe('p1-09 compliance route', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'board_president',
+      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
       communityType: 'condo_718',
     });
     getComplianceTemplateMock.mockImplementation((communityType: string) => {
@@ -98,7 +98,7 @@ describe('p1-09 compliance route', () => {
 
   it('POST apartment returns 403', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
-      role: 'site_manager',
+      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
       communityType: 'apartment',
     });
 
@@ -361,7 +361,7 @@ describe('p1-09 compliance route', () => {
 
   it('GET returns 403 for condo tenant (RBAC compliance.read denied)', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
-      role: 'tenant',
+      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
       communityType: 'condo_718',
     });
 

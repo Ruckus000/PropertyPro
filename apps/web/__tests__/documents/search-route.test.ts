@@ -10,7 +10,7 @@ const {
   searchDocumentsMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    role: 'owner',
+    role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
     communityType: 'condo_718',
   }),
 }));
@@ -67,7 +67,8 @@ describe('p1-14 document search route', () => {
         communityId: 42,
         query: 'minutes',
         limit: 10,
-        role: 'owner',
+        role: 'resident',
+        isUnitOwner: true,
         communityType: 'condo_718',
       }),
     );

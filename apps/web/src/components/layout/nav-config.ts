@@ -18,7 +18,7 @@ import {
   Building2,
   Paintbrush,
 } from 'lucide-react';
-import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
+import { ADMIN_ROLES, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
 export interface NavItemConfig {
   id: string;
@@ -34,14 +34,6 @@ export interface NavItemConfig {
   /** Pathname prefixes used for active-state matching. */
   matchPrefixes: readonly string[];
 }
-
-const ADMIN_ROLES: readonly CommunityRole[] = [
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-];
 
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   // ── Main ──

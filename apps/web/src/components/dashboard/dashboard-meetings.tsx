@@ -22,7 +22,7 @@ export function DashboardMeetings({ items, timezone }: DashboardMeetingsProps) {
       <h2 className="text-lg font-semibold text-gray-900">Upcoming Meetings</h2>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
-          <p className="text-sm text-gray-600">No upcoming meetings.</p>
+          <p className="text-base text-gray-600">No upcoming meetings.</p>
         ) : (
           items.map((item) => (
             <article key={item.id} className="rounded-md border border-gray-100 p-3">

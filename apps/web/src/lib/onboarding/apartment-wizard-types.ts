@@ -3,6 +3,7 @@
  *
  * Canonical JSONB shape in onboarding_wizard_state.stepData:
  * - profile
+ * - branding
  * - units
  * - rules
  * - invite
@@ -53,8 +54,18 @@ export type CompletionMarkers = {
   inviteCreated?: boolean;
 };
 
+export interface BrandingStepData {
+  presetId?: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  fontHeading: string;
+  fontBody: string;
+}
+
 export interface WizardStepData {
   profile?: ProfileStepData;
+  branding?: BrandingStepData;
   units?: UnitDraftData[];
   rules?: RulesStepData | null;
   invite?: InviteStepData | null;
@@ -126,8 +137,13 @@ export function normalizeWizardStepData(input: unknown): WizardStepData {
     ? (input.completionMarkers as CompletionMarkers)
     : undefined;
 
+  const branding = isRecord(input.branding)
+    ? (input.branding as unknown as BrandingStepData)
+    : undefined;
+
   return {
     profile,
+    branding,
     units,
     rules,
     invite,
@@ -143,6 +159,7 @@ export function normalizeWizardStepPatch(input: unknown): Partial<WizardStepData
   const patch: Partial<WizardStepData> = {};
 
   if (normalized.profile !== undefined) patch.profile = normalized.profile;
+  if (normalized.branding !== undefined) patch.branding = normalized.branding;
   if (normalized.units !== undefined) patch.units = normalized.units;
   if (normalized.rules !== undefined) patch.rules = normalized.rules;
   if (normalized.invite !== undefined) patch.invite = normalized.invite;

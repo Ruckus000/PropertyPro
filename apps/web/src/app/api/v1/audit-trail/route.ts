@@ -193,7 +193,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership.role, membership.communityType, 'audit', 'read');
+  requirePermission(membership, 'audit', 'read');
 
   // --- Cursor-based pagination params (validated before DB query) ---
   const cursor = searchParams.get('cursor');

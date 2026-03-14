@@ -108,7 +108,7 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
 
   const query = vi.fn().mockImplementation(async (table: unknown) => {
     if (table === userRolesTableMock) {
-      return [{ userId: 'user-abc', role: 'board_president', communityId: 42 }];
+      return [{ userId: 'user-abc', role: 'manager', isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } }, communityId: 42 }];
     }
     return [];
   });
@@ -118,7 +118,7 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
       return makeChainableBuilder(defaultAuditRows);
     }
     if (table === userRolesTableMock) {
-      return makeChainableBuilder([{ userId: 'user-abc', role: 'board_president', communityId: 42 }]);
+      return makeChainableBuilder([{ userId: 'user-abc', role: 'manager', isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } }, communityId: 42 }]);
     }
     return makeChainableBuilder([]);
   });
@@ -137,7 +137,7 @@ describe('p3-53 audit trail route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'session-user-1',
       communityId: 42,
-      role: 'board_president',
+      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
       communityType: 'condo_718',
     });
     createScopedClientMock.mockReturnValue(makeDefaultScopedClient());
@@ -152,7 +152,7 @@ describe('p3-53 audit trail route', () => {
       requireCommunityMembershipMock.mockResolvedValue({
         userId: 'session-user-1',
         communityId: 42,
-        role: 'owner',
+        role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
         communityType: 'condo_718',
       });
 
@@ -165,7 +165,7 @@ describe('p3-53 audit trail route', () => {
       requireCommunityMembershipMock.mockResolvedValue({
         userId: 'session-user-1',
         communityId: 42,
-        role: 'tenant',
+        role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
         communityType: 'condo_718',
       });
 
@@ -175,15 +175,28 @@ describe('p3-53 audit trail route', () => {
     });
 
     it.each([
-      'board_member',
-      'board_president',
-      'cam',
-      'property_manager_admin',
-    ] as const)('returns 200 for %s role in condo_718', async (role) => {
+      { label: 'board_member', presetKey: 'board_member', displayTitle: 'Board Member' },
+      { label: 'board_president', presetKey: 'board_president', displayTitle: 'Board President' },
+      { label: 'cam', presetKey: 'cam', displayTitle: 'Community Manager' },
+    ] as const)('returns 200 for $label role in condo_718', async ({ presetKey, displayTitle }) => {
       requireCommunityMembershipMock.mockResolvedValue({
         userId: 'session-user-1',
         communityId: 42,
-        role,
+        role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle, presetKey,
+        permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        communityType: 'condo_718',
+      });
+
+      const req = new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42');
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 200 for property_manager_admin role in condo_718', async () => {
+      requireCommunityMembershipMock.mockResolvedValue({
+        userId: 'session-user-1',
+        communityId: 42,
+        role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin',
         communityType: 'condo_718',
       });
 
@@ -196,7 +209,7 @@ describe('p3-53 audit trail route', () => {
       requireCommunityMembershipMock.mockResolvedValue({
         userId: 'session-user-1',
         communityId: 42,
-        role: 'site_manager',
+        role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
         communityType: 'apartment',
       });
 

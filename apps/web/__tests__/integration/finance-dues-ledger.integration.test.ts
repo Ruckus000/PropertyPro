@@ -125,7 +125,9 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     });
     await scopedA.insert(state.dbModule.userRoles, {
       userId: ownerAUserId,
-      role: 'owner',
+      role: 'resident',
+      isUnitOwner: true,
+      displayTitle: 'Owner',
       unitId: unitAId,
     });
     trackUserForCleanup(state, ownerAUserId);

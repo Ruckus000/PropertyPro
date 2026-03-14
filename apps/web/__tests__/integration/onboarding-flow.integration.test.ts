@@ -178,23 +178,32 @@ describeDb('onboarding flow (db-backed integration)', () => {
     );
     expect(patchStep0.status).toBe(200);
 
-    const patchStep1 = await appRoutes.onboarding.PATCH(
+    const patchBranding = await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 1,
-        stepData: { units: unitsData },
+        stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
       }),
     );
-    expect(patchStep1.status).toBe(200);
+    expect(patchBranding.status).toBe(200);
 
     const patchStep2 = await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 2,
-        stepData: { rules: rulesData },
+        stepData: { units: unitsData },
       }),
     );
     expect(patchStep2.status).toBe(200);
+
+    const patchStep3 = await appRoutes.onboarding.PATCH(
+      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
+        communityId: communityC.id,
+        step: 3,
+        stepData: { rules: rulesData },
+      }),
+    );
+    expect(patchStep3.status).toBe(200);
 
     const resumeGet = await appRoutes.onboarding.GET(
       new NextRequest(apiUrl(`/api/v1/onboarding/apartment?communityId=${communityC.id}`)),
@@ -212,20 +221,20 @@ describeDb('onboarding flow (db-backed integration)', () => {
       };
     }>(resumeGet);
 
-    expect(resumeJson.data.lastCompletedStep).toBe(2);
-    expect(resumeJson.data.nextStep).toBe(3);
+    expect(resumeJson.data.lastCompletedStep).toBe(3);
+    expect(resumeJson.data.nextStep).toBe(4);
     expect(resumeJson.data.stepData.profile?.name).toBe(profileData.name);
     expect(resumeJson.data.stepData.units).toHaveLength(2);
     expect(resumeJson.data.stepData.rules).toEqual(rulesData);
 
-    const patchStep3 = await appRoutes.onboarding.PATCH(
+    const patchStep4 = await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
-        step: 3,
+        step: 4,
         stepData: { invite: inviteData },
       }),
     );
-    expect(patchStep3.status).toBe(200);
+    expect(patchStep4.status).toBe(200);
 
     const complete = await appRoutes.onboarding.POST(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
@@ -384,20 +393,27 @@ describeDb('onboarding flow (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 1,
-        stepData: { units: unitsData },
+        stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
       }),
     );
     await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 2,
-        stepData: { rules: null },
+        stepData: { units: unitsData },
       }),
     );
     await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 3,
+        stepData: { rules: null },
+      }),
+    );
+    await appRoutes.onboarding.PATCH(
+      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
+        communityId: communityC.id,
+        step: 4,
         stepData: { invite: inviteData },
       }),
     );

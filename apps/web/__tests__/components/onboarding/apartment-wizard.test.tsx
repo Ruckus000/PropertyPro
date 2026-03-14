@@ -79,15 +79,15 @@ describe('apartment wizard', () => {
     expect(currentStep?.textContent).toBe('1');
   });
 
-  it('resume from lastCompletedStep=1 lands on rules step', async () => {
+  it('resume from lastCompletedStep=2 lands on rules step', async () => {
     await act(async () => {
       root.render(
         <ApartmentWizard
           communityId={42}
           initialState={{
             status: 'in_progress',
-            lastCompletedStep: 1,
-            nextStep: 2,
+            lastCompletedStep: 2,
+            nextStep: 3,
             completedAt: null,
             stepData: {
               profile: {
@@ -115,7 +115,7 @@ describe('apartment wizard', () => {
     expect(heading?.textContent).toBe('Upload Rules Document');
 
     const currentStep = container.querySelector('[aria-current="step"]');
-    expect(currentStep?.textContent).toBe('3');
+    expect(currentStep?.textContent).toBe('4');
   });
 
   it('skip wizard sends canonical POST action=skip', async () => {
@@ -161,14 +161,14 @@ describe('apartment wizard', () => {
           communityId={42}
           initialState={{
             status: 'in_progress',
-            lastCompletedStep: 1,
-            nextStep: 2,
+            lastCompletedStep: 2,
+            nextStep: 3,
             completedAt: null,
             stepData: {
               units: [{ unitNumber: '101' }],
             },
           }}
-        />, 
+        />,
       );
       await flushEffects();
     });
@@ -199,8 +199,8 @@ describe('apartment wizard', () => {
           communityId={42}
           initialState={{
             status: 'in_progress',
-            lastCompletedStep: 2,
-            nextStep: 3,
+            lastCompletedStep: 3,
+            nextStep: 4,
             completedAt: null,
             stepData: {
               units: [{ unitNumber: '101' }],
@@ -238,8 +238,8 @@ describe('apartment wizard', () => {
           communityId={42}
           initialState={{
             status: 'in_progress',
-            lastCompletedStep: 2,
-            nextStep: 3,
+            lastCompletedStep: 3,
+            nextStep: 4,
             completedAt: null,
             stepData: {
               units: [{ unitNumber: '101' }],
@@ -266,7 +266,7 @@ describe('apartment wizard', () => {
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('PATCH');
     expect(firstCallBody).toEqual({
       communityId: 42,
-      step: 3,
+      step: 4,
       stepData: {
         invite: null,
       },

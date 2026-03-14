@@ -57,7 +57,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
-  if (membership.role !== 'property_manager_admin') {
+  if (membership.role !== 'pm_admin') {
     throw new ForbiddenError('Only property managers can access branding settings');
   }
 
@@ -88,7 +88,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
-  if (membership.role !== 'property_manager_admin') {
+  if (membership.role !== 'pm_admin') {
     throw new ForbiddenError('Only property managers can update branding settings');
   }
 

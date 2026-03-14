@@ -1,35 +1,10 @@
 import { userRoles, type ScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import type { CommunityRole } from '@propertypro/shared';
+import type { NewCommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
-
-const WORK_ORDER_ADMIN_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-const AMENITY_ADMIN_ROLES = new Set<CommunityRole>([
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-const RESERVATION_ALLOWED_ROLES = new Set<CommunityRole>([
-  'owner',
-  'tenant',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
-
-const RESIDENT_ROLES = new Set<CommunityRole>(['owner', 'tenant']);
 
 export function requireWorkOrdersEnabled(membership: CommunityMembership): void {
   const features = getFeaturesForCommunity(membership.communityType);
@@ -46,41 +21,40 @@ export function requireAmenitiesEnabled(membership: CommunityMembership): void {
 }
 
 export function requireWorkOrdersReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'work_orders', 'read');
+  requirePermission(membership, 'work_orders', 'read');
 }
 
 export function requireWorkOrdersWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'work_orders', 'write');
+  requirePermission(membership, 'work_orders', 'write');
 }
 
 export function requireWorkOrderAdminWrite(membership: CommunityMembership): void {
-  if (!WORK_ORDER_ADMIN_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only work order administrators can perform this action');
   }
 }
 
 export function requireAmenitiesReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'amenities', 'read');
+  requirePermission(membership, 'amenities', 'read');
 }
 
 export function requireAmenitiesWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'amenities', 'write');
+  requirePermission(membership, 'amenities', 'write');
 }
 
 export function requireAmenityAdminWrite(membership: CommunityMembership): void {
-  if (!AMENITY_ADMIN_ROLES.has(membership.role)) {
+  if (!membership.isAdmin) {
     throw new ForbiddenError('Only amenity administrators can perform this action');
   }
 }
 
-export function requireReservationPermission(membership: CommunityMembership): void {
-  if (!RESERVATION_ALLOWED_ROLES.has(membership.role)) {
-    throw new ForbiddenError('This role cannot create amenity reservations');
-  }
+export function requireReservationPermission(_membership: CommunityMembership): void {
+  // All roles (resident, manager, pm_admin) can make amenity reservations.
+  // This guard is retained for call-site compatibility.
 }
 
-export function isResidentRole(role: CommunityRole): boolean {
-  return RESIDENT_ROLES.has(role);
+export function isResidentRole(role: NewCommunityRole): boolean {
+  return role === 'resident';
 }
 
 export async function getActorUnitIds(

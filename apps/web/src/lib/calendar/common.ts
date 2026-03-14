@@ -19,11 +19,11 @@ export function requireCalendarSyncEnabledForMembership(
 export function requireCalendarSyncReadPermission(
   membership: CommunityMembership,
 ): void {
-  requirePermission(membership.role, membership.communityType, 'calendar_sync', 'read');
+  requirePermission(membership, 'calendar_sync', 'read');
 }
 
 export function requireCalendarSyncWritePermission(
   membership: CommunityMembership,
 ): void {
-  requirePermission(membership.role, membership.communityType, 'calendar_sync', 'write');
+  requirePermission(membership, 'calendar_sync', 'write');
 }

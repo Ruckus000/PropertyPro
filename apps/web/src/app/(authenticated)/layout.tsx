@@ -5,6 +5,7 @@ import { getFeaturesForCommunity, COMMUNITY_TYPES, COMMUNITY_ROLES } from '@prop
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { createServerClient } from '@/lib/supabase/server';
+import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { AppShell, type AppShellUser, type AppShellCommunity } from '@/components/layout/app-shell';
@@ -22,17 +23,9 @@ async function resolveUser(): Promise<AppShellUser | null> {
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    // Fetch profile from users table for fullName
-    const { data: profile } = await supabase
-      .from('users')
-      .select('full_name')
-      .eq('id', user.id)
-      .limit(1)
-      .single();
-
     return {
       id: user.id,
-      fullName: profile?.full_name ?? null,
+      fullName: (user.user_metadata?.full_name as string) ?? null,
       email: user.email ?? null,
     };
   } catch (error) {
@@ -43,7 +36,8 @@ async function resolveUser(): Promise<AppShellUser | null> {
 
 /**
  * Resolve community context from middleware-injected headers.
- * Accepts the already-resolved userId to avoid a duplicate auth call.
+ * Uses Drizzle (via listCommunitiesForUser) instead of PostgREST since
+ * the authenticated role does not have table-level grants.
  * Returns null when no community is selected.
  */
 async function resolveCommunity(
@@ -57,30 +51,12 @@ async function resolveCommunity(
   if (!Number.isInteger(communityId) || communityId <= 0) return null;
 
   try {
-    const supabase = await createServerClient();
+    const communities = await listCommunitiesForUser(userId);
+    const match = communities.find((c) => c.communityId === communityId);
+    if (!match) return null;
 
-    // Fetch community info and user role in parallel
-    const [communityResult, roleResult] = await Promise.all([
-      supabase
-        .from('communities')
-        .select('id, name, community_type')
-        .eq('id', communityId)
-        .is('deleted_at', null)
-        .limit(1)
-        .single(),
-      supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('community_id', communityId)
-        .limit(1)
-        .single(),
-    ]);
-
-    if (!communityResult.data || !roleResult.data) return null;
-
-    const communityType = communityResult.data.community_type;
-    const role = roleResult.data.role;
+    const communityType = match.communityType;
+    const role = match.role;
     if (
       !COMMUNITY_TYPES.includes(communityType as CommunityType) ||
       !COMMUNITY_ROLES.includes(role as CommunityRole)
@@ -90,8 +66,8 @@ async function resolveCommunity(
 
     return {
       community: {
-        id: communityResult.data.id,
-        name: communityResult.data.name,
+        id: match.communityId,
+        name: match.communityName,
         type: communityType as CommunityType,
       },
       role: role as CommunityRole,

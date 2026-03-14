@@ -54,7 +54,7 @@ vi.mock('file-type', () => ({
 
 import { GET, PATCH } from '../../src/app/api/v1/pm/branding/route';
 
-const PM_MEMBERSHIP = { role: 'property_manager_admin', communityId: 1, userId: 'pm-1', communityType: 'condo_718' };
+const PM_MEMBERSHIP = { role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin', communityId: 1, userId: 'pm-1', communityType: 'condo_718' };
 
 describe('pm branding route', () => {
   beforeEach(() => {
@@ -90,7 +90,7 @@ describe('pm branding route', () => {
     });
 
     it('returns 403 for non-PM user', async () => {
-      requireCommunityMembershipMock.mockResolvedValueOnce({ ...PM_MEMBERSHIP, role: 'owner' });
+      requireCommunityMembershipMock.mockResolvedValueOnce({ ...PM_MEMBERSHIP, role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' });
       const req = new NextRequest('http://localhost/api/v1/pm/branding?communityId=1');
       const res = await GET(req);
       expect(res.status).toBe(403);
@@ -142,7 +142,7 @@ describe('pm branding route', () => {
     });
 
     it('returns 403 for non-PM user', async () => {
-      requireCommunityMembershipMock.mockResolvedValueOnce({ ...PM_MEMBERSHIP, role: 'board_member' });
+      requireCommunityMembershipMock.mockResolvedValueOnce({ ...PM_MEMBERSHIP, role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } });
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },

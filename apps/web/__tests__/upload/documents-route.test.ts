@@ -29,7 +29,7 @@ const {
   documentsTable: Symbol('documents'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    role: 'owner',
+    role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
     communityType: 'condo_718',
   }),
   queuePdfExtractionMock: vi.fn(),
@@ -68,6 +68,12 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 import { GET, POST, DELETE } from '../../src/app/api/v1/documents/route';
 
+const MANAGER_MEMBERSHIP = {
+  role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president',
+  communityType: 'condo_718',
+  permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+};
+
 describe('p1-11 documents route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,6 +105,7 @@ describe('p1-11 documents route', () => {
   });
 
   it('POST creates document metadata with scoped client and audit log', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
     scopedInsertMock.mockResolvedValue([
       {
         id: 99,
@@ -165,8 +172,10 @@ describe('p1-11 documents route', () => {
     expect(res.status).toBe(200);
     expect(getAccessibleDocumentsMock).toHaveBeenCalledWith({
       communityId: 8,
-      role: 'owner',
+      role: 'resident',
       communityType: 'condo_718',
+      isUnitOwner: true,
+      permissions: undefined,
     }, undefined);
     expect(json.data).toHaveLength(2);
   });
@@ -181,8 +190,10 @@ describe('p1-11 documents route', () => {
     expect(getAccessibleDocumentsMock).toHaveBeenCalledWith(
       {
         communityId: 8,
-        role: 'owner',
+        role: 'resident',
         communityType: 'condo_718',
+        isUnitOwner: true,
+        permissions: undefined,
       },
       expect.any(Object),
     );
@@ -232,6 +243,7 @@ describe('p1-11 documents route', () => {
   });
 
   it('POST returns 422, deletes object, and audits when file size does not match', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
       method: 'POST',
       headers: {
@@ -262,6 +274,7 @@ describe('p1-11 documents route', () => {
   });
 
   it('POST returns 422, deletes object, and audits when magic bytes validation fails', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -314,7 +327,7 @@ describe('p1-11 documents route', () => {
 
   it('GET requires community membership', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(
-      new ForbiddenError('You are not a member of this community'),
+      new ForbiddenError('User is not a member of this community'),
     );
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents?communityId=8');
@@ -328,7 +341,7 @@ describe('p1-15 documents route DELETE', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
-    requireCommunityMembershipMock.mockResolvedValue({ role: 'owner', communityType: 'condo_718' });
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner', communityType: 'condo_718' });
 
     createScopedClientMock.mockReturnValue({
       insert: scopedInsertMock,
@@ -409,7 +422,7 @@ describe('p1-15 documents route DELETE', () => {
 
   it('DELETE requires community membership', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(
-      new ForbiddenError('You are not a member of this community'),
+      new ForbiddenError('User is not a member of this community'),
     );
 
     const req = new NextRequest(
@@ -424,7 +437,7 @@ describe('p1-15 documents route DELETE', () => {
 
   it('DELETE rejects restricted roles', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
-      role: 'tenant',
+      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
       communityType: 'condo_718',
     });
 
@@ -505,6 +518,7 @@ describe('p1-11 documents route — additional coverage', () => {
 
   describe('subscription guard enforcement', () => {
     it('POST returns 403 when guard throws SUBSCRIPTION_REQUIRED', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
       requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
         new AppError('Your subscription is no longer active. Please reactivate to continue.', 403, 'SUBSCRIPTION_REQUIRED'),
       );
@@ -540,6 +554,7 @@ describe('p1-11 documents route — additional coverage', () => {
     });
 
     it('POST returns 400 when storage fetch returns non-ok (magic bytes validation path)', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
       // downloadStorageBytes throws ValidationError (400) when fetch returns !ok.
       // deleteStorageObject is NOT called in this code path (throws before rejectInvalidUpload).
       vi.stubGlobal(
@@ -570,6 +585,7 @@ describe('p1-11 documents route — additional coverage', () => {
     });
 
     it('POST handles deleteStorageObject throwing during cleanup and still returns 422', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
       // Stub EXE magic bytes to trigger rejectInvalidUpload
       vi.stubGlobal(
         'fetch',

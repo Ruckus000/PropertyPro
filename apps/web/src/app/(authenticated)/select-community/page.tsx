@@ -7,13 +7,28 @@ export const metadata = {
   title: 'Select Community | PropertyPro',
 };
 
+/**
+ * Community picker page.
+ *
+ * Tenants belong to exactly one community and are always auto-redirected —
+ * they never see the picker. Users with management roles (owner, board member,
+ * CAM, PM, etc.) who belong to multiple communities see the picker grid.
+ */
 export default async function SelectCommunityPage() {
   const userId = await requireAuthenticatedUserId();
   const communities = await listCommunitiesForUser(userId);
 
+  // Single community — auto-redirect regardless of role.
   if (communities.length === 1) {
-    const only = communities[0]!;
-    redirect(`/dashboard?communityId=${only.communityId}`);
+    redirect(`/dashboard?communityId=${communities[0]!.communityId}`);
+  }
+
+  // Tenants belong to exactly one community. If a tenant somehow has
+  // multiple memberships (data anomaly), route them to the first one
+  // rather than showing the picker.
+  const allTenant = communities.length > 0 && communities.every((c) => c.role === 'resident' && !c.isUnitOwner);
+  if (allTenant) {
+    redirect(`/dashboard?communityId=${communities[0]!.communityId}`);
   }
 
   return (

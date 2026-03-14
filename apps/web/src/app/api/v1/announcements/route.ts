@@ -122,7 +122,7 @@ export const POST = withErrorHandler(
 
       const userId = await requireAuthenticatedUserId();
       const membership = await requireCommunityMembership(communityId, userId);
-      requirePermission(membership.role, membership.communityType, 'announcements', 'write');
+      requirePermission(membership, 'announcements', 'write');
       await requireActiveSubscriptionForMutation(communityId);
 
       return { userId, communityId };

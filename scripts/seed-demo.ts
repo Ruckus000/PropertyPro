@@ -70,7 +70,7 @@ const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> 
 
 const CROSS_COMMUNITY_ASSIGNMENTS: Array<{ slug: DemoCommunitySlug; email: string; role: CanonicalRole }> = [
   { slug: 'palm-shores-hoa', email: 'owner.one@sunset.local', role: 'owner' },
-  { slug: 'palm-shores-hoa', email: 'tenant.one@sunset.local', role: 'tenant' },
+  // Tenants are excluded: a tenant belongs to exactly one community.
   { slug: 'palm-shores-hoa', email: 'cam.one@sunset.local', role: 'cam' },
   { slug: 'palm-shores-hoa', email: 'pm.admin@sunset.local', role: 'property_manager_admin' },
 ];

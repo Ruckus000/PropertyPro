@@ -3,16 +3,16 @@
 /**
  * Condo Onboarding Wizard — P2-39
  *
- * 3-step flow:
- * 0 Statutory -> 1 Profile -> 2 Units
+ * 4-step flow:
+ * 0 Statutory -> 1 Profile -> 2 Branding -> 3 Units
  */
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProgressIndicator } from './progress-indicator';
 import { StatutoryDocumentsStep } from './steps/statutory-documents-step';
-import { ProfileStep, UnitsStep } from './steps';
-import type { UnitData } from './steps';
+import { ProfileStep, UnitsStep, BrandingStep } from './steps';
+import type { UnitData, BrandingStepData } from './steps';
 import type {
     CondoWizardStatePayload,
     StatutoryStepData,
@@ -26,7 +26,7 @@ interface CondoWizardProps {
     initialState?: CondoWizardStatePayload;
 }
 
-const STEP_TITLES = ['Statutory Documents', 'Community Profile', 'Unit Roster'];
+const STEP_TITLES = ['Statutory Documents', 'Community Profile', 'Branding', 'Unit Roster'];
 
 interface ApiErrorResponse {
     error?: string | { code?: string; message?: string };
@@ -138,9 +138,18 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
         }
     }
 
+    async function handleBrandingNext(data: BrandingStepData): Promise<void> {
+        try {
+            await saveStep(2, { branding: data });
+        } catch (saveError) {
+            setError(saveError instanceof Error ? saveError.message : 'Failed to save branding step');
+            setIsSaving(false);
+        }
+    }
+
     async function handleUnitsNext(units: UnitData[]): Promise<void> {
         try {
-            await saveStep(2, { units });
+            await saveStep(3, { units });
             await completeWizard('complete');
         } catch (saveError) {
             setError(saveError instanceof Error ? saveError.message : 'Failed to save units step');
@@ -156,7 +165,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
         <div className="mx-auto max-w-4xl px-6 py-8">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Welcome to PropertyPro</h1>
-                <p className="mt-2 text-gray-600">Set up your community compliance and profile in three quick steps.</p>
+                <p className="mt-2 text-gray-600">Set up your community compliance and profile in four quick steps.</p>
             </div>
 
             <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
@@ -191,9 +200,17 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                 )}
 
                 {currentStep === 2 && (
+                    <BrandingStep
+                        onNext={handleBrandingNext}
+                        onBack={() => setCurrentStep(1)}
+                        initialData={stepData.branding}
+                    />
+                )}
+
+                {currentStep === 3 && (
                     <UnitsStep
                         onNext={handleUnitsNext}
-                        onBack={() => setCurrentStep(1)}
+                        onBack={() => setCurrentStep(2)}
                         initialData={stepData.units}
                     />
                 )}

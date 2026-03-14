@@ -143,7 +143,7 @@ async function resolveUnitResidents(
   );
 
   return rows
-    .filter((row) => row.role === 'owner' || row.role === 'tenant')
+    .filter((row) => row.role === 'resident')
     .map((row) => row.userId);
 }
 

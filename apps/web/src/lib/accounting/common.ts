@@ -11,9 +11,9 @@ export function requireAccountingEnabled(membership: CommunityMembership): void 
 }
 
 export function requireAccountingReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'accounting', 'read');
+  requirePermission(membership, 'accounting', 'read');
 }
 
 export function requireAccountingWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership.role, membership.communityType, 'accounting', 'write');
+  requirePermission(membership, 'accounting', 'write');
 }

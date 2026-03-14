@@ -19,7 +19,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const rawEndDate = searchParams.get('endDate');
 
   let unitId: number | undefined;
-  if (membership.role === 'owner') {
+  if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitId = await findActorUnitId(communityId, actorUserId);
     if (!actorUnitId) {
       throw new ForbiddenError('No unit association found for this owner');

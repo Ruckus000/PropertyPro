@@ -8,6 +8,10 @@ const COMMUNITY_TYPE_COLORS: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
+  resident: 'Resident',
+  manager: 'Manager',
+  pm_admin: 'Property Manager',
+  // Legacy labels (backward compat during migration)
   owner: 'Owner',
   tenant: 'Tenant',
   board_member: 'Board Member',
@@ -16,6 +20,16 @@ const ROLE_LABELS: Record<string, string> = {
   site_manager: 'Site Manager',
   property_manager_admin: 'Property Manager',
 };
+
+function getRoleLabel(community: UserCommunityRow): string {
+  if (community.displayTitle) {
+    return community.displayTitle;
+  }
+  if (community.role === 'resident') {
+    return community.isUnitOwner ? 'Owner' : 'Tenant';
+  }
+  return ROLE_LABELS[community.role] ?? community.role;
+}
 
 interface CommunityPickerGridProps {
   communities: UserCommunityRow[];
@@ -51,7 +65,7 @@ export function CommunityPickerGrid({ communities }: CommunityPickerGridProps) {
             )}
 
             <p className="mt-3 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              {ROLE_LABELS[community.role] ?? community.role}
+              {getRoleLabel(community)}
             </p>
           </a>
         </li>

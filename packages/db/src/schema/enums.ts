@@ -94,5 +94,17 @@ export const emailFrequencyEnum = pgEnum('email_frequency', [
   'never',
 ]);
 
+/**
+ * Simplified community-scoped roles (hybrid 4-role model).
+ * - resident: owner or tenant (distinguished by is_unit_owner flag)
+ * - manager: configurable permissions via JSONB (replaces board_member, board_president, cam, site_manager)
+ * - pm_admin: property manager admin (full access)
+ */
+export const userRoleV2Enum = pgEnum('user_role_v2', [
+  'resident',
+  'manager',
+  'pm_admin',
+]);
+
 /** Platform admin role. Only 'super_admin' exists today; enum enforces type safety and makes future roles explicit. */
 export const platformAdminRoleEnum = pgEnum('platform_admin_role', ['super_admin']);

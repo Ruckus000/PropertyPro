@@ -58,6 +58,8 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
     communityId,
     role: membership!.role,
     communityType: membership!.communityType,
+    isUnitOwner: membership!.isUnitOwner,
+    permissions: membership!.permissions,
   });
 
   return (

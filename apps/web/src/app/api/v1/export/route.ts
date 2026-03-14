@@ -41,7 +41,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership.role, membership.communityType, 'settings', 'read');
+  requirePermission(membership, 'settings', 'read');
 
   // Run all four exports in parallel
   const [residents, documents, maintenance, announcements] = await Promise.all([

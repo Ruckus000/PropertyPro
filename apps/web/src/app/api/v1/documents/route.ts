@@ -18,6 +18,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
 import { isElevatedRole } from '@propertypro/shared';
+import { requirePermission } from '@/lib/db/access-control';
 import { queueNotification } from '@/lib/services/notification-service';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 
@@ -125,6 +126,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       communityId: effectiveCommunityId,
       role: membership.role,
       communityType: membership.communityType,
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
     },
     categoryId != null ? eq(documents.categoryId, categoryId) : undefined,
   );
@@ -146,7 +149,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const payload = parseResult.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
-  await requireCommunityMembership(effectiveCommunityId, userId);
+  const membership = await requireCommunityMembership(effectiveCommunityId, userId);
+  requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
   const storageBytes = await downloadStorageBytes(payload.filePath);
@@ -293,7 +297,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   const { id } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
-  if (!isElevatedRole(membership.role)) {
+  if (!isElevatedRole(membership.role, { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions })) {
     throw new ForbiddenError('Only elevated roles can delete documents');
   }
   await requireActiveSubscriptionForMutation(communityId);

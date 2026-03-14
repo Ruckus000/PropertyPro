@@ -34,7 +34,7 @@ export async function resolvePmDashboardTarget(
     const membership = await requireCommunityMembership(communityId, userId);
 
     // Require property_manager_admin role specifically
-    if (membership.role !== 'property_manager_admin') {
+    if (membership.role !== 'pm_admin') {
       return null;
     }
 
