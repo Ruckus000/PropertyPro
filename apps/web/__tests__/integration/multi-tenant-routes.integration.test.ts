@@ -597,7 +597,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       eq(kit.dbModule.userRoles.userId, importedUserId),
     );
     expect(rolesA).toHaveLength(1);
-    expect(rolesA[0]?.['role']).toBe('board_member');
+    expect(rolesA[0]?.['role']).toBe('manager');
 
     // Verify imported user has no roles in communityB.
     const scopedB = kit.dbModule.createScopedClient(communityB.id);

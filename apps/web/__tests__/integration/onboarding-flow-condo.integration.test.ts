@@ -233,15 +233,25 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
         );
         expect(patchStep1.status).toBe(200);
 
-        // Step 2: Units
-        const patchStep2 = await appRoutes.onboarding.PATCH(
+        // Step 2: Branding
+        const patchBranding = await appRoutes.onboarding.PATCH(
             jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
                 communityId: communityA.id,
                 step: 2,
+                stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
+            }),
+        );
+        expect(patchBranding.status).toBe(200);
+
+        // Step 3: Units
+        const patchStep3 = await appRoutes.onboarding.PATCH(
+            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
+                communityId: communityA.id,
+                step: 3,
                 stepData: { units: unitsData },
             }),
         );
-        expect(patchStep2.status).toBe(200);
+        expect(patchStep3.status).toBe(200);
 
         // Resume from GET
         const resumeGet = await appRoutes.onboarding.GET(
@@ -260,8 +270,8 @@ describeDb('condo onboarding flow (db-backed integration)', () => {
             };
         }>(resumeGet);
 
-        expect(resumeJson.data.lastCompletedStep).toBe(2);
-        expect(resumeJson.data.nextStep).toBe(2); // max 2
+        expect(resumeJson.data.lastCompletedStep).toBe(3);
+        expect(resumeJson.data.nextStep).toBe(3); // max 3
         expect(resumeJson.data.stepData.profile?.name).toBe(profileData.name);
         expect(resumeJson.data.stepData.units).toHaveLength(2);
 

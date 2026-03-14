@@ -55,12 +55,12 @@ const config: Config = {
       },
       colors: {
         primary: {
-          DEFAULT: 'var(--brand-primary)',
-          hover: 'var(--brand-primary-hover)',
+          DEFAULT: 'var(--interactive-primary)',
+          hover: 'var(--interactive-primary-hover)',
           light: 'var(--brand-accent)',
         },
         secondary: {
-          DEFAULT: 'var(--brand-secondary)',
+          DEFAULT: 'var(--text-secondary)',
         },
         accent: {
           DEFAULT: 'var(--brand-accent)',

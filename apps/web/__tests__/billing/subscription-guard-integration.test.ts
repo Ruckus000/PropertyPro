@@ -46,11 +46,7 @@ const {
   announcementsTableMock: { id: Symbol('announcements.id') },
   usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    role: 'board_member',
-    communityType: 'condo_718',
-    timezone: 'America/New_York',
-  }),
+  requireCommunityMembershipMock: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -104,6 +100,7 @@ vi.mock('@/lib/services/announcement-delivery', () => ({
 
 // Route import — after all mocks
 import { POST } from '../../src/app/api/v1/announcements/route';
+import { getPresetPermissions } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Helper: configure the real guard's DB mock
@@ -126,9 +123,17 @@ describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-p0-1');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'board_member',
+      userId: 'user-p0-1',
+      communityId: 1,
+      communityName: 'Test',
+      role: 'manager',
       communityType: 'condo_718',
       timezone: 'America/New_York',
+      isUnitOwner: false,
+      isAdmin: true,
+      displayTitle: 'Board Member',
+      presetKey: 'board_member',
+      permissions: getPresetPermissions('board_member', 'condo_718'),
     });
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockImplementation(async (table: unknown) => {
