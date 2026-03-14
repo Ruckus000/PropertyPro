@@ -6,7 +6,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Search, ChevronDown, Trash2, X } from 'lucide-react';
+import { Search, ChevronDown, Trash2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
 import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
@@ -24,6 +24,7 @@ interface Community {
   state: string | null;
   subscription_status: string | null;
   created_at: string;
+  complianceScore: number | null;
 }
 
 interface StaleDemo {
@@ -41,7 +42,8 @@ interface ClientPortfolioProps {
 export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc'>('name-asc');
+  const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc' | 'compliance-asc' | 'compliance-desc'>('name-asc');
+  const [complianceFilter, setComplianceFilter] = useState<'all' | 'at-risk' | 'healthy'>('all');
   const [page, setPage] = useState(1);
   const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
   const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
@@ -60,23 +62,31 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       result = result.filter((c) => c.community_type === typeFilter);
     }
 
+    if (complianceFilter === 'at-risk') {
+      result = result.filter((c) => c.complianceScore !== null && c.complianceScore < 70);
+    } else if (complianceFilter === 'healthy') {
+      result = result.filter((c) => c.complianceScore === null || c.complianceScore >= 70);
+    }
+
     result = [...result].sort((a, b) => {
       switch (sort) {
         case 'name-asc': return a.name.localeCompare(b.name);
         case 'name-desc': return b.name.localeCompare(a.name);
         case 'created-asc': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         case 'created-desc': return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'compliance-asc': return (a.complianceScore ?? 101) - (b.complianceScore ?? 101);
+        case 'compliance-desc': return (b.complianceScore ?? -1) - (a.complianceScore ?? -1);
         default: return 0;
       }
     });
 
     return result;
-  }, [communities, search, typeFilter, sort]);
+  }, [communities, search, typeFilter, complianceFilter, sort]);
 
   // Reset pagination when filters change.
   useEffect(() => {
     setPage(1);
-  }, [search, typeFilter]);
+  }, [search, typeFilter, complianceFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
@@ -163,6 +173,20 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
 
+        {/* Compliance filter */}
+        <div className="relative">
+          <select
+            value={complianceFilter}
+            onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'at-risk' | 'healthy')}
+            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="all">All compliance</option>
+            <option value="at-risk">At risk (&lt;70%)</option>
+            <option value="healthy">Healthy (≥70%)</option>
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
+
         {/* Sort */}
         <div className="relative">
           <select
@@ -174,6 +198,8 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             <option value="name-desc">Name (Z–A)</option>
             <option value="created-desc">Newest first</option>
             <option value="created-asc">Oldest first</option>
+            <option value="compliance-asc">Compliance (worst first)</option>
+            <option value="compliance-desc">Compliance (best first)</option>
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
@@ -211,13 +237,28 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                   </div>
 
                   <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
-                    {status ? (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-                        {status.label}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {status ? (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+                          {status.label}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                      {c.complianceScore !== null && (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          c.complianceScore >= 70
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {c.complianceScore < 70
+                            ? <AlertTriangle size={10} />
+                            : <ShieldCheck size={10} />
+                          }
+                          {c.complianceScore}%
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-400">
                       {format(new Date(c.created_at), 'MMM d, yyyy')}
                     </span>

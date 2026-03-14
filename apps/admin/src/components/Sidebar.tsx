@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  BarChart3,
   LayoutGrid,
   MonitorPlay,
   Settings,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
   { href: '/demo', label: 'Demos', icon: MonitorPlay },
   { href: '/settings', label: 'Settings', icon: Settings },

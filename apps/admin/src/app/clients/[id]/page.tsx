@@ -1,7 +1,7 @@
 /**
- * P1-6: Client Workspace shell.
+ * Client Workspace page.
  *
- * Shows community overview with tab navigation.
+ * Shows community overview with tab navigation (Overview, Members, Compliance, Settings).
  * Returns 404 if the community doesn't exist or is a demo.
  */
 import { notFound } from 'next/navigation';
@@ -26,14 +26,13 @@ const CommunityRowSchema = z.object({
   state: z.string().nullable(),
   zip_code: z.string().nullable(),
   address_line1: z.string().nullable(),
+  timezone: z.string(),
   subscription_status: z.string().nullable(),
   subscription_plan: z.string().nullable(),
+  transparency_enabled: z.boolean(),
+  community_settings: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string(),
   is_demo: z.boolean(),
-});
-
-const ComplianceRowSchema = z.object({
-  status: z.string(),
 });
 
 export default async function ClientWorkspacePage({ params }: PageProps) {
@@ -46,44 +45,50 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
 
   const db = createAdminClient();
 
-  // Fetch community first (need it to gate 404)
+  // Fetch community (need it to gate 404)
   const communityResult = await db
     .from('communities')
-    .select('id, name, slug, community_type, city, state, zip_code, address_line1, subscription_status, subscription_plan, created_at, is_demo')
+    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, transparency_enabled, community_settings, created_at, is_demo')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
 
-  // Validate data at runtime (untyped Supabase client returns `unknown`)
   const communityParse = CommunityRowSchema.safeParse(communityResult.data);
   if (!communityParse.success || communityParse.data.is_demo) {
     notFound();
   }
   const community = communityParse.data;
 
-  // Fetch counts and compliance in parallel to minimize round trips
+  // Fetch counts and compliance score in parallel
   const [membersResult, documentsResult, complianceResult] = await Promise.all([
     db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
     db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
-    db.from('compliance_items').select('status').eq('community_id', communityId),
+    // Use the actual table name (not the non-existent compliance_items view)
+    db.from('compliance_checklist_items')
+      .select('document_id, deadline, is_applicable')
+      .eq('community_id', communityId)
+      .is('deleted_at', null),
   ]);
 
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;
 
-  // Validate compliance data at runtime
-  const compliance = z.array(ComplianceRowSchema).parse(complianceResult.data ?? []);
-  const totalItems = compliance.length;
-  const metItems = compliance.filter((c) => c.status === 'met').length;
-  const complianceScore = totalItems > 0 ? Math.round((metItems / totalItems) * 100) : null;
+  // Compute compliance score the same way the compliance API does
+  const rows = (complianceResult.data ?? []) as { document_id: number | null; deadline: string | null; is_applicable: boolean }[];
+  const applicable = rows.filter((r) => r.is_applicable);
+  const met = applicable.filter((r) => r.document_id !== null);
+  const complianceScore = applicable.length > 0 ? Math.round((met.length / applicable.length) * 100) : null;
 
   return (
     <AdminLayout>
       <ClientWorkspace
         community={{
           ...community,
-          memberCount: memberCount ?? 0,
-          documentCount: documentCount ?? 0,
+          timezone: community.timezone,
+          transparency_enabled: community.transparency_enabled,
+          community_settings: (community.community_settings ?? {}) as Record<string, 'all_members' | 'admin_only'>,
+          memberCount,
+          documentCount,
           complianceScore,
         }}
       />
