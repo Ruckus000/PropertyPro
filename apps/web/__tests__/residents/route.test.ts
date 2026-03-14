@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { getPresetPermissions } from '@propertypro/shared';
+
+const MANAGER_PERMISSIONS = getPresetPermissions('board_member', 'condo_718');
 
 const {
   createScopedClientMock,
@@ -27,12 +30,7 @@ const {
   userRolesTable: Symbol('user_roles'),
   notificationPreferencesTable: Symbol('notification_preferences'),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    userId: 'actor-1',
-    communityId: 777,
-    role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
-    communityType: 'condo_718',
-  }),
+  requireCommunityMembershipMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -62,6 +60,17 @@ describe('p1-18 residents route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('actor-1');
+    requireCommunityMembershipMock.mockResolvedValue({
+      userId: 'actor-1',
+      communityId: 777,
+      role: 'manager',
+      isAdmin: true,
+      isUnitOwner: false,
+      displayTitle: 'Board Member',
+      presetKey: 'board_member',
+      permissions: MANAGER_PERMISSIONS,
+      communityType: 'condo_718',
+    });
 
     createScopedClientMock.mockReturnValue({
       query: scopedQueryMock,
@@ -112,7 +121,8 @@ describe('p1-18 residents route', () => {
         email: 'owner@example.com',
         fullName: 'Owner One',
         phone: null,
-        role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+        role: 'resident',
+        isUnitOwner: true,
         unitId: 12,
       }),
     });
@@ -128,6 +138,10 @@ describe('p1-18 residents route', () => {
       expect.objectContaining({
         role: 'resident',
         unitId: 12,
+        isUnitOwner: true,
+        displayTitle: 'Owner',
+        permissions: null,
+        presetKey: null,
       }),
     );
 
@@ -182,7 +196,8 @@ describe('p1-18 residents route', () => {
         email: 'board@example.com',
         fullName: 'Board One',
         phone: null,
-        role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        role: 'manager',
+        presetKey: 'board_member',
         unitId: null,
       }),
     });
@@ -204,7 +219,8 @@ describe('p1-18 residents route', () => {
         communityId: 42,
         email: 'owner@example.com',
         fullName: 'Owner One',
-        role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+        role: 'resident',
+        isUnitOwner: true,
         unitId: 12,
       }),
     });
@@ -217,7 +233,10 @@ describe('p1-18 residents route', () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       userId: 'actor-1',
       communityId: 42,
-      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+      role: 'resident',
+      isAdmin: false,
+      isUnitOwner: false,
+      displayTitle: 'Tenant',
       communityType: 'apartment',
     });
 

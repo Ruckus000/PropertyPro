@@ -14,7 +14,8 @@ import { NotFoundError, ValidationError } from "@/lib/api/errors";
 import { formatZodErrors } from "@/lib/api/zod/error-formatter";
 import { validateResidentCsv } from "@/lib/utils/csv-validator";
 import { validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { CommunityRole, CommunityType } from "@propertypro/shared";
+import type { CommunityRole, CommunityType, NewCommunityRole, PresetKey } from "@propertypro/shared";
+import { getPresetPermissions, PRESET_METADATA, isPresetKey } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
@@ -45,6 +46,36 @@ async function getCommunityType(communityId: number): Promise<CommunityType> {
 function getInsertedStringId(row: Record<string, unknown> | undefined): string | null {
   const id = row?.["id"];
   return typeof id === "string" ? id : null;
+}
+
+interface MappedRole {
+  role: NewCommunityRole;
+  isUnitOwner: boolean;
+  presetKey: PresetKey | null;
+  displayTitle: string;
+}
+
+function mapLegacyRole(legacyRole: CommunityRole): MappedRole {
+  switch (legacyRole) {
+    case "owner":
+      return { role: "resident", isUnitOwner: true, presetKey: null, displayTitle: "Owner" };
+    case "tenant":
+      return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
+    case "board_president":
+    case "board_member":
+    case "cam":
+    case "site_manager":
+      return {
+        role: "manager",
+        isUnitOwner: false,
+        presetKey: legacyRole as PresetKey,
+        displayTitle: PRESET_METADATA[legacyRole as PresetKey].displayTitle,
+      };
+    case "property_manager_admin":
+      return { role: "pm_admin", isUnitOwner: false, presetKey: null, displayTitle: "Property Manager Admin" };
+    default:
+      return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
+  }
 }
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -105,7 +136,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const errors = [...parsedCsv.errors];
-  const createdUsers: Array<{ userId: string; email: string; role: CommunityRole }> = [];
+  const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: CommunityRole }> = [];
   let importedCount = 0;
   let skippedCount = invalidCsvRowNumbers.size; // rows with parse-level errors already skipped
 
@@ -165,12 +196,15 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       continue;
     }
 
+    // Map legacy CSV role to new hybrid model
+    const mapped = mapLegacyRole(role);
+
     // Tenants belong to exactly one community. Block if this user already
     // has a tenant role in any other community.
-    if (role === "tenant") {
+    if (role === "tenant" || (mapped.role === "resident" && !mapped.isUnitOwner)) {
       const existingCommunities = await listCommunitiesForUser(userId);
       const hasTenantElsewhere = existingCommunities.some(
-        (c) => c.role === "tenant" && c.communityId !== communityId,
+        (c) => c.role === "resident" && !c.isUnitOwner && c.communityId !== communityId,
       );
       if (hasTenantElsewhere) {
         errors.push({
@@ -183,17 +217,27 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       }
     }
 
+    // Derive permissions for manager roles
+    const permissions =
+      mapped.role === "manager" && mapped.presetKey
+        ? getPresetPermissions(mapped.presetKey, communityType)
+        : null;
+
     await scoped.insert(userRoles, {
       userId,
-      role,
+      role: mapped.role,
       unitId,
+      isUnitOwner: mapped.isUnitOwner,
+      permissions,
+      presetKey: mapped.presetKey,
+      displayTitle: mapped.displayTitle,
     });
 
     await scoped.insert(notificationPreferences, { userId });
 
     userHasRole.add(userId);
     importedCount++;
-    createdUsers.push({ userId, email, role });
+    createdUsers.push({ userId, email, role: mapped.role, legacyRole: role });
   }
 
   // Audit log one event per created user with bulkCount metadata
@@ -204,7 +248,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       resourceType: "resident",
       resourceId: cu.userId,
       communityId,
-      newValues: { email: cu.email, role: cu.role },
+      newValues: { email: cu.email, role: cu.role, legacyRole: cu.legacyRole },
       metadata: { bulkCount: createdUsers.length },
     });
   }

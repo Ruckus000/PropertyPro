@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS "public"."esign_signers" (
   "deleted_at"              timestamptz
 );
 
+CREATE INDEX IF NOT EXISTS "idx_esign_signers_community"
+  ON "public"."esign_signers" ("community_id");
+
 CREATE INDEX IF NOT EXISTS "idx_esign_signers_submission"
   ON "public"."esign_signers" ("submission_id");
 
@@ -122,6 +125,9 @@ CREATE TABLE IF NOT EXISTS "public"."esign_events" (
   "webhook_event_id"  text,
   "created_at"        timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS "idx_esign_events_community"
+  ON "public"."esign_events" ("community_id");
 
 CREATE INDEX IF NOT EXISTS "idx_esign_events_submission"
   ON "public"."esign_events" ("submission_id");

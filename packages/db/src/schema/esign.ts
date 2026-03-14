@@ -131,6 +131,7 @@ export const esignSigners = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
+    index('idx_esign_signers_community').on(table.communityId),
     index('idx_esign_signers_submission').on(table.submissionId),
     index('idx_esign_signers_user').on(table.userId),
     index('idx_esign_signers_email').on(table.email),
@@ -164,6 +165,7 @@ export const esignEvents = pgTable(
     // NO updatedAt, NO deletedAt — append-only
   },
   (table) => [
+    index('idx_esign_events_community').on(table.communityId),
     index('idx_esign_events_submission').on(table.submissionId),
     index('idx_esign_events_webhook').on(table.webhookEventId),
   ],

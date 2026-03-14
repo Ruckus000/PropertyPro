@@ -24,14 +24,22 @@ import {
   users,
 } from '@propertypro/db';
 import { eq, inArray } from '@propertypro/db/filters';
-import { NEW_COMMUNITY_ROLES, type NewCommunityRole, type CommunityType } from '@propertypro/shared';
+import {
+  NEW_COMMUNITY_ROLES,
+  PRESET_KEYS,
+  type NewCommunityRole,
+  type CommunityType,
+  type PresetKey,
+  getPresetPermissions,
+  PRESET_METADATA,
+} from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { requireCommunityRole, requireCommunityType } from '@/lib/utils/community-validators';
+import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 
@@ -44,6 +52,8 @@ const createResidentSchema = z.object({
   phone: z.string().nullable().optional(),
   role: z.enum(NEW_COMMUNITY_ROLES) as z.ZodType<NewCommunityRole>,
   unitId: z.number().int().positive().nullable().optional(),
+  isUnitOwner: z.boolean().optional().default(false),
+  presetKey: (z.enum(PRESET_KEYS as unknown as [string, ...string[]]) as z.ZodType<PresetKey>).optional(),
 });
 
 const updateResidentSchema = z.object({
@@ -53,6 +63,8 @@ const updateResidentSchema = z.object({
   phone: z.string().nullable().optional(),
   role: (z.enum(NEW_COMMUNITY_ROLES) as z.ZodType<NewCommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
+  isUnitOwner: z.boolean().optional(),
+  presetKey: (z.enum(PRESET_KEYS as unknown as [string, ...string[]]) as z.ZodType<PresetKey>).nullable().optional(),
 });
 
 const deleteResidentSchema = z.object({
@@ -170,7 +182,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  const { email, fullName, phone, role, unitId } = parseResult.data;
+  const { email, fullName, phone, role, unitId, isUnitOwner, presetKey } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(actorMembership, 'residents', 'write');
@@ -181,6 +193,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const validation = validateRoleAssignment(role, communityType, unitId ?? null);
   if (!validation.valid) {
     throw new ValidationError(validation.error ?? 'Invalid role assignment');
+  }
+
+  // Validate hybrid-model invariants
+  if (role === 'manager' && !presetKey) {
+    throw new ValidationError('presetKey is required when role is "manager"');
+  }
+  if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
+    throw new ValidationError('Owners are not allowed in apartment communities');
   }
 
   // users table is global; scoped query applies only deleted_at filtering here.
@@ -214,10 +234,22 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
+  // Derive hybrid-model fields
+  const effectiveIsUnitOwner = role === 'resident' ? (isUnitOwner ?? false) : false;
+  const permissions =
+    role === 'manager' && presetKey
+      ? getPresetPermissions(presetKey, communityType)
+      : null;
+  const displayTitle = resolveDisplayTitle(role, effectiveIsUnitOwner, presetKey);
+
   const insertedRoles = await scoped.insert(userRoles, {
     userId,
     role,
     unitId: unitId ?? null,
+    isUnitOwner: effectiveIsUnitOwner,
+    permissions,
+    presetKey: role === 'manager' ? (presetKey ?? null) : null,
+    displayTitle,
   });
 
   // Acceptance criterion: create notification_preferences when user role is created.
@@ -279,6 +311,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     phone,
     role,
     unitId,
+    isUnitOwner: patchIsUnitOwner,
+    presetKey: patchPresetKey,
   } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
@@ -292,7 +326,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
   }
 
-  const oldRole = requireCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
+  const oldRole = requireNewCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
   const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
   const newRole = role ?? oldRole;
@@ -332,8 +366,17 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  if (role !== undefined || unitId !== undefined) {
+  if (role !== undefined || unitId !== undefined || patchIsUnitOwner !== undefined || patchPresetKey !== undefined) {
+    const communityType = await getCommunityType(communityId);
     const roleUpdate: Record<string, unknown> = {};
+
+    // Validate manager role requires preset
+    if (newRole === 'manager') {
+      const effectivePreset = patchPresetKey ?? (existingRole['presetKey'] as string | null);
+      if (!effectivePreset) {
+        throw new ValidationError('presetKey is required when role is "manager"');
+      }
+    }
 
     if (role !== undefined) {
       oldValues['role'] = oldRole;
@@ -345,6 +388,35 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       oldValues['unitId'] = oldUnitId;
       newValues['unitId'] = unitId ?? null;
       roleUpdate['unitId'] = unitId ?? null;
+    }
+
+    // Update hybrid-model fields when role changes
+    if (role !== undefined || patchIsUnitOwner !== undefined) {
+      const effectiveIsUnitOwner = newRole === 'resident'
+        ? (patchIsUnitOwner ?? (existingRole['isUnitOwner'] as boolean) ?? false)
+        : false;
+      roleUpdate['isUnitOwner'] = effectiveIsUnitOwner;
+
+      if (newRole === 'resident' && effectiveIsUnitOwner && communityType === 'apartment') {
+        throw new ValidationError('Owners are not allowed in apartment communities');
+      }
+    }
+
+    if (role !== undefined || patchPresetKey !== undefined) {
+      const effectivePreset = newRole === 'manager'
+        ? (patchPresetKey ?? (existingRole['presetKey'] as PresetKey | null))
+        : null;
+      roleUpdate['presetKey'] = effectivePreset;
+
+      // Recalculate permissions and displayTitle
+      roleUpdate['permissions'] = newRole === 'manager' && effectivePreset
+        ? getPresetPermissions(effectivePreset as PresetKey, communityType)
+        : null;
+      roleUpdate['displayTitle'] = resolveDisplayTitle(
+        newRole as NewCommunityRole,
+        roleUpdate['isUnitOwner'] as boolean | undefined,
+        effectivePreset as PresetKey | undefined,
+      );
     }
 
     if (Object.keys(roleUpdate).length > 0) {
@@ -416,3 +488,17 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
 
   return NextResponse.json({ data: { success: true } });
 });
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function resolveDisplayTitle(
+  role: NewCommunityRole,
+  isUnitOwner?: boolean,
+  presetKey?: PresetKey | null,
+): string {
+  if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
+  if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
+  return 'Property Manager Admin';
+}

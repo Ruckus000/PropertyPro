@@ -470,10 +470,11 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       email: invite.email,
       fullName: invite.fullName,
       phone: null,
-      role: 'tenant',
+      role: 'resident',
       unitId: matchedUnit['id'] as number,
       actorUserId,
       communityType: membership.communityType,
+      isUnitOwner: false,
     });
 
     completionMarkers.residentCreated = true;

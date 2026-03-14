@@ -16,7 +16,8 @@ import {
 } from '@propertypro/db';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
-import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
+import { getPresetPermissions, PRESET_METADATA } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 
@@ -29,10 +30,12 @@ export async function createOnboardingResident(params: {
   email: string;
   fullName: string;
   phone: string | null;
-  role: CommunityRole;
+  role: NewCommunityRole;
   unitId: number | null;
   actorUserId: string;
   communityType: CommunityType;
+  isUnitOwner?: boolean;
+  presetKey?: PresetKey;
 }): Promise<{ userId: string; isNewUser: boolean }> {
   const { communityId, email, fullName, phone, role, unitId, actorUserId, communityType } = params;
   const scoped = createScopedClient(communityId);
@@ -75,11 +78,23 @@ export async function createOnboardingResident(params: {
     );
   }
 
-  // Create role
+  // Create role with hybrid-model fields
+  const isUnitOwner = role === 'resident' ? (params.isUnitOwner ?? false) : false;
+  const permissions =
+    role === 'manager' && params.presetKey
+      ? getPresetPermissions(params.presetKey, communityType)
+      : null;
+  const presetKey = role === 'manager' ? (params.presetKey ?? null) : null;
+  const displayTitle = resolveDisplayTitle(role, params.isUnitOwner, params.presetKey);
+
   await scoped.insert(userRoles, {
     userId,
     role,
     unitId: unitId ?? null,
+    isUnitOwner,
+    permissions,
+    presetKey,
+    displayTitle,
   });
 
   // Create notification preferences
@@ -190,4 +205,14 @@ function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + days);
   return d;
+}
+
+function resolveDisplayTitle(
+  role: NewCommunityRole,
+  isUnitOwner?: boolean,
+  presetKey?: PresetKey,
+): string {
+  if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
+  if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
+  return 'Property Manager Admin';
 }
