@@ -132,6 +132,9 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       process.env.TOKEN_ENCRYPTION_KEY
       ?? '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+    process.env.OAUTH_STATE_SECRET =
+      process.env.OAUTH_STATE_SECRET ?? 'test-oauth-state-secret-32bytes!!';
+
     state = await initTestKit();
 
     const selectedCommunities = MULTI_TENANT_COMMUNITIES.filter((community) =>
@@ -705,10 +708,18 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     await expectAuditEventForRequestId(kit, communityA.id, visitorsRequestId);
 
     setActor(kit, 'actorA');
+    const calendarConnectRes = await routeModules.googleConnect.POST(
+      jsonRequest(apiUrl('/api/v1/calendar/google/connect'), 'POST', {
+        communityId: communityA.id,
+      }),
+    );
+    expect(calendarConnectRes.status).toBe(200);
+    const calendarState = (await parseJson<{ data: { state: string } }>(calendarConnectRes)).data.state;
+
     const calendarRequestId = randomUUID();
     const calendarMutation = await routeModules.googleCallback.GET(
       new NextRequest(
-        apiUrl(`/api/v1/calendar/google/callback?communityId=${communityA.id}&code=ws72-calendar-code`),
+        apiUrl(`/api/v1/calendar/google/callback?communityId=${communityA.id}&code=ws72-calendar-code&state=${calendarState}`),
         {
           headers: {
             'x-request-id': calendarRequestId,
@@ -720,11 +731,20 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     await expectAuditEventForRequestId(kit, communityA.id, calendarRequestId);
 
     setActor(kit, 'actorC');
+    const acctConnectRes = await routeModules.accountingConnect.POST(
+      jsonRequest(apiUrl('/api/v1/accounting/connect'), 'POST', {
+        communityId: communityC.id,
+        provider: 'quickbooks',
+      }),
+    );
+    expect(acctConnectRes.status).toBe(200);
+    const acctState = (await parseJson<{ data: { state: string } }>(acctConnectRes)).data.state;
+
     const accountingRequestId = randomUUID();
     const accountingMutation = await routeModules.accountingCallback.GET(
       new NextRequest(
         apiUrl(
-          `/api/v1/accounting/callback?communityId=${communityC.id}&provider=quickbooks&code=ws72-accounting-code`,
+          `/api/v1/accounting/callback?communityId=${communityC.id}&provider=quickbooks&code=ws72-accounting-code&state=${acctState}`,
         ),
         {
           headers: {

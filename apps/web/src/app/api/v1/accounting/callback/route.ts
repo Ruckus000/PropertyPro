@@ -25,11 +25,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requireAccountingWritePermission(membership);
 
   const { searchParams } = new URL(req.url);
-  const code = searchParams.get('code');
-  if (!code || code.trim().length === 0) {
-    throw new BadRequestError('code query parameter is required');
-  }
 
+  // Validate provider first (needed by state check), then HMAC state before
+  // touching the authorization code — matches the Google callback ordering.
   const parsed = callbackSchema.safeParse({
     provider: searchParams.get('provider'),
   });
@@ -46,6 +44,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     actorUserId,
     parsed.data.provider,
   );
+
+  const code = searchParams.get('code');
+  if (!code || code.trim().length === 0) {
+    throw new BadRequestError('code query parameter is required');
+  }
 
   const requestId = req.headers.get('x-request-id');
   const data = await completeAccountingConnect(

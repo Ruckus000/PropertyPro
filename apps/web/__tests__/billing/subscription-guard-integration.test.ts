@@ -46,7 +46,11 @@ const {
   announcementsTableMock: { id: Symbol('announcements.id') },
   usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
+    role: 'board_member',
+    communityType: 'condo_718',
+    timezone: 'America/New_York',
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -121,7 +125,11 @@ describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-p0-1');
-    requireCommunityMembershipMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'board_member',
+      communityType: 'condo_718',
+      timezone: 'America/New_York',
+    });
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockImplementation(async (table: unknown) => {
         if (table === usersTableMock) {
