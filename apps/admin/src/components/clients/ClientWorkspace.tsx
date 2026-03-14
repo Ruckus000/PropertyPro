@@ -14,7 +14,7 @@ import {
 import { CommunitySettingsEditor } from './CommunitySettingsEditor';
 import { CommunityMembers } from './CommunityMembers';
 import { CommunityCompliance } from './CommunityCompliance';
-import { CommunityWebsiteEditor } from './CommunityWebsiteEditor';
+import { WebsiteTabPanel } from './WebsiteTabPanel';
 
 interface CommunitySettings {
   announcementsWriteLevel?: 'all_members' | 'admin_only';
@@ -219,7 +219,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'website' && (
-          <CommunityWebsiteEditor communityId={community.id} communitySlug={community.slug} />
+          <WebsiteTabPanel communityId={community.id} communitySlug={community.slug} />
         )}
 
         {activeTab === 'settings' && (

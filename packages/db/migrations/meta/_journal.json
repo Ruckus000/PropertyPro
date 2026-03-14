@@ -393,6 +393,13 @@
       "when": 1773080000000,
       "tag": "0095_role_simplification_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1773090000000,
+      "tag": "0096_add_jsx_template_block_type",
+      "breakpoints": true
     }
   ]
 }

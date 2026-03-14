@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
+import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { isValidHexColor } from '@propertypro/shared';
 import { ALLOWED_FONTS } from '@propertypro/theme';
@@ -28,39 +29,6 @@ const patchSchema = z.object({
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-/**
- * Validate the community ID param, verify community exists and is not a demo.
- * Returns the numeric ID or a NextResponse error.
- */
-async function resolveAndVerifyCommunity(
-  rawId: string,
-  db: ReturnType<typeof createAdminClient>,
-): Promise<number | NextResponse> {
-  const communityId = Number(rawId);
-  if (!Number.isInteger(communityId) || communityId <= 0) {
-    return NextResponse.json(
-      { error: { code: 'INVALID_ID', message: 'Invalid community ID' } },
-      { status: 400 },
-    );
-  }
-
-  const { data } = await db
-    .from('communities')
-    .select('id, is_demo')
-    .eq('id', communityId)
-    .is('deleted_at', null)
-    .single();
-
-  if (!data || (data as Record<string, unknown>).is_demo) {
-    return NextResponse.json(
-      { error: { code: 'NOT_FOUND', message: 'Community not found' } },
-      { status: 404 },
-    );
-  }
-
-  return communityId;
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
