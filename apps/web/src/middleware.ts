@@ -78,7 +78,6 @@ const USER_ID_HEADER = 'x-user-id';
 
 const TENANT_CACHE_MAX_ENTRIES = 256;
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000;
-const TENANT_NEGATIVE_CACHE_TTL_MS = 30 * 1000;
 
 type TenantCacheEntry = {
   communityId: number | null;
@@ -214,8 +213,7 @@ function writeTenantCache(slug: string, communityId: number | null): void {
   tenantCache.set(slug, {
     communityId,
     expiresAt:
-      Date.now() +
-      (communityId == null ? TENANT_NEGATIVE_CACHE_TTL_MS : TENANT_CACHE_TTL_MS),
+      Date.now() + TENANT_CACHE_TTL_MS,
   });
 }
 

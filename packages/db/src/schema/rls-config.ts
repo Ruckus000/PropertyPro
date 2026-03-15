@@ -211,6 +211,31 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_admin_write',
     notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT uses community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
   },
+  {
+    tableName: 'esign_templates',
+    policyFamily: 'tenant_admin_write',
+    notes: 'E-signature templates are managed by admin-tier roles only. SELECT open to community members.',
+  },
+  {
+    tableName: 'esign_submissions',
+    policyFamily: 'tenant_admin_write',
+    notes: 'E-signature submission lifecycle (create, send, void) is admin-managed. SELECT open to community members.',
+  },
+  {
+    tableName: 'esign_signers',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Signer rows are derived from submissions; mutated only by admin-tier roles.',
+  },
+  {
+    tableName: 'esign_events',
+    policyFamily: 'tenant_append_only',
+    notes: 'Immutable audit trail of e-signature lifecycle events. INSERT only; no UPDATE/DELETE.',
+  },
+  {
+    tableName: 'esign_consent',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'UETA/ESIGN Act consent tracking. Users manage their own consent; admin-tier sees all.',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -235,7 +260,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 41;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 46;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

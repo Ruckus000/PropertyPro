@@ -17,7 +17,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 const ADMIN_EMAIL = 'pm.admin@sunset.local';
 
 export async function GET(request: Request) {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
   }
 
