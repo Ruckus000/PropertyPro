@@ -2,6 +2,11 @@
 
 import { useState } from 'react';
 import { Loader2, Save, RotateCcw } from 'lucide-react';
+import {
+  COMMUNITY_FEATURES,
+  type CommunityType,
+  type CommunityFeatures,
+} from '@propertypro/shared';
 
 interface CommunitySettings {
   announcementsWriteLevel?: 'all_members' | 'admin_only';
@@ -15,6 +20,7 @@ interface CommunitySettings {
 interface CommunityData {
   id: number;
   name: string;
+  communityType: CommunityType;
   address_line1: string | null;
   city: string | null;
   state: string | null;
@@ -30,14 +36,49 @@ interface CommunitySettingsEditorProps {
   community: CommunityData;
 }
 
-const WRITE_LEVEL_LABELS: Record<string, string> = {
-  announcementsWriteLevel: 'Announcements',
-  meetingsWriteLevel: 'Meetings',
-  meetingDocumentsWriteLevel: 'Meeting Documents',
-  unitsWriteLevel: 'Units',
-  leasesWriteLevel: 'Leases',
-  documentCategoriesWriteLevel: 'Document Categories',
-};
+interface WriteLevelConfig {
+  key: keyof CommunitySettings;
+  label: string;
+  helpText: string;
+  /** Feature flag key from CommunityFeatures — if set, toggle is only shown when the flag is true. */
+  featureFlag?: keyof CommunityFeatures;
+}
+
+const WRITE_LEVEL_CONFIG: WriteLevelConfig[] = [
+  {
+    key: 'announcementsWriteLevel',
+    label: 'Announcements',
+    helpText: 'Controls who can create and edit community announcements.',
+  },
+  {
+    key: 'meetingsWriteLevel',
+    label: 'Meetings',
+    helpText: 'Controls who can create, edit, and cancel meetings.',
+    featureFlag: 'hasMeetings',
+  },
+  {
+    key: 'meetingDocumentsWriteLevel',
+    label: 'Meeting Documents',
+    helpText: 'Controls who can attach or remove documents from meetings.',
+    featureFlag: 'hasMeetings',
+  },
+  {
+    key: 'unitsWriteLevel',
+    label: 'Units',
+    helpText: 'Controls who can create and modify unit records.',
+  },
+  {
+    key: 'leasesWriteLevel',
+    label: 'Leases',
+    helpText: 'Controls who can create, renew, and terminate leases.',
+    featureFlag: 'hasLeaseTracking',
+  },
+  {
+    key: 'documentCategoriesWriteLevel',
+    label: 'Document Categories',
+    helpText: 'Controls who can create custom document categories.',
+  },
+];
 
 const SUBSCRIPTION_OPTIONS = ['active', 'trialing', 'past_due', 'canceled'] as const;
 
@@ -49,6 +90,13 @@ const US_TIMEZONES = [
   'America/Anchorage',
   'Pacific/Honolulu',
 ] as const;
+
+function getVisibleWriteLevelToggles(communityType: CommunityType): WriteLevelConfig[] {
+  const features = COMMUNITY_FEATURES[communityType];
+  return WRITE_LEVEL_CONFIG.filter(
+    (config) => !config.featureFlag || features[config.featureFlag],
+  );
+}
 
 export function CommunitySettingsEditor({ community: initial }: CommunitySettingsEditorProps) {
   const [form, setForm] = useState({
@@ -67,6 +115,8 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const visibleToggles = getVisibleWriteLevelToggles(initial.communityType);
 
   function handleChange(field: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -248,19 +298,21 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
         <h2 className="mb-1 text-sm font-semibold text-gray-700">Write-Level Restrictions</h2>
         <p className="mb-4 text-xs text-gray-400">
-          Control whether all members or only admins can create/edit content in each area.
+          Control whether all community members or only admin roles (board members, CAM, site manager, PM admin) can create and edit content in each area. Default is &ldquo;All Members&rdquo;.
         </p>
         <div className="space-y-3">
-          {Object.entries(WRITE_LEVEL_LABELS).map(([key, label]) => {
-            const settingKey = key as keyof CommunitySettings;
-            const value = form.community_settings[settingKey] ?? 'all_members';
+          {visibleToggles.map(({ key, label, helpText }) => {
+            const value = form.community_settings[key] ?? 'all_members';
             return (
               <div key={key} className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-4 py-3">
-                <span className="text-sm text-gray-700">{label}</span>
-                <div className="flex gap-1">
+                <div className="min-w-0 mr-4">
+                  <span className="text-sm text-gray-700">{label}</span>
+                  <p className="text-xs text-gray-400 mt-0.5">{helpText}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={() => handleWriteLevel(settingKey, 'all_members')}
+                    onClick={() => handleWriteLevel(key, 'all_members')}
                     className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                       value === 'all_members'
                         ? 'bg-blue-600 text-white'
@@ -271,7 +323,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleWriteLevel(settingKey, 'admin_only')}
+                    onClick={() => handleWriteLevel(key, 'admin_only')}
                     className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                       value === 'admin_only'
                         ? 'bg-amber-600 text-white'

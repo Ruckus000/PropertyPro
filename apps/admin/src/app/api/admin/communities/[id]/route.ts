@@ -74,7 +74,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
 
   const { id } = await context.params;
   const communityId = Number(id);
@@ -96,10 +96,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const db = createAdminClient();
 
-  // Verify community exists and is not a demo
+  // Verify community exists and is not a demo; also fetch current settings for audit diff
   const { data: existing } = await db
     .from('communities')
-    .select('id, is_demo')
+    .select('id, is_demo, community_settings')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
@@ -137,6 +137,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       { error: { code: 'INTERNAL_ERROR', message: error.message } },
       { status: 500 },
     );
+  }
+
+  // Audit log: record community_settings changes
+  if (community_settings !== undefined) {
+    const oldSettings = (existing as Record<string, unknown>).community_settings ?? {};
+    const settingsChanged = JSON.stringify(oldSettings) !== JSON.stringify(community_settings);
+    if (settingsChanged) {
+      // Fire-and-forget: audit log failure should not block the response
+      db.from('compliance_audit_log')
+        .insert({
+          user_id: admin.id,
+          community_id: communityId,
+          action: 'settings_changed',
+          resource_type: 'community_settings',
+          resource_id: String(communityId),
+          old_values: oldSettings as Record<string, unknown>,
+          new_values: community_settings as Record<string, unknown>,
+          metadata: { source: 'admin_platform', admin_email: admin.email },
+        } as never)
+        .then(({ error: auditError }) => {
+          if (auditError) {
+            console.error('[audit] Failed to log settings change:', auditError.message);
+          }
+        });
+    }
   }
 
   return NextResponse.json({ community: updated });

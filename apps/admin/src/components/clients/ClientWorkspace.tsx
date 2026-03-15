@@ -227,6 +227,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
             community={{
               id: community.id,
               name: community.name,
+              communityType: community.community_type,
               address_line1: community.address_line1,
               city: community.city,
               state: community.state,
