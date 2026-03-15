@@ -13,12 +13,13 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { BottomTabBar } from '@/components/mobile/BottomTabBar';
+import { MobileTopBar } from '@/components/mobile/MobileTopBar';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -35,9 +36,12 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
 
   const communityId = rawId;
   let userId: string;
+  let userName: string | null = null;
 
   try {
-    userId = await requireAuthenticatedUserId();
+    const user = await requireAuthenticatedUser();
+    userId = user.id;
+    userName = (user.user_metadata?.full_name as string) ?? null;
   } catch {
     redirect('/auth/login');
   }
@@ -66,6 +70,7 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div className="mobile-shell" style={cssVars as React.CSSProperties}>
+        <MobileTopBar communityName={communityName} userName={userName} communityId={communityId} />
         <main id="main-content" className="mobile-content">{children}</main>
         <BottomTabBar features={features} communityId={communityId} />
       </div>

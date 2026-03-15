@@ -13,7 +13,7 @@ import { desc, eq } from '@propertypro/db/filters';
 import { createScopedClient, maintenanceRequests } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
-import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
+
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -55,7 +55,6 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
 
   return (
     <div>
-      <MobilePageHeader>Maintenance</MobilePageHeader>
       {active.length === 0 ? (
         <p className="mobile-empty">No maintenance requests</p>
       ) : (

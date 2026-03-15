@@ -38,10 +38,8 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <div className="mobile-page-header">Welcome, {data.firstName}</div>
-
       {/* Recent announcements */}
-      <div className="mt-2">
+      <div className="mt-1">
         <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Announcements
         </div>
