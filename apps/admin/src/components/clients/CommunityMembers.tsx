@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
-import { Loader2, Users, ChevronDown, Trash2 } from 'lucide-react';
+import { Loader2, Users, ChevronDown, ChevronUp, Search, Trash2, X } from 'lucide-react';
 
-interface Member {
+export interface Member {
   roleId: number;
   userId: string;
   email: string;
@@ -52,7 +52,7 @@ const ROLE_BADGES: Record<string, string> = {
   pm_admin: 'bg-purple-100 text-purple-700',
 };
 
-function displayRole(member: Member): string {
+export function displayRole(member: Member): string {
   if (member.displayTitle) return member.displayTitle;
   if (member.presetKey) {
     const labels: Record<string, string> = {
@@ -68,6 +68,12 @@ function displayRole(member: Member): string {
   return 'Manager';
 }
 
+export type MemberSort =
+  | 'name-asc' | 'name-desc'
+  | 'role-asc' | 'role-desc'
+  | 'lastSignIn-asc' | 'lastSignIn-desc'
+  | 'joined-asc' | 'joined-desc';
+
 export function CommunityMembers({ communityId, communityType }: CommunityMembersProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +83,62 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<MemberSort>('name-asc');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const displayedMembers = useMemo(() => {
+    let result = members;
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          (m.fullName ?? '').toLowerCase().includes(q) ||
+          m.email.toLowerCase().includes(q),
+      );
+    }
+
+    result = [...result].sort((a, b) => {
+      switch (sort) {
+        case 'name-asc':
+          return (a.fullName ?? '').localeCompare(b.fullName ?? '');
+        case 'name-desc':
+          return (b.fullName ?? '').localeCompare(a.fullName ?? '');
+        case 'role-asc':
+          return displayRole(a).localeCompare(displayRole(b));
+        case 'role-desc':
+          return displayRole(b).localeCompare(displayRole(a));
+        case 'lastSignIn-asc': {
+          const aTime = a.lastSignInAt ? new Date(a.lastSignInAt).getTime() : Infinity;
+          const bTime = b.lastSignInAt ? new Date(b.lastSignInAt).getTime() : Infinity;
+          return aTime - bTime;
+        }
+        case 'lastSignIn-desc': {
+          const aTime = a.lastSignInAt ? new Date(a.lastSignInAt).getTime() : -Infinity;
+          const bTime = b.lastSignInAt ? new Date(b.lastSignInAt).getTime() : -Infinity;
+          return bTime - aTime;
+        }
+        case 'joined-asc':
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'joined-desc':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [members, search, sort]);
+
+  function toggleSort(column: 'name' | 'role' | 'lastSignIn' | 'joined') {
+    setSort((prev) => {
+      const asc = `${column}-asc` as MemberSort;
+      const desc = `${column}-desc` as MemberSort;
+      return prev === asc ? desc : asc;
+    });
+  }
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -96,6 +158,16 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
   }, [communityId]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   function startEdit(member: Member) {
     setEditingId(member.userId);
@@ -183,24 +255,87 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-gray-700">
-        <Users size={16} />
-        <h2 className="text-sm font-semibold">{members.length} Members</h2>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 text-gray-700 shrink-0">
+          <Users size={16} />
+          <h2 className="text-sm font-semibold">{members.length} Members</h2>
+        </div>
+
+        <div className="relative flex-1 max-w-sm" ref={dropdownRef}>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search members…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
+            onFocus={() => { if (search.trim()) setDropdownOpen(true); }}
+            onKeyDown={(e) => { if (e.key === 'Escape') setDropdownOpen(false); }}
+            className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setDropdownOpen(false); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          ) : (
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          )}
+
+          {dropdownOpen && search.trim() && (
+            <div className="absolute left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              {displayedMembers.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-gray-400">No members found</p>
+              ) : (
+                <>
+                  {displayedMembers.map((m) => (
+                    <div key={m.userId} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">{m.fullName || 'No name'}</p>
+                        <p className="truncate text-xs text-gray-500">{m.email}</p>
+                      </div>
+                      <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGES[m.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {displayRole(m)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-100 px-3 py-1.5 text-xs text-gray-400">
+                    {displayedMembers.length} of {members.length} members
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-e1">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Name / Email</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Role</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Last Sign In</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Joined</th>
+              {([['Name / Email', 'name'], ['Role', 'role'], ['Last Sign In', 'lastSignIn'], ['Joined', 'joined']] as const).map(([label, column]) => {
+                const isActive = sort.startsWith(`${column}-`);
+                const isAsc = sort === `${column}-asc`;
+                return (
+                  <th key={column} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column)}
+                      className="inline-flex items-center gap-1 hover:text-gray-700"
+                    >
+                      {label}
+                      {isActive && (isAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                    </button>
+                  </th>
+                );
+              })}
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {members.map((member) => (
+            {displayedMembers.map((member) => (
               <tr key={member.userId} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <div>
@@ -318,10 +453,10 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
                 </td>
               </tr>
             ))}
-            {members.length === 0 && (
+            {displayedMembers.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
-                  No members found
+                  {search.trim() ? 'No members match your search' : 'No members found'}
                 </td>
               </tr>
             )}
