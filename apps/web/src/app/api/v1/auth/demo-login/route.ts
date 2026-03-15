@@ -8,6 +8,8 @@
  * Token-authenticated (no session required) — listed in middleware allowlist.
  */
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 import {
   decryptDemoTokenSecret,
   extractDemoIdFromToken,
@@ -177,18 +179,62 @@ export async function GET(request: Request) {
   }
   const redirectTo = redirectToUrl.toString();
 
-  // 6. Create a Supabase session via admin magic-link API
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.auth.admin.generateLink({
+  // 6. Generate a magic link and verify OTP server-side (same pattern as /dev/agent-login)
+  const admin = createAdminClient();
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
-    options: { redirectTo },
   });
 
-  if (error || !data?.properties?.action_link) {
+  if (linkError || !linkData?.properties?.hashed_token) {
+    console.error('[demo-login] Failed to generate magic link:', linkError?.message);
     return loginError(trustedBaseUrl, 'session_error');
   }
 
-  // 7. Redirect to the Supabase action link (sets session cookie, then redirects to app)
-  return createRedirectResponse(data.properties.action_link);
+  // Verify OTP server-side to establish session with cookies
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[demo-login] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    return loginError(trustedBaseUrl, 'session_error');
+  }
+
+  const cookieStore = await cookies();
+  const pendingCookies: Array<{ name: string; value: string; options: Record<string, unknown> }> =
+    [];
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const cookie of cookiesToSet) {
+          pendingCookies.push(cookie);
+          try {
+            cookieStore.set(cookie.name, cookie.value, cookie.options);
+          } catch {
+            // May fail in some contexts; replayed onto response below
+          }
+        }
+      },
+    },
+  });
+
+  const { error: verifyError } = await supabase.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'magiclink',
+  });
+
+  if (verifyError) {
+    console.error('[demo-login] OTP verification failed:', verifyError.message);
+    return loginError(trustedBaseUrl, 'session_error');
+  }
+
+  // 7. Redirect with session cookies attached
+  const response = createRedirectResponse(redirectTo);
+  for (const cookie of pendingCookies) {
+    response.cookies.set(cookie.name, cookie.value, cookie.options);
+  }
+  return response;
 }

@@ -64,7 +64,7 @@ export default async function DemoPreviewPage({ params }: PageProps) {
   const demoLoginBase = `${webBaseUrl}/api/v1/auth/demo-login`;
 
   // 1. Public Website — no auth needed
-  const publicUrl = `${webBaseUrl}/${demo.slug}`;
+  const publicUrl = `${webBaseUrl}/${demo.slug}?preview=true`;
 
   // 2. Mobile App — resident token
   const mobileUrl = residentToken

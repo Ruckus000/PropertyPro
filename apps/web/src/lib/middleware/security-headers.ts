@@ -28,7 +28,8 @@ function getAdminOrigins(): string {
   if (envOrigin) return envOrigin;
 
   if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:3001 http://127.0.0.1:3001';
+    // Use http://localhost:* to cover any dev port (admin dev server, preview tools, etc.)
+    return 'http://localhost:* http://127.0.0.1:*';
   }
 
   return 'https://admin.propertyprofl.com';
@@ -93,13 +94,19 @@ export function buildCorsHeaders(origin: string | null): Record<string, string> 
  * Call buildCspHeader() separately and add it to page responses.
  */
 export function buildSecurityHeaders(options?: { isPreview?: boolean }): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': options?.isPreview ? 'SAMEORIGIN' : 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'X-DNS-Prefetch-Control': 'off',
   };
+  // In preview mode, CSP frame-ancestors is the authoritative framing policy.
+  // X-Frame-Options is omitted because SAMEORIGIN would block the cross-origin
+  // admin→web iframe while CSP correctly allows the admin origin.
+  if (!options?.isPreview) {
+    headers['X-Frame-Options'] = 'DENY';
+  }
+  return headers;
 }
 
 /**
