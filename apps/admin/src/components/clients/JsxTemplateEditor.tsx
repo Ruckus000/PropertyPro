@@ -213,13 +213,15 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
     jsxRef.current = jsxSource;
   }, [jsxSource]);
 
-  // Build a blob URL for the preview iframe so CDN scripts can load
-  // (srcdoc + sandbox="allow-scripts" blocks external fetches due to opaque origin)
+  // Snapshot of JSX source captured when the user clicks Preview.
+  // Decoupled from jsxSource so the blob URL doesn't rebuild on every keystroke.
+  const [previewSource, setPreviewSource] = useState<string | null>(null);
+
   const previewBlobUrl = useMemo(() => {
-    if (activeTab !== 'preview') return null;
-    const html = buildPreviewSrcdoc(jsxSource);
+    if (previewSource === null) return null;
+    const html = buildPreviewSrcdoc(previewSource);
     return URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  }, [jsxSource, activeTab]);
+  }, [previewSource]);
 
   // Revoke blob URL on change or unmount
   useEffect(() => {
@@ -399,7 +401,7 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
             Code
           </button>
           <button
-            onClick={() => setActiveTab('preview')}
+            onClick={() => { setPreviewSource(jsxSource); setActiveTab('preview'); }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
               activeTab === 'preview'
                 ? 'bg-gray-900 text-white'
@@ -458,12 +460,15 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
         </div>
       )}
 
-      {/* Editor / Preview area */}
+      {/* Editor / Preview area — both are always mounted so CodeMirror's DOM
+           node persists across tab switches (imperative library, can't unmount). */}
       <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '60vh' }}>
-        {activeTab === 'code' && (
-          <div ref={editorRef} className="h-full" />
-        )}
-        {activeTab === 'preview' && previewBlobUrl && (
+        <div
+          ref={editorRef}
+          className="h-full"
+          style={{ display: activeTab === 'code' ? 'block' : 'none' }}
+        />
+        {previewBlobUrl && (
           <iframe
             title="Template Preview"
             // allow-same-origin is required for the blob iframe to load external CDN
@@ -473,6 +478,7 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
             sandbox="allow-scripts allow-same-origin"
             src={previewBlobUrl}
             className="w-full h-full border-0"
+            style={{ display: activeTab === 'preview' ? 'block' : 'none' }}
           />
         )}
       </div>
