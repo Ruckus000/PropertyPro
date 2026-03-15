@@ -108,6 +108,9 @@ export default async function DemoPreviewPage({ params }: PageProps) {
         publicUrl={publicUrl}
         mobileUrl={mobileUrl}
         adminUrl={adminUrl}
+        demoId={demo.id}
+        communityId={demo.seeded_community_id ?? 0}
+        prospectName={demo.prospect_name}
       />
     </div>
   );

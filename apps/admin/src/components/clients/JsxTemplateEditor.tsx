@@ -8,7 +8,7 @@
  * accesses browser APIs at import time.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Loader2, Save, Upload, Code, Eye } from 'lucide-react';
+import { Loader2, Save, Upload, Code, Eye, Clipboard, Check } from 'lucide-react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
@@ -20,6 +20,12 @@ import { oneDark } from '@codemirror/theme-one-dark';
 
 interface JsxTemplateEditorProps {
   communityId: number;
+  /** Called after a successful save or publish, e.g. to refresh preview iframes. */
+  onSaved?: () => void;
+  /** Override the default JSX template shown when no draft or published template exists. */
+  defaultJsx?: string;
+  /** When provided, a "Copy for Claude" button appears that copies this context prepended to the editor content. */
+  brandingContext?: string;
 }
 
 interface TemplateContent {
@@ -42,7 +48,7 @@ type ActiveTab = 'code' | 'preview';
 // Default JSX template
 // ---------------------------------------------------------------------------
 
-const DEFAULT_JSX = `function App() {
+export const DEFAULT_JSX = `function App() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -193,7 +199,7 @@ export function buildPreviewSrcdoc(jsxSource: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProps) {
+export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, brandingContext }: JsxTemplateEditorProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [jsxSource, setJsxSource] = useState('');
   const [draft, setDraft] = useState<SiteBlock | null>(null);
@@ -203,6 +209,8 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [copiedForClaude, setCopiedForClaude] = useState(false);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -246,7 +254,7 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
 
         const source = (data.draft?.content as TemplateContent)?.jsxSource
           ?? (data.published?.content as TemplateContent)?.jsxSource
-          ?? DEFAULT_JSX;
+          ?? defaultJsx ?? DEFAULT_JSX;
         setJsxSource(source);
       } catch {
         if (!cancelled) setError('Failed to load template');
@@ -321,12 +329,13 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
       setDraft(data.draft);
       setSuccess('Draft saved');
       setTimeout(() => setSuccess(null), 3000);
+      onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
-  }, [communityId, jsxSource, clearMessages]);
+  }, [communityId, jsxSource, clearMessages, onSaved]);
 
   const publishTemplate = useCallback(async () => {
     clearMessages();
@@ -363,12 +372,24 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
       setPublished(data.published);
       setSuccess('Template published successfully');
       setTimeout(() => setSuccess(null), 5000);
+      onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Publish failed');
     } finally {
       setPublishing(false);
     }
-  }, [communityId, jsxSource, clearMessages]);
+  }, [communityId, jsxSource, clearMessages, onSaved]);
+
+  const copyForClaude = useCallback(async () => {
+    if (!brandingContext) return;
+    try {
+      await navigator.clipboard.writeText(brandingContext + '\n\n' + jsxSource);
+      setCopiedForClaude(true);
+      setTimeout(() => setCopiedForClaude(false), 1500);
+    } catch {
+      // clipboard not available
+    }
+  }, [brandingContext, jsxSource]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -411,6 +432,15 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
             <Eye className="h-4 w-4" />
             Preview
           </button>
+          {brandingContext && (
+            <button
+              onClick={() => { void copyForClaude(); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+            >
+              {copiedForClaude ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
+              {copiedForClaude ? 'Copied!' : 'Copy for Claude'}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
