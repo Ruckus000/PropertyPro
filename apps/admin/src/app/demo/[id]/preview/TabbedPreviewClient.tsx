@@ -61,6 +61,8 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
+    // Close the edit drawer when switching to Admin Dashboard (not editable)
+    if (key === 'admin') setDrawerOpen(false);
     setVisitedTabs((prev) => {
       if (prev.has(key)) return prev;
       const next = new Set(prev);
@@ -214,17 +216,19 @@ export function TabbedPreviewClient({
           );
         })}
 
-        {/* Floating Edit Button */}
-        <button
-          type="button"
-          onClick={() => setDrawerOpen((prev) => !prev)}
-          className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
-            drawerOpen ? 'rotate-0' : ''
-          }`}
-          title={drawerOpen ? 'Close editor' : 'Edit demo'}
-        >
-          {drawerOpen ? <X size={20} /> : <Pencil size={20} />}
-        </button>
+        {/* Floating Edit Button — hidden on Admin Dashboard tab */}
+        {activeTab !== 'admin' && (
+          <button
+            type="button"
+            onClick={() => setDrawerOpen((prev) => !prev)}
+            className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
+              drawerOpen ? 'rotate-0' : ''
+            }`}
+            title={drawerOpen ? 'Close editor' : 'Edit demo'}
+          >
+            {drawerOpen ? <X size={20} /> : <Pencil size={20} />}
+          </button>
+        )}
       </div>
 
       {/* Edit Drawer */}
