@@ -406,13 +406,25 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     throw new Error('Missing seeded community IDs');
   }
 
-  const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({
-    communityId: communityIdsBySlug[assignment.slug]!,
-    userId: resolveUserId(userIdsByEmail, assignment.email),
-    role: assignment.role,
-  }));
+  const communityTypeBySlug = Object.fromEntries(
+    DEMO_COMMUNITIES.map((c) => [c.slug, c.communityType]),
+  ) as Record<DemoCommunitySlug, CommunityType>;
 
-  await seedRoles(crossAssignments);
+  const crossBySlug = new Map<DemoCommunitySlug, Array<{ communityId: number; userId: string; role: CanonicalRole }>>();
+  for (const assignment of CROSS_COMMUNITY_ASSIGNMENTS) {
+    const entry = {
+      communityId: communityIdsBySlug[assignment.slug]!,
+      userId: resolveUserId(userIdsByEmail, assignment.email),
+      role: assignment.role,
+    };
+    const existing = crossBySlug.get(assignment.slug) ?? [];
+    existing.push(entry);
+    crossBySlug.set(assignment.slug, existing);
+  }
+
+  for (const [slug, assignments] of crossBySlug) {
+    await seedRoles(assignments, communityTypeBySlug[slug]);
+  }
 
   await Promise.all(
     crossAssignments.map((a) => ensureNotificationPreference(a.communityId, a.userId)),

@@ -1,31 +1,53 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { SplitPreviewClient } from '../../src/app/demo/[id]/preview/SplitPreviewClient';
+import { TabbedPreviewClient } from '../../src/app/demo/[id]/preview/TabbedPreviewClient';
 import { MobilePreviewClient } from '../../src/app/demo/[id]/mobile/MobilePreviewClient';
 
 describe('demo preview clients', () => {
-  it('renders copy shareable link control in split preview', () => {
+  it('renders all four tab labels', () => {
     const html = renderToStaticMarkup(
-      createElement(SplitPreviewClient, {
-        boardUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=abc',
-        residentUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=def',
+      createElement(TabbedPreviewClient, {
+        publicUrl: 'http://localhost:3000/demo-test',
+        mobileUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=abc',
+        complianceUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=def&redirect=%2Fcompliance',
+        adminUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=ghi',
       }),
     );
 
-    expect(html).toContain('Copy shareable link');
+    expect(html).toContain('Public Website');
+    expect(html).toContain('Mobile App');
+    expect(html).toContain('Compliance');
+    expect(html).toContain('Admin Dashboard');
   });
 
-  it('disables copy control when board URL is missing', () => {
+  it('renders copy link control', () => {
     const html = renderToStaticMarkup(
-      createElement(SplitPreviewClient, {
-        boardUrl: null,
-        residentUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=def',
+      createElement(TabbedPreviewClient, {
+        publicUrl: 'http://localhost:3000/demo-test',
+        mobileUrl: null,
+        complianceUrl: null,
+        adminUrl: null,
       }),
     );
 
-    expect(html).toContain('Copy shareable link');
-    expect(html).toMatch(/<button[^>]*disabled/);
+    expect(html).toContain('Copy link');
+  });
+
+  it('disables tabs with null URLs', () => {
+    const html = renderToStaticMarkup(
+      createElement(TabbedPreviewClient, {
+        publicUrl: 'http://localhost:3000/demo-test',
+        mobileUrl: null,
+        complianceUrl: null,
+        adminUrl: null,
+      }),
+    );
+
+    // Public Website tab should not be disabled
+    // Mobile, Compliance, Admin should be disabled (disabled="" attribute)
+    const disabledButtons = html.match(/<button[^>]*disabled=""/g) ?? [];
+    expect(disabledButtons.length).toBe(3);
   });
 
   it('renders mobile back and split-screen navigation links', () => {

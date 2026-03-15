@@ -150,10 +150,26 @@ export async function GET(request: Request) {
   if (!communityId) {
     return loginError(trustedBaseUrl, 'demo_setup_incomplete');
   }
-  const redirectPath =
-    payload.role === 'resident'
-      ? `/mobile?communityId=${communityId}`
-      : `/dashboard?communityId=${communityId}`;
+
+  // Allow explicit redirect override (used by admin preview tabs)
+  const explicitRedirect = url.searchParams.get('redirect');
+  let redirectPath: string;
+  if (explicitRedirect) {
+    if (
+      !explicitRedirect.startsWith('/') ||
+      explicitRedirect.startsWith('//') ||
+      explicitRedirect.includes('://')
+    ) {
+      return loginError(trustedBaseUrl, 'invalid_redirect');
+    }
+    redirectPath = explicitRedirect;
+  } else {
+    redirectPath =
+      payload.role === 'resident'
+        ? `/mobile?communityId=${communityId}`
+        : `/dashboard?communityId=${communityId}`;
+  }
+
   const redirectToUrl = new URL(redirectPath, trustedBaseUrl);
   // Propagate preview flag so the final page response has relaxed iframe headers
   if (url.searchParams.get('preview') === 'true') {
