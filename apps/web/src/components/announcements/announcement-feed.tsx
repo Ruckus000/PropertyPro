@@ -7,6 +7,7 @@
 'use client';
 
 import React from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 import { AnnouncementToolbar } from './announcement-toolbar';
 
 export interface AnnouncementItem {
@@ -122,7 +123,7 @@ export function AnnouncementFeed({
 
           <div
             className="prose prose-sm max-w-none text-[var(--text-secondary)] dark:prose-invert dark:text-gray-300"
-            dangerouslySetInnerHTML={{ __html: announcement.body }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(announcement.body) }}
           />
         </article>
       ))}

@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
+import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
 import { CommandPalette } from './command-palette';
@@ -38,7 +38,7 @@ interface AppShellProps {
   children: ReactNode;
   user: AppShellUser | null;
   community: AppShellCommunity | null;
-  role: CommunityRole | null;
+  role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
 }
 

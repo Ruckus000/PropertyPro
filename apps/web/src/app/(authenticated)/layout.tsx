@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity, COMMUNITY_TYPES, COMMUNITY_ROLES } from '@propertypro/shared';
-import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity, COMMUNITY_TYPES, isAnyCommunityRole } from '@propertypro/shared';
+import type { AnyCommunityRole, CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { createServerClient } from '@/lib/supabase/server';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
@@ -43,7 +43,7 @@ async function resolveUser(): Promise<AppShellUser | null> {
 async function resolveCommunity(
   requestHeaders: Headers,
   userId: string,
-): Promise<{ community: AppShellCommunity; role: CommunityRole } | null> {
+): Promise<{ community: AppShellCommunity; role: AnyCommunityRole } | null> {
   const communityIdStr = requestHeaders.get('x-community-id');
   if (!communityIdStr) return null;
 
@@ -59,7 +59,7 @@ async function resolveCommunity(
     const role = match.role;
     if (
       !COMMUNITY_TYPES.includes(communityType as CommunityType) ||
-      !COMMUNITY_ROLES.includes(role as CommunityRole)
+      !isAnyCommunityRole(role)
     ) {
       return null;
     }
@@ -70,7 +70,7 @@ async function resolveCommunity(
         name: match.communityName,
         type: communityType as CommunityType,
       },
-      role: role as CommunityRole,
+      role: role as AnyCommunityRole,
     };
   } catch (error) {
     console.error('[AuthenticatedLayout] Failed to resolve community:', error);

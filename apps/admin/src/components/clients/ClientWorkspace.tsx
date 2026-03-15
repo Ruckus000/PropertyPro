@@ -11,6 +11,16 @@ import {
   COMMUNITY_TYPE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
+import { CommunitySettingsEditor } from './CommunitySettingsEditor';
+
+interface CommunitySettings {
+  announcementsWriteLevel?: 'all_members' | 'admin_only';
+  meetingsWriteLevel?: 'all_members' | 'admin_only';
+  meetingDocumentsWriteLevel?: 'all_members' | 'admin_only';
+  unitsWriteLevel?: 'all_members' | 'admin_only';
+  leasesWriteLevel?: 'all_members' | 'admin_only';
+  documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
+}
 
 interface Community {
   id: number;
@@ -23,6 +33,9 @@ interface Community {
   address_line1: string | null;
   subscription_status: string | null;
   subscription_plan: string | null;
+  timezone: string;
+  transparency_enabled: boolean;
+  community_settings: CommunitySettings;
   created_at: string;
   memberCount: number;
   documentCount: number;
@@ -182,14 +195,22 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'settings' && (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-500">Community settings</p>
-              <p className="mt-1 text-xs text-gray-400">
-                Settings editor coming in a future phase
-              </p>
-            </div>
-          </div>
+          <CommunitySettingsEditor
+            community={{
+              id: community.id,
+              name: community.name,
+              communityType: community.community_type,
+              address_line1: community.address_line1,
+              city: community.city,
+              state: community.state,
+              zip_code: community.zip_code,
+              timezone: community.timezone,
+              subscription_plan: community.subscription_plan,
+              subscription_status: community.subscription_status,
+              transparency_enabled: community.transparency_enabled,
+              community_settings: community.community_settings,
+            }}
+          />
         )}
       </div>
     </div>

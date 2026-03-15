@@ -18,7 +18,7 @@ import {
   Building2,
   Paintbrush,
 } from 'lucide-react';
-import { ADMIN_ROLES, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
+import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
 export interface NavItemConfig {
   id: string;
@@ -145,11 +145,18 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  */
 export function getVisibleItems(
   items: readonly NavItemConfig[],
-  role: CommunityRole | null,
+  role: AnyCommunityRole | null,
   features: CommunityFeatures | null,
 ): NavItemConfig[] {
   return items.filter((item) => {
-    if (item.roles && role && !item.roles.includes(role)) return false;
+    if (item.roles && role) {
+      if (isCommunityRole(role)) {
+        if (!item.roles.includes(role)) return false;
+      } else {
+        // New roles: all role-gated nav items are currently admin-gated
+        if (!isAdminRole(role)) return false;
+      }
+    }
     if (item.featureKey && features && !features[item.featureKey]) return false;
     return true;
   });

@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Wrench, Settings, LogOut } from 'lucide-react';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
+
 
 interface MoreLink {
   label: string;
@@ -47,7 +47,6 @@ export default async function MobileMorePage() {
 
   return (
     <div>
-      <MobilePageHeader>More</MobilePageHeader>
       <ul className="divide-y divide-gray-100 dark:divide-gray-800">
         {links.map((link) => {
           const Icon = link.icon;

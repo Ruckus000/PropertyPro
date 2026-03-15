@@ -12,7 +12,7 @@ import { createScopedClient, announcements } from '@propertypro/db';
 import type { Announcement } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
-import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
+
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -48,7 +48,6 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
 
   return (
     <div>
-      <MobilePageHeader>Announcements</MobilePageHeader>
       {active.length === 0 ? (
         <p className="mobile-empty">No announcements</p>
       ) : (

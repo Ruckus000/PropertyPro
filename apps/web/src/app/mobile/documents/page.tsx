@@ -13,7 +13,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getAccessibleDocuments } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { CompactCard } from '@/components/mobile/CompactCard';
-import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
+
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -64,7 +64,6 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <MobilePageHeader>Documents</MobilePageHeader>
       {docs.length === 0 ? (
         <p className="mobile-empty">No documents available</p>
       ) : (

@@ -28,6 +28,9 @@ const CommunityRowSchema = z.object({
   address_line1: z.string().nullable(),
   subscription_status: z.string().nullable(),
   subscription_plan: z.string().nullable(),
+  timezone: z.string(),
+  transparency_enabled: z.boolean(),
+  community_settings: z.record(z.unknown()).nullable(),
   created_at: z.string(),
   is_demo: z.boolean(),
 });
@@ -49,7 +52,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // Fetch community first (need it to gate 404)
   const communityResult = await db
     .from('communities')
-    .select('id, name, slug, community_type, city, state, zip_code, address_line1, subscription_status, subscription_plan, created_at, is_demo')
+    .select('id, name, slug, community_type, city, state, zip_code, address_line1, subscription_status, subscription_plan, timezone, transparency_enabled, community_settings, created_at, is_demo')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();

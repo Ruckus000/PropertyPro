@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Building } from 'lucide-react';
 import { NavRail, type NavRailItem } from '@propertypro/ui';
-import { toInitials, type CommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
+import { toInitials, type AnyCommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
 import {
   NAV_ITEMS,
   PM_NAV_ITEMS,
@@ -24,7 +24,7 @@ interface AppSidebarProps {
   communityId: number | null;
   communityName: string | null;
   communityType: CommunityType | null;
-  role: CommunityRole | null;
+  role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
   userName: string | null;
 }
