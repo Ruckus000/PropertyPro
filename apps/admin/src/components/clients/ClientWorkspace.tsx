@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * P1-6: Client Workspace — tab layout with Overview and Settings.
+ * Client Workspace — tab layout with Overview, Members, Compliance, and Settings.
  */
 import { useState } from 'react';
 import Link from 'next/link';
@@ -12,6 +12,9 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from '@/lib/constants/community-labels';
 import { CommunitySettingsEditor } from './CommunitySettingsEditor';
+import { CommunityMembers } from './CommunityMembers';
+import { CommunityCompliance } from './CommunityCompliance';
+import { WebsiteTabPanel } from './WebsiteTabPanel';
 
 interface CommunitySettings {
   announcementsWriteLevel?: 'all_members' | 'admin_only';
@@ -46,7 +49,15 @@ interface ClientWorkspaceProps {
   community: Community;
 }
 
-type Tab = 'overview' | 'settings';
+type Tab = 'overview' | 'members' | 'compliance' | 'website' | 'settings';
+
+const TAB_LABELS: Record<Tab, string> = {
+  overview: 'Overview',
+  members: 'Members',
+  compliance: 'Compliance',
+  website: 'Website',
+  settings: 'Settings',
+};
 
 export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -57,6 +68,11 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   const address = [community.address_line1, community.city, community.state, community.zip_code]
     .filter(Boolean)
     .join(', ');
+
+  // Apartments have no compliance items — hide the tab
+  const tabs: Tab[] = community.community_type === 'apartment'
+    ? ['overview', 'members', 'website', 'settings']
+    : ['overview', 'members', 'compliance', 'website', 'settings'];
 
   return (
     <div className="flex flex-col h-full">
@@ -95,7 +111,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
       {/* Tabs */}
       <div className="border-b border-gray-200 bg-white px-6">
         <div className="flex gap-1">
-          {(['overview', 'settings'] as Tab[]).map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -107,7 +123,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700',
               ].join(' ')}
             >
-              {tab === 'overview' ? 'Overview' : 'Settings'}
+              {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
@@ -192,6 +208,18 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
               </dl>
             </div>
           </div>
+        )}
+
+        {activeTab === 'members' && (
+          <CommunityMembers communityId={community.id} communityType={community.community_type} />
+        )}
+
+        {activeTab === 'compliance' && (
+          <CommunityCompliance communityId={community.id} />
+        )}
+
+        {activeTab === 'website' && (
+          <WebsiteTabPanel communityId={community.id} communitySlug={community.slug} />
         )}
 
         {activeTab === 'settings' && (

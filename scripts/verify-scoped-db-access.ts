@@ -56,6 +56,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // P3-47: White-label branding — communities is the root tenant table (no communityId column);
   // getBrandingForCommunity must query by primary key directly.
   resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
+  // JSX site template — public site queries published template by community_id (root tenant key)
+  resolve(repoRoot, 'apps/web/src/lib/api/site-template.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
   // Community picker — cross-community user membership query for post-login routing

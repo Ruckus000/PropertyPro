@@ -98,6 +98,6 @@ export type AnyCommunityRole = CommunityRole | NewCommunityRole;
 export type {
   BlockType, BlockContent, BlockContentMap,
   HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
-  MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent,
+  MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent, JsxTemplateBlockContent,
 } from './site-blocks';
 export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';

@@ -1,20 +1,65 @@
-import { Settings } from 'lucide-react';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { AdminLayout } from '@/components/AdminLayout';
+import { PlatformSettings } from '@/components/settings/PlatformSettings';
 
-export default function SettingsPage() {
+export const dynamic = 'force-dynamic';
+
+/** Row shape for platform_admin_users (not in generated Supabase types). */
+interface PlatformAdminRow {
+  user_id: string;
+  role: string;
+  invited_by: string | null;
+  created_at: string;
+}
+
+export default async function SettingsPage() {
+  const currentAdmin = await requirePlatformAdmin();
+  const db = createAdminClient();
+
+  // Fetch platform admins with emails
+  const { data } = await db
+    .from('platform_admin_users')
+    .select('user_id, role, invited_by, created_at')
+    .order('created_at');
+
+  const rows = (data ?? []) as unknown as PlatformAdminRow[];
+
+  const admins = await Promise.all(
+    rows.map(async (row) => {
+      const { data: { user } } = await db.auth.admin.getUserById(row.user_id);
+      return {
+        userId: row.user_id,
+        email: user?.email ?? 'unknown',
+        role: row.role,
+        invitedBy: row.invited_by,
+        createdAt: row.created_at,
+      };
+    }),
+  );
+
+  // Fetch platform stats
+  const [communityResult, demoResult] = await Promise.all([
+    db
+      .from('communities')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_demo', false)
+      .is('deleted_at', null),
+    db
+      .from('demo_instances')
+      .select('*', { count: 'exact', head: true }),
+  ]);
+
   return (
     <AdminLayout>
-      <div className="p-6">
-        <h1 className="text-xl font-semibold text-gray-900">Platform Settings</h1>
-        <div className="mt-6 flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-          <div className="text-center">
-            <Settings size={32} className="mx-auto mb-3 text-gray-400" />
-            <p className="text-sm text-gray-500">
-              Platform-wide settings coming in a future phase.
-            </p>
-          </div>
-        </div>
-      </div>
+      <PlatformSettings
+        currentAdmin={{ id: currentAdmin.id, email: currentAdmin.email, role: currentAdmin.role }}
+        admins={admins}
+        stats={{
+          communityCount: communityResult.count ?? 0,
+          demoCount: demoResult.count ?? 0,
+        }}
+      />
     </AdminLayout>
   );
 }

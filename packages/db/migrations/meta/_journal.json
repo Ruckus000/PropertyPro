@@ -400,6 +400,13 @@
       "when": 1773090000000,
       "tag": "0096_esign_rls_admin_write",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1773100000000,
+      "tag": "0097_add_jsx_template_block_type",
+      "breakpoints": true
     }
   ]
 }
