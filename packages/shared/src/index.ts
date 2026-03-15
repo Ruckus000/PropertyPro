@@ -92,6 +92,9 @@ export * from './manager-presets';
 export const NEW_COMMUNITY_ROLES = ['resident', 'manager', 'pm_admin'] as const;
 export type NewCommunityRole = (typeof NEW_COMMUNITY_ROLES)[number];
 
+/** Any community role — legacy or new. Used during the hybrid migration period. */
+export type AnyCommunityRole = CommunityRole | NewCommunityRole;
+
 export type {
   BlockType, BlockContent, BlockContentMap,
   HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
