@@ -4,7 +4,7 @@
  *
  * @module supabase/middleware
  */
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptionsWithName } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCookieOptions } from './cookie-config';
 
@@ -13,8 +13,14 @@ import { getCookieOptions } from './cookie-config';
  * Refreshes session tokens and writes updated cookies to the response.
  *
  * Returns `{ supabase, response }` — caller must return `response`.
+ *
+ * @param cookieOptions - Override the default cookie options (e.g. custom name
+ *   to isolate sessions between apps sharing the same Supabase project).
  */
-export async function createMiddlewareClient(request: NextRequest) {
+export async function createMiddlewareClient(
+  request: NextRequest,
+  cookieOptions?: CookieOptionsWithName,
+) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -30,7 +36,7 @@ export async function createMiddlewareClient(request: NextRequest) {
   });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookieOptions: getCookieOptions(),
+    cookieOptions: cookieOptions ?? getCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll();

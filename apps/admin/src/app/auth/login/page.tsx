@@ -10,6 +10,7 @@
 import { useState, useMemo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { Suspense } from 'react';
 
 function safeReturnTo(value: string | null): string {
@@ -34,7 +35,7 @@ function LoginForm() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return null;
-    return createBrowserClient(url, key);
+    return createBrowserClient(url, key, { cookieOptions: ADMIN_COOKIE_OPTIONS });
   }, []);
 
   if (accessDenied) {
