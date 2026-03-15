@@ -19,6 +19,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 
 const PRODUCTION_DOMAIN = 'propertyprofl.com';
 
@@ -70,11 +71,50 @@ function getTrustedBaseUrl(request: Request): string | null {
   return null;
 }
 
-function createRedirectResponse(target: string | URL): NextResponse {
+function createRedirectResponse(target: string | URL, options?: { isPreview?: boolean }): NextResponse {
   const response = NextResponse.redirect(target);
   response.headers.set('Referrer-Policy', 'no-referrer');
   response.headers.set('Cache-Control', 'no-store');
   response.headers.set('Pragma', 'no-cache');
+
+  // Apply security headers directly — middleware headers may not propagate
+  // to route-handler-created redirect responses in Next.js App Router.
+  const isPreview = options?.isPreview ?? false;
+  const secHeaders = buildSecurityHeaders({ isPreview });
+  for (const [name, value] of Object.entries(secHeaders)) {
+    response.headers.set(name, value);
+  }
+  // Browsers check frame-ancestors on redirect responses before following them.
+  response.headers.set('Content-Security-Policy', buildCspHeader({ isPreview }));
+
+  return response;
+}
+
+/**
+ * For preview-mode (iframe) requests, return an HTML page that redirects
+ * client-side instead of a 307. Browsers block Set-Cookie on 307 redirect
+ * responses in cross-origin iframes, preventing the session from being
+ * established. A 200 HTML response stores cookies normally, then JS navigates.
+ */
+function createPreviewRedirectResponse(target: string | URL): NextResponse {
+  const targetUrl = typeof target === 'string' ? target : target.toString();
+  const escaped = targetUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const html = `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=${escaped}"><script>window.location.replace(${JSON.stringify(targetUrl)})</script></head><body></body></html>`;
+
+  const response = new NextResponse(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+  response.headers.set('Referrer-Policy', 'no-referrer');
+  response.headers.set('Cache-Control', 'no-store');
+  response.headers.set('Pragma', 'no-cache');
+
+  const secHeaders = buildSecurityHeaders({ isPreview: true });
+  for (const [name, value] of Object.entries(secHeaders)) {
+    response.headers.set(name, value);
+  }
+  response.headers.set('Content-Security-Policy', buildCspHeader({ isPreview: true }));
+
   return response;
 }
 
@@ -232,7 +272,10 @@ export async function GET(request: Request) {
   }
 
   // 7. Redirect with session cookies attached
-  const response = createRedirectResponse(redirectTo);
+  const isPreview = url.searchParams.get('preview') === 'true';
+  const response = isPreview
+    ? createPreviewRedirectResponse(redirectTo)
+    : createRedirectResponse(redirectTo);
   for (const cookie of pendingCookies) {
     response.cookies.set(cookie.name, cookie.value, cookie.options);
   }

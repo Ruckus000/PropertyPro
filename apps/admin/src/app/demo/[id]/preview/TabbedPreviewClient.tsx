@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PhoneFrame } from '@propertypro/ui';
 
-type TabKey = 'public' | 'mobile' | 'compliance' | 'admin';
+type TabKey = 'public' | 'mobile' | 'admin';
 
 interface TabDef {
   key: TabKey;
@@ -14,14 +14,12 @@ interface TabDef {
 interface TabbedPreviewClientProps {
   publicUrl: string;
   mobileUrl: string | null;
-  complianceUrl: string | null;
   adminUrl: string | null;
 }
 
 export function TabbedPreviewClient({
   publicUrl,
   mobileUrl,
-  complianceUrl,
   adminUrl,
 }: TabbedPreviewClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('public');
@@ -40,7 +38,6 @@ export function TabbedPreviewClient({
   const tabs: TabDef[] = [
     { key: 'public', label: 'Public Website', url: publicUrl },
     { key: 'mobile', label: 'Mobile App', url: mobileUrl },
-    { key: 'compliance', label: 'Compliance', url: complianceUrl },
     { key: 'admin', label: 'Admin Dashboard', url: adminUrl },
   ];
 

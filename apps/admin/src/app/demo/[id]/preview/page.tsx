@@ -71,13 +71,7 @@ export default async function DemoPreviewPage({ params }: PageProps) {
     ? `${demoLoginBase}?token=${residentToken}&preview=true`
     : null;
 
-  // 3. Compliance Dashboard — board token with explicit redirect
-  const complianceRedirect = `/communities/${demo.seeded_community_id}/compliance`;
-  const complianceUrl = boardToken
-    ? `${demoLoginBase}?token=${boardToken}&preview=true&redirect=${encodeURIComponent(complianceRedirect)}`
-    : null;
-
-  // 4. Admin Dashboard — board token (default redirect to /dashboard)
+  // 3. Admin Dashboard — board token (default redirect to /dashboard)
   const adminUrl = boardToken
     ? `${demoLoginBase}?token=${boardToken}&preview=true`
     : null;
@@ -113,7 +107,6 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       <TabbedPreviewClient
         publicUrl={publicUrl}
         mobileUrl={mobileUrl}
-        complianceUrl={complianceUrl}
         adminUrl={adminUrl}
       />
     </div>
