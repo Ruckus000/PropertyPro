@@ -7,7 +7,7 @@
  * Must be loaded via next/dynamic({ ssr: false }) because CodeMirror
  * accesses browser APIs at import time.
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Loader2, Save, Upload, Code, Eye } from 'lucide-react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
@@ -107,16 +107,24 @@ const DEFAULT_JSX = `function App() {
 // Preview iframe srcdoc builder
 // ---------------------------------------------------------------------------
 
-function buildPreviewSrcdoc(jsxSource: string): string {
+// CDN URLs with pinned versions.
+// React 19 dropped UMD builds, so preview uses React 18 UMD (visual output is identical).
+// Published templates compile server-side with the project's actual React 19.
+const CDN_REACT = 'https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js';
+const CDN_REACT_DOM = 'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js';
+const CDN_BABEL = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.10/babel.min.js';
+const CDN_TAILWIND = 'https://cdn.tailwindcss.com/3.4.17';
+
+export function buildPreviewSrcdoc(jsxSource: string): string {
+  // JSON.stringify escapes quotes, newlines, backslashes.
+  // We also replace </ with <\/ to prevent </script> from closing the HTML script block.
+  const encodedSource = JSON.stringify(jsxSource).replace(/<\//g, '<\\/');
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <script crossorigin src="https://unpkg.com/react@19/umd/react.production.min.js"><\/script>
-  <script crossorigin src="https://unpkg.com/react-dom@19/umd/react-dom.production.min.js"><\/script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
   <style>
     :root {
       --pp-primary: #2563EB;
@@ -124,15 +132,58 @@ function buildPreviewSrcdoc(jsxSource: string): string {
       --pp-accent: #3B82F6;
     }
     body { margin: 0; }
+    .pp-loading { padding: 24px; color: #6b7280; font-family: system-ui, sans-serif; }
+    .pp-error {
+      padding: 24px; margin: 16px; font-family: ui-monospace, monospace; font-size: 13px;
+      color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+      white-space: pre-wrap; word-break: break-word;
+    }
   </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    ${jsxSource}
+  <div id="root"><p class="pp-loading">Loading preview\u2026</p></div>
+  <script>
+  (function() {
+    var root = document.getElementById('root');
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(typeof App !== 'undefined' ? App : () => null));
+    function showError(msg) {
+      root.innerHTML = '<div class="pp-error">' + String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+    }
+
+    window.onerror = function(msg, src, line, col, err) {
+      showError('Runtime error: ' + (err ? err.message : msg));
+    };
+
+    function loadScript(url) {
+      return new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = function() { reject(new Error('Failed to load: ' + url)); };
+        document.head.appendChild(s);
+      });
+    }
+
+    loadScript('${CDN_REACT}')
+      .then(function() { return loadScript('${CDN_REACT_DOM}'); })
+      .then(function() { return loadScript('${CDN_BABEL}'); })
+      .then(function() { return loadScript('${CDN_TAILWIND}'); })
+      .then(function() {
+        var jsxSource = ${encodedSource};
+        var transformed = Babel.transform(
+          jsxSource + '\\n;typeof App !== "undefined" ? App : null;',
+          { presets: ['react'], filename: 'template.jsx' }
+        );
+        var fn = new Function('React', 'ReactDOM', 'return eval(' + JSON.stringify(transformed.code) + ');');
+        var App = fn(React, ReactDOM);
+        if (!App) {
+          showError('No App component found.\\nDefine: function App() { return <div>...</div>; }');
+          return;
+        }
+        ReactDOM.createRoot(root).render(React.createElement(App));
+      })
+      .catch(function(err) { showError(err.message || String(err)); });
+  })();
   <\/script>
 </body>
 </html>`;
@@ -161,6 +212,19 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
   useEffect(() => {
     jsxRef.current = jsxSource;
   }, [jsxSource]);
+
+  // Build a blob URL for the preview iframe so CDN scripts can load
+  // (srcdoc + sandbox="allow-scripts" blocks external fetches due to opaque origin)
+  const previewBlobUrl = useMemo(() => {
+    if (activeTab !== 'preview') return null;
+    const html = buildPreviewSrcdoc(jsxSource);
+    return URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  }, [jsxSource, activeTab]);
+
+  // Revoke blob URL on change or unmount
+  useEffect(() => {
+    return () => { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl); };
+  }, [previewBlobUrl]);
 
   // ---------------------------------------------------------------------------
   // Load template on mount
@@ -399,11 +463,15 @@ export default function JsxTemplateEditor({ communityId }: JsxTemplateEditorProp
         {activeTab === 'code' && (
           <div ref={editorRef} className="h-full" />
         )}
-        {activeTab === 'preview' && (
+        {activeTab === 'preview' && previewBlobUrl && (
           <iframe
             title="Template Preview"
-            sandbox="allow-scripts"
-            srcDoc={buildPreviewSrcdoc(jsxSource)}
+            // allow-same-origin is required for the blob iframe to load external CDN
+            // scripts (React, Babel, Tailwind). This means the iframe shares the admin
+            // app's origin, but the template author is already a trusted platform admin.
+            // Published templates go through server-side sanitization (DOMPurify) separately.
+            sandbox="allow-scripts allow-same-origin"
+            src={previewBlobUrl}
             className="w-full h-full border-0"
           />
         )}
