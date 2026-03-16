@@ -33,6 +33,8 @@ interface DemoEditDrawerProps {
   communityId: number;
   prospectName: string;
   onSaved: () => void;
+  /** Which preview tab is active — controls whether Page Template tab is shown */
+  previewTab?: 'public' | 'mobile' | 'admin';
 }
 
 type DrawerTab = 'branding' | 'template';
@@ -180,9 +182,18 @@ export function DemoEditDrawer({
   communityId,
   prospectName,
   onSaved,
+  previewTab = 'public',
 }: DemoEditDrawerProps) {
-  const [activeTab, setActiveTab] = useState<DrawerTab>('template');
+  const showTemplateTab = previewTab === 'public';
+  const [activeTab, setActiveTab] = useState<DrawerTab>(showTemplateTab ? 'template' : 'branding');
   const [branding, setBranding] = useState<BrandingInfo>(DEFAULT_BRANDING);
+  // Switch to branding tab when Page Template tab is hidden
+  useEffect(() => {
+    if (!showTemplateTab && activeTab === 'template') {
+      setActiveTab('branding');
+    }
+  }, [showTemplateTab, activeTab]);
+
   // Fetch branding on mount and when refreshed
   const fetchBranding = useCallback(async () => {
     try {
@@ -255,17 +266,19 @@ export function DemoEditDrawer({
         {/* Tab navigation */}
         <div className="border-b border-gray-200 px-5">
           <nav className="-mb-px flex gap-4">
-            <button
-              type="button"
-              onClick={() => setActiveTab('template')}
-              className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'template'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Page Template
-            </button>
+            {showTemplateTab && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('template')}
+                className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'template'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Page Template
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setActiveTab('branding')}

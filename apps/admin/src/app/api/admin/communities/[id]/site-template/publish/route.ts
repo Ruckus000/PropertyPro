@@ -8,9 +8,8 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import React from 'react';
-import ReactDOMServer from 'react-dom/server';
 import { transform } from 'sucrase';
-import DOMPurify from 'isomorphic-dompurify';
+// DOMPurify is dynamically imported below to avoid jsdom build errors in Next.js route handlers
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -93,6 +92,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Dynamic import to avoid Next.js build error with react-dom/server in route handlers
+    const ReactDOMServer = (await import('react-dom/server')).default;
     compiledHtml = ReactDOMServer.renderToStaticMarkup(element);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Render failed';
@@ -103,6 +104,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   }
 
   // 4. Sanitize compiled HTML (defense-in-depth)
+  const DOMPurify = (await import('isomorphic-dompurify')).default;
   compiledHtml = DOMPurify.sanitize(compiledHtml, {
     ADD_TAGS: ['style'],
     ADD_ATTR: ['target', 'rel'],

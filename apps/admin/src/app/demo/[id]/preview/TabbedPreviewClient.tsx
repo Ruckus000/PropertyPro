@@ -31,7 +31,6 @@ export function TabbedPreviewClient({
   prospectName,
 }: TabbedPreviewClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('public');
-  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(() => new Set(['public']));
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshFlash, setRefreshFlash] = useState(false);
@@ -61,14 +60,8 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
-    // Close the edit drawer when switching to Admin Dashboard (not editable)
-    if (key === 'admin') setDrawerOpen(false);
-    setVisitedTabs((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
+    // Close the edit drawer when switching away from Public Website
+    if (key !== 'public') setDrawerOpen(false);
   };
 
   const handleCopyShareableLink = async () => {
@@ -90,19 +83,25 @@ export function TabbedPreviewClient({
     }, 1600);
   };
 
-  // Refresh all visited iframes after an edit is saved
+  // Refresh all mounted iframes after an edit is saved.
+  // Authenticated iframes are staggered to avoid rate-limiting on demo-login.
   const handleSaved = useCallback(() => {
-    for (const key of Object.keys(iframeRefs.current) as TabKey[]) {
+    const reloadIframe = (key: TabKey) => {
       const iframe = iframeRefs.current[key];
-      if (iframe) {
-        try {
-          // eslint-disable-next-line no-self-assign
-          iframe.src = iframe.src;
-        } catch {
-          // Cross-origin iframe — can't reload, ignore
-        }
+      if (!iframe) return;
+      try {
+        // eslint-disable-next-line no-self-assign
+        iframe.src = iframe.src;
+      } catch {
+        // Cross-origin iframe — can't reload, ignore
       }
-    }
+    };
+
+    // Public tab has no auth — reload immediately
+    reloadIframe('public');
+    // Stagger authenticated tabs to avoid rate-limit on demo-login
+    setTimeout(() => reloadIframe('mobile'), 300);
+    setTimeout(() => reloadIframe('admin'), 1200);
 
     // Brief green border flash as visual confirmation
     setRefreshFlash(true);
@@ -164,11 +163,9 @@ export function TabbedPreviewClient({
       <div className={`relative flex-1 transition-all duration-200 ${refreshFlash ? 'ring-2 ring-green-400 ring-inset' : ''}`}>
         {tabs.map((tab) => {
           const isActive = tab.key === activeTab;
-          const hasVisited = visitedTabs.has(tab.key);
 
-          // Only render the iframe once the tab has been visited (lazy load)
-          if (!hasVisited || !tab.url) {
-            if (isActive && !tab.url) {
+          if (!tab.url) {
+            if (isActive) {
               return (
                 <div
                   key={tab.key}
@@ -189,7 +186,7 @@ export function TabbedPreviewClient({
                 style={{ display: isActive ? 'flex' : 'none' }}
               >
                 <div className="flex flex-col items-center gap-4">
-                  <PhoneFrame src={tab.url} />
+                  <PhoneFrame ref={(el) => setIframeRef('mobile', el)} src={tab.url} />
                   <a
                     href={tab.url}
                     target="_blank"
@@ -239,6 +236,7 @@ export function TabbedPreviewClient({
         communityId={communityId}
         prospectName={prospectName}
         onSaved={handleSaved}
+        previewTab={activeTab}
       />
     </div>
   );

@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     '@propertypro/ui',
     '@propertypro/theme',
   ],
+  serverExternalPackages: ['isomorphic-dompurify'],
   env: {
     NEXT_PUBLIC_APP_ROLE: 'admin',
   },

@@ -9,8 +9,14 @@ describe('PhoneFrame', () => {
     expect(iframe.src).toContain('/mobile?communityId=42');
   });
 
-  it('has loading="lazy" attribute', () => {
+  it('defaults to loading="eager"', () => {
     render(<PhoneFrame src="/mobile" />);
+    const iframe = screen.getByTitle('Mobile portal preview');
+    expect(iframe).toHaveAttribute('loading', 'eager');
+  });
+
+  it('accepts loading="lazy" override', () => {
+    render(<PhoneFrame src="/mobile" loading="lazy" />);
     const iframe = screen.getByTitle('Mobile portal preview');
     expect(iframe).toHaveAttribute('loading', 'lazy');
   });
