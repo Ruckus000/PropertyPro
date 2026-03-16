@@ -297,7 +297,7 @@ export function DemoEditDrawer({
   const showTemplateTab = previewTab !== 'admin';
   const templateVariant = previewTab === 'mobile' ? 'mobile' : 'public';
   const [activeTab, setActiveTab] = useState<DrawerTab>(showTemplateTab ? 'template' : 'branding');
-  const [branding, setBranding] = useState<BrandingInfo>(DEFAULT_BRANDING);
+  const [branding, setBranding] = useState<BrandingInfo>({ ...DEFAULT_BRANDING, communityName: prospectName });
   // Switch to branding tab when Page Template tab is hidden (admin tab only)
   useEffect(() => {
     if (previewTab === 'admin' && activeTab === 'template') {
@@ -414,6 +414,7 @@ export function DemoEditDrawer({
               defaultJsx={templateVariant === 'mobile' ? buildDefaultMobileJsx(branding) : buildDefaultJsx(branding)}
               brandingContext={buildBrandingContext(branding)}
               variant={templateVariant}
+              brandingColors={{ primary: branding.primaryColor, secondary: branding.secondaryColor, accent: branding.accentColor }}
             />
           )}
           {activeTab === 'branding' && (

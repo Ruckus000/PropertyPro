@@ -28,6 +28,8 @@ interface JsxTemplateEditorProps {
   brandingContext?: string;
   /** Template variant — determines which template is loaded/saved. Default: 'public'. */
   variant?: 'public' | 'mobile';
+  /** Branding colors to inject into the preview iframe's CSS variables. Falls back to defaults. */
+  brandingColors?: { primary: string; secondary: string; accent: string };
 }
 
 interface TemplateContent {
@@ -123,7 +125,13 @@ const CDN_REACT_DOM = 'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-d
 const CDN_BABEL = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.10/babel.min.js';
 const CDN_TAILWIND = 'https://cdn.tailwindcss.com/3.4.17';
 
-export function buildPreviewSrcdoc(jsxSource: string): string {
+export function buildPreviewSrcdoc(
+  jsxSource: string,
+  colors?: { primary: string; secondary: string; accent: string },
+): string {
+  const primary = colors?.primary ?? '#2563EB';
+  const secondary = colors?.secondary ?? '#1E40AF';
+  const accent = colors?.accent ?? '#3B82F6';
   // JSON.stringify escapes quotes, newlines, backslashes.
   // We also replace </ with <\/ to prevent </script> from closing the HTML script block.
   const encodedSource = JSON.stringify(jsxSource).replace(/<\//g, '<\\/');
@@ -135,9 +143,9 @@ export function buildPreviewSrcdoc(jsxSource: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
-      --pp-primary: #2563EB;
-      --pp-secondary: #1E40AF;
-      --pp-accent: #3B82F6;
+      --pp-primary: ${primary};
+      --pp-secondary: ${secondary};
+      --pp-accent: ${accent};
     }
     body { margin: 0; }
     .pp-loading { padding: 24px; color: #6b7280; font-family: system-ui, sans-serif; }
@@ -201,7 +209,7 @@ export function buildPreviewSrcdoc(jsxSource: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, brandingContext, variant = 'public' }: JsxTemplateEditorProps) {
+export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, brandingContext, variant = 'public', brandingColors }: JsxTemplateEditorProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [jsxSource, setJsxSource] = useState('');
   const [draft, setDraft] = useState<SiteBlock | null>(null);
@@ -229,9 +237,9 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
 
   const previewBlobUrl = useMemo(() => {
     if (previewSource === null) return null;
-    const html = buildPreviewSrcdoc(previewSource);
+    const html = buildPreviewSrcdoc(previewSource, brandingColors);
     return URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  }, [previewSource]);
+  }, [previewSource, brandingColors]);
 
   // Revoke blob URL on change or unmount
   useEffect(() => {

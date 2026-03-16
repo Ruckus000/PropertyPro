@@ -57,6 +57,14 @@ export default async function PublicSitePage() {
 
   // If a custom template has been published, render it instead of the default
   if (compiledHtml) {
+    // Template JSX uses --pp-* aliases alongside --theme-* vars
+    const templateVars: Record<string, string> = {
+      ...cssVars,
+      '--pp-primary': theme.primaryColor,
+      '--pp-secondary': theme.secondaryColor,
+      '--pp-accent': theme.accentColor,
+    };
+
     return (
       <>
         {fontLinks.map((href) => (
@@ -65,8 +73,8 @@ export default async function PublicSitePage() {
         ))}
         {/* Tailwind CDN for custom template styling */}
         {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
-        <script src="https://cdn.tailwindcss.com" async />
-        <div style={cssVars} className="font-body">
+        <script src="/assets/tailwind.min.js" async />
+        <div style={templateVars} className="font-body">
           <div dangerouslySetInnerHTML={{ __html: compiledHtml }} />
         </div>
       </>
