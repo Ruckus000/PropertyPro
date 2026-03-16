@@ -22,7 +22,7 @@ const patchSchema = z.object({
   accentColor: HEX_COLOR.optional(),
   fontHeading: FONT.optional(),
   fontBody: FONT.optional(),
-  logoStoragePath: z.string().max(500).optional(),
+  logoPath: z.string().max(500).optional(),
 }).strict();
 
 describe('branding PATCH schema', () => {
@@ -81,16 +81,16 @@ describe('branding PATCH schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts logoStoragePath', () => {
+  it('accepts logoPath', () => {
     const result = patchSchema.safeParse({
-      logoStoragePath: '123/site/abc-def.webp',
+      logoPath: '123/site/abc-def.webp',
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects logoStoragePath over 500 chars', () => {
+  it('rejects logoPath over 500 chars', () => {
     const result = patchSchema.safeParse({
-      logoStoragePath: 'x'.repeat(501),
+      logoPath: 'x'.repeat(501),
     });
     expect(result.success).toBe(false);
   });
@@ -102,7 +102,7 @@ describe('branding PATCH schema', () => {
       accentColor: '#D1FAE5',
       fontHeading: 'Urbanist',
       fontBody: 'Figtree',
-      logoStoragePath: '42/site/logo.webp',
+      logoPath: '42/site/logo.webp',
     });
     expect(result.success).toBe(true);
   });

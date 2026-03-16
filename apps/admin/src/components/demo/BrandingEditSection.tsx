@@ -204,7 +204,7 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
       if (form.accentColor !== initial.accentColor) body.accentColor = form.accentColor;
       if (form.fontHeading !== initial.fontHeading) body.fontHeading = form.fontHeading;
       if (form.fontBody !== initial.fontBody) body.fontBody = form.fontBody;
-      if (form.logoPath !== initial.logoPath) body.logoStoragePath = form.logoPath;
+      if (form.logoPath !== initial.logoPath) body.logoPath = form.logoPath;
 
       if (Object.keys(body).length === 0) {
         setSuccess(true);

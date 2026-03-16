@@ -24,7 +24,7 @@ const patchSchema = z.object({
   accentColor: HEX_COLOR.optional(),
   fontHeading: FONT.optional(),
   fontBody: FONT.optional(),
-  logoStoragePath: z.string().max(500).optional(),
+  logoPath: z.string().max(500).optional(),
 }).strict();
 
 interface RouteContext {
@@ -109,17 +109,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const existingBranding = ((current as Record<string, unknown> | null)?.branding ?? {}) as Record<string, unknown>;
 
   // Build merged branding
-  const { logoStoragePath, ...colorFontFields } = parsed.data;
   const merged: Record<string, unknown> = { ...existingBranding };
 
-  for (const [key, value] of Object.entries(colorFontFields)) {
+  for (const [key, value] of Object.entries(parsed.data)) {
     if (value !== undefined) {
       merged[key] = value;
     }
-  }
-
-  if (logoStoragePath !== undefined) {
-    merged.logoPath = logoStoragePath;
   }
 
   const { data: updated, error } = await db
