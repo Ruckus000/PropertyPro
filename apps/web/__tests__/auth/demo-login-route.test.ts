@@ -10,6 +10,9 @@ const {
   extractDemoIdFromTokenMock,
   validateDemoTokenMock,
   decryptDemoTokenSecretMock,
+  verifyOtpMock,
+  createServerClientMock,
+  cookiesMock,
 } = vi.hoisted(() => {
   interface DemoInstanceRow {
     id: number;
@@ -45,6 +48,18 @@ const {
   const validateDemoTokenMock = vi.fn();
   const decryptDemoTokenSecretMock = vi.fn();
 
+  const verifyOtpMock = vi.fn();
+  const createServerClientMock = vi.fn(() => ({
+    auth: {
+      verifyOtp: verifyOtpMock,
+    },
+  }));
+
+  const cookiesMock = vi.fn(() => ({
+    getAll: vi.fn(() => []),
+    set: vi.fn(),
+  }));
+
   return {
     state,
     demoInstancesTable: Symbol('demo_instances'),
@@ -55,6 +70,9 @@ const {
     extractDemoIdFromTokenMock,
     validateDemoTokenMock,
     decryptDemoTokenSecretMock,
+    verifyOtpMock,
+    createServerClientMock,
+    cookiesMock,
   };
 });
 
@@ -80,9 +98,17 @@ vi.mock('@propertypro/shared/server', () => ({
   decryptDemoTokenSecret: decryptDemoTokenSecretMock,
 }));
 
+vi.mock('@supabase/ssr', () => ({
+  createServerClient: createServerClientMock,
+}));
+
+vi.mock('next/headers', () => ({
+  cookies: cookiesMock,
+}));
+
 import { GET } from '../../src/app/api/v1/auth/demo-login/route';
 
-const ACTION_LINK = 'https://supabase.example/auth/v1/verify?token=magic';
+const HASHED_TOKEN = 'hashed-token-abc123';
 const BASE_INSTANCE = {
   id: 101,
   demoResidentEmail: 'demo-resident@test.propertyprofl.com',
@@ -100,6 +126,8 @@ describe('demo-login route hardening', () => {
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', '');
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY', '');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
     state.rows = [];
 
     extractDemoIdFromTokenMock.mockReturnValue(101);
@@ -114,11 +142,13 @@ describe('demo-login route hardening', () => {
     generateLinkMock.mockResolvedValue({
       data: {
         properties: {
-          action_link: ACTION_LINK,
+          hashed_token: HASHED_TOKEN,
         },
       },
       error: null,
     });
+
+    verifyOtpMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
   });
 
   afterEach(() => {
@@ -147,7 +177,7 @@ describe('demo-login route hardening', () => {
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 
-  it('uses trusted base URL for redirectTo even when request host is malicious', async () => {
+  it('redirects to computed URL after server-side OTP verification', async () => {
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', 'a'.repeat(64));
 
@@ -161,16 +191,18 @@ describe('demo-login route hardening', () => {
     const response = await GET(makeRequest('https://evil.example/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe(ACTION_LINK);
+    // Should redirect to the computed redirect URL, not to a Supabase action link
+    expect(response.headers.get('location')).toBe('https://propertyprofl.com/mobile?communityId=42');
     expect(generateLinkMock).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'magiclink',
         email: BASE_INSTANCE.demoResidentEmail,
-        options: {
-          redirectTo: 'https://propertyprofl.com/mobile?communityId=42',
-        },
       }),
     );
+    expect(verifyOtpMock).toHaveBeenCalledWith({
+      token_hash: HASHED_TOKEN,
+      type: 'magiclink',
+    });
   });
 
   it('keeps legacy plaintext-secret flow working without encryption key', async () => {
@@ -187,9 +219,10 @@ describe('demo-login route hardening', () => {
     const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe(ACTION_LINK);
+    expect(response.headers.get('location')).toBe('https://propertyprofl.com/mobile?communityId=42');
     expect(decryptDemoTokenSecretMock).toHaveBeenCalledWith('legacy-plaintext-secret', '');
     expect(generateLinkMock).toHaveBeenCalledTimes(1);
+    expect(verifyOtpMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns invalid_token when decryption fails', async () => {
@@ -222,5 +255,72 @@ describe('demo-login route hardening', () => {
     expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(response.headers.get('Pragma')).toBe('no-cache');
+  });
+
+  it('returns session_error when OTP verification fails', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    state.rows = [
+      {
+        ...BASE_INSTANCE,
+        authTokenSecret: 'plaintext-secret',
+      },
+    ];
+
+    verifyOtpMock.mockResolvedValue({ data: null, error: { message: 'Invalid OTP' } });
+
+    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[demo-login] OTP verification failed:',
+      'Invalid OTP',
+    );
+  });
+
+  it('returns session_error when hashed_token is missing from generateLink response', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    state.rows = [
+      {
+        ...BASE_INSTANCE,
+        authTokenSecret: 'plaintext-secret',
+      },
+    ];
+
+    generateLinkMock.mockResolvedValue({
+      data: { properties: {} },
+      error: null,
+    });
+
+    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
+    expect(verifyOtpMock).not.toHaveBeenCalled();
+  });
+
+  it('propagates preview=true to redirect URL via HTML redirect (200)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+
+    state.rows = [
+      {
+        ...BASE_INSTANCE,
+        authTokenSecret: 'plaintext-secret',
+      },
+    ];
+
+    const response = await GET(
+      makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test&preview=true'),
+    );
+
+    // Preview mode uses a 200 HTML response with client-side redirect
+    // because browsers block Set-Cookie on 307 in cross-origin iframes
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('https://propertyprofl.com/mobile?communityId=42&amp;preview=true');
   });
 });

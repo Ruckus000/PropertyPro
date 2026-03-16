@@ -35,6 +35,14 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
   }
 
   const communityId = rawId;
+
+  // Preview mode: skip auth, render minimal shell (no nav bars).
+  // The page handles its own branding/fonts when rendering templates.
+  const isPreview = requestHeaders.get('x-preview') === 'true';
+  if (isPreview) {
+    return <>{children}</>;
+  }
+
   let userId: string;
   let userName: string | null = null;
 

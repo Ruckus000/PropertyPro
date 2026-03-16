@@ -22,6 +22,7 @@ export const demoInstances = pgTable(
     externalCrmUrl: text('external_crm_url'),
     prospectNotes: text('prospect_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    customizedAt: timestamp('customized_at', { withTimezone: true }),
   },
   (table) => [
     unique('demo_instances_slug_unique').on(table.slug),

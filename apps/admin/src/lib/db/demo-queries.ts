@@ -26,6 +26,7 @@ export interface DemoInstanceRow {
   external_crm_url: string | null;
   prospect_notes: string | null;
   created_at: string;
+  customized_at: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,31 @@ export async function deleteDemo(id: number): Promise<{
     .eq('id', id)
     .select()
     .single();
+}
+
+/**
+ * Set `customized_at` to now if not already set.
+ * Called on the first edit to mark a demo as customized.
+ */
+export async function markDemoCustomized(id: number): Promise<{
+  error: { message: string } | null;
+}> {
+  return from('demo_instances')
+    .update({ customized_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('customized_at', null);
+}
+
+/**
+ * Get the seeded community ID for a demo instance.
+ * Returns null if the demo doesn't exist or has no community.
+ */
+export async function getDemoCommunityId(demoId: number): Promise<number | null> {
+  const { data } = await from('demo_instances')
+    .select('seeded_community_id')
+    .eq('id', demoId)
+    .single();
+  return (data as { seeded_community_id: number | null } | null)?.seeded_community_id ?? null;
 }
 
 /** Delete a community by ID (cascades demo data). */

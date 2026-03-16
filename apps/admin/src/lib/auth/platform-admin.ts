@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { ADMIN_COOKIE_OPTIONS } from './cookie-config';
 
 const AdminRowSchema = z.object({ role: z.enum(['super_admin']) });
 
@@ -32,6 +33,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
 
   const cookieStore = await cookies();
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: ADMIN_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll();

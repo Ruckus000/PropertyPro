@@ -146,9 +146,9 @@ describe('buildSecurityHeaders', () => {
   });
 
   describe('with isPreview option', () => {
-    it('sets X-Frame-Options to SAMEORIGIN when isPreview is true', () => {
+    it('omits X-Frame-Options when isPreview is true (CSP frame-ancestors is authoritative)', () => {
       const headers = buildSecurityHeaders({ isPreview: true });
-      expect(headers['X-Frame-Options']).toBe('SAMEORIGIN');
+      expect(headers['X-Frame-Options']).toBeUndefined();
     });
 
     it('preserves all other security headers when isPreview is true', () => {
@@ -226,8 +226,8 @@ describe('buildCspHeader', () => {
     it('includes localhost admin origins in development', () => {
       vi.stubEnv('NODE_ENV', 'development');
       const csp = buildCspHeader({ isPreview: true });
-      expect(csp).toContain('http://localhost:3001');
-      expect(csp).toContain('http://127.0.0.1:3001');
+      expect(csp).toContain('http://localhost:*');
+      expect(csp).toContain('http://127.0.0.1:*');
       vi.unstubAllEnvs();
     });
 

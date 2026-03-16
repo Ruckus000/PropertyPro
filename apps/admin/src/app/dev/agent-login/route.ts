@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 
 /** Hard-coded demo email — deterministic seed data, not a secret. */
 const ADMIN_EMAIL = 'pm.admin@sunset.local';
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
     [];
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: ADMIN_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll();

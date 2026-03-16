@@ -4,10 +4,13 @@
  */
 
 export const BLOCK_TYPES = [
-  'hero', 'announcements', 'documents', 'meetings', 'contact', 'text', 'image',
+  'hero', 'announcements', 'documents', 'meetings', 'contact', 'text', 'image', 'jsx_template',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
+
+export const TEMPLATE_VARIANTS = ['public', 'mobile'] as const;
+export type TemplateVariant = (typeof TEMPLATE_VARIANTS)[number];
 
 export interface HeroBlockContent {
   headline: string;                    // max 120 chars
@@ -49,6 +52,12 @@ export interface ImageBlockContent {
   caption?: string;                    // max 300 chars
 }
 
+export interface JsxTemplateBlockContent {
+  jsxSource: string;                   // raw JSX source, max 100,000 chars
+  compiledHtml?: string;               // server-compiled static HTML
+  compiledAt?: string;                 // ISO timestamp of last compilation
+}
+
 export type BlockContent =
   | HeroBlockContent
   | AnnouncementsBlockContent
@@ -56,7 +65,8 @@ export type BlockContent =
   | MeetingsBlockContent
   | ContactBlockContent
   | TextBlockContent
-  | ImageBlockContent;
+  | ImageBlockContent
+  | JsxTemplateBlockContent;
 
 /**
  * Maps block type to its content interface for type-safe usage.
@@ -69,6 +79,7 @@ export interface BlockContentMap {
   contact: ContactBlockContent;
   text: TextBlockContent;
   image: ImageBlockContent;
+  jsx_template: JsxTemplateBlockContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +190,12 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
       if (c.caption && c.caption.length > 300) return 'Caption max 300 chars';
       return null;
     }
+    case 'jsx_template': {
+      const c = content as JsxTemplateBlockContent;
+      if (typeof c.jsxSource !== 'string') return 'jsxSource must be a string';
+      if (c.jsxSource.length > 100_000) return 'jsxSource max 100,000 chars';
+      return null;
+    }
     default:
       return `Unknown block type: ${type}`;
   }
@@ -203,5 +220,7 @@ export function getDefaultBlockContent(type: BlockType): BlockContent {
       return { body: '', format: 'plain' };
     case 'image':
       return { url: '', alt: '' };
+    case 'jsx_template':
+      return { jsxSource: '' };
   }
 }

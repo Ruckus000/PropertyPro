@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 
 // ---------------------------------------------------------------------------
 // Simple sliding-window rate limiter (edge-compatible, in-memory)
@@ -114,7 +115,7 @@ export async function middleware(request: NextRequest) {
   });
 
   // 3. Refresh Supabase session
-  const { supabase, response } = await createMiddlewareClient(modifiedRequest);
+  const { supabase, response } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
   response.headers.set('x-request-id', requestId);
 
   // 4. Allow public paths through immediately (no admin check)

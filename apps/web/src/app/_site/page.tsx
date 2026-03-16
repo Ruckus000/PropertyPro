@@ -5,6 +5,7 @@ import {
   getBrandingForCommunity,
   getCommunityPublicInfo,
 } from '@/lib/api/branding';
+import { getPublishedTemplate } from '@/lib/api/site-template';
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 
@@ -50,6 +51,35 @@ export default async function PublicSitePage() {
   );
   const cssVars = toCssVars(theme);
   const fontLinks = toFontLinks(theme);
+
+  // Check for a published JSX template
+  const compiledHtml = await getPublishedTemplate(community.id);
+
+  // If a custom template has been published, render it instead of the default
+  if (compiledHtml) {
+    // Template JSX uses --pp-* aliases alongside --theme-* vars
+    const templateVars: Record<string, string> = {
+      ...cssVars,
+      '--pp-primary': theme.primaryColor,
+      '--pp-secondary': theme.secondaryColor,
+      '--pp-accent': theme.accentColor,
+    };
+
+    return (
+      <>
+        {fontLinks.map((href) => (
+          // eslint-disable-next-line @next/next/no-page-custom-font
+          <link key={href} rel="stylesheet" href={href} />
+        ))}
+        {/* Tailwind CDN for custom template styling */}
+        {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
+        <script src="/assets/tailwind.min.js" async />
+        <div style={templateVars} className="font-body">
+          <div dangerouslySetInnerHTML={{ __html: compiledHtml }} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

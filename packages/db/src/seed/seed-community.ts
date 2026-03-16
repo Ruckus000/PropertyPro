@@ -17,7 +17,14 @@ import {
 } from '../schema';
 import { createAdminClient } from '../supabase/admin';
 import { createUnscopedClient } from '../unsafe';
-import { getComplianceTemplate, type CommunityBranding, type CommunityType } from '@propertypro/shared';
+import {
+  getComplianceTemplate,
+  getPresetPermissions,
+  isPresetKey,
+  type CommunityBranding,
+  type CommunityType,
+  type PresetKey,
+} from '@propertypro/shared';
 
 const db = createUnscopedClient();
 
@@ -79,15 +86,31 @@ function getDefaultPassword(): string {
 const DEBUG_DEMO_SEED = process.env.DEBUG_DEMO_SEED === '1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const ROLE_FALLBACK_ORDER: Record<CanonicalRole, string[]> = {
-  owner: ['owner', 'resident', 'manager', 'admin'],
-  tenant: ['tenant', 'resident', 'manager', 'admin'],
-  board_member: ['board_member', 'manager', 'admin', 'resident'],
-  board_president: ['board_president', 'board_member', 'manager', 'admin', 'resident'],
-  cam: ['cam', 'manager', 'admin', 'resident'],
-  site_manager: ['site_manager', 'manager', 'admin', 'resident'],
-  property_manager_admin: ['property_manager_admin', 'admin', 'manager', 'resident'],
-};
+interface V2RoleMapping {
+  role: 'resident' | 'manager' | 'pm_admin';
+  isUnitOwner: boolean;
+  presetKey: PresetKey | null;
+  displayTitle: string;
+}
+
+function mapCanonicalToV2(canonical: CanonicalRole): V2RoleMapping {
+  switch (canonical) {
+    case 'owner':
+      return { role: 'resident', isUnitOwner: true, presetKey: null, displayTitle: 'Owner' };
+    case 'tenant':
+      return { role: 'resident', isUnitOwner: false, presetKey: null, displayTitle: 'Tenant' };
+    case 'board_president':
+      return { role: 'manager', isUnitOwner: false, presetKey: 'board_president', displayTitle: 'Board President' };
+    case 'board_member':
+      return { role: 'manager', isUnitOwner: false, presetKey: 'board_member', displayTitle: 'Board Member' };
+    case 'cam':
+      return { role: 'manager', isUnitOwner: false, presetKey: 'cam', displayTitle: 'Community Association Manager' };
+    case 'site_manager':
+      return { role: 'manager', isUnitOwner: false, presetKey: 'site_manager', displayTitle: 'Site Manager' };
+    case 'property_manager_admin':
+      return { role: 'pm_admin', isUnitOwner: false, presetKey: null, displayTitle: 'Property Manager Admin' };
+  }
+}
 
 const ANNOUNCEMENT_AUTHOR_ROLES = new Set<CanonicalRole>([
   'board_member',
@@ -102,7 +125,6 @@ const maxStepsByWizardType: Record<WizardType, number> = {
   apartment: 3,
 };
 
-let cachedUserRoleLabels: Set<string> | null = null;
 let cachedRegistryAvailable: boolean | null = null;
 
 interface SeededDocument {
@@ -151,36 +173,6 @@ function assertValidConfig(config: SeedCommunityConfig): void {
   if (!validCommunityTypes.includes(config.communityType)) {
     throw new Error(`seedCommunity received invalid communityType: ${config.communityType}`);
   }
-}
-
-async function getUserRoleLabels(): Promise<Set<string>> {
-  if (cachedUserRoleLabels) {
-    return cachedUserRoleLabels;
-  }
-
-  const result = await db.execute<{ enumlabel: string }>(sql`
-    select e.enumlabel
-    from pg_enum e
-    join pg_type t on t.oid = e.enumtypid
-    where t.typname = 'user_role'
-    order by e.enumsortorder
-  `);
-  const rows = extractRows<{ enumlabel: string }>(result);
-  cachedUserRoleLabels = new Set(rows.map((row) => row.enumlabel));
-  return cachedUserRoleLabels;
-}
-
-async function resolvePersistedRole(role: CanonicalRole): Promise<string> {
-  const labels = await getUserRoleLabels();
-  const candidates = ROLE_FALLBACK_ORDER[role];
-
-  for (const candidate of candidates) {
-    if (labels.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error(`No compatible user_role enum label found for canonical role "${role}"`);
 }
 
 async function hasRegistryTable(): Promise<boolean> {
@@ -384,22 +376,14 @@ async function ensureAuthUser(
 
 export async function seedRoles(
   assignments: Array<{ communityId: number; userId: string; role: CanonicalRole }>,
+  communityType: CommunityType,
 ): Promise<void> {
   if (assignments.length === 0) {
     return;
   }
 
-  const persistedAssignments: Array<{ communityId: number; userId: string; role: string }> = [];
-  for (const assignment of assignments) {
-    persistedAssignments.push({
-      communityId: assignment.communityId,
-      userId: assignment.userId,
-      role: await resolvePersistedRole(assignment.role),
-    });
-  }
-
-  const uniqueCommunityIds = [...new Set(persistedAssignments.map((assignment) => assignment.communityId))];
-  const uniqueUserIds = [...new Set(persistedAssignments.map((assignment) => assignment.userId))];
+  const uniqueCommunityIds = [...new Set(assignments.map((a) => a.communityId))];
+  const uniqueUserIds = [...new Set(assignments.map((a) => a.userId))];
 
   await db.execute(sql`
     delete from user_roles
@@ -408,11 +392,18 @@ export async function seedRoles(
   `);
 
   const values = sql.join(
-    persistedAssignments.map((assignment) => sql`(${assignment.userId}, ${assignment.communityId}, ${assignment.role})`),
+    assignments.map((a) => {
+      const m = mapCanonicalToV2(a.role);
+      const perms =
+        m.presetKey && isPresetKey(m.presetKey)
+          ? JSON.stringify(getPresetPermissions(m.presetKey, communityType))
+          : null;
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${m.displayTitle})`;
+    }),
     sql`, `,
   );
   await db.execute(sql`
-    insert into user_roles (user_id, community_id, role)
+    insert into user_roles (user_id, community_id, role, is_unit_owner, permissions, preset_key, display_title)
     values ${values}
   `);
 }
@@ -1238,6 +1229,7 @@ export async function seedCommunity(
       userId: entry.userId,
       role: entry.role as CanonicalRole,
     })),
+    config.communityType,
   );
 
   await Promise.all(seededUsers.map((entry) => ensureNotificationPreference(communityId, entry.userId)));

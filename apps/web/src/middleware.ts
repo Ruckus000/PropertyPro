@@ -252,6 +252,7 @@ function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Head
   headers.delete(TENANT_SLUG_HEADER);
   headers.delete(TENANT_SOURCE_HEADER);
   headers.delete(USER_ID_HEADER);
+  headers.delete('x-preview');
   headers.set('x-request-id', requestId);
   return headers;
 }
@@ -335,6 +336,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
       }
     }
+  }
+
+  // --- Mobile preview bypass (demo iframe) ---
+  // Skip auth for the /mobile root in preview mode so the admin-app iframe
+  // (different origin) can render the published template without cookies.
+  // Sub-routes (/mobile/announcements, etc.) remain fully protected.
+  if (pathname === '/mobile' && isPreviewRequest) {
+    forwardedHeaders.set('x-preview', 'true');
+    const previewResp = NextResponse.next({ request: { headers: forwardedHeaders } });
+    return finaliseResponse(
+      response as unknown as NextResponse,
+      previewResp,
+      requestId,
+      origin,
+      isApi,
+      true,
+    );
   }
 
   // Only enforce auth checks on protected paths
