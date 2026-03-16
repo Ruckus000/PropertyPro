@@ -303,7 +303,7 @@ describe('demo-login route hardening', () => {
     expect(verifyOtpMock).not.toHaveBeenCalled();
   });
 
-  it('propagates preview=true to redirect URL', async () => {
+  it('propagates preview=true to redirect URL via HTML redirect (200)', async () => {
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
 
     state.rows = [
@@ -317,9 +317,10 @@ describe('demo-login route hardening', () => {
       makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test&preview=true'),
     );
 
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe(
-      'https://propertyprofl.com/mobile?communityId=42&preview=true',
-    );
+    // Preview mode uses a 200 HTML response with client-side redirect
+    // because browsers block Set-Cookie on 307 in cross-origin iframes
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('https://propertyprofl.com/mobile?communityId=42&amp;preview=true');
   });
 });

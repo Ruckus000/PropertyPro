@@ -73,9 +73,6 @@ function getTrustedBaseUrl(request: Request): string | null {
 
 function createRedirectResponse(target: string | URL, options?: { isPreview?: boolean }): NextResponse {
   const response = NextResponse.redirect(target);
-  response.headers.set('Referrer-Policy', 'no-referrer');
-  response.headers.set('Cache-Control', 'no-store');
-  response.headers.set('Pragma', 'no-cache');
 
   // Apply security headers directly — middleware headers may not propagate
   // to route-handler-created redirect responses in Next.js App Router.
@@ -86,6 +83,11 @@ function createRedirectResponse(target: string | URL, options?: { isPreview?: bo
   }
   // Browsers check frame-ancestors on redirect responses before following them.
   response.headers.set('Content-Security-Policy', buildCspHeader({ isPreview }));
+
+  // Override after security headers — auth redirects should not leak referrer
+  response.headers.set('Referrer-Policy', 'no-referrer');
+  response.headers.set('Cache-Control', 'no-store');
+  response.headers.set('Pragma', 'no-cache');
 
   return response;
 }

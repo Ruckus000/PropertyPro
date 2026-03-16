@@ -67,33 +67,44 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const rows = (roles ?? []) as unknown as UserRoleRow[];
 
-  // Resolve user details from auth.users and users table
-  const members = await Promise.all(
-    rows.map(async (row) => {
-      const [authResult, profileResult] = await Promise.all([
-        db.auth.admin.getUserById(row.user_id),
-        db.from('users').select('full_name, email, phone').eq('id', row.user_id).maybeSingle(),
-      ]);
+  if (rows.length === 0) {
+    return NextResponse.json({ members: [] });
+  }
 
-      const authUser = authResult.data?.user;
-      const profile = profileResult.data as { full_name: string | null; email: string | null; phone: string | null } | null;
+  const userIds = rows.map((row) => row.user_id);
 
-      return {
-        roleId: row.id,
-        userId: row.user_id,
-        email: profile?.email ?? authUser?.email ?? 'unknown',
-        fullName: profile?.full_name ?? null,
-        phone: profile?.phone ?? null,
-        role: row.role,
-        presetKey: row.preset_key,
-        displayTitle: row.display_title,
-        isUnitOwner: row.is_unit_owner,
-        lastSignInAt: authUser?.last_sign_in_at ?? null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    }),
+  // Batch fetch profiles and auth users to avoid N+1 queries
+  const [profileResult, authResult] = await Promise.all([
+    db.from('users').select('id, full_name, email, phone').in('id', userIds),
+    db.auth.admin.listUsers(),
+  ]);
+
+  const profilesById = new Map(
+    (profileResult.data ?? []).map((p: { id: string; full_name: string | null; email: string | null; phone: string | null }) => [p.id, p]),
   );
+  const authUsersById = new Map(
+    authResult.data.users.filter((u) => userIds.includes(u.id)).map((u) => [u.id, u]),
+  );
+
+  const members = rows.map((row) => {
+    const profile = profilesById.get(row.user_id);
+    const authUser = authUsersById.get(row.user_id);
+
+    return {
+      roleId: row.id,
+      userId: row.user_id,
+      email: profile?.email ?? authUser?.email ?? 'unknown',
+      fullName: profile?.full_name ?? null,
+      phone: profile?.phone ?? null,
+      role: row.role,
+      presetKey: row.preset_key,
+      displayTitle: row.display_title,
+      isUnitOwner: row.is_unit_owner,
+      lastSignInAt: authUser?.last_sign_in_at ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
 
   return NextResponse.json({ members });
 }

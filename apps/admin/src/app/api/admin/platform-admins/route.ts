@@ -40,19 +40,20 @@ export async function GET() {
 
   const rows = (data ?? []) as unknown as PlatformAdminRow[];
 
-  // Resolve emails from auth.users for each admin
-  const admins = await Promise.all(
-    rows.map(async (row) => {
-      const { data: { user } } = await db.auth.admin.getUserById(row.user_id);
-      return {
-        userId: row.user_id,
-        email: user?.email ?? 'unknown',
-        role: row.role,
-        invitedBy: row.invited_by,
-        createdAt: row.created_at,
-      };
-    }),
-  );
+  // Batch fetch all auth users to avoid N+1 queries
+  const { data: { users: authUsers } } = await db.auth.admin.listUsers();
+  const authUserMap = new Map(authUsers.map((u) => [u.id, u]));
+
+  const admins = rows.map((row) => {
+    const user = authUserMap.get(row.user_id);
+    return {
+      userId: row.user_id,
+      email: user?.email ?? 'unknown',
+      role: row.role,
+      invitedBy: row.invited_by,
+      createdAt: row.created_at,
+    };
+  });
 
   return NextResponse.json({ admins });
 }
