@@ -24,18 +24,24 @@ interface PageProps {
 export default async function MobileHomePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const communityId = Number(params['communityId']);
+  const isPreview = params['preview'] === 'true';
 
-  let userId: string;
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
+  // Auth — skip in preview mode (demo iframe from admin app on different origin)
+  let userId: string | undefined;
+  if (!isPreview) {
+    try {
+      userId = await requireAuthenticatedUserId();
+    } catch {
+      redirect('/auth/login');
+    }
 
-  try {
-    await requireCommunityMembership(communityId, userId!);
-  } catch {
-    redirect('/auth/login');
+    try {
+      await requireCommunityMembership(communityId, userId!);
+    } catch {
+      redirect('/auth/login');
+    }
+  } else if (!Number.isInteger(communityId) || communityId <= 0) {
+    return <div className="p-4 text-gray-500">Community not found.</div>;
   }
 
   // If a custom mobile template has been published, render it with branding
@@ -72,6 +78,15 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
           <div dangerouslySetInnerHTML={{ __html: mobileHtml }} />
         </div>
       </>
+    );
+  }
+
+  // No published template — preview shows placeholder, auth'd shows dashboard
+  if (isPreview) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-500">No mobile template published yet. Use the edit drawer to create one.</p>
+      </div>
     );
   }
 

@@ -6,7 +6,7 @@ import { MobilePreviewClient } from '../../src/app/demo/[id]/mobile/MobilePrevie
 
 const defaultProps = {
   publicUrl: 'http://localhost:3000/demo-test',
-  mobileUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=abc',
+  mobileUrl: 'http://localhost:3000/mobile?communityId=1&preview=true',
   adminUrl: 'http://localhost:3000/api/v1/auth/demo-login?token=ghi',
   demoId: 1,
   communityId: 1,

@@ -45,16 +45,6 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       })
     : null;
 
-  const residentToken = demo.demo_resident_user_id
-    ? generateDemoToken({
-        demoId: demo.id,
-        userId: demo.demo_resident_user_id,
-        role: 'resident',
-        secret,
-        ttlSeconds: 3600,
-      })
-    : null;
-
   // Build demo-login URLs
   const webBaseUrl =
     process.env.NODE_ENV === 'development'
@@ -66,9 +56,9 @@ export default async function DemoPreviewPage({ params }: PageProps) {
   // 1. Public Website — no auth needed
   const publicUrl = `${webBaseUrl}/${demo.slug}?preview=true`;
 
-  // 2. Mobile App — resident token
-  const mobileUrl = residentToken
-    ? `${demoLoginBase}?token=${residentToken}&preview=true`
+  // 2. Mobile App — preview mode (no auth needed, avoids cross-origin cookie issues)
+  const mobileUrl = demo.seeded_community_id
+    ? `${webBaseUrl}/mobile?communityId=${demo.seeded_community_id}&preview=true`
     : null;
 
   // 3. Admin Dashboard — board token (default redirect to /dashboard)
