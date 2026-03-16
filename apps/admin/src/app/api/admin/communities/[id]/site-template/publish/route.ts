@@ -28,13 +28,18 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   if (result instanceof NextResponse) return result;
   const communityId = result;
 
-  // 1. Fetch the draft jsx_template block
+  // Parse optional variant from request body (default: 'public')
+  const body = await _request.json().catch(() => ({}));
+  const variant = body?.variant === 'mobile' ? 'mobile' : 'public';
+
+  // 1. Fetch the draft jsx_template block for this variant
   const { data: draftRow, error: fetchError } = await db
     .from('site_blocks')
     .select('*')
     .eq('community_id', communityId)
     .eq('block_type', 'jsx_template')
     .eq('is_draft', true)
+    .eq('template_variant', variant)
     .is('deleted_at', null)
     .single();
 
@@ -126,13 +131,14 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     .update({ content: updatedContent, updated_at: now } as never)
     .eq('id', draft.id as number);
 
-  // 6. Upsert published row
+  // 6. Upsert published row for this variant
   const { data: existingPublished } = await db
     .from('site_blocks')
     .select('id')
     .eq('community_id', communityId)
     .eq('block_type', 'jsx_template')
     .eq('is_draft', false)
+    .eq('template_variant', variant)
     .is('deleted_at', null)
     .single();
 
@@ -167,6 +173,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         content: updatedContent,
         is_draft: false,
         published_at: now,
+        template_variant: variant,
       } as never)
       .select('*')
       .single();
@@ -180,11 +187,13 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     published = inserted as Record<string, unknown>;
   }
 
-  // 7. Update communities.site_published_at
-  await db
-    .from('communities')
-    .update({ site_published_at: now, updated_at: now } as never)
-    .eq('id', communityId);
+  // 7. Update communities.site_published_at (public variant only)
+  if (variant === 'public') {
+    await db
+      .from('communities')
+      .update({ site_published_at: now, updated_at: now } as never)
+      .eq('id', communityId);
+  }
 
   return NextResponse.json({ published, compiledHtml });
 }

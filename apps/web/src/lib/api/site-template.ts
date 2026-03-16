@@ -11,9 +11,12 @@ import { eq, and, isNull } from '@propertypro/db/filters';
 /**
  * Returns the compiled HTML of the published jsx_template block for a community,
  * or null if no template has been published.
+ *
+ * @param variant - 'public' (default) or 'mobile' — selects the template variant.
  */
 export async function getPublishedTemplate(
   communityId: number,
+  variant: 'public' | 'mobile' = 'public',
 ): Promise<string | null> {
   const db = createUnscopedClient();
   const rows = await db
@@ -24,6 +27,7 @@ export async function getPublishedTemplate(
         eq(siteBlocks.communityId, communityId),
         eq(siteBlocks.blockType, 'jsx_template'),
         eq(siteBlocks.isDraft, false),
+        eq(siteBlocks.templateVariant, variant),
         isNull(siteBlocks.deletedAt),
       ),
     )

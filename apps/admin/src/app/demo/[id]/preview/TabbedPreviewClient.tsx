@@ -60,8 +60,8 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
-    // Close the edit drawer when switching away from Public Website
-    if (key !== 'public') setDrawerOpen(false);
+    // Close the edit drawer when switching to Admin Dashboard (no template editing)
+    if (key === 'admin') setDrawerOpen(false);
   };
 
   const handleCopyShareableLink = async () => {

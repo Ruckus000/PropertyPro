@@ -8,7 +8,7 @@
  * accesses browser APIs at import time.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Loader2, Save, Upload, Code, Eye, Clipboard, Check } from 'lucide-react';
+import { Loader2, Save, Upload, Code, Eye, Clipboard, Check, XCircle } from 'lucide-react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
@@ -26,6 +26,8 @@ interface JsxTemplateEditorProps {
   defaultJsx?: string;
   /** When provided, a "Copy for Claude" button appears that copies this context prepended to the editor content. */
   brandingContext?: string;
+  /** Template variant — determines which template is loaded/saved. Default: 'public'. */
+  variant?: 'public' | 'mobile';
 }
 
 interface TemplateContent {
@@ -199,7 +201,7 @@ export function buildPreviewSrcdoc(jsxSource: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, brandingContext }: JsxTemplateEditorProps) {
+export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, brandingContext, variant = 'public' }: JsxTemplateEditorProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [jsxSource, setJsxSource] = useState('');
   const [draft, setDraft] = useState<SiteBlock | null>(null);
@@ -210,7 +212,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [copiedForClaude, setCopiedForClaude] = useState(false);
+  const [clipboardState, setClipboardState] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -244,7 +246,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/admin/communities/${communityId}/site-template`);
+        const res = await fetch(`/api/admin/communities/${communityId}/site-template?variant=${variant}`);
         if (!res.ok) throw new Error('Failed to load template');
         const data = await res.json();
         if (cancelled) return;
@@ -263,7 +265,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
       }
     })();
     return () => { cancelled = true; };
-  }, [communityId]);
+  }, [communityId, variant]);
 
   // ---------------------------------------------------------------------------
   // Initialize CodeMirror
@@ -322,7 +324,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
       const res = await fetch(`/api/admin/communities/${communityId}/site-template`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsxSource }),
+        body: JSON.stringify({ jsxSource, variant }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message ?? 'Save failed');
@@ -335,7 +337,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
     } finally {
       setSaving(false);
     }
-  }, [communityId, jsxSource, clearMessages, onSaved]);
+  }, [communityId, jsxSource, variant, clearMessages, onSaved]);
 
   const publishTemplate = useCallback(async () => {
     clearMessages();
@@ -346,7 +348,7 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
       const saveRes = await fetch(`/api/admin/communities/${communityId}/site-template`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsxSource }),
+        body: JSON.stringify({ jsxSource, variant }),
       });
       if (!saveRes.ok) {
         const data = await saveRes.json();
@@ -366,6 +368,8 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
     try {
       const res = await fetch(`/api/admin/communities/${communityId}/site-template/publish`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message ?? 'Publish failed');
@@ -378,16 +382,17 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
     } finally {
       setPublishing(false);
     }
-  }, [communityId, jsxSource, clearMessages, onSaved]);
+  }, [communityId, jsxSource, variant, clearMessages, onSaved]);
 
   const copyForClaude = useCallback(async () => {
     if (!brandingContext) return;
     try {
       await navigator.clipboard.writeText(brandingContext + '\n\n' + jsxSource);
-      setCopiedForClaude(true);
-      setTimeout(() => setCopiedForClaude(false), 1500);
+      setClipboardState('copied');
+      setTimeout(() => setClipboardState('idle'), 2000);
     } catch {
-      // clipboard not available
+      setClipboardState('error');
+      setTimeout(() => setClipboardState('idle'), 2000);
     }
   }, [brandingContext, jsxSource]);
 
@@ -435,10 +440,24 @@ export default function JsxTemplateEditor({ communityId, onSaved, defaultJsx, br
           {brandingContext && (
             <button
               onClick={() => { void copyForClaude(); }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                clipboardState === 'copied'
+                  ? 'bg-green-100 text-green-700'
+                  : clipboardState === 'error'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+              }`}
             >
-              {copiedForClaude ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-              {copiedForClaude ? 'Copied!' : 'Copy for Claude'}
+              {clipboardState === 'copied'
+                ? <Check className="h-4 w-4" />
+                : clipboardState === 'error'
+                  ? <XCircle className="h-4 w-4" />
+                  : <Clipboard className="h-4 w-4" />}
+              {clipboardState === 'copied'
+                ? 'Copied!'
+                : clipboardState === 'error'
+                  ? 'Copy failed'
+                  : 'Copy for Claude'}
             </button>
           )}
         </div>

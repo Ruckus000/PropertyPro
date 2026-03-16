@@ -11,6 +11,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
+import { getPublishedTemplate } from '@/lib/api/site-template';
 import { CompactCard } from '@/components/mobile/CompactCard';
 
 interface PageProps {
@@ -32,6 +33,12 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     await requireCommunityMembership(communityId, userId!);
   } catch {
     redirect('/auth/login');
+  }
+
+  // If a custom mobile template has been published, render it instead
+  const mobileHtml = await getPublishedTemplate(communityId, 'mobile');
+  if (mobileHtml) {
+    return <div dangerouslySetInnerHTML={{ __html: mobileHtml }} />;
   }
 
   const data = await loadDashboardData(communityId, userId!);

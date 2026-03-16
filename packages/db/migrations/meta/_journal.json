@@ -414,6 +414,13 @@
       "when": 1773110000000,
       "tag": "0098_add_demo_customized_at",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1773120000000,
+      "tag": "0099_add_template_variant",
+      "breakpoints": true
     }
   ]
 }

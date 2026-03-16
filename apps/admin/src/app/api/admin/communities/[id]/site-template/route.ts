@@ -10,8 +10,12 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
+const VALID_VARIANTS = ['public', 'mobile'] as const;
+type TemplateVariant = (typeof VALID_VARIANTS)[number];
+
 const putSchema = z.object({
   jsxSource: z.string().max(100_000),
+  variant: z.enum(VALID_VARIANTS).default('public'),
 }).strict();
 
 interface RouteContext {
@@ -28,11 +32,20 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (result instanceof NextResponse) return result;
   const communityId = result;
 
+  const variant = (_request.nextUrl.searchParams.get('variant') ?? 'public') as string;
+  if (!VALID_VARIANTS.includes(variant as TemplateVariant)) {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: `Invalid variant: ${variant}` } },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await db
     .from('site_blocks')
     .select('*')
     .eq('community_id', communityId)
     .eq('block_type', 'jsx_template')
+    .eq('template_variant', variant)
     .is('deleted_at', null);
 
   if (error) {
@@ -72,13 +85,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     jsxSource: parsed.data.jsxSource,
   };
 
-  // Check if a draft already exists
+  const variant = parsed.data.variant;
+
+  // Check if a draft already exists for this variant
   const { data: existing } = await db
     .from('site_blocks')
     .select('id')
     .eq('community_id', communityId)
     .eq('block_type', 'jsx_template')
     .eq('is_draft', true)
+    .eq('template_variant', variant)
     .is('deleted_at', null)
     .single();
 
@@ -113,6 +129,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         block_order: 0,
         content,
         is_draft: true,
+        template_variant: variant,
       } as never)
       .select('*')
       .single();

@@ -172,6 +172,116 @@ function buildBrandingContext(b: BrandingInfo): string {
 }
 
 // ---------------------------------------------------------------------------
+// Build default mobile JSX — compact single-column layout for phone screens
+// ---------------------------------------------------------------------------
+
+function buildDefaultMobileJsx(b: BrandingInfo): string {
+  return `/**
+ * ============================================================
+ * ${b.communityName.toUpperCase()} — MOBILE APP TEMPLATE
+ * ============================================================
+ *
+ * BRANDING CONTEXT (for AI assistants):
+ * Community: ${b.communityName}
+ * This is the mobile app view for a Florida community
+ * association managed by PropertyPro.
+ *
+ * CURRENT BRANDING:
+ *   Primary color  : ${b.primaryColor}
+ *   Secondary color: ${b.secondaryColor}
+ *   Accent color   : ${b.accentColor}
+ *   Heading font   : ${b.fontHeading}
+ *   Body font      : ${b.fontBody}
+ *
+ * CSS VARIABLES:
+ *   --pp-primary, --pp-secondary, --pp-accent
+ *
+ * DESIGN NOTES:
+ *   Single-column mobile layout. No hero section.
+ *   Compact cards, large tap targets, minimal chrome.
+ *
+ * ============================================================
+ */
+
+function App() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header bar */}
+      <header className="bg-[var(--pp-primary)] text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+        <h1 className="text-lg font-bold truncate">${b.communityName}</h1>
+        <a href="/auth/login" className="text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-md transition-colors">
+          Login
+        </a>
+      </header>
+
+      {/* Announcements */}
+      <section className="px-4 pt-4 pb-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Announcements</h2>
+        <div className="space-y-2">
+          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+            <p className="text-sm font-medium text-gray-900">Annual Meeting Scheduled</p>
+            <p className="text-xs text-gray-500 mt-1">March 15, 2026</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+            <p className="text-sm font-medium text-gray-900">Pool Maintenance Notice</p>
+            <p className="text-xs text-gray-500 mt-1">March 10, 2026</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+            <p className="text-sm font-medium text-gray-900">Budget Update Available</p>
+            <p className="text-xs text-gray-500 mt-1">March 5, 2026</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Upcoming Meetings */}
+      <section className="px-4 pt-2 pb-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Upcoming Meetings</h2>
+        <div className="space-y-2">
+          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Board Meeting</p>
+              <p className="text-xs text-gray-500">Mar 20 at 7:00 PM</p>
+            </div>
+            <span className="text-xs bg-[var(--pp-accent)] text-[var(--pp-primary)] px-2 py-0.5 rounded-full font-medium">Board</span>
+          </div>
+          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Annual Owner Meeting</p>
+              <p className="text-xs text-gray-500">Apr 5 at 6:00 PM</p>
+            </div>
+            <span className="text-xs bg-[var(--pp-accent)] text-[var(--pp-primary)] px-2 py-0.5 rounded-full font-medium">Owner</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Links */}
+      <section className="px-4 pt-2 pb-6">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Quick Links</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <a href="/documents" className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 text-center hover:bg-gray-50 transition-colors">
+            <span className="text-2xl block mb-1">📄</span>
+            <span className="text-sm font-medium text-gray-900">Documents</span>
+          </a>
+          <a href="/maintenance" className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 text-center hover:bg-gray-50 transition-colors">
+            <span className="text-2xl block mb-1">🔧</span>
+            <span className="text-sm font-medium text-gray-900">Maintenance</span>
+          </a>
+          <a href="/meetings" className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 text-center hover:bg-gray-50 transition-colors">
+            <span className="text-2xl block mb-1">📅</span>
+            <span className="text-sm font-medium text-gray-900">Meetings</span>
+          </a>
+          <a href="/contact" className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 text-center hover:bg-gray-50 transition-colors">
+            <span className="text-2xl block mb-1">📞</span>
+            <span className="text-sm font-medium text-gray-900">Contact</span>
+          </a>
+        </div>
+      </section>
+    </div>
+  );
+}`;
+}
+
+// ---------------------------------------------------------------------------
 // Main Drawer
 // ---------------------------------------------------------------------------
 
@@ -184,15 +294,16 @@ export function DemoEditDrawer({
   onSaved,
   previewTab = 'public',
 }: DemoEditDrawerProps) {
-  const showTemplateTab = previewTab === 'public';
+  const showTemplateTab = previewTab !== 'admin';
+  const templateVariant = previewTab === 'mobile' ? 'mobile' : 'public';
   const [activeTab, setActiveTab] = useState<DrawerTab>(showTemplateTab ? 'template' : 'branding');
   const [branding, setBranding] = useState<BrandingInfo>(DEFAULT_BRANDING);
-  // Switch to branding tab when Page Template tab is hidden
+  // Switch to branding tab when Page Template tab is hidden (admin tab only)
   useEffect(() => {
-    if (!showTemplateTab && activeTab === 'template') {
+    if (previewTab === 'admin' && activeTab === 'template') {
       setActiveTab('branding');
     }
-  }, [showTemplateTab, activeTab]);
+  }, [previewTab, activeTab]);
 
   // Fetch branding on mount and when refreshed
   const fetchBranding = useCallback(async () => {
@@ -297,10 +408,12 @@ export function DemoEditDrawer({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {activeTab === 'template' && (
             <JsxTemplateEditor
+              key={templateVariant}
               communityId={communityId}
               onSaved={onSaved}
-              defaultJsx={buildDefaultJsx(branding)}
+              defaultJsx={templateVariant === 'mobile' ? buildDefaultMobileJsx(branding) : buildDefaultJsx(branding)}
               brandingContext={buildBrandingContext(branding)}
+              variant={templateVariant}
             />
           )}
           {activeTab === 'branding' && (

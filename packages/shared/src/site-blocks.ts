@@ -9,6 +9,9 @@ export const BLOCK_TYPES = [
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
+export const TEMPLATE_VARIANTS = ['public', 'mobile'] as const;
+export type TemplateVariant = (typeof TEMPLATE_VARIANTS)[number];
+
 export interface HeroBlockContent {
   headline: string;                    // max 120 chars
   subheadline?: string;                // max 300 chars, optional
