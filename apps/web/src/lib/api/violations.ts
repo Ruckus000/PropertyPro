@@ -96,6 +96,8 @@ export async function listViolations(
     status?: ViolationStatus;
     severity?: ViolationSeverity;
     unitId?: number;
+    createdAfter?: string;
+    createdBefore?: string;
     page?: number;
     limit?: number;
   },
@@ -104,6 +106,8 @@ export async function listViolations(
   if (params?.status) sp.set('status', params.status);
   if (params?.severity) sp.set('severity', params.severity);
   if (params?.unitId) sp.set('unitId', String(params.unitId));
+  if (params?.createdAfter) sp.set('createdAfter', params.createdAfter);
+  if (params?.createdBefore) sp.set('createdBefore', params.createdBefore);
   if (params?.page) sp.set('page', String(params.page));
   if (params?.limit) sp.set('limit', String(params.limit));
   return apiFetch<ListViolationsResponse>(`/api/v1/violations?${sp.toString()}`);

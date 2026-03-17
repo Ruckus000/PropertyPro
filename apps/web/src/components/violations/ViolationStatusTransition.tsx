@@ -143,7 +143,7 @@ export function ViolationStatusTransition({
       <h4 className="text-sm font-semibold text-gray-900">{config.title}</h4>
 
       {error && (
-        <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
       {/* Hearing-specific fields */}

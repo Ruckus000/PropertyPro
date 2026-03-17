@@ -7,6 +7,7 @@
  * /api/v1/documents), returning document IDs stored in evidenceDocumentIds.
  */
 import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { createViolation } from '@/lib/api/violations';
 import type { ViolationSeverity } from '@propertypro/db';
@@ -127,6 +128,7 @@ export function ViolationReportForm({
   defaultUnitId,
   unitIds,
 }: ViolationReportFormProps) {
+  const router = useRouter();
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<ViolationSeverity>('minor');
@@ -213,8 +215,8 @@ export function ViolationReportForm({
         setPhotos([]);
         setSubmitted(true);
         setTimeout(() => setSubmitted(false), 4000);
-        // Reload to show the new violation in the list below
-        window.location.reload();
+        // Refresh server components to show the new violation in the list below
+        router.refresh();
       } catch (err) {
         setServerError(err instanceof Error ? err.message : 'Failed to submit violation report');
       } finally {
@@ -228,7 +230,7 @@ export function ViolationReportForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-gray-200 bg-white p-6">
       {serverError && (
-        <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</div>
+        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</div>
       )}
       {submitted && (
         <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">

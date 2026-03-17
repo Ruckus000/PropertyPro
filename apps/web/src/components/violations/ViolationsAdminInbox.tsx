@@ -79,6 +79,8 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
   const [error, setError] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<ViolationStatus | ''>('');
   const [selectedSeverity, setSelectedSeverity] = useState<ViolationSeverity | ''>('');
+  const [createdAfter, setCreatedAfter] = useState('');
+  const [createdBefore, setCreatedBefore] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchViolations = useCallback(async () => {
@@ -88,6 +90,8 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
       const res = await listViolations(communityId, {
         status: selectedStatus || undefined,
         severity: selectedSeverity || undefined,
+        createdAfter: createdAfter || undefined,
+        createdBefore: createdBefore || undefined,
         page,
         limit: LIMIT,
       });
@@ -98,7 +102,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
     } finally {
       setLoading(false);
     }
-  }, [communityId, selectedStatus, selectedSeverity, page]);
+  }, [communityId, selectedStatus, selectedSeverity, createdAfter, createdBefore, page]);
 
   useEffect(() => {
     void fetchViolations();
@@ -145,6 +149,22 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
           ))}
         </select>
 
+        <input
+          type="date"
+          value={createdAfter}
+          onChange={(e) => handleFilterChange(setCreatedAfter, e.target.value)}
+          aria-label="Filter violations from date"
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+        <span className="text-sm text-gray-400">to</span>
+        <input
+          type="date"
+          value={createdBefore}
+          onChange={(e) => handleFilterChange(setCreatedBefore, e.target.value)}
+          aria-label="Filter violations until date"
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+
         <span className="ml-auto text-sm text-gray-500">
           {total} violation{total !== 1 ? 's' : ''}
         </span>
@@ -152,7 +172,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
 
       {/* Error */}
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
       {/* List */}
@@ -165,7 +185,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
       ) : violations.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 px-6 py-12 text-center">
           <p className="text-sm text-gray-500">
-            {selectedStatus || selectedSeverity
+            {selectedStatus || selectedSeverity || createdAfter || createdBefore
               ? 'No violations match your filters. Try adjusting your filter criteria.'
               : 'No violations have been reported. When community members report violations, they will appear here.'}
           </p>
@@ -177,6 +197,8 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
               <button
                 type="button"
                 onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}
+                aria-expanded={expandedId === v.id}
+                aria-label={`Violation #${v.id} — ${CATEGORY_LABELS[v.category] ?? v.category}, Unit ${v.unitId}`}
                 className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
                   expandedId === v.id
                     ? 'border-blue-300 bg-blue-50'
