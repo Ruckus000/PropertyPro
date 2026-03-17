@@ -319,6 +319,10 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     },
   },
   violations: {
+    // Two-tier permission model:
+    // - write: true allows residents to self-report violations (POST /api/v1/violations)
+    // - Admin-only mutations (update, resolve, dismiss, fine) additionally check
+    //   requireViolationAdminWrite() at the route layer
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },

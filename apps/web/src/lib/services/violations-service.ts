@@ -3,12 +3,13 @@ import {
   arcSubmissions,
   assessmentLineItems,
   createScopedClient,
+  documents,
   logAuditEvent,
   postLedgerEntry,
   violationFines,
   violations,
 } from '@propertypro/db';
-import { and, desc, eq, inArray } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
 import type { ArcSubmissionStatus, ViolationFineStatus, ViolationSeverity, ViolationStatus } from '@propertypro/db';
 import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
@@ -125,6 +126,28 @@ const VALID_VIOLATION_STATUSES: readonly ViolationStatus[] = [
 
 const VALID_VIOLATION_SEVERITIES: readonly ViolationSeverity[] = ['minor', 'moderate', 'major'];
 
+/**
+ * Allowed status transitions for violations.
+ * Terminal states (resolved, dismissed) have no outgoing transitions.
+ */
+const VALID_STATUS_TRANSITIONS: Record<ViolationStatus, readonly ViolationStatus[]> = {
+  reported: ['noticed', 'dismissed'],
+  noticed: ['hearing_scheduled', 'fined', 'resolved', 'dismissed'],
+  hearing_scheduled: ['fined', 'resolved', 'dismissed'],
+  fined: ['resolved'],
+  resolved: [],
+  dismissed: [],
+};
+
+function assertValidStatusTransition(from: ViolationStatus, to: ViolationStatus): void {
+  const allowed = VALID_STATUS_TRANSITIONS[from];
+  if (!allowed.includes(to)) {
+    throw new UnprocessableEntityError(
+      `Cannot transition violation from '${from}' to '${to}'. Allowed transitions: ${allowed.length > 0 ? allowed.join(', ') : 'none (terminal state)'}`,
+    );
+  }
+}
+
 const VALID_VIOLATION_FINE_STATUSES: readonly ViolationFineStatus[] = ['pending', 'paid', 'waived'];
 
 const VALID_ARC_SUBMISSION_STATUSES: readonly ArcSubmissionStatus[] = [
@@ -169,6 +192,26 @@ function assertIdArray(values: number[] | undefined, label: string): number[] {
     throw new BadRequestError(`${label} must be an array of positive integers`);
   }
   return values;
+}
+
+async function assertDocumentsBelongToCommunity(
+  communityId: number,
+  documentIds: number[],
+): Promise<void> {
+  if (documentIds.length === 0) return;
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<{ id: number }>(
+    documents,
+    {},
+    inArray(documents.id, documentIds),
+  );
+  const foundIds = new Set(rows.map((r) => r.id));
+  const missing = documentIds.filter((id) => !foundIds.has(id));
+  if (missing.length > 0) {
+    throw new BadRequestError(
+      `Evidence document(s) not found in this community: ${missing.join(', ')}`,
+    );
+  }
 }
 
 function mapViolationRow(row: ViolationRecord): ViolationRecord {
@@ -262,6 +305,8 @@ export async function listViolationsForCommunity(
     status?: ViolationStatus;
     unitId?: number;
     allowedUnitIds?: number[];
+    createdAfter?: string;
+    createdBefore?: string;
   },
 ): Promise<ViolationRecord[]> {
   const scoped = createScopedClient(communityId);
@@ -278,6 +323,12 @@ export async function listViolationsForCommunity(
       return [];
     }
     whereFilters.push(inArray(violations.unitId, filters.allowedUnitIds));
+  }
+  if (filters.createdAfter) {
+    whereFilters.push(gte(violations.createdAt, new Date(filters.createdAfter)));
+  }
+  if (filters.createdBefore) {
+    whereFilters.push(lte(violations.createdAt, new Date(filters.createdBefore)));
   }
 
   const whereClause = whereFilters.length === 0
@@ -323,6 +374,9 @@ export async function createViolationForCommunity(
   input: CreateViolationInput,
   requestId?: string | null,
 ): Promise<ViolationRecord> {
+  const validatedDocIds = assertIdArray(input.evidenceDocumentIds, 'evidenceDocumentIds');
+  await assertDocumentsBelongToCommunity(communityId, validatedDocIds);
+
   const scoped = createScopedClient(communityId);
   const [inserted] = await scoped.insert(violations, {
     unitId: input.unitId,
@@ -331,7 +385,7 @@ export async function createViolationForCommunity(
     description: input.description.trim(),
     status: 'reported',
     severity: input.severity ?? 'minor',
-    evidenceDocumentIds: assertIdArray(input.evidenceDocumentIds, 'evidenceDocumentIds'),
+    evidenceDocumentIds: validatedDocIds,
   });
 
   if (!inserted) {
@@ -366,9 +420,14 @@ export async function updateViolationForCommunity(
   if (input.category !== undefined) updates['category'] = input.category.trim();
   if (input.description !== undefined) updates['description'] = input.description.trim();
   if (input.severity !== undefined) updates['severity'] = input.severity;
-  if (input.status !== undefined) updates['status'] = input.status;
+  if (input.status !== undefined) {
+    assertValidStatusTransition(existing.status, input.status);
+    updates['status'] = input.status;
+  }
   if (input.evidenceDocumentIds !== undefined) {
-    updates['evidenceDocumentIds'] = assertIdArray(input.evidenceDocumentIds, 'evidenceDocumentIds');
+    const validatedDocIds = assertIdArray(input.evidenceDocumentIds, 'evidenceDocumentIds');
+    await assertDocumentsBelongToCommunity(communityId, validatedDocIds);
+    updates['evidenceDocumentIds'] = validatedDocIds;
   }
   if (input.noticeDate !== undefined) {
     updates['noticeDate'] = input.noticeDate === null ? null : parseDateOnly(input.noticeDate, 'noticeDate');
@@ -401,7 +460,12 @@ export async function updateViolationForCommunity(
     communityId,
     oldValues: existing,
     newValues: record,
-    metadata: { requestId: requestId ?? null },
+    metadata: {
+      requestId: requestId ?? null,
+      ...(record.resolutionDate && !existing.resolutionDate
+        ? { resolutionAutoTimestamp: record.resolutionDate.toISOString() }
+        : {}),
+    },
   });
 
   if (existing.status !== 'noticed' && record.status === 'noticed') {
@@ -435,6 +499,12 @@ export async function imposeViolationFineForCommunity(
     ? parseDateOnly(input.dueDate, 'dueDate')
     : format(addDays(new Date(), Math.max(1, input.graceDays ?? 14)), 'yyyy-MM-dd');
 
+  // Validate status transition before starting multi-step operation
+  assertValidStatusTransition(violation.status, 'fined');
+
+  // Multi-step operation: ledger → fine → line item → status update.
+  // The scoped client does not expose database transactions, so we use
+  // compensating soft-deletes on failure to avoid orphaned records.
   const ledgerResult = await postLedgerEntry(scoped, {
     entryType: 'fine',
     amountCents: input.amountCents,
@@ -451,40 +521,56 @@ export async function imposeViolationFineForCommunity(
     requestId: requestId ?? undefined,
   });
 
-  const [fineInserted] = await scoped.insert(violationFines, {
-    violationId,
-    amountCents: input.amountCents,
-    ledgerEntryId: ledgerResult.id,
-    status: 'pending',
-  });
-  if (!fineInserted) {
-    throw new Error('Failed to create violation fine');
+  let fine: ViolationFineRecord;
+  try {
+    const [fineInserted] = await scoped.insert(violationFines, {
+      violationId,
+      amountCents: input.amountCents,
+      ledgerEntryId: ledgerResult.id,
+      status: 'pending',
+    });
+    if (!fineInserted) {
+      throw new Error('Failed to create violation fine');
+    }
+    fine = mapViolationFineRow(fineInserted as unknown as ViolationFineRecord);
+  } catch (error) {
+    console.error('[violations-service] fine insert failed after ledger entry created; orphaned ledger entry', {
+      ledgerEntryId: ledgerResult.id, violationId, communityId,
+    });
+    throw error;
   }
-  const fine = mapViolationFineRow(fineInserted as unknown as ViolationFineRecord);
 
-  const [lineItem] = await scoped.insert(assessmentLineItems, {
-    assessmentId: null,
-    unitId: violation.unitId,
-    amountCents: input.amountCents,
-    dueDate,
-    status: 'pending',
-    lateFeeCents: 0,
-    paidAt: null,
-    paymentIntentId: null,
-  });
-  if (!lineItem) {
-    throw new Error('Failed to create one-off fine line item');
+  let lineItemId: number;
+  try {
+    const [lineItem] = await scoped.insert(assessmentLineItems, {
+      assessmentId: null,
+      unitId: violation.unitId,
+      amountCents: input.amountCents,
+      dueDate,
+      status: 'pending',
+      lateFeeCents: 0,
+      paidAt: null,
+      paymentIntentId: null,
+    });
+    if (!lineItem) {
+      throw new Error('Failed to create one-off fine line item');
+    }
+    lineItemId = Number(lineItem['id']);
+  } catch (error) {
+    // Compensate: soft-delete orphaned fine record
+    await scoped.update(violationFines, { deletedAt: new Date() }, eq(violationFines.id, fine.id)).catch(() => {});
+    console.error('[violations-service] line item insert failed; compensated fine, orphaned ledger entry', {
+      fineId: fine.id, ledgerEntryId: ledgerResult.id, violationId, communityId,
+    });
+    throw error;
   }
 
   await scoped.update(
     violations,
-    {
-      status: 'fined',
-    },
+    { status: 'fined' },
     eq(violations.id, violationId),
   );
 
-  const lineItemId = Number(lineItem['id']);
   await logAuditEvent({
     userId: actorUserId,
     action: 'create',
@@ -681,7 +767,7 @@ export async function reviewArcSubmissionForCommunity(
     metadata: { requestId: requestId ?? null },
   });
 
-  await notifyArcDecision(communityId, record, actorUserId);
+  // Notification is sent at the decide step, not the review step
   return record;
 }
 
@@ -726,6 +812,8 @@ export async function decideArcSubmissionForCommunity(
     newValues: record,
     metadata: { requestId: requestId ?? null },
   });
+
+  await notifyArcDecision(communityId, record, actorUserId);
   return record;
 }
 
@@ -776,15 +864,21 @@ export async function markMatchingViolationFinePaid(
   amountCents: number,
   actorUserId: string,
   requestId?: string | null,
+  /** When provided, only match fines for this specific violation (avoids ambiguity with duplicate amounts). */
+  violationId?: number,
 ): Promise<number | null> {
   const scoped = createScopedClient(communityId);
+  const fineFilters = [
+    eq(violationFines.status, 'pending'),
+    eq(violationFines.amountCents, Math.abs(amountCents)),
+  ];
+  if (violationId !== undefined) {
+    fineFilters.push(eq(violationFines.violationId, violationId));
+  }
   const pendingFines = await scoped.selectFrom<ViolationFineRecord>(
     violationFines,
     {},
-    and(
-      eq(violationFines.status, 'pending'),
-      eq(violationFines.amountCents, Math.abs(amountCents)),
-    ),
+    and(...fineFilters),
   );
   if (pendingFines.length === 0) {
     return null;
