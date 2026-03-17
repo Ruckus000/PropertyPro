@@ -38,6 +38,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
+  // Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
+  resolve(repoRoot, 'apps/web/src/lib/services/assessment-automation-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available
   resolve(repoRoot, 'apps/web/src/lib/services/stripe-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/actions/checkout.ts'),
