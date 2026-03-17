@@ -15,6 +15,8 @@ const {
   findActorUnitIdMock,
   waiveLateFeesForUnitMock,
   startConnectOnboardingMock,
+  completeConnectOnboardingMock,
+  validateConnectOAuthStateMock,
   getConnectStatusMock,
   eqMock,
   userRolesTableMock,
@@ -31,6 +33,8 @@ const {
   findActorUnitIdMock: vi.fn(),
   waiveLateFeesForUnitMock: vi.fn(),
   startConnectOnboardingMock: vi.fn(),
+  completeConnectOnboardingMock: vi.fn(),
+  validateConnectOAuthStateMock: vi.fn(),
   getConnectStatusMock: vi.fn(),
   eqMock: vi.fn((column: unknown, value: unknown) => ({ column, value })),
   userRolesTableMock: {
@@ -69,6 +73,8 @@ vi.mock('@/lib/services/finance-service', () => ({
   findActorUnitId: findActorUnitIdMock,
   waiveLateFeesForUnit: waiveLateFeesForUnitMock,
   startConnectOnboarding: startConnectOnboardingMock,
+  completeConnectOnboarding: completeConnectOnboardingMock,
+  validateConnectOAuthState: validateConnectOAuthStateMock,
   getConnectStatus: getConnectStatusMock,
 }));
 
@@ -78,6 +84,7 @@ import { POST as assessmentGeneratePost } from '../../src/app/api/v1/assessments
 import { POST as createIntentPost } from '../../src/app/api/v1/payments/create-intent/route';
 import { POST as delinquencyWaivePost } from '../../src/app/api/v1/delinquency/[unitId]/waive/route';
 import { POST as connectOnboardPost } from '../../src/app/api/v1/stripe/connect/onboard/route';
+import { POST as connectCompletePost } from '../../src/app/api/v1/stripe/connect/complete/route';
 import { GET as connectStatusGet } from '../../src/app/api/v1/stripe/connect/status/route';
 
 const communityId = 321;
@@ -124,9 +131,14 @@ describe('WS66 finance mutation routes', () => {
     findActorUnitIdMock.mockResolvedValue(91);
     waiveLateFeesForUnitMock.mockResolvedValue({ waivedCount: 1, waivedAmountCents: 500 });
     startConnectOnboardingMock.mockResolvedValue({
-      stripeAccountId: 'acct_123',
       onboardingUrl: 'https://connect.stripe.test/onboard',
     });
+    completeConnectOnboardingMock.mockResolvedValue({
+      stripeAccountId: 'acct_123',
+      chargesEnabled: true,
+      payoutsEnabled: true,
+    });
+    validateConnectOAuthStateMock.mockReturnValue(undefined);
     getConnectStatusMock.mockResolvedValue({
       connected: true,
       stripeAccountId: 'acct_123',
@@ -325,5 +337,66 @@ describe('WS66 finance mutation routes', () => {
 
     expect(response.status).toBe(403);
     expect(getConnectStatusMock).not.toHaveBeenCalled();
+  });
+
+  it('completes connect onboarding with valid state and code', async () => {
+    const response = await connectCompletePost(
+      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
+        communityId,
+        code: 'ac_test_code',
+        state: 'valid-state-token',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(validateConnectOAuthStateMock).toHaveBeenCalledWith(
+      'valid-state-token',
+      communityId,
+      'user-finance-1',
+    );
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
+    expect(completeConnectOnboardingMock).toHaveBeenCalledWith(
+      communityId,
+      'ac_test_code',
+      'user-finance-1',
+      'req-finance-test-1',
+    );
+
+    const body = await response.json();
+    expect(body.data).toEqual({
+      stripeAccountId: 'acct_123',
+      chargesEnabled: true,
+      payoutsEnabled: true,
+    });
+  });
+
+  it('rejects connect completion with invalid state', async () => {
+    validateConnectOAuthStateMock.mockImplementationOnce(() => {
+      throw new AppError('OAuth state signature invalid', 403, 'FORBIDDEN');
+    });
+
+    const response = await connectCompletePost(
+      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
+        communityId,
+        code: 'ac_test_code',
+        state: 'forged-state',
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects connect completion with missing state', async () => {
+    const response = await connectCompletePost(
+      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
+        communityId,
+        code: 'ac_test_code',
+      }),
+    );
+
+    // Missing state field fails validation → 400
+    expect(response.status).toBe(400);
+    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
 });

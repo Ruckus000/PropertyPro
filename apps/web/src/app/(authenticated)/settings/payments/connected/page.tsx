@@ -35,10 +35,13 @@ export default function StripeConnectCallbackPage() {
 
     let communityId: number;
     try {
-      const decoded = JSON.parse(
+      // Decode the outer envelope to extract communityId for the API call.
+      // The full signed state is forwarded to the backend for HMAC verification.
+      const outer = JSON.parse(
         Buffer.from(stateRaw, 'base64url').toString('utf-8'),
       );
-      communityId = decoded.communityId;
+      const parsed = JSON.parse(outer.p);
+      communityId = parsed.communityId;
       if (!communityId || typeof communityId !== 'number') throw new Error('Invalid communityId');
     } catch {
       setStatus('error');
@@ -49,7 +52,7 @@ export default function StripeConnectCallbackPage() {
     fetch('/api/v1/stripe/connect/complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ communityId, code }),
+      body: JSON.stringify({ communityId, code, state: stateRaw }),
     })
       .then(async (res) => {
         if (!res.ok) {

@@ -12,17 +12,31 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireFinanceEnabled, requireFinanceWritePermission, requireFinanceAdminWrite } from '@/lib/finance/common';
-import { completeConnectOnboarding } from '@/lib/services/finance-service';
+import { ValidationError } from '@/lib/api/errors';
+import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { completeConnectOnboarding, validateConnectOAuthState } from '@/lib/services/finance-service';
 
 const bodySchema = z.object({
   communityId: z.number().int().positive(),
-  code: z.string().min(1),
+  code: z.string().min(1).max(256),
+  state: z.string().min(1).max(2048),
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
-  const body = await req.json();
-  const { communityId, code } = bodySchema.parse(body);
+  const body: unknown = await req.json();
+  const parseResult = bodySchema.safeParse(body);
+
+  if (!parseResult.success) {
+    throw new ValidationError('Invalid Stripe Connect completion payload', {
+      fields: formatZodErrors(parseResult.error),
+    });
+  }
+
+  const { communityId, code, state } = parseResult.data;
+
+  // Validate HMAC-signed OAuth state before any mutations
+  validateConnectOAuthState(state, communityId, userId);
 
   const membership = await requireCommunityMembership(communityId, userId);
   requireFinanceEnabled(membership);
