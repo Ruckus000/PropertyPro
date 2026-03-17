@@ -10,10 +10,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { validateSmsWebhookSignature } from '@/lib/services/sms/sms-service';
 import { mapTwilioStatus } from '@/lib/services/sms/twilio-provider';
 import { updateRecipientSmsStatusByIds } from '@/lib/services/emergency-broadcast-service';
-import {
-  createScopedClient,
-  emergencyBroadcastRecipients,
-} from '@propertypro/db';
+import { emergencyBroadcastRecipients } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 /**
  * Parse form-encoded body from Twilio webhook.
@@ -34,11 +33,14 @@ export async function POST(req: NextRequest) {
     const body = await parseFormBody(req);
 
     // Validate Twilio signature
-    const signature = req.headers.get('X-Twilio-Signature') ?? '';
-    const url = req.url;
+    const signature = req.headers.get('X-Twilio-Signature');
+    if (!signature) {
+      return NextResponse.json({ error: 'Missing X-Twilio-Signature header' }, { status: 401 });
+    }
 
+    const url = req.url;
     if (!validateSmsWebhookSignature(signature, url, body)) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 403 });
     }
 
     // Extract status update fields
@@ -53,15 +55,34 @@ export async function POST(req: NextRequest) {
 
     const normalizedStatus = mapTwilioStatus(messageStatus);
 
-    // Look up the recipient by provider SID
-    // Since we don't know the community_id from the webhook, we need to find it.
-    // The sms_provider_sid column is indexed for this lookup.
-    // For v1, we use a simple approach since scale is limited.
-    // TODO: Add a direct DB lookup via the unsafe escape hatch for cross-tenant SID search
-    // For now, return 200 to acknowledge the webhook (Twilio will not retry on 200)
-    // and log for manual reconciliation if needed.
+    // Cross-tenant SID lookup — we don't know community_id from the webhook,
+    // so use unscoped client to find the recipient by the indexed sms_provider_sid column.
+    const db = createUnscopedClient();
+    const recipientRows = await db
+      .select({
+        broadcastId: emergencyBroadcastRecipients.broadcastId,
+        communityId: emergencyBroadcastRecipients.communityId,
+        userId: emergencyBroadcastRecipients.userId,
+      })
+      .from(emergencyBroadcastRecipients)
+      .where(eq(emergencyBroadcastRecipients.smsProviderSid, messageSid))
+      .limit(1);
 
-    // Acknowledge webhook immediately (Twilio requires fast response)
+    const recipient = recipientRows[0];
+    if (!recipient) {
+      // Unknown SID — acknowledge to prevent Twilio retries
+      return NextResponse.json({ received: true });
+    }
+
+    await updateRecipientSmsStatusByIds(
+      Number(recipient.communityId),
+      Number(recipient.broadcastId),
+      recipient.userId,
+      normalizedStatus,
+      errorCode,
+      errorMessage,
+    );
+
     return NextResponse.json({ received: true });
   } catch {
     // Always return 200 to prevent Twilio retries on unexpected errors

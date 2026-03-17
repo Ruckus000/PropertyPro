@@ -14,6 +14,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { UnprocessableEntityError } from '@/lib/api/errors/UnprocessableEntityError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import {
   createBroadcast,
@@ -25,7 +26,7 @@ import {
 const createBroadcastSchema = z.object({
   communityId: z.number().int().positive(),
   title: z.string().min(1, 'Title is required').max(500),
-  body: z.string().min(1, 'Body is required'),
+  body: z.string().min(1, 'Body is required').max(5000),
   smsBody: z.string().max(1600).optional(),
   severity: z.enum(['emergency', 'urgent', 'info']).default('emergency'),
   templateKey: z.string().optional(),
@@ -74,7 +75,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const parsed = createBroadcastSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ValidationError('Invalid broadcast request', { fields: formatZodErrors(parsed.error) });
+    throw new UnprocessableEntityError('Invalid broadcast request', { fields: formatZodErrors(parsed.error) });
   }
 
   const { communityId, ...rest } = parsed.data;

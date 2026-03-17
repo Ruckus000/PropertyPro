@@ -27,6 +27,7 @@ import { eq, and } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import { normalizeToE164, isValidE164, maskPhone } from '@/lib/utils/phone';
+import { chunk } from '@/lib/utils/chunk';
 import { sendBulkEmergencySms, sendEmergencySms } from '@/lib/services/sms/sms-service';
 import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
@@ -106,14 +107,6 @@ function getBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
-
 function isAudienceMatch(
   role: string,
   audience: BroadcastAudience,
@@ -141,7 +134,7 @@ export async function createBroadcast(
   const scoped = createScopedClient(params.communityId);
 
   // Resolve recipients (batch query — no N+1)
-  const resolved = await resolveEmergencyRecipients(params.communityId, params.targetAudience);
+  const resolved = await resolveEmergencyRecipients(params.communityId, params.targetAudience, params.severity);
 
   // Create broadcast record
   const broadcastRows = await scoped.insert(emergencyBroadcasts, {
@@ -237,7 +230,9 @@ export async function executeBroadcast(
   const recipientRows = await scoped.query(emergencyBroadcastRecipients);
   const recipients = recipientRows.filter((r) => r['broadcastId'] === broadcastId);
 
-  const smsBody = (broadcast['smsBody'] as string) ?? (broadcast['body'] as string);
+  // If no explicit smsBody, fall back to body but truncate to SMS limit (1600 chars multi-part)
+  const rawSmsBody = (broadcast['smsBody'] as string) ?? (broadcast['body'] as string);
+  const smsBody = rawSmsBody.length > 1600 ? rawSmsBody.slice(0, 1597) + '...' : rawSmsBody;
   const emailBody = broadcast['body'] as string;
   const title = broadcast['title'] as string;
   const severity = broadcast['severity'] as string;
@@ -449,32 +444,6 @@ export async function cancelBroadcast(
 }
 
 /**
- * Update a recipient's SMS delivery status from a Twilio webhook.
- *
- * Idempotent: only advances status forward (pending → queued → sent → delivered).
- * Also updates aggregate counts on the broadcast.
- */
-export async function updateRecipientSmsStatus(
-  providerMessageSid: string,
-  newStatus: SmsDeliveryStatus,
-  errorCode?: string,
-  errorMessage?: string,
-): Promise<void> {
-  // Find the recipient by provider SID — this is a cross-tenant lookup
-  // so we use a targeted approach: search for the SID in the recipients table
-  // Note: This requires using the DB directly since we don't know the community_id yet.
-  // The webhook handler should pass communityId if available, or we use a different approach.
-  // For now, we'll search by iterating (acceptable for v1 with limited scale).
-
-  // TODO: In production, add an index on sms_provider_sid and use a direct DB query
-  // For v1, the webhook handler should extract community context from the message metadata
-  // or we add a lookup table. For now, this is handled at the API layer.
-
-  // This function is called from the webhook handler which resolves the recipient first.
-  // See the webhook route for the actual lookup implementation.
-}
-
-/**
  * Update SMS status for a specific recipient (called after webhook resolves the recipient).
  */
 export async function updateRecipientSmsStatusByIds(
@@ -645,6 +614,7 @@ export async function listBroadcasts(
 export async function resolveEmergencyRecipients(
   communityId: number,
   audience: BroadcastAudience,
+  severity: BroadcastSeverity = 'emergency',
 ): Promise<ResolvedRecipient[]> {
   const scoped = createScopedClient(communityId);
 
@@ -702,13 +672,16 @@ export async function resolveEmergencyRecipients(
       phoneVerified = phoneVerifiedAt != null;
     }
 
-    // Check SMS consent
+    // Check SMS consent (TCPA) + smsEmergencyOnly preference filter
     const prefs = prefsByUserId.get(userId);
-    const smsConsented =
+    const hasTcpaConsent =
       prefs !== undefined &&
       prefs['smsEnabled'] === true &&
       prefs['smsConsentGivenAt'] != null &&
       prefs['smsConsentRevokedAt'] == null;
+    // If user opted for emergency-only SMS (default), skip non-emergency broadcasts
+    const smsEmergencyOnly = prefs?.['smsEmergencyOnly'] !== false; // default true
+    const smsConsented = hasTcpaConsent && (severity === 'emergency' || !smsEmergencyOnly);
 
     recipients.push({
       userId,

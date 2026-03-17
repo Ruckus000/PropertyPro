@@ -433,7 +433,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
   emergency_broadcasts: {
     policy: {
       owner:                  { read: true,  write: false },
-      tenant:                 { read: true,  write: false },
+      tenant:                 { read: false, write: false },
       board_member:           { read: true,  write: true  },
       board_president:        { read: true,  write: true  },
       cam:                    { read: true,  write: true  },

@@ -57,9 +57,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
 
     if (!response.ok) {
+      // Log full Twilio error server-side but return generic message to client
+      // to avoid leaking infrastructure details (rate limits, error codes, etc.)
       const errorBody = await response.json().catch(() => ({}));
+      console.error('[phone/verify/send] Twilio error:', errorBody.code, errorBody.message);
       return NextResponse.json(
-        { error: errorBody.message ?? 'Failed to send verification code' },
+        { error: 'Could not send verification code. Please try again.' },
         { status: 422 },
       );
     }

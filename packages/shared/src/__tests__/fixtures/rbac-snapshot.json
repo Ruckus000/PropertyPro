@@ -168,7 +168,7 @@
         "write": false
       },
       "emergency_broadcasts": {
-        "read": true,
+        "read": false,
         "write": false
       }
     },
@@ -772,7 +772,7 @@
         "write": false
       },
       "emergency_broadcasts": {
-        "read": true,
+        "read": false,
         "write": false
       }
     },
@@ -1376,7 +1376,7 @@
         "write": false
       },
       "emergency_broadcasts": {
-        "read": true,
+        "read": false,
         "write": false
       }
     },

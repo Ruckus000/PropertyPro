@@ -14,6 +14,7 @@ import type {
   SmsRecipient,
 } from './sms-types';
 import { TwilioProvider } from './twilio-provider';
+import { chunk } from '@/lib/utils/chunk';
 
 // ── Singleton provider ──────────────────────────────────────────────────────
 
@@ -109,12 +110,3 @@ export function validateSmsWebhookSignature(
   return provider.validateWebhookSignature(signature, url, body);
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function chunk<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}
