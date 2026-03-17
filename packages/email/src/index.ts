@@ -53,6 +53,9 @@ export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscripti
 export { WelcomeEmail } from "./templates/welcome-email";
 export type { WelcomeEmailProps } from "./templates/welcome-email";
 
+export { EmergencyAlertEmail } from "./templates/emergency-alert-email";
+export type { EmergencyAlertEmailProps, EmergencyAlertSeverity } from "./templates/emergency-alert-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

@@ -10,6 +10,8 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   fullName: text('full_name').notNull(),
   phone: text('phone'),
+  /** Phase 1B: When phone was verified via OTP (null = unverified) */
+  phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

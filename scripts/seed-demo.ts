@@ -3,7 +3,13 @@ import {
   communities,
   complianceChecklistItems,
   documents,
+  emergencyBroadcastRecipients,
+  emergencyBroadcasts,
   meetings,
+  notificationPreferences,
+  units,
+  users,
+  violations,
 } from '@propertypro/db';
 import { and, eq, inArray, isNull } from '@propertypro/db/filters';
 import {
@@ -372,6 +378,190 @@ async function seedTransparencyDemoData(
   );
 }
 
+async function seedViolationsData(
+  communityId: number,
+  reportedByUserId: string,
+): Promise<void> {
+  // Look up existing units for this community
+  const communityUnits = await db
+    .select({ id: units.id, unitNumber: units.unitNumber })
+    .from(units)
+    .where(
+      and(
+        eq(units.communityId, communityId),
+        isNull(units.deletedAt),
+      ),
+    )
+    .limit(4);
+
+  if (communityUnits.length === 0) {
+    debugSeed(`no units found for community ${communityId}, skipping violations seed`);
+    return;
+  }
+
+  const now = new Date();
+  const violationData = [
+    {
+      communityId,
+      unitId: communityUnits[0]!.id,
+      reportedByUserId,
+      category: 'noise',
+      description: 'Loud music playing after 10 PM on multiple occasions. Neighbors on the floor above and adjacent units have reported repeated disturbances.',
+      status: 'reported' as const,
+      severity: 'moderate' as const,
+      evidenceDocumentIds: [],
+      createdAt: subDays(now, 3),
+      updatedAt: subDays(now, 3),
+    },
+    {
+      communityId,
+      unitId: communityUnits[Math.min(1, communityUnits.length - 1)]!.id,
+      reportedByUserId,
+      category: 'unauthorized_modification',
+      description: 'Installed a satellite dish on the balcony without prior ARC approval. The dish is visible from the common area and does not comply with association guidelines.',
+      status: 'noticed' as const,
+      severity: 'major' as const,
+      evidenceDocumentIds: [],
+      noticeDate: subDays(now, 5).toISOString().slice(0, 10),
+      createdAt: subDays(now, 10),
+      updatedAt: subDays(now, 5),
+    },
+    {
+      communityId,
+      unitId: communityUnits[Math.min(2, communityUnits.length - 1)]!.id,
+      reportedByUserId,
+      category: 'parking',
+      description: 'Vehicle consistently parked in the fire lane near Building C entrance. License plate observed multiple times over the past week.',
+      status: 'hearing_scheduled' as const,
+      severity: 'major' as const,
+      evidenceDocumentIds: [],
+      noticeDate: subDays(now, 14).toISOString().slice(0, 10),
+      hearingDate: addDays(now, 7),
+      createdAt: subDays(now, 18),
+      updatedAt: subDays(now, 7),
+    },
+    {
+      communityId,
+      unitId: communityUnits[Math.min(3, communityUnits.length - 1)]!.id,
+      reportedByUserId,
+      category: 'pet',
+      description: 'Unleashed dog observed in the pool area on three separate occasions. Community rules require all pets to be leashed in common areas.',
+      status: 'fined' as const,
+      severity: 'moderate' as const,
+      evidenceDocumentIds: [],
+      noticeDate: subDays(now, 25).toISOString().slice(0, 10),
+      hearingDate: subDays(now, 10),
+      createdAt: subDays(now, 30),
+      updatedAt: subDays(now, 8),
+    },
+  ];
+
+  // Delete existing violations for this community to avoid duplicates on re-seed
+  await db.delete(violations).where(eq(violations.communityId, communityId));
+
+  for (const data of violationData) {
+    await db.insert(violations).values(data);
+  }
+
+  debugSeed(`seeded ${violationData.length} violations for community ${communityId}`);
+}
+
+/**
+ * Seed emergency broadcast data for a community.
+ * Adds phone verification + SMS consent for select users, plus a past broadcast.
+ */
+async function seedEmergencyBroadcastData(
+  communityId: number,
+  initiatedByUserId: string,
+  recipientUserIds: string[],
+): Promise<void> {
+  const now = new Date();
+  const consentDate = subDays(now, 30);
+
+  // 1. Set phone_verified_at for initiator + recipients (simulate verified phones)
+  const allUserIds = [initiatedByUserId, ...recipientUserIds];
+  for (const userId of allUserIds) {
+    await db
+      .update(users)
+      .set({ phoneVerifiedAt: consentDate, updatedAt: now })
+      .where(eq(users.id, userId));
+  }
+
+  // 2. Enable SMS consent on notification_preferences for these users
+  for (const userId of allUserIds) {
+    await db
+      .update(notificationPreferences)
+      .set({
+        smsEnabled: true,
+        smsEmergencyOnly: true,
+        smsConsentGivenAt: consentDate,
+        smsConsentMethod: 'web_form',
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationPreferences.userId, userId),
+          eq(notificationPreferences.communityId, communityId),
+        ),
+      );
+  }
+
+  // 3. Delete any existing emergency broadcasts for this community (re-seed safe)
+  await db.delete(emergencyBroadcasts).where(eq(emergencyBroadcasts.communityId, communityId));
+
+  // 4. Insert a past completed broadcast (hurricane prep alert from 5 days ago)
+  const broadcastDate = subDays(now, 5);
+  const [broadcast] = await db
+    .insert(emergencyBroadcasts)
+    .values({
+      communityId,
+      title: 'Hurricane Preparation Advisory',
+      body: 'A tropical storm is approaching our area and may strengthen into a hurricane. Please take the following precautions: secure loose items on balconies, stock water and non-perishable food, charge devices, and review the community evacuation plan posted in the lobby.',
+      smsBody: 'EMERGENCY: Hurricane warning for Sunset Condos. Secure items, stock supplies, follow evacuation orders. Details via email.',
+      severity: 'emergency',
+      templateKey: 'hurricane_prep',
+      targetAudience: 'all',
+      channels: 'sms,email',
+      recipientCount: recipientUserIds.length,
+      sentCount: recipientUserIds.length,
+      deliveredCount: recipientUserIds.length,
+      failedCount: 0,
+      initiatedBy: initiatedByUserId,
+      initiatedAt: broadcastDate,
+      completedAt: addDays(broadcastDate, 0), // completed same day
+      createdAt: broadcastDate,
+      updatedAt: broadcastDate,
+    })
+    .returning({ id: emergencyBroadcasts.id });
+
+  if (!broadcast) {
+    debugSeed(`failed to insert emergency broadcast for community ${communityId}`);
+    return;
+  }
+
+  // 5. Insert recipient delivery records (all delivered successfully)
+  for (const userId of recipientUserIds) {
+    await db.insert(emergencyBroadcastRecipients).values({
+      communityId,
+      broadcastId: broadcast.id,
+      userId,
+      email: `demo-${userId.slice(0, 8)}@example.com`,
+      phone: '+13055551234',
+      smsStatus: 'delivered',
+      smsProviderSid: `SM${userId.slice(0, 32)}`,
+      smsSentAt: broadcastDate,
+      smsDeliveredAt: addDays(broadcastDate, 0),
+      emailStatus: 'sent',
+      emailProviderId: `resend-${userId.slice(0, 16)}`,
+      emailSentAt: broadcastDate,
+      createdAt: broadcastDate,
+      updatedAt: broadcastDate,
+    });
+  }
+
+  debugSeed(`seeded emergency broadcast with ${recipientUserIds.length} recipients for community ${communityId}`);
+}
+
 export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> {
   const syncAuthUsers = options.syncAuthUsers ?? true;
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
@@ -488,6 +678,21 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   }
 
   debugSeed('cross-community role and notification fixups complete');
+
+  // Seed violation data for condo and HOA communities (apartments don't have violations)
+  const ownerUserId = resolveUserId(userIdsByEmail, 'owner.one@sunset.local');
+  await seedViolationsData(sunsetCommunityId, ownerUserId);
+  // Palm Shores gets 2 violations (reported + resolved via the same function, we re-use first 2)
+  await seedViolationsData(palmCommunityId, boardPresidentId);
+  debugSeed('violations seed complete');
+
+  // Seed emergency broadcast data for Sunset Condos
+  const camUserId = resolveUserId(userIdsByEmail, 'cam.one@sunset.local');
+  const tenantUserId = resolveUserId(userIdsByEmail, 'tenant.one@sunset.local');
+  const emergencyRecipientIds = [ownerUserId, boardPresidentId, tenantUserId];
+  await seedEmergencyBroadcastData(sunsetCommunityId, camUserId, emergencyRecipientIds);
+  debugSeed('emergency broadcast seed complete');
+
   debugSeed('runDemoSeed complete');
 }
 

@@ -52,6 +52,8 @@ export * from './onboarding-wizard-state';
 export * from './rls-config';
 export * from './site-blocks';
 export * from './esign';
+export * from './emergency-broadcasts';
+export * from './emergency-broadcast-recipients';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -318,3 +320,15 @@ export type EsignEvent = typeof esignEvents.$inferSelect;
 import type { esignConsent } from './esign';
 export type EsignConsentRecord = typeof esignConsent.$inferSelect;
 export type NewEsignConsentRecord = typeof esignConsent.$inferInsert;
+
+// Emergency Broadcasts (Phase 1B)
+import type { emergencyBroadcasts } from './emergency-broadcasts';
+export type EmergencyBroadcast = typeof emergencyBroadcasts.$inferSelect;
+export type NewEmergencyBroadcast = typeof emergencyBroadcasts.$inferInsert;
+
+// Emergency Broadcast Recipients (Phase 1B)
+import type { emergencyBroadcastRecipients } from './emergency-broadcast-recipients';
+export type EmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferSelect;
+export type NewEmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferInsert;
+
+

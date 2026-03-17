@@ -57,4 +57,6 @@ export interface CommunityFeatures {
   readonly hasAccountingConnectors: boolean;
   /** Native e-signature builder (coming soon) */
   readonly hasEsign: boolean;
+  /** Emergency SMS + email broadcast system (Phase 1B) */
+  readonly hasEmergencyNotifications: boolean;
 }
