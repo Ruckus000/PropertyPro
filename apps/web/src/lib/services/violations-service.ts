@@ -460,7 +460,12 @@ export async function updateViolationForCommunity(
     communityId,
     oldValues: existing,
     newValues: record,
-    metadata: { requestId: requestId ?? null },
+    metadata: {
+      requestId: requestId ?? null,
+      ...(record.resolutionDate && !existing.resolutionDate
+        ? { resolutionAutoTimestamp: record.resolutionDate.toISOString() }
+        : {}),
+    },
   });
 
   if (existing.status !== 'noticed' && record.status === 'noticed') {
@@ -762,7 +767,7 @@ export async function reviewArcSubmissionForCommunity(
     metadata: { requestId: requestId ?? null },
   });
 
-  await notifyArcDecision(communityId, record, actorUserId);
+  // Notification is sent at the decide step, not the review step
   return record;
 }
 
@@ -807,6 +812,8 @@ export async function decideArcSubmissionForCommunity(
     newValues: record,
     metadata: { requestId: requestId ?? null },
   });
+
+  await notifyArcDecision(communityId, record, actorUserId);
   return record;
 }
 
@@ -857,15 +864,21 @@ export async function markMatchingViolationFinePaid(
   amountCents: number,
   actorUserId: string,
   requestId?: string | null,
+  /** When provided, only match fines for this specific violation (avoids ambiguity with duplicate amounts). */
+  violationId?: number,
 ): Promise<number | null> {
   const scoped = createScopedClient(communityId);
+  const fineFilters = [
+    eq(violationFines.status, 'pending'),
+    eq(violationFines.amountCents, Math.abs(amountCents)),
+  ];
+  if (violationId !== undefined) {
+    fineFilters.push(eq(violationFines.violationId, violationId));
+  }
   const pendingFines = await scoped.selectFrom<ViolationFineRecord>(
     violationFines,
     {},
-    and(
-      eq(violationFines.status, 'pending'),
-      eq(violationFines.amountCents, Math.abs(amountCents)),
-    ),
+    and(...fineFilters),
   );
   if (pendingFines.length === 0) {
     return null;
