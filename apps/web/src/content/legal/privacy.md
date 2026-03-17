@@ -21,6 +21,7 @@ This policy applies to all users of PropertyPro, including community association
 We collect the following personal information that you provide directly to us:
 
 - **Account information:** Full name, email address, phone number, and password.
+- **Phone number and SMS consent data:** If you opt in to SMS notifications, we collect your mobile phone number, phone verification status, SMS consent timestamp, consent method (e.g., web form), and consent revocation timestamp if you later opt out. This data is collected and retained for compliance with the Telephone Consumer Protection Act (TCPA).
 - **Unit/property information:** Unit number, property address, and community association membership details.
 - **Profile information:** Role within the community association (e.g., owner, board member, property manager).
 - **Uploaded documents:** Association documents, meeting minutes, budgets, financial reports, and other files uploaded to the platform.
@@ -44,6 +45,7 @@ We use the information we collect for the following purposes:
 - **Platform operation:** To provide, maintain, and improve the PropertyPro platform and its features.
 - **Compliance tracking:** To help community associations track statutory compliance deadlines and requirements under Florida Statutes §718 and §720.
 - **Email notifications:** To send you account-related notifications, compliance alerts, meeting notices, and other communications you have opted into.
+- **SMS notifications:** If you have opted in, to send you emergency and community alert text messages via SMS. SMS messages are sent through our third-party provider, Twilio, and are limited to life-safety emergencies and critical community alerts. We do not use your phone number for marketing or promotional messages.
 - **Authentication and security:** To verify your identity, protect your account, and maintain the security of the platform.
 - **Customer support:** To respond to your inquiries, troubleshoot issues, and provide technical assistance.
 - **Analytics:** To understand how users interact with the platform and improve our services (using aggregated, de-identified data only).
@@ -66,6 +68,7 @@ We share limited information with the following third-party service providers wh
 
 - **Supabase** — Database hosting and data storage. Supabase acts as a data processor on our behalf and stores data in secure, SOC 2 Type II compliant data centers. Learn more at [supabase.com/privacy](https://supabase.com/privacy).
 - **Stripe** — Payment processing for subscription billing. Stripe handles payment card data directly and is PCI DSS Level 1 compliant. We do not store your full credit card number on our servers.
+- **Twilio** — SMS message delivery and phone number verification for emergency notifications. If you opt in to SMS alerts, your phone number is shared with Twilio solely for the purpose of delivering text messages and verifying your phone number via one-time passcode (OTP). Learn more at [twilio.com/legal/privacy](https://www.twilio.com/en-us/legal/privacy).
 - **Resend** — Transactional email delivery for notifications, invitations, and compliance alerts.
 - **Sentry** — Error monitoring and application performance tracking. Sentry may receive anonymized technical data to help us identify and fix software issues.
 - **Vercel** — Web application hosting and content delivery.
@@ -127,6 +130,15 @@ You may request deletion of your personal information as described in Section 5.
 ### 7.4 Communication Preferences
 
 You may manage your email notification preferences through the notification settings in your account. You may opt out of non-essential communications at any time. Certain account-related and security notifications cannot be opted out of.
+
+### 7.5 SMS Opt-Out
+
+If you have opted in to SMS notifications, you may revoke your consent at any time by:
+
+- **Replying STOP** to any SMS message received from PropertyPro.
+- **Disabling SMS** in your notification settings within the platform.
+
+Upon opting out, we will stop sending you SMS messages promptly. Your phone number and consent records (including the date of consent and date of revocation) will be retained for TCPA compliance recordkeeping purposes but will not be used for further messaging unless you opt in again.
 
 ---
 

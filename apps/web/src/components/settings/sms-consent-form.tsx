@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { formatPhoneDisplay } from '@/lib/utils/phone';
 
 interface Props {
@@ -232,14 +233,24 @@ export function SmsConsentForm({
               className="mt-1"
             />
             <span className="text-sm text-gray-700">
-              I consent to receive emergency SMS notifications from this community.
+              By enabling SMS notifications, I consent to receive emergency and community
+              alerts via text message from this community.
             </span>
           </label>
 
           <p className="text-xs text-gray-500">
-            Message and data rates may apply. Reply STOP to unsubscribe at any time.
-            Emergency notifications are sent only for life-safety events
-            (hurricanes, evacuations, gas leaks, etc.).
+            Message and data rates may apply. You can opt out at any time by replying STOP
+            to any message or by disabling SMS in your settings. Emergency notifications
+            are sent only for life-safety events (hurricanes, evacuations, gas leaks, etc.).
+            See our{' '}
+            <Link href="/legal/terms" className="text-blue-600 underline hover:text-blue-500">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link href="/legal/privacy" className="text-blue-600 underline hover:text-blue-500">
+              Privacy Policy
+            </Link>
+            .
           </p>
 
           {smsConsentGivenAt && smsEnabled && (

@@ -53,12 +53,6 @@ export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscripti
 export { WelcomeEmail } from "./templates/welcome-email";
 export type { WelcomeEmailProps } from "./templates/welcome-email";
 
-export { AssessmentPaymentReceivedEmail } from "./templates/assessment-payment-received";
-export type { AssessmentPaymentReceivedEmailProps } from "./templates/assessment-payment-received";
-
-export { AssessmentDueReminderEmail } from "./templates/assessment-due-reminder";
-export type { AssessmentDueReminderEmailProps } from "./templates/assessment-due-reminder";
-
 export { EmergencyAlertEmail } from "./templates/emergency-alert-email";
 export type { EmergencyAlertEmailProps, EmergencyAlertSeverity } from "./templates/emergency-alert-email";
 

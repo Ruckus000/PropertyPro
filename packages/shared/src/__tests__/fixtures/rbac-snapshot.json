@@ -80,6 +80,10 @@
       "esign": {
         "read": true,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -160,6 +164,10 @@
         "write": false
       },
       "esign": {
+        "read": true,
+        "write": false
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": false
       }
@@ -244,6 +252,10 @@
       "esign": {
         "read": true,
         "write": true
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -324,6 +336,10 @@
         "write": false
       },
       "esign": {
+        "read": true,
+        "write": true
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": true
       }
@@ -408,6 +424,10 @@
       "esign": {
         "read": true,
         "write": true
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -490,6 +510,10 @@
       "esign": {
         "read": false,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -570,6 +594,10 @@
         "write": true
       },
       "esign": {
+        "read": true,
+        "write": true
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": true
       }
@@ -656,6 +684,10 @@
       "esign": {
         "read": true,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -736,6 +768,10 @@
         "write": false
       },
       "esign": {
+        "read": true,
+        "write": false
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": false
       }
@@ -820,6 +856,10 @@
       "esign": {
         "read": true,
         "write": true
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -900,6 +940,10 @@
         "write": false
       },
       "esign": {
+        "read": true,
+        "write": true
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": true
       }
@@ -984,6 +1028,10 @@
       "esign": {
         "read": true,
         "write": true
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -1066,6 +1114,10 @@
       "esign": {
         "read": false,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -1146,6 +1198,10 @@
         "write": true
       },
       "esign": {
+        "read": true,
+        "write": true
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": true
       }
@@ -1232,6 +1288,10 @@
       "esign": {
         "read": false,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1312,6 +1372,10 @@
         "write": false
       },
       "esign": {
+        "read": true,
+        "write": false
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": false
       }
@@ -1396,6 +1460,10 @@
       "esign": {
         "read": false,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": false,
+        "write": false
       }
     },
     "board_president": {
@@ -1476,6 +1544,10 @@
         "write": false
       },
       "esign": {
+        "read": false,
+        "write": false
+      },
+      "emergency_broadcasts": {
         "read": false,
         "write": false
       }
@@ -1560,6 +1632,10 @@
       "esign": {
         "read": false,
         "write": false
+      },
+      "emergency_broadcasts": {
+        "read": false,
+        "write": false
       }
     },
     "site_manager": {
@@ -1642,6 +1718,10 @@
       "esign": {
         "read": true,
         "write": true
+      },
+      "emergency_broadcasts": {
+        "read": true,
+        "write": true
       }
     },
     "property_manager_admin": {
@@ -1722,6 +1802,10 @@
         "write": true
       },
       "esign": {
+        "read": true,
+        "write": true
+      },
+      "emergency_broadcasts": {
         "read": true,
         "write": true
       }

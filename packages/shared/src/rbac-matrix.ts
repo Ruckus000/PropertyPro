@@ -49,7 +49,6 @@ export const RBAC_RESOURCES = [
   'accounting',
   'esign',
   'emergency_broadcasts',
-  'elections',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -83,7 +82,6 @@ const PHASE5_DEFAULT_RESOURCES = [
   'accounting',
   'esign',
   'emergency_broadcasts',
-  'elections',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -442,18 +440,6 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
       site_manager:           { read: true,  write: true  },
       property_manager_admin: { read: true,  write: true  },
     },
-  },
-  elections: {
-    policy: {
-      owner:                  { read: true,  write: true  },
-      tenant:                 { read: false, write: false },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: false, write: false },
-      property_manager_admin: { read: true,  write: true  },
-    },
-    excludedCommunityTypes: ['apartment'],
   },
 };
 
