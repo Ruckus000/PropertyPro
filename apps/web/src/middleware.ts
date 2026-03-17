@@ -47,6 +47,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/pm',
   '/communities',
   '/onboarding',
+  '/violations',
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';

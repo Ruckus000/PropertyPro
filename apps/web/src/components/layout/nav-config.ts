@@ -17,6 +17,7 @@ import {
   History,
   Building2,
   Paintbrush,
+  AlertTriangle,
 } from 'lucide-react';
 import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -78,6 +79,15 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
+  {
+    id: 'violations-report',
+    label: 'Report Violation',
+    icon: AlertTriangle,
+    href: (cid) => `/violations/report?communityId=${cid}`,
+    featureKey: 'hasViolations',
+    group: 'main',
+    matchPrefixes: ['/violations/report'],
+  },
 
   // ── Admin ──
   {
@@ -108,6 +118,16 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     featureKey: 'hasCompliance',
     group: 'admin',
     matchPrefixes: ['/contracts'],
+  },
+  {
+    id: 'violations-inbox',
+    label: 'Violations Inbox',
+    icon: AlertTriangle,
+    href: (cid) => `/violations/inbox?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasViolations',
+    group: 'admin',
+    matchPrefixes: ['/violations/inbox'],
   },
   {
     id: 'audit-trail',
@@ -201,6 +221,8 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
+  'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
+  'violations-inbox': { title: 'Violations Inbox', subtitle: 'Review & manage violations' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
