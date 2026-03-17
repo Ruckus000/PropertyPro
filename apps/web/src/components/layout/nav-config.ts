@@ -17,6 +17,9 @@ import {
   History,
   Building2,
   Paintbrush,
+  CreditCard,
+  DollarSign,
+  BarChart3,
 } from 'lucide-react';
 import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -78,6 +81,15 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
+  {
+    id: 'payments',
+    label: 'Payments',
+    icon: CreditCard,
+    href: (cid) => `/payments?communityId=${cid}`,
+    featureKey: 'hasFinance',
+    group: 'main',
+    matchPrefixes: ['/payments'],
+  },
 
   // ── Admin ──
   {
@@ -117,6 +129,26 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     roles: ADMIN_ROLES,
     group: 'admin',
     matchPrefixes: ['/audit-trail'],
+  },
+  {
+    id: 'assessments',
+    label: 'Assessments',
+    icon: DollarSign,
+    href: (cid) => `/assessments?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasFinance',
+    group: 'admin',
+    matchPrefixes: ['/assessments'],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    icon: BarChart3,
+    href: (cid) => `/finance?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasFinance',
+    group: 'admin',
+    matchPrefixes: ['/finance'],
   },
 ];
 
@@ -202,6 +234,9 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
+  payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
+  assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
+  finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
 };

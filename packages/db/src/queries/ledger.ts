@@ -20,7 +20,7 @@ export interface PostLedgerEntryParams {
   userId?: string;
   effectiveDate?: Date;
   metadata?: LedgerMetadata;
-  createdByUserId: string;
+  createdByUserId?: string | null;
   requestId?: string;
 }
 
@@ -80,7 +80,7 @@ export async function postLedgerEntry(
     userId: entry.userId ?? null,
     effectiveDate: entry.effectiveDate ? toDateOnly(entry.effectiveDate) : undefined,
     metadata: entry.metadata ?? {},
-    createdByUserId: entry.createdByUserId,
+    createdByUserId: entry.createdByUserId ?? null,
   });
 
   const firstRow = inserted[0];
@@ -90,7 +90,7 @@ export async function postLedgerEntry(
   }
 
   await logAuditEvent({
-    userId: entry.createdByUserId,
+    userId: entry.createdByUserId ?? 'system',
     action: 'create',
     resourceType: 'ledger_entry',
     resourceId: String(id),
