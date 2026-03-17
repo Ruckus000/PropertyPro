@@ -52,6 +52,9 @@ export * from './onboarding-wizard-state';
 export * from './rls-config';
 export * from './site-blocks';
 export * from './esign';
+export * from './emergency-broadcasts';
+export * from './emergency-broadcast-recipients';
+export * from './elections';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -318,3 +321,36 @@ export type EsignEvent = typeof esignEvents.$inferSelect;
 import type { esignConsent } from './esign';
 export type EsignConsentRecord = typeof esignConsent.$inferSelect;
 export type NewEsignConsentRecord = typeof esignConsent.$inferInsert;
+
+// Emergency Broadcasts (Phase 1B)
+import type { emergencyBroadcasts } from './emergency-broadcasts';
+export type EmergencyBroadcast = typeof emergencyBroadcasts.$inferSelect;
+export type NewEmergencyBroadcast = typeof emergencyBroadcasts.$inferInsert;
+
+// Emergency Broadcast Recipients (Phase 1B)
+import type { emergencyBroadcastRecipients } from './emergency-broadcast-recipients';
+export type EmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferSelect;
+export type NewEmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferInsert;
+
+// Elections (Phase 1D)
+import type { elections } from './elections';
+export type Election = typeof elections.$inferSelect;
+export type NewElection = typeof elections.$inferInsert;
+
+// Election Candidates (Phase 1D)
+import type { electionCandidates } from './elections';
+export type ElectionCandidate = typeof electionCandidates.$inferSelect;
+export type NewElectionCandidate = typeof electionCandidates.$inferInsert;
+
+// Election Ballots (Phase 1D — append-only)
+import type { electionBallots } from './elections';
+export type ElectionBallot = typeof electionBallots.$inferSelect;
+
+// Election Proxies (Phase 1D)
+import type { electionProxies } from './elections';
+export type ElectionProxy = typeof electionProxies.$inferSelect;
+export type NewElectionProxy = typeof electionProxies.$inferInsert;
+
+// Election Eligibility Snapshots (Phase 1D — append-only)
+import type { electionEligibilitySnapshots } from './elections';
+export type ElectionEligibilitySnapshot = typeof electionEligibilitySnapshots.$inferSelect;

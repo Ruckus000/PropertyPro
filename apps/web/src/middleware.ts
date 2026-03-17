@@ -40,6 +40,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/settings',
   '/documents',
   '/maintenance',
+  '/violations',
   '/contracts',
   '/audit-trail',
   '/announcements',
@@ -47,6 +48,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/pm',
   '/communities',
   '/onboarding',
+  '/emergency',
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';
@@ -65,6 +67,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/transparency', method: 'GET' },
   // Public tenant ICS feed (community-scoped via middleware tenant headers)
   { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
+  // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
+  { path: '/api/v1/webhooks/twilio', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
