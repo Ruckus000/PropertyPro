@@ -3,13 +3,13 @@ export const dynamic = 'force-dynamic';
 /**
  * P3-48/49: Mobile meetings list page.
  *
- * Only reachable via BottomTabBar for condo/HOA communities (features.hasMeetings).
- * For apartment communities the Meetings tab is hidden and this page redirects.
+ * Only reachable via BottomTabBar when meetings are enabled for the community type.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { asc, gte } from '@propertypro/db/filters';
 import { createScopedClient, meetings } from '@propertypro/db';
@@ -35,18 +35,19 @@ export default async function MobileMeetingsPage({ searchParams }: PageProps) {
 
   let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
-    membership = await requireCommunityMembership(communityId, userId!);
+    membership = await requireCommunityMembership(communityId, userId);
   } catch {
     redirect('/auth/login');
   }
 
-  // Gate: redirect apartment communities (tab should be hidden but guard here too)
-  const features = getFeaturesForCommunity(membership!.communityType);
+  const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasMeetings) {
     redirect(`/mobile?communityId=${communityId}`);
   }
 
-  const timezone = resolveTimezone(membership!.timezone);
+  requirePermission(membership, 'meetings', 'read');
+
+  const timezone = resolveTimezone(membership.timezone);
   const scoped = createScopedClient(communityId);
   // Filter and sort at the DB level; communityId + deletedAt IS NULL are injected automatically
   const upcoming = await scoped

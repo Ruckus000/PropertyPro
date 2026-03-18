@@ -377,10 +377,10 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
   });
 
   // =========================================================================
-  // 7. Feature gate: apartment community → 403
+  // 7. Apartments now support meetings for readable/writable roles
   // =========================================================================
 
-  it('GET meetings on apartment community returns 403', async () => {
+  it('GET meetings on apartment community succeeds for property manager admin', async () => {
     const kit = requireState();
     const route = requireMeetingsRoute();
     const communityC = requireCommunity(kit, 'communityC');
@@ -389,10 +389,10 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     const response = await route.GET(
       new NextRequest(apiUrl(`/api/v1/meetings?communityId=${communityC.id}`)),
     );
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
   });
 
-  it('POST create meeting on apartment community returns 403', async () => {
+  it('POST create meeting on apartment community succeeds for property manager admin', async () => {
     const kit = requireState();
     const route = requireMeetingsRoute();
     const communityC = requireCommunity(kit, 'communityC');
@@ -407,7 +407,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'Nowhere',
       }),
     );
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(201);
   });
 
   // =========================================================================

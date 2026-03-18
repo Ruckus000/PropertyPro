@@ -54,10 +54,10 @@ describe('checkPermission — exhaustive RBAC_MATRIX coverage', () => {
 
 describe('policy invariants', () => {
 
-  // --- meetings and compliance are condo/HOA only ---
+  // --- apartment communities now support meetings; compliance stays condo/HOA only ---
 
-  it('apartment tenant cannot read meetings', () => {
-    expect(checkPermission('tenant', 'apartment', 'meetings', 'read')).toBe(false);
+  it('apartment tenant can read meetings', () => {
+    expect(checkPermission('tenant', 'apartment', 'meetings', 'read')).toBe(true);
   });
 
   it('apartment tenant cannot write meetings', () => {
@@ -72,8 +72,12 @@ describe('policy invariants', () => {
     expect(checkPermission('site_manager', 'apartment', 'compliance', 'write')).toBe(false);
   });
 
-  it('apartment property_manager_admin cannot read meetings', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'meetings', 'read')).toBe(false);
+  it('apartment property_manager_admin can read meetings', () => {
+    expect(checkPermission('property_manager_admin', 'apartment', 'meetings', 'read')).toBe(true);
+  });
+
+  it('apartment site_manager can write meetings', () => {
+    expect(checkPermission('site_manager', 'apartment', 'meetings', 'write')).toBe(true);
   });
 
   it('apartment property_manager_admin cannot read compliance', () => {
@@ -289,6 +293,12 @@ describe('policy invariants', () => {
   it('condo board_president can write calendar sync but not accounting connectors', () => {
     expect(checkPermission('board_president', 'condo_718', 'calendar_sync', 'write')).toBe(true);
     expect(checkPermission('board_president', 'condo_718', 'accounting', 'write')).toBe(false);
+  });
+
+  it('residents can read authenticated calendar sync feeds', () => {
+    expect(checkPermission('owner', 'condo_718', 'calendar_sync', 'read')).toBe(true);
+    expect(checkPermission('tenant', 'condo_718', 'calendar_sync', 'read')).toBe(true);
+    expect(checkPermission('tenant', 'apartment', 'calendar_sync', 'read')).toBe(true);
   });
 
   it('condo cam can write accounting connectors', () => {

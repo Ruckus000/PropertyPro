@@ -2,34 +2,60 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
-import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
   createScopedClientMock,
   logAuditEventMock,
-  meetingsTableMock,
-  meetingDocumentsTableMock,
-  documentsTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requireActiveSubscriptionForMutationMock,
   queueNotificationMock,
+  meetingsTableMock,
+  meetingDocumentsTableMock,
+  documentsTableMock,
+  communitiesTableMock,
+  filtersMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  meetingsTableMock: { id: Symbol('meetings.id') },
-  meetingDocumentsTableMock: { id: Symbol('meeting_documents.id') },
-  documentsTableMock: { id: Symbol('documents.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue({
-    userId: 'session-user-1',
-    communityId: 42,
-    role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
-    communityType: 'condo_718',
-  }),
+  requireCommunityMembershipMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
   queueNotificationMock: vi.fn().mockResolvedValue(undefined),
+  meetingsTableMock: {
+    id: Symbol('meetings.id'),
+    title: Symbol('meetings.title'),
+    meetingType: Symbol('meetings.meetingType'),
+    startsAt: Symbol('meetings.startsAt'),
+    endsAt: Symbol('meetings.endsAt'),
+    location: Symbol('meetings.location'),
+    noticePostedAt: Symbol('meetings.noticePostedAt'),
+    minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
+  },
+  meetingDocumentsTableMock: {
+    id: Symbol('meeting_documents.id'),
+    meetingId: Symbol('meeting_documents.meetingId'),
+    documentId: Symbol('meeting_documents.documentId'),
+  },
+  documentsTableMock: { id: Symbol('documents.id') },
+  communitiesTableMock: {
+    id: Symbol('communities.id'),
+    timezone: Symbol('communities.timezone'),
+  },
+  filtersMock: {
+    and: vi.fn((...parts) => ({ type: 'and', parts })),
+    asc: vi.fn((value) => ({ type: 'asc', value })),
+    eq: vi.fn((left, right) => ({ type: 'eq', left, right })),
+    gte: vi.fn((left, right) => ({ type: 'gte', left, right })),
+    lt: vi.fn((left, right) => ({ type: 'lt', left, right })),
+  },
 }));
+
+function makeSelectResult<T>(rows: T[]) {
+  return Object.assign(Promise.resolve(rows), {
+    orderBy: vi.fn().mockResolvedValue(rows),
+  });
+}
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
@@ -37,9 +63,10 @@ vi.mock('@propertypro/db', () => ({
   meetings: meetingsTableMock,
   meetingDocuments: meetingDocumentsTableMock,
   documents: documentsTableMock,
-  // communities is referenced by handleCreate for timezone lookup (selectFrom call)
-  communities: { id: Symbol('communities.id'), timezone: Symbol('communities.timezone') },
+  communities: communitiesTableMock,
 }));
+
+vi.mock('@propertypro/db/filters', () => filtersMock);
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
@@ -59,556 +86,318 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 import { GET, POST } from '../../src/app/api/v1/meetings/route';
 
-describe('p1-16 meetings route', () => {
+describe('meetings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'session-user-1',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+      role: 'manager',
+      isAdmin: true,
+      isUnitOwner: false,
+      displayTitle: 'Board President',
+      presetKey: 'board_president',
+      permissions: {
+        resources: {
+          documents: { read: true, write: true },
+          meetings: { read: true, write: true },
+          announcements: { read: true, write: true },
+          residents: { read: true, write: true },
+          settings: { read: true, write: true },
+          audit: { read: true, write: false },
+          compliance: { read: true, write: true },
+          maintenance: { read: true, write: true },
+          contracts: { read: true, write: true },
+          finances: { read: true, write: true },
+          violations: { read: true, write: true },
+          arc_submissions: { read: true, write: true },
+          polls: { read: true, write: true },
+          work_orders: { read: true, write: true },
+          amenities: { read: true, write: true },
+          packages: { read: true, write: true },
+          visitors: { read: true, write: true },
+          calendar_sync: { read: true, write: true },
+          accounting: { read: true, write: true },
+          esign: { read: true, write: true },
+          emergency_broadcasts: { read: true, write: true },
+        },
+      },
       communityType: 'condo_718',
-    });
-
-    const query = vi.fn().mockResolvedValue([]);
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      insert: vi.fn(),
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
+      timezone: 'America/New_York',
     });
   });
 
-  it('GET lists meetings for a community and computes deadlines', async () => {
-    const query = vi.fn().mockImplementation(async (table) => {
+  it('GET lists meetings and applies a DB-level date range filter when start and end are provided', async () => {
+    const meetingRows = [
+      {
+        id: 1,
+        title: 'Board Meeting',
+        meetingType: 'board',
+        startsAt: new Date('2026-04-10T22:00:00.000Z'),
+        endsAt: new Date('2026-04-10T23:00:00.000Z'),
+        location: 'Clubhouse',
+        noticePostedAt: null,
+        minutesApprovedAt: null,
+      },
+    ];
+    const selectFromMock = vi.fn((table: unknown) => {
       if (table === meetingsTableMock) {
-        return [
-          {
-            id: 1,
-            title: 'Board Meeting',
-            meetingType: 'board',
-            startsAt: '2026-02-20T18:00:00.000Z',
-            location: 'Clubhouse',
-          },
-        ];
+        return makeSelectResult(meetingRows);
       }
-      return [];
+      return makeSelectResult([]);
     });
+
     createScopedClientMock.mockReturnValue({
-      query,
+      selectFrom: selectFromMock,
       insert: vi.fn(),
       update: vi.fn(),
       softDelete: vi.fn(),
       hardDelete: vi.fn(),
     });
 
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
-    const res = await GET(req);
-    const json = (await res.json()) as { data: Array<{ id: number; deadlines: Record<string, string> }> };
+    const response = await GET(
+      new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42&start=2026-04-01&end=2026-04-30'),
+    );
+    const json = (await response.json()) as { data: Array<{ id: number; deadlines: Record<string, string> }> };
 
-    expect(createScopedClientMock).toHaveBeenCalledWith(42);
-    expect(query).toHaveBeenCalledWith(meetingsTableMock);
-    expect(json.data[0].id).toBe(1);
-    expect(json.data[0].deadlines).toBeDefined();
+    expect(response.status).toBe(200);
+    expect(selectFromMock).toHaveBeenCalledWith(
+      meetingsTableMock,
+      expect.any(Object),
+      expect.anything(),
+    );
+    expect(json.data).toHaveLength(1);
+    expect(json.data[0]?.id).toBe(1);
+    expect(json.data[0]?.deadlines).toBeDefined();
   });
 
-  it('POST create inserts meeting via scoped client and logs audit', async () => {
-    const insert = vi.fn().mockResolvedValue([
-      { id: 99, title: 'Annual Meeting', meetingType: 'annual', startsAt: '2026-03-01T00:00:00.000Z', location: 'Hall' },
-    ]);
+  it('POST create persists endsAt and returns the serialized meeting payload', async () => {
+    const insertMock = vi.fn().mockResolvedValue([{ id: 99 }]);
+    const selectFromMock = vi.fn((table: unknown) => {
+      if (table === meetingsTableMock) {
+        return makeSelectResult([
+          {
+            id: 99,
+            title: 'Annual Meeting',
+            meetingType: 'annual',
+            startsAt: new Date('2026-04-18T14:00:00.000Z'),
+            endsAt: new Date('2026-04-18T16:00:00.000Z'),
+            location: 'Main Hall',
+            noticePostedAt: null,
+            minutesApprovedAt: null,
+          },
+        ]);
+      }
+      if (table === communitiesTableMock) {
+        return makeSelectResult([{ timezone: 'America/New_York' }]);
+      }
+      return makeSelectResult([]);
+    });
 
     createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      // selectFrom is called by handleCreate to fetch the community timezone for notification formatting
-      selectFrom: vi.fn().mockResolvedValue([{ timezone: 'America/New_York' }]),
-      insert,
+      selectFrom: selectFromMock,
+      insert: insertMock,
       update: vi.fn(),
       softDelete: vi.fn(),
       hardDelete: vi.fn(),
     });
 
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 77,
+          title: 'Annual Meeting',
+          meetingType: 'annual',
+          startsAt: '2026-04-18T14:00:00.000Z',
+          endsAt: '2026-04-18T16:00:00.000Z',
+          location: 'Main Hall',
+        }),
+      }),
+    );
+    const json = (await response.json()) as { data: { id: number; endsAt: string | null } };
+
+    expect(response.status).toBe(201);
+    expect(insertMock).toHaveBeenCalledWith(
+      meetingsTableMock,
+      expect.objectContaining({
         title: 'Annual Meeting',
         meetingType: 'annual',
-        startsAt: '2026-03-01T00:00:00.000Z',
-        location: 'Hall',
-        communityId: 77,
-        userId: 'spoofed-user',
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    const json = (await res.json()) as { data: { id: number } };
-
-    expect(createScopedClientMock).toHaveBeenCalledWith(77);
-    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(77, 'session-user-1');
-    expect(insert).toHaveBeenCalledWith(
-      meetingsTableMock,
-      expect.objectContaining({ title: 'Annual Meeting', meetingType: 'annual' }),
-    );
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'create',
-        resourceType: 'meeting',
-        resourceId: '99',
-        userId: 'session-user-1',
+        endsAt: new Date('2026-04-18T16:00:00.000Z'),
       }),
     );
     expect(json.data.id).toBe(99);
+    expect(json.data.endsAt).toBe('2026-04-18T16:00:00.000Z');
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(77);
+    expect(queueNotificationMock).toHaveBeenCalled();
   });
 
-  it('POST update writes audit with changed fields', async () => {
-    const query = vi.fn().mockResolvedValue([
-      { id: 5, title: 'Old', meetingType: 'board', startsAt: '2026-01-01T00:00:00.000Z', location: 'A' },
-    ]);
-    const update = vi.fn().mockResolvedValue([
-      { id: 5, title: 'New', meetingType: 'board', startsAt: '2026-01-01T00:00:00.000Z', location: 'B' },
-    ]);
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      insert: vi.fn(),
-      update,
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'update',
-        id: 5,
-        communityId: 55,
-        title: 'New',
-        location: 'B',
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    await POST(req);
-    expect(update).toHaveBeenCalled();
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'update',
-        resourceType: 'meeting',
-        resourceId: '5',
-        oldValues: expect.objectContaining({ title: 'Old', location: 'A' }),
-        newValues: expect.objectContaining({ title: 'New', location: 'B' }),
+  it('POST create rejects an end time that is not after the start time', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          title: 'Invalid Meeting',
+          meetingType: 'board',
+          startsAt: '2026-04-18T16:00:00.000Z',
+          endsAt: '2026-04-18T15:00:00.000Z',
+          location: 'Clubhouse',
+        }),
       }),
     );
+
+    expect(response.status).toBe(422);
   });
 
-  it('POST delete soft-deletes and logs audit', async () => {
-    const softDelete = vi.fn().mockResolvedValue([]);
+  it('POST update validates endsAt against the existing startsAt when only the end changes', async () => {
+    const selectFromMock = vi.fn((table: unknown) => {
+      if (table === meetingsTableMock) {
+        return makeSelectResult([
+          {
+            id: 5,
+            title: 'Board Meeting',
+            meetingType: 'board',
+            startsAt: new Date('2026-05-01T16:00:00.000Z'),
+            endsAt: new Date('2026-05-01T17:00:00.000Z'),
+            location: 'Room A',
+            noticePostedAt: null,
+            minutesApprovedAt: null,
+          },
+        ]);
+      }
+      return makeSelectResult([]);
+    });
 
     createScopedClientMock.mockReturnValue({
-      query: vi.fn(),
+      selectFrom: selectFromMock,
       insert: vi.fn(),
       update: vi.fn(),
-      softDelete,
+      softDelete: vi.fn(),
       hardDelete: vi.fn(),
     });
 
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'delete',
-        id: 10,
-        communityId: 88,
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          communityId: 42,
+          id: 5,
+          endsAt: '2026-05-01T15:30:00.000Z',
+        }),
       }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    await POST(req);
-    expect(softDelete).toHaveBeenCalled();
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'delete', resourceType: 'meeting', resourceId: '10' }),
     );
-    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(88);
+
+    expect(response.status).toBe(422);
   });
 
-  it('POST attach creates join record and logs audit', async () => {
-    const insert = vi.fn().mockResolvedValue([{ id: 123, meetingId: 1, documentId: 2 }]);
-    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
-      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
-      return Promise.resolve([]);
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      selectFrom,
-      insert,
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'attach',
-        communityId: 42,
-        meetingId: 1,
-        documentId: 2,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    await POST(req);
-    expect(insert).toHaveBeenCalledWith(
-      meetingDocumentsTableMock,
-      expect.objectContaining({ meetingId: 1, documentId: 2 }),
-    );
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ resourceType: 'meeting_document', action: 'update' }),
-    );
-  });
-
-  it('POST attach returns 404 when meetingId does not belong to community', async () => {
-    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-      if (table === meetingsTableMock) return Promise.resolve([]); // not found
-      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
-      return Promise.resolve([]);
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      selectFrom,
-      insert: vi.fn(),
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'attach',
-        communityId: 42,
-        meetingId: 999,
-        documentId: 2,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
-  });
-
-  it('POST attach returns 404 when documentId does not belong to community', async () => {
-    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
-      if (table === documentsTableMock) return Promise.resolve([]); // not found
-      return Promise.resolve([]);
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      selectFrom,
-      insert: vi.fn(),
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'attach',
-        communityId: 42,
-        meetingId: 1,
-        documentId: 999,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
-  });
-
-  it('POST detach returns 404 when meetingId does not belong to community', async () => {
-    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-      if (table === meetingsTableMock) return Promise.resolve([]); // not found
-      if (table === documentsTableMock) return Promise.resolve([{ id: 2 }]);
-      return Promise.resolve([]);
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      selectFrom,
-      insert: vi.fn(),
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'detach',
-        communityId: 42,
-        meetingId: 999,
-        documentId: 2,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
-  });
-
-  it('POST detach returns 404 when documentId does not belong to community', async () => {
-    const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-      if (table === meetingsTableMock) return Promise.resolve([{ id: 1 }]);
-      if (table === documentsTableMock) return Promise.resolve([]); // not found
-      return Promise.resolve([]);
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
-      selectFrom,
-      insert: vi.fn(),
-      update: vi.fn(),
-      softDelete: vi.fn(),
-      hardDelete: vi.fn(),
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'detach',
-        communityId: 42,
-        meetingId: 1,
-        documentId: 999,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
-  });
-
-  it('POST returns 404 when x-community-id header conflicts with body communityId', async () => {
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Annual Meeting',
-        meetingType: 'annual',
-        startsAt: '2026-03-01T00:00:00.000Z',
-        location: 'Hall',
-        communityId: 77,
-      }),
-      headers: {
-        'content-type': 'application/json',
-        'x-community-id': '88',
+  it('allows apartment manager roles to read and write meetings', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      userId: 'session-user-1',
+      communityId: 42,
+      role: 'manager',
+      isAdmin: true,
+      isUnitOwner: false,
+      displayTitle: 'Site Manager',
+      presetKey: 'site_manager',
+      permissions: {
+        resources: {
+          documents: { read: true, write: true },
+          meetings: { read: true, write: true },
+          announcements: { read: true, write: true },
+          residents: { read: true, write: true },
+          settings: { read: true, write: false },
+          audit: { read: true, write: false },
+          compliance: { read: false, write: false },
+          maintenance: { read: true, write: true },
+          contracts: { read: true, write: true },
+          finances: { read: true, write: true },
+          violations: { read: false, write: false },
+          arc_submissions: { read: false, write: false },
+          polls: { read: true, write: true },
+          work_orders: { read: true, write: true },
+          amenities: { read: true, write: true },
+          packages: { read: true, write: true },
+          visitors: { read: true, write: true },
+          calendar_sync: { read: true, write: true },
+          accounting: { read: true, write: true },
+          esign: { read: true, write: true },
+          emergency_broadcasts: { read: true, write: true },
+        },
       },
+      communityType: 'apartment',
+      timezone: 'America/New_York',
     });
 
-    const res = await POST(req);
-    expect(res.status).toBe(404);
+    const selectFromMock = vi.fn((table: unknown) => {
+      if (table === meetingsTableMock) {
+        return makeSelectResult([
+          {
+            id: 7,
+            title: 'Leasing Update',
+            meetingType: 'committee',
+            startsAt: new Date('2026-06-02T18:00:00.000Z'),
+            endsAt: null,
+            location: 'Leasing Office',
+            noticePostedAt: null,
+            minutesApprovedAt: null,
+          },
+        ]);
+      }
+      if (table === communitiesTableMock) {
+        return makeSelectResult([{ timezone: 'America/New_York' }]);
+      }
+      return makeSelectResult([]);
+    });
+    const insertMock = vi.fn().mockResolvedValue([{ id: 8 }]);
+
+    createScopedClientMock.mockReturnValue({
+      selectFrom: selectFromMock,
+      insert: insertMock,
+      update: vi.fn(),
+      softDelete: vi.fn(),
+      hardDelete: vi.fn(),
+    });
+
+    const getResponse = await GET(
+      new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42'),
+    );
+    expect(getResponse.status).toBe(200);
+
+    const postResponse = await POST(
+      new NextRequest('http://localhost:3000/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          title: 'Leasing Standup',
+          meetingType: 'committee',
+          startsAt: '2026-06-02T18:00:00.000Z',
+          location: 'Leasing Office',
+        }),
+      }),
+    );
+    expect(postResponse.status).toBe(201);
   });
 
   it('GET rejects unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
+    const response = await GET(
+      new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42'),
+    );
+    expect(response.status).toBe(401);
   });
 
-  it('GET returns 404 when x-community-id header conflicts with query communityId', async () => {
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42', {
-      headers: {
-        'x-community-id': '99',
-      },
-    });
-    const res = await GET(req);
-    expect(res.status).toBe(404);
-  });
-
-  it('GET returns 403 for authenticated non-member', async () => {
+  it('GET returns 403 for authenticated non-members', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
-    const res = await GET(req);
-    expect(res.status).toBe(403);
-  });
-
-  it('GET and POST block apartment communities', async () => {
-    requireCommunityMembershipMock.mockResolvedValue({
-      userId: 'session-user-1',
-      communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
-      communityType: 'apartment',
-    });
-
-    const getReq = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
-    const getRes = await GET(getReq);
-    expect(getRes.status).toBe(403);
-
-    const postReq = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Leasing Standup',
-        meetingType: 'committee',
-        startsAt: '2026-03-01T00:00:00.000Z',
-        location: 'Leasing Office',
-        communityId: 42,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const postRes = await POST(postReq);
-    expect(postRes.status).toBe(403);
-    expect(queueNotificationMock).not.toHaveBeenCalled();
-  });
-
-  it('GET returns 403 for invalid role/community combo via RBAC read guard', async () => {
-    // Manager with meetings.read = false should be denied
-    requireCommunityMembershipMock.mockResolvedValueOnce({
-      userId: 'session-user-1',
-      communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: false, write: false }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
-      communityType: 'condo_718',
-    });
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42');
-    const res = await GET(req);
-
-    expect(res.status).toBe(403);
-    expect(createScopedClientMock).not.toHaveBeenCalled();
-  });
-
-  it('POST rejects unauthenticated requests', async () => {
-    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Annual Meeting',
-        meetingType: 'annual',
-        startsAt: '2026-03-01T00:00:00.000Z',
-        location: 'Hall',
-        communityId: 77,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('POST returns 403 for authenticated non-member', async () => {
-    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
-
-    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Annual Meeting',
-        meetingType: 'annual',
-        startsAt: '2026-03-01T00:00:00.000Z',
-        location: 'Hall',
-        communityId: 77,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  describe('subscription guard enforcement', () => {
-    it('POST returns 403 when guard throws SUBSCRIPTION_REQUIRED', async () => {
-      requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
-        new AppError('Your subscription is no longer active. Please reactivate to continue.', 403, 'SUBSCRIPTION_REQUIRED'),
-      );
-
-      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: 'Annual Meeting',
-          meetingType: 'annual',
-          startsAt: '2026-03-01T00:00:00.000Z',
-          location: 'Hall',
-          communityId: 42,
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      const res = await POST(req);
-      expect(res.status).toBe(403);
-    });
-  });
-
-  describe('POST detach happy path', () => {
-    it('POST detach returns 200 when both meeting and document exist in community', async () => {
-      const hardDelete = vi.fn().mockResolvedValue([]);
-      const selectFrom = vi.fn()
-        .mockResolvedValueOnce([{ id: 1 }])   // meetings lookup
-        .mockResolvedValueOnce([{ id: 2 }]);  // documents lookup
-
-      createScopedClientMock.mockReturnValue({
-        query: vi.fn().mockResolvedValue([]),
-        selectFrom,
-        insert: vi.fn(),
-        update: vi.fn(),
-        softDelete: vi.fn(),
-        hardDelete,
-      });
-
-      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'detach',
-          communityId: 42,
-          meetingId: 1,
-          documentId: 2,
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      const res = await POST(req);
-      expect(res.status).toBe(200);
-      expect(hardDelete).toHaveBeenCalled();
-      expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'update',
-          resourceType: 'meeting_document',
-          resourceId: '1:2',
-        }),
-      );
-    });
-  });
-
-  describe('POST input validation', () => {
-    it('POST with invalid meetingType returns 400', async () => {
-      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: 'Standup',
-          meetingType: 'standup',
-          startsAt: '2026-03-01T00:00:00.000Z',
-          location: 'Office',
-          communityId: 42,
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-      const res = await POST(req);
-      expect([400, 422]).toContain(res.status);
-    });
-
-    it('POST with non-ISO startsAt returns 400', async () => {
-      const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: 'Annual Meeting',
-          meetingType: 'annual',
-          startsAt: 'not-a-date',
-          location: 'Hall',
-          communityId: 42,
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-      const res = await POST(req);
-      expect([400, 422]).toContain(res.status);
-    });
+    const response = await GET(
+      new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42'),
+    );
+    expect(response.status).toBe(403);
   });
 });

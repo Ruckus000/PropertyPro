@@ -22,13 +22,38 @@ vi.mock('@/lib/services/notification-service', () => ({
 
 const {
   createScopedClientMock,
+  communitiesTableMock,
+  documentsTableMock,
   logAuditEventMock,
+  meetingDocumentsTableMock,
+  meetingsTableMock,
   requireAuthMock,
   requireCommunityMembershipMock,
   resolveEffectiveMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
+  communitiesTableMock: {
+    id: Symbol('communities.id'),
+    timezone: Symbol('communities.timezone'),
+  },
+  documentsTableMock: {
+    id: Symbol('documents.id'),
+  },
   logAuditEventMock: vi.fn(),
+  meetingDocumentsTableMock: {
+    meetingId: Symbol('meetingDocuments.meetingId'),
+    documentId: Symbol('meetingDocuments.documentId'),
+  },
+  meetingsTableMock: {
+    id: Symbol('meetings.id'),
+    title: Symbol('meetings.title'),
+    meetingType: Symbol('meetings.meetingType'),
+    startsAt: Symbol('meetings.startsAt'),
+    endsAt: Symbol('meetings.endsAt'),
+    location: Symbol('meetings.location'),
+    noticePostedAt: Symbol('meetings.noticePostedAt'),
+    minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
+  },
   requireAuthMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveMock: vi.fn(),
@@ -37,13 +62,10 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
-  communities: Symbol('communities'),
-  documents: Symbol('documents'),
-  meetings: { id: Symbol('meetings.id') },
-  meetingDocuments: {
-    meetingId: Symbol('meetingDocuments.meetingId'),
-    documentId: Symbol('meetingDocuments.documentId'),
-  },
+  communities: communitiesTableMock,
+  documents: documentsTableMock,
+  meetings: meetingsTableMock,
+  meetingDocuments: meetingDocumentsTableMock,
 }));
 
 vi.mock('@propertypro/shared', () => ({
@@ -116,13 +138,26 @@ describe('meeting creation triggers notification', () => {
       title: 'Annual Budget Meeting',
       meetingType: 'annual',
       startsAt: new Date('2026-04-15T19:00:00.000Z'),
+      endsAt: null,
       location: 'Clubhouse',
+      noticePostedAt: null,
+      minutesApprovedAt: null,
     };
+
+    const selectFromMock = vi.fn((table: unknown) => {
+      if (table === meetingsTableMock) {
+        return Promise.resolve([createdMeeting]);
+      }
+      if (table === communitiesTableMock) {
+        return Promise.resolve([{ timezone: 'America/New_York' }]);
+      }
+      return Promise.resolve([]);
+    });
 
     createScopedClientMock.mockReturnValue({
       insert: vi.fn().mockResolvedValue([createdMeeting]),
       query: vi.fn().mockResolvedValue([]),
-      selectFrom: vi.fn().mockResolvedValue([]),
+      selectFrom: selectFromMock,
     });
   });
 

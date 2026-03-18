@@ -6,7 +6,7 @@ import { NotFoundError } from '@/lib/api/errors';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 import { parseCommunityIdFromQueryOrHeader } from '@/lib/calendar/request';
 import { requireCalendarSyncEnabled } from '@/lib/calendar/common';
-import { generateCommunityMeetingsIcs } from '@/lib/services/calendar-sync-service';
+import { generateCommunityCalendarIcs } from '@/lib/services/calendar-sync-service';
 
 interface CommunityRow {
   [key: string]: unknown;
@@ -50,7 +50,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   );
 
   const calendarName = `${community.name} Meetings`;
-  const body = await generateCommunityMeetingsIcs(communityId, calendarName);
+  const body = await generateCommunityCalendarIcs(communityId, calendarName);
 
   return new NextResponse(body, {
     status: 200,
