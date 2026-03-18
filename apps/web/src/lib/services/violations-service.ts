@@ -4,6 +4,7 @@ import {
   assessmentLineItems,
   createScopedClient,
   documents,
+  ledgerEntries,
   logAuditEvent,
   postLedgerEntry,
   violationFines,
@@ -11,7 +12,7 @@ import {
 } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
 import type { ArcSubmissionStatus, ViolationFineStatus, ViolationSeverity, ViolationStatus } from '@propertypro/db';
-import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
+import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
 import { sendNotification } from '@/lib/services/notification-service';
 
@@ -446,9 +447,20 @@ export async function updateViolationForCommunity(
     return existing;
   }
 
-  const [updated] = await scoped.update(violations, updates, eq(violations.id, violationId));
+  const [updated] = await scoped.update(
+    violations,
+    updates,
+    and(
+      eq(violations.id, violationId),
+      eq(violations.status, existing.status),
+    ),
+  );
   if (!updated) {
-    throw new NotFoundError('Violation not found');
+    throw new AppError(
+      'Violation was modified by another user. Please refresh and try again.',
+      409,
+      'CONFLICT',
+    );
   }
 
   const record = mapViolationRow(updated as unknown as ViolationRecord);
@@ -505,43 +517,41 @@ export async function imposeViolationFineForCommunity(
   // Multi-step operation: ledger → fine → line item → status update.
   // The scoped client does not expose database transactions, so we use
   // compensating soft-deletes on failure to avoid orphaned records.
-  const ledgerResult = await postLedgerEntry(scoped, {
-    entryType: 'fine',
-    amountCents: input.amountCents,
-    description: `Fine imposed for violation #${violationId}`,
-    sourceType: 'violation',
-    sourceId: String(violationId),
-    unitId: violation.unitId,
-    userId: violation.reportedByUserId ?? undefined,
-    metadata: {
-      violationId,
-      notes: input.notes ?? undefined,
-    },
-    createdByUserId: actorUserId,
-    requestId: requestId ?? undefined,
-  });
+  let ledgerEntryId: number | undefined;
+  let fine: ViolationFineRecord | undefined;
+  let fineId: number | undefined;
+  let lineItemId: number | undefined;
 
-  let fine: ViolationFineRecord;
   try {
+    const ledgerResult = await postLedgerEntry(scoped, {
+      entryType: 'fine',
+      amountCents: input.amountCents,
+      description: `Fine imposed for violation #${violationId}`,
+      sourceType: 'violation',
+      sourceId: String(violationId),
+      unitId: violation.unitId,
+      userId: violation.reportedByUserId ?? undefined,
+      metadata: {
+        violationId,
+        notes: input.notes ?? undefined,
+      },
+      createdByUserId: actorUserId,
+      requestId: requestId ?? undefined,
+    });
+    ledgerEntryId = ledgerResult.id;
+
     const [fineInserted] = await scoped.insert(violationFines, {
       violationId,
       amountCents: input.amountCents,
-      ledgerEntryId: ledgerResult.id,
+      ledgerEntryId,
       status: 'pending',
     });
     if (!fineInserted) {
       throw new Error('Failed to create violation fine');
     }
     fine = mapViolationFineRow(fineInserted as unknown as ViolationFineRecord);
-  } catch (error) {
-    console.error('[violations-service] fine insert failed after ledger entry created; orphaned ledger entry', {
-      ledgerEntryId: ledgerResult.id, violationId, communityId,
-    });
-    throw error;
-  }
+    fineId = fine.id;
 
-  let lineItemId: number;
-  try {
     const [lineItem] = await scoped.insert(assessmentLineItems, {
       assessmentId: null,
       unitId: violation.unitId,
@@ -557,12 +567,27 @@ export async function imposeViolationFineForCommunity(
     }
     lineItemId = Number(lineItem['id']);
   } catch (error) {
-    // Compensate: soft-delete orphaned fine record
-    await scoped.update(violationFines, { deletedAt: new Date() }, eq(violationFines.id, fine.id)).catch(() => {});
-    console.error('[violations-service] line item insert failed; compensated fine, orphaned ledger entry', {
-      fineId: fine.id, ledgerEntryId: ledgerResult.id, violationId, communityId,
+    if (fineId) {
+      await scoped
+        .update(violationFines, { deletedAt: new Date() }, eq(violationFines.id, fineId))
+        .catch(() => {});
+    }
+    if (ledgerEntryId) {
+      await scoped
+        .update(ledgerEntries, { deletedAt: new Date() }, eq(ledgerEntries.id, ledgerEntryId))
+        .catch(() => {});
+    }
+    console.error('[violations-service] fine creation rollback executed', {
+      fineId,
+      ledgerEntryId,
+      violationId,
+      communityId,
     });
     throw error;
+  }
+
+  if (!fine || !ledgerEntryId || !lineItemId) {
+    throw new Error('Failed to create violation fine');
   }
 
   await scoped.update(
@@ -580,7 +605,7 @@ export async function imposeViolationFineForCommunity(
     newValues: {
       violationId,
       amountCents: fine.amountCents,
-      ledgerEntryId: ledgerResult.id,
+      ledgerEntryId,
       lineItemId,
       dueDate,
     },
@@ -589,7 +614,7 @@ export async function imposeViolationFineForCommunity(
 
   return {
     fine,
-    ledgerEntryId: ledgerResult.id,
+    ledgerEntryId,
     lineItemId,
   };
 }

@@ -123,12 +123,19 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       fullName: `Owner A ${state.runSuffix}`,
       phone: null,
     });
+    await scopedA.update(
+      state.dbModule.units,
+      {
+        ownerUserId: ownerAUserId,
+      },
+      eq(state.dbModule.units.id, unitAId),
+    );
     await scopedA.insert(state.dbModule.userRoles, {
       userId: ownerAUserId,
       role: 'resident',
       isUnitOwner: true,
       displayTitle: 'Owner',
-      unitId: unitAId,
+      unitId: null,
     });
     trackUserForCleanup(state, ownerAUserId);
 
@@ -361,6 +368,13 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityA.id}&unitId=${unitASecondaryId}`)),
     );
     expect(statementForbidden.status).toBe(403);
+
+    const statementResponse = await routeModules.paymentStatement.GET(
+      new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityA.id}`)),
+    );
+    expect(statementResponse.status).toBe(200);
+    const statementJson = await parseJson<{ data: Record<string, unknown> }>(statementResponse);
+    expect(statementJson.data['unitId']).toBe(unitAId);
 
     const ledgerForbidden = await routeModules.ledger.GET(
       new NextRequest(apiUrl(`/api/v1/ledger?communityId=${communityA.id}&unitId=${unitASecondaryId}`)),

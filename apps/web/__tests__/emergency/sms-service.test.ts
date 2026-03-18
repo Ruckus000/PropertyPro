@@ -80,6 +80,14 @@ describe('SMS Service', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe('30003');
     });
+
+    it('rejects invalid phone numbers before calling the provider', async () => {
+      await expect(sendEmergencySms('3055551234', 'Test')).rejects.toThrow(
+        'Invalid phone number: 3055551234',
+      );
+
+      expect(mockProvider.sendSms).not.toHaveBeenCalled();
+    });
   });
 
   describe('sendBulkEmergencySms', () => {

@@ -121,6 +121,50 @@ describe('p1-26 notification-preferences route', () => {
     );
   });
 
+  it('PATCH logs IP, user-agent, and consent metadata for SMS preference changes', async () => {
+    const stored: Record<string, unknown>[] = [];
+    const query = vi.fn().mockResolvedValue(stored);
+    const insert = vi
+      .fn()
+      .mockImplementation(async (_table, data: Record<string, unknown>) => {
+        stored.push({ id: 1, communityId: 42, ...data });
+        return [stored[stored.length - 1]];
+      });
+
+    createScopedClientMock.mockReturnValue({ query, insert, update: vi.fn() });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.5',
+        'user-agent': 'PropertyProTest/1.0',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        emailFrequency: 'immediate',
+        emailAnnouncements: true,
+        emailMeetings: true,
+        inAppEnabled: true,
+        smsEnabled: true,
+        smsEmergencyOnly: true,
+      }),
+    });
+
+    const res = await PATCH(req);
+    expect(res.status).toBe(200);
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          ip: '203.0.113.5',
+          userAgent: 'PropertyProTest/1.0',
+          consentMethod: 'web_form',
+        },
+      }),
+    );
+  });
+
   it('PATCH rejects invalid emailFrequency enum values', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',

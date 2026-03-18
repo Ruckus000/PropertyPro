@@ -28,5 +28,8 @@ export interface LedgerMetadata {
   refundReason?: string;
   originalEntryId?: number;
   notes?: string;
+  convenienceFeeCents?: number;
+  stripeFeeActualCents?: number;
+  paymentMethod?: 'card' | 'us_bank_account';
   [key: string]: unknown;
 }

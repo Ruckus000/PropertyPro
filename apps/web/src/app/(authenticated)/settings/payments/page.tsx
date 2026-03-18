@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { ConnectStatus } from '@/components/finance/connect-status';
+import { FeePolicySettings } from '@/components/finance/fee-policy-settings';
 
 /**
  * Settings → Payments page.
@@ -34,6 +35,8 @@ export default function PaymentSettingsPage() {
       </div>
 
       <ConnectStatus communityId={communityId} />
+
+      <FeePolicySettings communityId={communityId} />
 
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
         <h3 className="text-sm font-medium text-blue-900">Florida Trust Fund Compliance</h3>

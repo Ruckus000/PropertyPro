@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useMutation } from '@tanstack/react-query';
+import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
 
 /* ─────── Types ─────── */
 
@@ -26,7 +27,15 @@ interface PaymentIntentResponse {
   paymentIntentId: string;
   clientSecret: string;
   amountCents: number;
+  convenienceFeeCents: number;
+  totalChargeCents: number;
   currency: string;
+  feePolicy: PaymentFeePolicy;
+}
+
+interface UpdateIntentResponse {
+  convenienceFeeCents: number;
+  totalChargeCents: number;
 }
 
 /* ─────── Helpers ─────── */
@@ -48,16 +57,6 @@ function formatDate(dateStr: string): string {
   });
 }
 
-/** Estimated card processing fee (2.9% + $0.30). Display-only. */
-function estimateCardFee(amountCents: number): number {
-  return Math.round(amountCents * 0.029 + 30);
-}
-
-/** Estimated ACH processing fee (0.8%, capped at $5). Display-only. */
-function estimateAchFee(amountCents: number): number {
-  return Math.min(Math.round(amountCents * 0.008), 500);
-}
-
 async function createPaymentIntent(
   communityId: number,
   lineItemId: number,
@@ -75,6 +74,24 @@ async function createPaymentIntent(
   return json.data;
 }
 
+async function updatePaymentIntentMethod(
+  communityId: number,
+  paymentIntentId: string,
+  paymentMethod: 'card' | 'us_bank_account',
+): Promise<UpdateIntentResponse> {
+  const res = await fetch('/api/v1/payments/update-intent', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ communityId, paymentIntentId, paymentMethod }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error?.message || 'Failed to update payment method');
+  }
+  const json = await res.json();
+  return json.data;
+}
+
 /* ─────── Main Dialog ─────── */
 
 export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: PaymentDialogProps) {
@@ -84,10 +101,17 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
     mutationFn: () => createPaymentIntent(communityId, lineItem.id),
   });
 
-  // Create intent on mount
-  if (!intentMutation.data && !intentMutation.isPending && !intentMutation.isError) {
-    intentMutation.mutate();
-  }
+  // Create intent on mount (useEffect prevents duplicate calls in React 18 strict mode)
+  const intentCreated = useRef(false);
+  useEffect(() => {
+    if (!intentCreated.current) {
+      intentCreated.current = true;
+      intentMutation.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const feePolicy = intentMutation.data?.feePolicy;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -124,22 +148,25 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
               </div>
             )}
             <div className="mt-2 flex justify-between border-t border-gray-200 pt-2 text-sm font-semibold">
-              <span className="text-gray-900">Total</span>
+              <span className="text-gray-900">Subtotal</span>
               <span className="text-gray-900">{formatCents(totalCents)}</span>
             </div>
           </div>
 
-          {/* Fee Estimate */}
-          <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
-            <p className="text-xs font-medium text-blue-900">Convenience Fee Estimate</p>
-            <div className="mt-1 flex gap-4 text-xs text-blue-700">
-              <span>Card: ~{formatCents(estimateCardFee(totalCents))}</span>
-              <span>ACH: ~{formatCents(estimateAchFee(totalCents))}</span>
+          {/* Fee Estimate — only shown for owner_pays before method selection */}
+          {feePolicy === 'owner_pays' && (
+            <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <p className="text-xs font-medium text-blue-900">Convenience Fee</p>
+              <div className="mt-1 flex gap-4 text-xs text-blue-700">
+                <span>Card: ~{formatCents(calculateConvenienceFee(totalCents, 'card'))}</span>
+                <span>ACH: ~{formatCents(calculateConvenienceFee(totalCents, 'us_bank_account'))}</span>
+              </div>
+              <p className="mt-1 text-xs text-blue-600">
+                A convenience fee applies for online payments. To avoid this fee,
+                mail a check to your association.
+              </p>
             </div>
-            <p className="mt-1 text-xs text-blue-600">
-              Processing fees are passed through at cost. Final fee depends on payment method.
-            </p>
-          </div>
+          )}
 
           {/* Stripe Payment Element */}
           {intentMutation.isPending && (
@@ -178,7 +205,14 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
                 },
               }}
             >
-              <CheckoutForm onSuccess={onSuccess} onClose={onClose} />
+              <CheckoutForm
+                communityId={communityId}
+                paymentIntentId={intentMutation.data.paymentIntentId}
+                feePolicy={intentMutation.data.feePolicy}
+                baseAmountCents={totalCents}
+                onSuccess={onSuccess}
+                onClose={onClose}
+              />
             </Elements>
           )}
         </div>
@@ -189,11 +223,61 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
 
 /* ─────── Checkout Form ─────── */
 
-function CheckoutForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
+interface CheckoutFormProps {
+  communityId: number;
+  paymentIntentId: string;
+  feePolicy: PaymentFeePolicy;
+  baseAmountCents: number;
+  onSuccess: () => void;
+  onClose: () => void;
+}
+
+function CheckoutForm({
+  communityId,
+  paymentIntentId,
+  feePolicy,
+  baseAmountCents,
+  onSuccess,
+  onClose,
+}: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentMethod, setCurrentMethod] = useState<'card' | 'us_bank_account'>('card');
+  const [confirmedFee, setConfirmedFee] = useState<number | null>(null);
+  const [totalCharge, setTotalCharge] = useState(baseAmountCents);
+  const initialUpdateDone = useRef(false);
+
+  // Call update-intent immediately with default method (card), and on method change
+  const updateMutation = useMutation({
+    mutationFn: (method: 'card' | 'us_bank_account') =>
+      updatePaymentIntentMethod(communityId, paymentIntentId, method),
+    onSuccess: (data) => {
+      setConfirmedFee(data.convenienceFeeCents);
+      setTotalCharge(data.totalChargeCents);
+    },
+  });
+
+  // Fire initial update-intent on mount with default method
+  useEffect(() => {
+    if (!initialUpdateDone.current) {
+      initialUpdateDone.current = true;
+      updateMutation.mutate('card');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePaymentMethodChange = useCallback(
+    (e: { value: { type: string } }) => {
+      const method = e.value.type === 'us_bank_account' ? 'us_bank_account' : 'card';
+      if (method !== currentMethod) {
+        setCurrentMethod(method);
+        updateMutation.mutate(method);
+      }
+    },
+    [currentMethod, updateMutation],
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -221,17 +305,49 @@ function CheckoutForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: 
     [stripe, elements, onSuccess],
   );
 
+  const displayFee = confirmedFee ?? (feePolicy === 'owner_pays'
+    ? calculateConvenienceFee(baseAmountCents, currentMethod)
+    : 0);
+
   return (
     <form onSubmit={handleSubmit}>
       <PaymentElement
+        onChange={handlePaymentMethodChange}
         options={{
           layout: 'tabs',
           paymentMethodOrder: ['card', 'us_bank_account'],
         }}
       />
 
+      {/* Confirmed fee breakdown for owner_pays */}
+      {feePolicy === 'owner_pays' && displayFee > 0 && (
+        <div className="mt-3 rounded-lg bg-gray-50 p-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Convenience Fee</span>
+            <span className="text-gray-900">{formatCents(displayFee)}</span>
+          </div>
+          <div className="mt-1 flex justify-between text-sm font-semibold">
+            <span className="text-gray-900">Total</span>
+            <span className="text-gray-900">{formatCents(totalCharge)}</span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <p className="mt-3 text-sm text-red-600">{error}</p>
+      )}
+
+      {updateMutation.isError && (
+        <p className="mt-3 text-sm text-red-600">
+          Failed to calculate fees.{' '}
+          <button
+            type="button"
+            onClick={() => updateMutation.mutate(currentMethod)}
+            className="font-medium underline hover:text-red-800"
+          >
+            Retry
+          </button>
+        </p>
       )}
 
       <div className="mt-4 flex gap-3">
@@ -244,10 +360,12 @@ function CheckoutForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: 
         </button>
         <button
           type="submit"
-          disabled={!stripe || submitting}
+          disabled={!stripe || submitting || updateMutation.isPending || updateMutation.isError}
           className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >
-          {submitting ? 'Processing...' : 'Pay Now'}
+          {submitting
+            ? 'Processing...'
+            : `Pay ${formatCents(totalCharge)}`}
         </button>
       </div>
     </form>

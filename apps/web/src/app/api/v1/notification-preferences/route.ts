@@ -92,6 +92,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
   const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled, smsEnabled, smsEmergencyOnly } = result.data;
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const userAgent = req.headers.get('user-agent') ?? 'unknown';
 
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
@@ -153,6 +155,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     resourceId: `${userId}:${communityId}`,
     communityId,
     newValues: updateValues as unknown as Record<string, unknown>,
+    metadata: {
+      ip,
+      userAgent,
+      ...(smsEnabled !== undefined ? { consentMethod: 'web_form' } : {}),
+    },
   });
 
   return NextResponse.json({

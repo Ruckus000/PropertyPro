@@ -15,6 +15,7 @@ import type {
 } from './sms-types';
 import { TwilioProvider } from './twilio-provider';
 import { chunk } from '@/lib/utils/chunk';
+import { isValidE164 } from '@/lib/utils/phone';
 
 // ── Singleton provider ──────────────────────────────────────────────────────
 
@@ -42,13 +43,17 @@ export function resetSmsProvider(): void {
 /**
  * Send a single emergency SMS.
  *
- * Returns the result — never throws. Callers should check `result.success`.
+ * Returns the provider result. Throws only for invalid input.
  */
 export async function sendEmergencySms(
   to: string,
   body: string,
   statusCallbackUrl?: string,
 ): Promise<SmsSendResult> {
+  if (!isValidE164(to)) {
+    throw new Error(`Invalid phone number: ${to}`);
+  }
+
   const provider = getProvider();
   return provider.sendSms({ to, body, statusCallbackUrl });
 }
@@ -109,4 +114,3 @@ export function validateSmsWebhookSignature(
   const provider = getProvider();
   return provider.validateWebhookSignature(signature, url, body);
 }
-

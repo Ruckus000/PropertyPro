@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing X-Twilio-Signature header' }, { status: 401 });
     }
 
-    const url = req.url;
+    const reqUrl = new URL(req.url);
+    const url = `${reqUrl.origin}${reqUrl.pathname}`;
     if (!validateSmsWebhookSignature(signature, url, body)) {
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 403 });
     }
@@ -70,7 +71,10 @@ export async function POST(req: NextRequest) {
 
     const recipient = recipientRows[0];
     if (!recipient) {
-      // Unknown SID — acknowledge to prevent Twilio retries
+      console.warn('[twilio-webhook] Received status callback for unknown MessageSid:', {
+        messageSid,
+        messageStatus,
+      });
       return NextResponse.json({ received: true });
     }
 
@@ -84,8 +88,8 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ received: true });
-  } catch {
-    // Always return 200 to prevent Twilio retries on unexpected errors
-    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error('[twilio-webhook] Error processing webhook:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

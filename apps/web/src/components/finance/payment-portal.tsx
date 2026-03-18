@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
 
 /* ─────── Types ─────── */
@@ -38,6 +39,8 @@ interface PaymentPortalProps {
   userId: string;
   userRole: string;
   isUnitOwner: boolean;
+  /** Required for non-owner roles; owners' unitId is resolved server-side. */
+  unitId?: number;
 }
 
 /* ─────── Helpers ─────── */
@@ -66,24 +69,39 @@ const STATUS_STYLES: Record<string, string> = {
 
 /* ─────── Fetch ─────── */
 
-async function fetchStatement(communityId: number): Promise<StatementData> {
-  const res = await fetch(`/api/v1/payments/statement?communityId=${communityId}`);
+async function fetchStatement(communityId: number, unitId?: number): Promise<StatementData> {
+  const params = new URLSearchParams({ communityId: String(communityId) });
+  if (unitId) params.set('unitId', String(unitId));
+  const res = await fetch(`/api/v1/payments/statement?${params}`);
   if (!res.ok) throw new Error('Failed to load payment data');
   const json = await res.json();
   return json.data;
 }
 
+async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
+  const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
+  if (!res.ok) return 'association_absorbs';
+  const json = await res.json();
+  return json.data.feePolicy;
+}
+
 /* ─────── Component ─────── */
 
-export function PaymentPortal({ communityId, userId, userRole, isUnitOwner }: PaymentPortalProps) {
+export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unitId }: PaymentPortalProps) {
   const [payingLineItem, setPayingLineItem] = useState<LineItem | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
 
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ['payment-portal', communityId],
-    queryFn: () => fetchStatement(communityId),
+    queryKey: ['payment-portal', communityId, unitId],
+    queryFn: () => fetchStatement(communityId, unitId),
     staleTime: 30_000,
     retry: false,
+  });
+
+  const { data: feePolicy } = useQuery({
+    queryKey: ['fee-policy', communityId],
+    queryFn: () => fetchFeePolicy(communityId),
+    staleTime: 60_000,
   });
 
   if (isPending) {
@@ -159,6 +177,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner }: Pa
           items={unpaidItems}
           onPay={setPayingLineItem}
           canPay={isUnitOwner || userRole !== 'resident'}
+          feePolicy={feePolicy}
         />
       )}
 
@@ -250,8 +269,10 @@ function UpcomingAssessments({
   items,
   onPay,
   canPay,
+  feePolicy,
 }: {
   items: LineItem[];
+  feePolicy?: PaymentFeePolicy;
   onPay: (item: LineItem) => void;
   canPay: boolean;
 }) {
@@ -317,6 +338,11 @@ function UpcomingAssessments({
           })}
         </tbody>
       </table>
+      {feePolicy === 'owner_pays' && canPay && (
+        <p className="px-4 py-2 text-xs text-gray-500">
+          Online payments include a small convenience fee.
+        </p>
+      )}
     </div>
   );
 }

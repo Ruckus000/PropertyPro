@@ -92,7 +92,7 @@ function isApiRoute(pathname: string): boolean {
 // Middleware
 // ---------------------------------------------------------------------------
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest): Promise<Response> {
   maybeEvict();
 
   const pathname = request.nextUrl.pathname;

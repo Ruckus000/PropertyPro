@@ -26,6 +26,9 @@ build/
 
 # Test coverage
 coverage/
+playwright-report/
+test-results/
+blob-report/
 
 # Lock files (macOS)
 docs/.~lock.*

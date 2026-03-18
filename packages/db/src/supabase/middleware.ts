@@ -5,8 +5,17 @@
  * @module supabase/middleware
  */
 import { createServerClient, type CookieOptionsWithName } from '@supabase/ssr';
-import { type NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getCookieOptions } from './cookie-config';
+
+type MiddlewareCookieStore = {
+  getAll(): Array<{ name: string; value: string }>;
+  set(name: string, value: string): void;
+};
+
+export type MiddlewareRequest = Request & {
+  cookies: MiddlewareCookieStore;
+};
 
 /**
  * Creates a Supabase client inside Next.js middleware.
@@ -18,7 +27,7 @@ import { getCookieOptions } from './cookie-config';
  *   to isolate sessions between apps sharing the same Supabase project).
  */
 export async function createMiddlewareClient(
-  request: NextRequest,
+  request: MiddlewareRequest,
   cookieOptions?: CookieOptionsWithName,
 ) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

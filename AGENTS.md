@@ -1,166 +1,95 @@
-# PropertyPro Florida — Agent Warnings & Learnings
+# PropertyPro Florida — Agent Safety Guide
 
-**Platform:** Compliance and community management for Florida condo/HOA/apartment communities
-**Tech Stack:** Next.js 14+ App Router, TypeScript, Tailwind CSS, Supabase (DB + Auth + Storage), Drizzle ORM, Resend, Stripe, Turborepo + pnpm workspaces, Vercel
-
-These are the persistent "signs next to the slide" — accumulated warnings and learnings that must be read before every iteration.
+> Read `CLAUDE.md` first for architecture, project structure, API patterns, and dev commands.
+> This file covers enforcement boundaries and failure patterns that agents must know to avoid breaking things.
 
 ---
 
-## Codex Task Execution
+## 1. Tenant Isolation (Enforced, Not Voluntary)
 
-For task-based implementation driven by `docs/agent-tasks/`:
+Tenant isolation is enforced at four layers — not by convention alone:
 
-### Setup
-```bash
-pnpm install
-```
+1. **Runtime:** `createScopedClient()` (`packages/db/src/scoped-client.ts`) auto-injects `community_id` and `deleted_at IS NULL` on every query. Throws `TenantContextMissing` if community ID is null/undefined/NaN.
+2. **Database RLS:** `FORCE ROW LEVEL SECURITY` is enabled on all 21+ tenant tables (migrations 0020, 0027). Even the table owner role cannot bypass policies.
+3. **Write trigger:** `pp_rls_enforce_tenant_community_id` blocks any non-privileged INSERT/UPDATE lacking `app.current_community_id` in session context. Direct browser-to-Supabase writes are blocked even if RLS policies pass.
+4. **CI guard:** `scripts/verify-scoped-db-access.ts` (rules DB001–DB005) runs on every PR via `pnpm lint`. It uses TypeScript AST parsing to catch unauthorized `drizzle-orm` imports, direct `@propertypro/db/src` imports, and new tables missing RLS enablement.
 
-### Verification (run after every task)
-```bash
-pnpm typecheck && pnpm lint && pnpm test
-```
+**Escape hatch:** `packages/db/src/unsafe.ts` exports `createUnscopedClient()` and purpose-built unscoped queries. Each caller requires:
+- A documented authorization contract comment (e.g., "callers MUST verify PM role")
+- The importing file added to the allowlist in `scripts/verify-scoped-db-access.ts`
+- Code review approval
 
-### How to Execute a Task
-1. Read `docs/agent-tasks/SHARED-CONTEXT.md` for project conventions, locked decisions, and exact values
-2. Read the specific task file assigned (e.g., `docs/agent-tasks/TASK-0.3-platform-admin-table.md`)
-3. Read `CLAUDE.md` at the repo root for architecture context and project structure
-4. Implement the task per the deliverables and acceptance criteria in the task file
-5. Respect the "Do NOT" section in each task file — stay within scope
-6. Run verification commands before marking complete
-
-### Key Conventions
-- **Database:** PostgreSQL via Supabase, Drizzle ORM. Never import directly from `drizzle-orm` — use `@propertypro/db/filters`
-- **Scoped queries:** Use `createScopedClient()` for tenant queries, `createAdminClient()` for platform admin queries
-- **RLS:** Every new table must have `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and explicit policies
-- **Migrations:** Numbered sequentially in `packages/db/migrations/`. Check the task file for pre-assigned numbers
-- **Tests:** Vitest. Test files go in `__tests__/` directories adjacent to source
-- **Package manager:** pnpm (not npm, not yarn)
-- **Node version:** 20
+**What agents must do:** Use `createScopedClient()` for all new code. If you genuinely need cross-tenant access, add a function to `unsafe.ts` with an authorization contract, add the consuming file to the CI allowlist, and explain why in the PR.
 
 ---
 
-## Supabase & Auth
+## 2. Migration Pipeline (Fragile — Handle With Care)
 
-- **Session availability in Server Components:** Supabase Auth session is not available directly in Server Components. Use `@supabase/ssr` and create a dedicated server client utility that reads cookies from request headers.
-- **User roles are per-community, not global:** Roles are keyed by (user_id, community_id) in the `user_roles` table, not stored in Supabase Auth metadata alone. Never assume a user has a single global role.
-- **Customizing invite emails:** Supabase's default invite email is generic. Customize via `user_metadata` or use Resend with `generateLink({ type: 'invite' })` for better deliverability and control.
-- **Connection strings:** Use the pooled connection string for app queries; use the direct connection for migrations only.
+Drizzle Kit does not auto-increment migration numbers. The pipeline has known fragility:
 
----
-
-## Drizzle & Database
-
-- **Driver selection:** Use `postgres-js` driver, NOT `node-postgres`. The latter is incompatible with PgBouncer.
-- **Never modify production schema manually:** All schema changes must go through Drizzle Kit migrations. Disable Supabase's migration UI entirely.
-- **Scoped query builder auto-injection:** The scoped query builder must automatically inject `community_id` filter AND `deleted_at IS NULL` on every query.
-- **Server-only writes enforced at DB layer:** The `pp_rls_enforce_tenant_community_id` trigger (migration 0020) raises `42501` on any non-privileged INSERT/UPDATE that lacks `app.current_community_id` in the session context. Direct browser-to-Supabase writes are blocked by this trigger even if RLS policies pass — this is intentional. The app server connects as `service_role` (privileged), so the trigger returns early via `pp_rls_is_privileged()` without reading `app.current_community_id`. Tenant isolation for app writes is enforced by `createScopedClient()` injecting `community_id` into the data payload and `WHERE` filters on every query. If the server role is ever downgraded to a non-privileged role, `createScopedClient()` would need to emit `SET LOCAL app.current_community_id = ?` before each write.
-- **Compliance audit log is append-only:** `compliance_audit_log` is excluded from soft-delete filtering — it's append-only and never deleted.
+- **Before creating a migration:** Check `packages/db/migrations/` for the current max number. Collisions from parallel branches are the most common failure mode.
+- **Journal sync:** The migration directory may have more files than `meta/_journal.json` entries (drift exists on main). The CI job `migration-ordering` catches ordering violations but not file/journal count mismatches.
+- **Timestamp ordering:** `drizzle-kit generate --custom` can emit a `when` timestamp older than existing entries if prior migrations were manually future-dated. Always verify the new journal entry's `when` is strictly greater than the current max.
+- **Connection discipline:** Pooled connection string for app queries; direct connection string for migrations only.
+- **After any migration change:** Run `pnpm --filter @propertypro/db db:migrate` against the target DB before integration tests. Never trust "tests pass locally" as evidence of shared DB health.
 
 ---
 
-## File Uploads
+## 3. Compliance Engine (Core Differentiator)
 
-- **Vercel request body limit:** Vercel enforces a 4.5MB request body limit. Use presigned URLs for direct upload to Supabase Storage instead of streaming files through the API.
-- **Validate file types via magic bytes:** Always validate via magic bytes using the `file-type` npm package. Never trust Content-Type headers from the client.
-- **PDF text extraction memory constraint:** `pdf-parse` loads the entire PDF into memory. Run this asynchronously outside the upload handler to avoid blocking.
-- **File size limits:** Documents max 50MB, images max 10MB.
+The compliance engine tracks Florida statutory obligations for condos (§718, 16 items) and HOAs (§720, 10 items). Templates live in `packages/shared/src/compliance/templates.ts`. Apartments are excluded via feature gating.
 
----
-
-## Multi-Tenancy
-
-- **Community filter on every query:** EVERY query must include a `community_id` filter. Missing it results in a cross-tenant data leak.
-- **Always use scoped query builder:** The scoped query builder handles community_id injection automatically. Never use raw Drizzle queries that skip this filtering.
-- **Test cross-tenant isolation:** Integration tests must verify that one community cannot access another community's data.
+- **Status is computed at query time**, not stored — prevents stale data. Statuses: `satisfied`, `unsatisfied`, `overdue`, `not_applicable`.
+- **30-day posting rule:** Documents must be posted within 30 days of creation. Deadline math uses `date-fns` with weekend rollover (Saturday/Sunday → Monday).
+- **Rolling 12-month windows:** Meeting minutes, video recordings, and bids use rolling retention windows checked at query time.
+- **Florida timezone split:** Florida spans Eastern and Central zones. Timezone is per-community (`communities.timezone` column), not per-application. All dates stored UTC, displayed in community-local timezone.
+- **Append-only audit log:** `compliance_audit_log` is excluded from soft-delete filtering and has DB-native delete protection. Never attempt to delete audit rows. Integration test teardown must be best-effort and tolerate FK-restricted cleanup.
+- **Edge cases requiring test coverage:** DST transitions, leap years, weekend posting dates, year-boundary crossings.
 
 ---
 
-## Compliance Engine
+## 4. CI Enforcement Gates
 
-- **Dates in UTC, display in local timezone:** All dates are stored as UTC in the database. Convert to community timezone (`communities.timezone` column) at the presentation layer only.
-- **Use date-fns for arithmetic:** All date calculations must use `date-fns` for consistency and safety.
-- **Edge cases:** Be aware of DST transitions, weekend posting dates, and leap years. Test these scenarios explicitly.
-- **Florida timezone split:** Florida spans both Eastern and Central time zones. Timezone is per-community, not per-application.
+Seven parallel CI jobs run on every PR (`.github/workflows/ci.yml`):
 
----
+| Job | What it catches | Script |
+|-----|----------------|--------|
+| **lint** | TypeScript lint + DB access guard (DB001–DB005) | `pnpm lint` (includes `guard:db-access`) |
+| **typecheck** | Type errors across all packages | `pnpm typecheck` |
+| **unit-tests** | Vitest unit test failures | `pnpm test` |
+| **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |
+| **migration-ordering** | Timestamp ordering violations, duplicate indices | `scripts/verify-migration-ordering.ts` |
+| **perf-check** | Bundle size budget violations | `pnpm perf:check` |
+| **build** | Build failures (depends on all 6 above) | `pnpm build` |
 
-## Next.js & Vercel
-
-- **Configure transpilePackages:** Every internal package must be added to `transpilePackages` in `next.config.ts`.
-- **Subdomain routing:** Use query param `?tenant=x` in development; use hostname extraction in production.
-- **Reserved subdomains:** Do not use: admin, api, www, mobile, pm, app, dashboard, login, signup, legal.
-
----
-
-## Tailwind & Design System
-
-- **Extend, don't fight defaults:** Extend the Tailwind theme with custom tokens. Override defaults rather than fighting them.
-- **8pt spacing grid:** Map the spacing grid to Tailwind classes: space-1=4px, space-2=8px, etc.
-- **Component porting priority:** Port components in priority order: primitives first, then as needed by features.
+Integration tests require a live DB: `scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
 
 ---
 
-## Stripe
+## 5. Supabase & Auth Gotchas
 
-- **Webhook handlers must be idempotent:** Processing the same event twice must be safe. Design handlers to be naturally idempotent or include deduplication logic.
-- **Always verify webhook signatures:** Validate the signature before processing.
-- **Fetch fresh state from Stripe API:** Inside webhook handlers, fetch the latest state from the Stripe API. Don't rely solely on the webhook payload.
-- **Events can arrive out of order:** Assume events may not arrive in chronological order.
-
----
-
-## Email
-
-- **Set up SPF/DKIM/DMARC in Phase 1:** Configure email authentication records early, not in a later phase.
-- **Use Resend for invite emails:** Send invite emails via Resend (not Supabase's built-in invite) for better deliverability control.
-- **Check notification preferences:** Verify user notification preferences before sending any non-critical email.
-- **Include List-Unsubscribe header:** Include the List-Unsubscribe header to comply with CAN-SPAM and Gmail 2024 requirements.
+- **Session in Server Components:** Not available directly. Use `@supabase/ssr` server client that reads cookies from request headers.
+- **Roles are per-community:** Keyed by `(user_id, community_id)` in `user_roles`. Never assume a single global role.
+- **Driver:** Use `postgres-js`, NOT `node-postgres` (PgBouncer incompatibility).
+- **File uploads:** Presigned URLs for direct upload to Supabase Storage (Vercel 4.5MB body limit). Validate file types via magic bytes (`file-type` package), never trust Content-Type headers.
+- **Stripe webhooks:** Handlers must be idempotent. Events arrive out of order. Always fetch fresh state from the Stripe API inside the handler.
 
 ---
 
-## Community Types
+## 6. Rules From Failure
 
-- **Three community types:** condo_718, hoa_720, apartment.
-- **Use CommunityFeatures config object:** Map community type to enabled features. Never check type directly in components.
-- **Feature checks in components:** Components check `features.hasCompliance`, `features.hasLeaseTracking`, etc.
-- **Document access rules:** Use a declarative policy matrix: role × community_type × document_category → allow/deny.
-- **Enforce access at query level:** Implement access control in Drizzle where clauses, never at the UI level only.
+Synthesized from recurring incidents — these are the root causes, not the symptoms:
 
----
-
-## Testing
-
-- **Tests before implementation is complete:** Tests MUST exist before any implementation is considered complete.
-- **Fix implementation, not test assertions:** Never modify test assertions to make them pass. Fix the implementation instead.
-- **Integration tests for cross-tenant isolation:** Verify that one community cannot access another community's data.
-- **Role-based document filtering coverage:** Ensure specific test coverage for role-based document filtering behavior.
+1. **Schema drift:** After any migration, run `pnpm --filter @propertypro/db db:migrate` against the target DB before integration tests. Shared DBs can have migration-history drift where newer tables are absent while older objects exist.
+2. **Build cache:** After editing workspace package source (`@propertypro/shared`, `@propertypro/db`, `@propertypro/email`), rebuild before evaluating test results. Stale `dist/` outputs cause misleading behavior.
+3. **Env loading:** `scripts/with-env-local.sh` uses `set -u`. If `.env.local` has `$` expansions referencing unset vars, sourcing aborts. Use `set +u` before sourcing if needed.
+4. **Append-only tables:** `compliance_audit_log` has DB-native delete protection. Integration teardown must tolerate FK-restricted cleanup failures.
+5. **PDF parsing:** `pdf-parse` loads entire files into memory. Run asynchronously outside the upload handler to avoid blocking.
 
 ---
 
-## General
+## 7. Type Safety & Escape Hatches
 
-- **No escape hatches:** Never use `any` or `@ts-ignore`.
-- **Wrap API routes:** Every API route uses `withErrorHandler` wrapper.
-- **Log audit events:** Every mutation calls `logAuditEvent` for compliance-relevant actions.
-- **Generate request tracing ID:** Generate a UUID per request in middleware for request tracing (X-Request-ID header).
-
----
-
-## Learnings
-
-Add entries here as failures are encountered during Ralph loops. Format:
-```
-- [YYYY-MM-DD] [spec-id]: description of what went wrong and how to avoid it
-```
-
-- [2026-02-11] [P1-27b]: `claude -p` + wrapper-based multiline prompts can silently stall or parse incorrectly (e.g., prompt consumed by flags). For Ralph loops, run from the task worktree (`pwd` + `git branch --show-current`), and use direct `claude "..."` prompt invocation unless print-mode piping is explicitly required.
-- [2026-02-12] [P1-16/P1-26]: Manual SQL migrations without corresponding Drizzle `meta/_journal.json` entry + snapshot cause `db:generate` to re-emit already-created tables (e.g., duplicate `invitations`). Keep journal/snapshots in lockstep with manual migration files before generating subsequent migrations.
-- [2026-02-13] [Gate2-evidence]: `psql` 14.x can fail against Supabase pooler in some environments; for Gate 2 evidence capture, use `pnpm seed:verify` (`tsx` + `postgres-js`) as the canonical SQL verification path and treat `psql` as optional.
-- [2026-02-14] [P0-05/Gate2]: Shared-env schema drift can persist even when app tests appear mostly green (e.g., missing applied migrations and legacy enum/data values). Before shared integration runs, execute `pnpm --filter @propertypro/db db:migrate`; avoid direct SQL patches; if emergency SQL is used, reconcile into Drizzle migration history the same day.
-- [2026-02-14] [P1-27c/P2-43]: DB-native append-only enforcement on `compliance_audit_log` invalidates test teardowns that delete audit rows before parent cleanup. Integration teardown must be best-effort and tolerate FK-restricted cleanup when audited mutations have run.
-- [2026-02-17] [P1-recovery/Gate]: A network-enabled rerun can expose pooled-DB schema drift even when local targeted suites are green (observed missing `notification_preferences.email_frequency` causing route-level `500`s). For merge-gate evidence, always `set -a; source .env.local; set +a`, run `pnpm --filter @propertypro/db db:migrate` first, then execute the networked integration suite.
-- [2026-02-22] [P4-55/DrizzleJournal]: `drizzle-kit generate --custom` can emit a `meta/_journal.json` `when` timestamp older than existing repo entries when prior migrations were manually future-dated; `drizzle-kit migrate` may report success while silently skipping the new migration on shared DB. Before trusting migrate output, confirm the new journal `when` is strictly greater than the current max.
-- [2026-03-09] [P5-66/Gate]: Shared DB may have migration-history drift where newer tables are absent (`assessments` missing) while older objects already exist (`platform_admin_role`), causing `db:migrate` to fail replay (`42710`) and networked integration tests to fail with `42P01`. Before WS66+ network runs, reconcile `drizzle.__drizzle_migrations` state with actual objects or run against a clean migrated DB target.
-- [2026-03-09] [P5-66/GateEnv]: `scripts/with-env-local.sh` runs with `set -u`; if `.env.local` contains `$` expansions that reference unset vars, sourcing can abort (`unbound variable`, e.g., `Property`). For networked verification runs, use `set +u; set -a; source .env.local; set +a` (or quote/escape the env value) before executing commands.
-- [2026-03-09] [P5-67/Runtime]: Integration runs may consume stale workspace package `dist` outputs (`@propertypro/shared`, `@propertypro/db`) even after source edits, causing misleading behavior (e.g., feature flags unchanged). After changing workspace package source, rebuild affected packages before evaluating integration failures.
+- **`any`:** Avoid. Use `unknown` with a type guard, or `as unknown as T` backed by a runtime column/property check (this pattern is used in `scoped-client.ts` at Drizzle generic boundaries).
+- **`@ts-ignore`:** Never. Use `@ts-expect-error` with a comment explaining why — it auto-fails when the underlying error is fixed, preventing stale suppressions.
+- **Unscoped DB access:** Use `createUnscopedClient()` via `@propertypro/db/unsafe`. Document the authorization contract. Add the file to the CI allowlist in `scripts/verify-scoped-db-access.ts`.
