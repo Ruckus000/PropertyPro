@@ -31,7 +31,7 @@ import type {
   User,
   UserRoleRecord,
 } from '@propertypro/db';
-import { eq, and, desc } from '@propertypro/db/filters';
+import { eq, and, desc, inArray } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import { normalizeToE164, isValidE164, maskPhone } from '@/lib/utils/phone';
@@ -122,7 +122,7 @@ function isAudienceMatch(
   opts?: { isUnitOwner?: boolean },
 ): boolean {
   if (audience === 'all') return true;
-  if (audience === 'owners_only') return role === 'owner';
+  if (audience === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   return false;
 }
 
@@ -567,8 +567,11 @@ export async function getBroadcastWithReport(
     emergencyBroadcastRecipients, {}, eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
   );
 
-  // Load user names for display
-  const userRows = await scoped.selectFrom<User>(users, {});
+  // Load user names for display (scoped to recipient user IDs)
+  const recipientUserIds = [...new Set(recipients.map((r) => r.userId))];
+  const userRows = recipientUserIds.length > 0
+    ? await scoped.selectFrom<User>(users, {}, inArray(users.id, recipientUserIds))
+    : [];
   const usersById = new Map<string, string>();
   for (const u of userRows) {
     usersById.set(u.id, u.fullName ?? 'Unknown');

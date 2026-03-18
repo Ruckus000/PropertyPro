@@ -102,7 +102,8 @@ export function maskPhone(phone: string): string {
  *
  * Returns the input unchanged if it's not a valid E.164 US number.
  */
-export function formatPhoneDisplay(phone: string): string {
+export function formatPhoneDisplay(phone: string | null | undefined): string {
+  if (!phone) return '';
   if (!E164_US_REGEX.test(phone)) {
     return phone;
   }
