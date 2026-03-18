@@ -10,6 +10,7 @@
  *   TWILIO_MESSAGING_SERVICE_SID
  */
 
+import { createHmac, timingSafeEqual } from 'crypto';
 import type { SmsProvider } from './sms-provider';
 import type { SmsSendRequest, SmsSendResult, SmsDeliveryStatus } from './sms-types';
 
@@ -92,7 +93,16 @@ export class TwilioProvider implements SmsProvider {
         };
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
+      if (!data?.sid) {
+        return {
+          success: false,
+          providerMessageId: null,
+          status: 'failed' as const,
+          errorCode: 'PARSE_ERROR',
+          errorMessage: 'Invalid JSON response from Twilio',
+        };
+      }
 
       return {
         success: true,
@@ -121,8 +131,6 @@ export class TwilioProvider implements SmsProvider {
     // Twilio signature validation per https://www.twilio.com/docs/usage/security
     // signature = HMAC-SHA1(authToken, url + sorted(params))
     try {
-      const crypto = require('crypto');
-
       // Build the data string: URL + sorted param key/values
       const sortedKeys = Object.keys(body).sort();
       let dataString = url;
@@ -130,8 +138,7 @@ export class TwilioProvider implements SmsProvider {
         dataString += key + body[key];
       }
 
-      const computed = crypto
-        .createHmac('sha1', this.authToken)
+      const computed = createHmac('sha1', this.authToken)
         .update(dataString, 'utf-8')
         .digest('base64');
 
@@ -143,7 +150,7 @@ export class TwilioProvider implements SmsProvider {
         return false;
       }
 
-      return crypto.timingSafeEqual(sigBuffer, computedBuffer);
+      return timingSafeEqual(sigBuffer, computedBuffer);
     } catch {
       return false;
     }

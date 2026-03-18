@@ -23,12 +23,20 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { eq, and } from '@propertypro/db/filters';
+import type {
+  Community,
+  EmergencyBroadcast,
+  EmergencyBroadcastRecipient,
+  NotificationPreference,
+  User,
+  UserRoleRecord,
+} from '@propertypro/db';
+import { eq, and, desc } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import { normalizeToE164, isValidE164, maskPhone } from '@/lib/utils/phone';
 import { chunk } from '@/lib/utils/chunk';
-import { sendBulkEmergencySms, sendEmergencySms } from '@/lib/services/sms/sms-service';
+import { sendBulkEmergencySms } from '@/lib/services/sms/sms-service';
 import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
 
@@ -98,6 +106,7 @@ interface ResolvedRecipient {
 
 /** Undo window duration in milliseconds (10 seconds) */
 const UNDO_WINDOW_MS = 10_000;
+const MAX_BROADCAST_RECIPIENTS = 500;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -113,7 +122,7 @@ function isAudienceMatch(
   opts?: { isUnitOwner?: boolean },
 ): boolean {
   if (audience === 'all') return true;
-  if (audience === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
+  if (audience === 'owners_only') return role === 'owner';
   return false;
 }
 
@@ -220,37 +229,46 @@ export async function executeBroadcast(
   const scoped = createScopedClient(communityId);
 
   // Load broadcast
-  const broadcastRows = await scoped.query(emergencyBroadcasts);
-  const broadcast = broadcastRows.find((r) => r['id'] === broadcastId);
+  const broadcastRows = await scoped.selectFrom<EmergencyBroadcast>(
+    emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
+  );
+  const broadcast = broadcastRows[0];
   if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast['canceledAt']) throw new Error('Broadcast was canceled');
-  if (broadcast['completedAt']) throw new Error('Broadcast already sent');
+  if (broadcast.canceledAt) throw new Error('Broadcast was canceled');
+  if (broadcast.completedAt) throw new Error('Broadcast already sent');
 
   // Load recipients
-  const recipientRows = await scoped.query(emergencyBroadcastRecipients);
-  const recipients = recipientRows.filter((r) => r['broadcastId'] === broadcastId);
+  const recipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
+    emergencyBroadcastRecipients, {}, eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+  );
+  if (recipients.length > MAX_BROADCAST_RECIPIENTS) {
+    throw new Error(
+      `Broadcast exceeds maximum recipient limit of ${MAX_BROADCAST_RECIPIENTS}`,
+    );
+  }
 
   // If no explicit smsBody, fall back to body but truncate to SMS limit (1600 chars multi-part)
-  const rawSmsBody = (broadcast['smsBody'] as string) ?? (broadcast['body'] as string);
+  const rawSmsBody = broadcast.smsBody ?? broadcast.body;
   const smsBody = rawSmsBody.length > 1600 ? rawSmsBody.slice(0, 1597) + '...' : rawSmsBody;
-  const emailBody = broadcast['body'] as string;
-  const title = broadcast['title'] as string;
-  const severity = broadcast['severity'] as string;
+  const emailBody = broadcast.body;
+  const title = broadcast.title;
+  const severity = broadcast.severity;
 
   // Load community name for email
-  const communityRows = await scoped.query(communities);
-  const community = communityRows.find((r) => r['id'] === communityId);
-  const communityName = typeof community?.['name'] === 'string' ? community['name'] : 'PropertyPro';
+  const communityRows = await scoped.selectFrom<Community>(
+    communities, {}, eq(communities.id, communityId),
+  );
+  const communityName = communityRows[0]?.name ?? 'PropertyPro';
 
   const statusCallbackUrl = `${getBaseUrl()}/api/v1/webhooks/twilio`;
 
   // ── Send SMS + Email in parallel ────────────────────────────────────────
 
   const smsRecipients = recipients.filter(
-    (r) => r['smsStatus'] === 'pending' && typeof r['phone'] === 'string',
+    (r) => r.smsStatus === 'pending' && r.phone != null,
   );
   const emailRecipients = recipients.filter(
-    (r) => r['emailStatus'] === 'pending' && typeof r['email'] === 'string',
+    (r) => r.emailStatus === 'pending' && r.email != null,
   );
 
   const [smsResult, emailResult] = await Promise.allSettled([
@@ -260,8 +278,8 @@ export async function executeBroadcast(
 
       const bulkResult = await sendBulkEmergencySms({
         recipients: smsRecipients.map((r) => ({
-          userId: r['userId'] as string,
-          phone: r['phone'] as string,
+          userId: r.userId,
+          phone: r.phone!,
         })),
         body: smsBody,
         statusCallbackUrl,
@@ -269,9 +287,6 @@ export async function executeBroadcast(
 
       // Update per-recipient SMS status
       for (const [recipientUserId, result] of bulkResult.results) {
-        const recipientRow = recipients.find((r) => r['userId'] === recipientUserId);
-        if (!recipientRow) continue;
-
         await scoped.update(
           emergencyBroadcastRecipients,
           {
@@ -299,12 +314,9 @@ export async function executeBroadcast(
       for (const batch of chunk(emailRecipients, 50)) {
         await Promise.all(
           batch.map(async (recipient) => {
-            const recipientEmail = recipient['email'] as string;
-            const recipientUserId = recipient['userId'] as string;
-
             try {
               const result = await sendEmail({
-                to: recipientEmail,
+                to: recipient.email!,
                 subject: `🚨 ${title}`,
                 category: 'transactional',
                 react: createElement(EmergencyAlertEmail, {
@@ -326,7 +338,7 @@ export async function executeBroadcast(
                 },
                 and(
                   eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
-                  eq(emergencyBroadcastRecipients.userId, recipientUserId),
+                  eq(emergencyBroadcastRecipients.userId, recipient.userId),
                 ),
               );
               sentCount++;
@@ -336,7 +348,7 @@ export async function executeBroadcast(
                 { emailStatus: 'failed' },
                 and(
                   eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
-                  eq(emergencyBroadcastRecipients.userId, recipientUserId),
+                  eq(emergencyBroadcastRecipients.userId, recipient.userId),
                 ),
               );
             }
@@ -390,14 +402,16 @@ export async function cancelBroadcast(
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
 
-  const broadcastRows = await scoped.query(emergencyBroadcasts);
-  const broadcast = broadcastRows.find((r) => r['id'] === broadcastId);
+  const broadcastRows = await scoped.selectFrom<EmergencyBroadcast>(
+    emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
+  );
+  const broadcast = broadcastRows[0];
   if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast['canceledAt']) throw new Error('Broadcast already canceled');
-  if (broadcast['completedAt']) throw new Error('Broadcast already sent — cannot cancel');
+  if (broadcast.canceledAt) throw new Error('Broadcast already canceled');
+  if (broadcast.completedAt) throw new Error('Broadcast already sent — cannot cancel');
 
   // Check undo window
-  const initiatedAt = broadcast['initiatedAt'];
+  const initiatedAt = broadcast.initiatedAt;
   if (!(initiatedAt instanceof Date)) throw new Error('Invalid broadcast initiation time');
 
   const elapsed = Date.now() - initiatedAt.getTime();
@@ -412,22 +426,23 @@ export async function cancelBroadcast(
   );
 
   // Mark all pending recipients as skipped
-  const recipientRows = await scoped.query(emergencyBroadcastRecipients);
-  const pendingRecipients = recipientRows.filter(
-    (r) => r['broadcastId'] === broadcastId &&
-    (r['smsStatus'] === 'pending' || r['emailStatus'] === 'pending'),
+  const pendingRecipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
+    emergencyBroadcastRecipients, {},
+    eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
   );
 
   for (const recipient of pendingRecipients) {
+    if (recipient.smsStatus !== 'pending' && recipient.emailStatus !== 'pending') continue;
+
     await scoped.update(
       emergencyBroadcastRecipients,
       {
-        smsStatus: recipient['smsStatus'] === 'pending' ? 'skipped' : recipient['smsStatus'],
-        emailStatus: recipient['emailStatus'] === 'pending' ? 'skipped' : recipient['emailStatus'],
+        smsStatus: recipient.smsStatus === 'pending' ? 'skipped' : recipient.smsStatus,
+        emailStatus: recipient.emailStatus === 'pending' ? 'skipped' : recipient.emailStatus,
       },
       and(
         eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
-        eq(emergencyBroadcastRecipients.userId, recipient['userId'] as string),
+        eq(emergencyBroadcastRecipients.userId, recipient.userId),
       ),
     );
   }
@@ -457,13 +472,17 @@ export async function updateRecipientSmsStatusByIds(
   const scoped = createScopedClient(communityId);
 
   // Get current status
-  const recipientRows = await scoped.query(emergencyBroadcastRecipients);
-  const recipient = recipientRows.find(
-    (r) => r['broadcastId'] === broadcastId && r['userId'] === recipientUserId,
+  const recipientRows = await scoped.selectFrom<EmergencyBroadcastRecipient>(
+    emergencyBroadcastRecipients, {},
+    and(
+      eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+      eq(emergencyBroadcastRecipients.userId, recipientUserId),
+    ),
   );
+  const recipient = recipientRows[0];
   if (!recipient) return;
 
-  const currentStatus = recipient['smsStatus'] as SmsDeliveryStatus;
+  const currentStatus = recipient.smsStatus as SmsDeliveryStatus;
   if (!isStatusAdvancement(currentStatus, newStatus)) return; // Idempotent: don't go backward
 
   const updateData: Record<string, unknown> = { smsStatus: newStatus };
@@ -490,6 +509,11 @@ export async function updateRecipientSmsStatusByIds(
 
 /**
  * Recalculate and update aggregate delivery counts on a broadcast.
+ *
+ * Counts SMS and email channels independently:
+ * - deliveredCount: SMS confirmed delivered to handset
+ * - sentCount: SMS accepted by provider + email accepted by Resend
+ * - failedCount: SMS or email permanently failed
  */
 async function updateBroadcastAggregates(
   communityId: number,
@@ -497,20 +521,24 @@ async function updateBroadcastAggregates(
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
 
-  const recipientRows = await scoped.query(emergencyBroadcastRecipients);
-  const recipients = recipientRows.filter((r) => r['broadcastId'] === broadcastId);
+  const recipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
+    emergencyBroadcastRecipients, {},
+    eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+  );
 
   let deliveredCount = 0;
   let failedCount = 0;
   let sentCount = 0;
 
   for (const r of recipients) {
-    const smsStatus = r['smsStatus'] as string;
-    const emailStatus = r['emailStatus'] as string;
+    // SMS channel
+    if (r.smsStatus === 'delivered') deliveredCount++;
+    else if (r.smsStatus === 'sent') sentCount++;
+    else if (r.smsStatus === 'failed' || r.smsStatus === 'undelivered') failedCount++;
 
-    if (smsStatus === 'delivered' || emailStatus === 'sent') deliveredCount++;
-    if (smsStatus === 'failed' || smsStatus === 'undelivered' || emailStatus === 'failed') failedCount++;
-    if (smsStatus === 'sent' || smsStatus === 'queued' || emailStatus === 'sent') sentCount++;
+    // Email channel
+    if (r.emailStatus === 'sent') sentCount++;
+    else if (r.emailStatus === 'failed') failedCount++;
   }
 
   await scoped.update(
@@ -529,50 +557,53 @@ export async function getBroadcastWithReport(
 ): Promise<BroadcastWithReport | null> {
   const scoped = createScopedClient(communityId);
 
-  const broadcastRows = await scoped.query(emergencyBroadcasts);
-  const broadcast = broadcastRows.find((r) => r['id'] === broadcastId);
+  const broadcastRows = await scoped.selectFrom<EmergencyBroadcast>(
+    emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
+  );
+  const broadcast = broadcastRows[0];
   if (!broadcast) return null;
 
-  const recipientRows = await scoped.query(emergencyBroadcastRecipients);
-  const recipients = recipientRows.filter((r) => r['broadcastId'] === broadcastId);
+  const recipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
+    emergencyBroadcastRecipients, {}, eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+  );
 
   // Load user names for display
-  const userRows = await scoped.query(users);
+  const userRows = await scoped.selectFrom<User>(users, {});
   const usersById = new Map<string, string>();
   for (const u of userRows) {
-    if (typeof u['id'] === 'string' && typeof u['fullName'] === 'string') {
-      usersById.set(u['id'], u['fullName']);
-    }
+    usersById.set(u.id, u.fullName ?? 'Unknown');
   }
 
   return {
-    id: Number(broadcast['id']),
-    communityId: Number(broadcast['communityId']),
-    title: broadcast['title'] as string,
-    body: broadcast['body'] as string,
-    smsBody: (broadcast['smsBody'] as string) ?? null,
-    severity: broadcast['severity'] as string,
-    templateKey: (broadcast['templateKey'] as string) ?? null,
-    targetAudience: broadcast['targetAudience'] as string,
-    channels: (broadcast['channels'] as string[]) ?? [],
-    recipientCount: Number(broadcast['recipientCount']),
-    sentCount: Number(broadcast['sentCount']),
-    deliveredCount: Number(broadcast['deliveredCount']),
-    failedCount: Number(broadcast['failedCount']),
-    initiatedBy: broadcast['initiatedBy'] as string,
-    initiatedAt: broadcast['initiatedAt'] as Date,
-    completedAt: (broadcast['completedAt'] as Date) ?? null,
-    canceledAt: (broadcast['canceledAt'] as Date) ?? null,
+    id: broadcast.id,
+    communityId: broadcast.communityId,
+    title: broadcast.title,
+    body: broadcast.body,
+    smsBody: broadcast.smsBody ?? null,
+    severity: broadcast.severity,
+    templateKey: broadcast.templateKey ?? null,
+    targetAudience: broadcast.targetAudience,
+    channels: typeof broadcast.channels === 'string'
+      ? broadcast.channels.split(',')
+      : Array.isArray(broadcast.channels) ? broadcast.channels : [],
+    recipientCount: broadcast.recipientCount,
+    sentCount: broadcast.sentCount,
+    deliveredCount: broadcast.deliveredCount,
+    failedCount: broadcast.failedCount,
+    initiatedBy: broadcast.initiatedBy,
+    initiatedAt: broadcast.initiatedAt,
+    completedAt: broadcast.completedAt ?? null,
+    canceledAt: broadcast.canceledAt ?? null,
     recipients: recipients.map((r) => ({
-      userId: r['userId'] as string,
-      email: (r['email'] as string) ?? null,
-      phone: r['phone'] ? maskPhone(r['phone'] as string) : null,
-      fullName: usersById.get(r['userId'] as string) ?? 'Unknown',
-      smsStatus: r['smsStatus'] as string,
-      emailStatus: r['emailStatus'] as string,
-      smsSentAt: (r['smsSentAt'] as Date) ?? null,
-      smsDeliveredAt: (r['smsDeliveredAt'] as Date) ?? null,
-      emailSentAt: (r['emailSentAt'] as Date) ?? null,
+      userId: r.userId,
+      email: r.email ?? null,
+      phone: r.phone ? maskPhone(r.phone) : null,
+      fullName: usersById.get(r.userId) ?? 'Unknown',
+      smsStatus: r.smsStatus,
+      emailStatus: r.emailStatus,
+      smsSentAt: r.smsSentAt ?? null,
+      smsDeliveredAt: r.smsDeliveredAt ?? null,
+      emailSentAt: r.emailSentAt ?? null,
     })),
   };
 }
@@ -584,21 +615,15 @@ export async function listBroadcasts(
   communityId: number,
   limit = 20,
   offset = 0,
-): Promise<{ broadcasts: Array<Record<string, unknown>>; total: number }> {
+): Promise<{ broadcasts: EmergencyBroadcast[]; total: number }> {
   const scoped = createScopedClient(communityId);
-  const allRows = await scoped.query(emergencyBroadcasts);
-
-  // Sort by initiatedAt descending
-  const sorted = allRows
-    .sort((a, b) => {
-      const aDate = a['initiatedAt'] instanceof Date ? a['initiatedAt'].getTime() : 0;
-      const bDate = b['initiatedAt'] instanceof Date ? b['initiatedAt'].getTime() : 0;
-      return bDate - aDate;
-    });
+  const allRows = await scoped
+    .selectFrom<EmergencyBroadcast>(emergencyBroadcasts, {})
+    .orderBy(desc(emergencyBroadcasts.initiatedAt));
 
   return {
-    broadcasts: sorted.slice(offset, offset + limit),
-    total: sorted.length,
+    broadcasts: allRows.slice(offset, offset + limit),
+    total: allRows.length,
   };
 }
 
@@ -620,23 +645,21 @@ export async function resolveEmergencyRecipients(
 
   // Batch queries — no N+1
   const [roleRows, userRows, preferenceRows] = await Promise.all([
-    scoped.query(userRoles),
-    scoped.query(users),
-    scoped.query(notificationPreferences),
+    scoped.selectFrom<UserRoleRecord>(userRoles, {}),
+    scoped.selectFrom<User>(users, {}),
+    scoped.selectFrom<NotificationPreference>(notificationPreferences, {}),
   ]);
 
   // Index users by ID
-  const usersById = new Map<string, Record<string, unknown>>();
+  const usersById = new Map<string, User>();
   for (const u of userRows) {
-    const id = u['id'];
-    if (typeof id === 'string') usersById.set(id, u);
+    usersById.set(u.id, u);
   }
 
   // Index preferences by userId
-  const prefsByUserId = new Map<string, Record<string, unknown>>();
+  const prefsByUserId = new Map<string, NotificationPreference>();
   for (const p of preferenceRows) {
-    const uid = p['userId'];
-    if (typeof uid === 'string') prefsByUserId.set(uid, p);
+    prefsByUserId.set(p.userId, p);
   }
 
   // Resolve recipients from roles
@@ -644,11 +667,11 @@ export async function resolveEmergencyRecipients(
   const recipients: ResolvedRecipient[] = [];
 
   for (const role of roleRows) {
-    const userId = role['userId'];
-    const roleName = role['role'];
-    const isUnitOwner = role['isUnitOwner'] === true;
+    const userId = role.userId;
+    const roleName = role.role;
+    const isUnitOwner = role.isUnitOwner === true;
 
-    if (typeof userId !== 'string' || typeof roleName !== 'string') continue;
+    if (!userId || !roleName) continue;
     if (!isAudienceMatch(roleName, audience, { isUnitOwner })) continue;
     if (seen.has(userId)) continue;
     seen.add(userId);
@@ -656,17 +679,17 @@ export async function resolveEmergencyRecipients(
     const user = usersById.get(userId);
     if (!user) continue;
 
-    const email = user['email'];
-    const fullName = user['fullName'];
-    const phone = user['phone'];
-    const phoneVerifiedAt = user['phoneVerifiedAt'];
+    const email = user.email;
+    const fullName = user.fullName;
+    const phone = user.phone;
+    const phoneVerifiedAt = user.phoneVerifiedAt;
 
-    if (typeof email !== 'string' || typeof fullName !== 'string') continue;
+    if (!email || !fullName) continue;
 
     // Normalize phone to E.164
     let normalizedPhone: string | null = null;
     let phoneVerified = false;
-    if (typeof phone === 'string' && phone.length > 0) {
+    if (phone && phone.length > 0) {
       normalizedPhone = normalizeToE164(phone);
       if (!isValidE164(normalizedPhone)) normalizedPhone = null;
       phoneVerified = phoneVerifiedAt != null;
@@ -676,11 +699,11 @@ export async function resolveEmergencyRecipients(
     const prefs = prefsByUserId.get(userId);
     const hasTcpaConsent =
       prefs !== undefined &&
-      prefs['smsEnabled'] === true &&
-      prefs['smsConsentGivenAt'] != null &&
-      prefs['smsConsentRevokedAt'] == null;
+      prefs.smsEnabled === true &&
+      prefs.smsConsentGivenAt != null &&
+      prefs.smsConsentRevokedAt == null;
     // If user opted for emergency-only SMS (default), skip non-emergency broadcasts
-    const smsEmergencyOnly = prefs?.['smsEmergencyOnly'] !== false; // default true
+    const smsEmergencyOnly = prefs?.smsEmergencyOnly !== false; // default true
     const smsConsented = hasTcpaConsent && (severity === 'emergency' || !smsEmergencyOnly);
 
     recipients.push({

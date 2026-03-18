@@ -52,6 +52,7 @@ export const emergencyBroadcastRecipients = pgTable(
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     unique('emergency_broadcast_recipients_broadcast_user_unique').on(

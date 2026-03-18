@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SmsPreview } from './SmsPreview';
 import {
@@ -37,18 +37,23 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
     emailCount: number;
   } | null>(null);
   const [undoCountdown, setUndoCountdown] = useState(10);
+  const hasSentRef = useRef(false);
 
   const { data: templates } = useEmergencyTemplates(communityId);
   const createMutation = useCreateBroadcast();
   const sendMutation = useSendBroadcast();
   const cancelMutation = useCancelBroadcast();
 
-  // Undo countdown timer
+  // Undo countdown timer — W5 fix: hasSentRef prevents double-send
   useEffect(() => {
-    if (step !== 'sending') return;
+    if (step !== 'sending') {
+      hasSentRef.current = false;
+      return;
+    }
     if (undoCountdown <= 0) {
       // Auto-send after countdown
-      if (broadcastId) {
+      if (broadcastId && !hasSentRef.current) {
+        hasSentRef.current = true;
         sendMutation.mutate(
           { broadcastId, communityId },
           {
@@ -108,11 +113,25 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
 
   function handleUndo() {
     if (broadcastId) {
-      cancelMutation.mutate({ broadcastId, communityId });
+      cancelMutation.mutate(
+        { broadcastId, communityId },
+        {
+          onSuccess: () => {
+            setStep('template');
+            setBroadcastId(null);
+            setRecipientInfo(null);
+          },
+          onError: () => {
+            // Cancel failed — broadcast was already sent or undo window expired
+            setStep('sent');
+          },
+        },
+      );
+    } else {
+      setStep('template');
+      setBroadcastId(null);
+      setRecipientInfo(null);
     }
-    setStep('template');
-    setBroadcastId(null);
-    setRecipientInfo(null);
   }
 
   return (

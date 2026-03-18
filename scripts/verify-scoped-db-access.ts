@@ -75,7 +75,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/agent-login/route.ts'),
-  // Phase 1B: Phone OTP verification — updates users table (no community_id column)
+  // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/send/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/confirm/route.ts'),
   // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
   resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/twilio/route.ts'),

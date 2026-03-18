@@ -54,6 +54,7 @@ export * from './site-blocks';
 export * from './esign';
 export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
+export * from './elections';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -331,4 +332,15 @@ import type { emergencyBroadcastRecipients } from './emergency-broadcast-recipie
 export type EmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferSelect;
 export type NewEmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferInsert;
 
-
+// Elections (Phase 1D)
+import type { elections, electionCandidates, electionBallots, electionProxies, electionEligibilitySnapshots } from './elections';
+export type Election = typeof elections.$inferSelect;
+export type NewElection = typeof elections.$inferInsert;
+export type ElectionCandidate = typeof electionCandidates.$inferSelect;
+export type NewElectionCandidate = typeof electionCandidates.$inferInsert;
+export type ElectionBallot = typeof electionBallots.$inferSelect;
+export type NewElectionBallot = typeof electionBallots.$inferInsert;
+export type ElectionProxy = typeof electionProxies.$inferSelect;
+export type NewElectionProxy = typeof electionProxies.$inferInsert;
+export type ElectionEligibilitySnapshot = typeof electionEligibilitySnapshots.$inferSelect;
+export type NewElectionEligibilitySnapshot = typeof electionEligibilitySnapshots.$inferInsert;

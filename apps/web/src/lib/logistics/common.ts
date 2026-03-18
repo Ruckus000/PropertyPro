@@ -1,10 +1,11 @@
-import { userRoles, type ScopedClient } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import type { NewCommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
+
+// Re-export from canonical source (M1 deduplication)
+export { getActorUnitIds } from '@/lib/units/actor-units';
 
 export function isResidentRole(role: NewCommunityRole): boolean {
   return role === 'resident';
@@ -46,26 +47,16 @@ export function requireVisitorsWritePermission(membership: CommunityMembership):
   requirePermission(membership, 'visitors', 'write');
 }
 
-export async function getActorUnitIds(
-  scopedClient: ScopedClient,
-  actorUserId: string,
-): Promise<number[]> {
-  const membershipRows = await scopedClient.selectFrom<{ unitId: number | null }>(
-    userRoles,
-    { unitId: userRoles.unitId },
-    eq(userRoles.userId, actorUserId),
-  );
+export { requireActorUnitId } from '@/lib/units/actor-units';
+import type { ScopedClient } from '@propertypro/db';
+import { getActorUnitIds as getIds } from '@/lib/units/actor-units';
 
-  return membershipRows
-    .map((row) => row.unitId)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-}
-
+/** Variant that returns all unit IDs (not just the first). Throws if none found. */
 export async function requireActorUnitIds(
   scopedClient: ScopedClient,
   actorUserId: string,
 ): Promise<number[]> {
-  const unitIds = await getActorUnitIds(scopedClient, actorUserId);
+  const unitIds = await getIds(scopedClient, actorUserId);
   if (unitIds.length === 0) {
     throw new ForbiddenError('No unit association found for this user in the selected community');
   }

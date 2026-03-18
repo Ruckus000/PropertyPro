@@ -1,4 +1,4 @@
--- 0101: Elections schema (Phase 1D).
+-- 0102: Elections schema (Phase 1D).
 --
 -- Creates 5 tables:
 --   elections                        - election/ballot measure definitions
