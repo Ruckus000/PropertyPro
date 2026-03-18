@@ -104,15 +104,23 @@ export function MeetingsPageShell({
         </Card.Body>
       </Card>
 
-      <MonthGrid
-        events={events}
-        selectedDate={selectedDate}
-        onSelectDate={setSelectedDate}
-        currentMonth={currentMonth}
-        onMonthChange={handleMonthChange}
-        communityTimezone={timezone}
-        isLoading={eventsQuery.isLoading}
-      />
+      {eventsQuery.isError ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3">
+          <p className="text-sm text-[var(--status-danger)]">
+            Failed to load calendar events. Refresh the page to try again.
+          </p>
+        </div>
+      ) : (
+        <MonthGrid
+          events={events}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          currentMonth={currentMonth}
+          onMonthChange={handleMonthChange}
+          communityTimezone={timezone}
+          isLoading={eventsQuery.isLoading}
+        />
+      )}
 
       {selectedDate ? (
         <DayDetailPanel
