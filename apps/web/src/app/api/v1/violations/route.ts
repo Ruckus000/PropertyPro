@@ -50,6 +50,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawUnitId = searchParams.get('unitId');
   const rawStatus = searchParams.get('status');
+  const createdAfter = searchParams.get('createdAfter') ?? undefined;
+  const createdBefore = searchParams.get('createdBefore') ?? undefined;
 
   const unitId = rawUnitId ? parsePositiveInt(rawUnitId, 'unitId') : undefined;
   const status = rawStatus
@@ -77,6 +79,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     status,
     unitId,
     allowedUnitIds: residentUnitIds,
+    createdAfter,
+    createdBefore,
   });
 
   return NextResponse.json({ data });

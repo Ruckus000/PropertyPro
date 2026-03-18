@@ -21,7 +21,17 @@ export type AuditAction =
   | 'esign_template_cloned'                                    // E-sign template cloning
   | 'esign_submission_created' | 'esign_submission_completed'  // E-sign submission lifecycle
   | 'esign_submission_cancelled' | 'esign_reminder_sent'       // E-sign submission actions
-  | 'esign_document_verified';                                 // E-sign document verification
+  | 'esign_document_verified'                                   // E-sign document verification
+  // Emergency broadcast audit actions (Phase 1B)
+  | 'emergency_broadcast_created' | 'emergency_broadcast_sent'  // Broadcast lifecycle
+  | 'emergency_broadcast_canceled'                               // Broadcast cancellation
+  // Election audit actions (Phase 1D)
+  | 'election_created' | 'election_updated'                      // Election lifecycle
+  | 'election_opened' | 'election_closed'                        // Election state transitions
+  | 'election_certified' | 'election_canceled'                   // Election finalization
+  | 'ballot_cast'                                                // Vote recorded
+  | 'proxy_designated' | 'proxy_approved'                        // Proxy workflow
+  | 'proxy_rejected' | 'proxy_revoked';                          // Proxy denial/revocation
 
 export interface AuditEventParams {
   userId: string;

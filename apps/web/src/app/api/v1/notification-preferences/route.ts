@@ -42,6 +42,9 @@ const patchSchema = z.object({
   emailAnnouncements: z.boolean(),
   emailMeetings: z.boolean(),
   inAppEnabled: z.boolean(),
+  // Phase 1B: SMS consent fields (optional — backwards-compatible)
+  smsEnabled: z.boolean().optional(),
+  smsEmergencyOnly: z.boolean().optional(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -69,8 +72,13 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
         inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+        // Phase 1B: SMS consent fields
+        smsEnabled: (row['smsEnabled'] as boolean | undefined) ?? false,
+        smsEmergencyOnly: (row['smsEmergencyOnly'] as boolean | undefined) ?? true,
+        smsConsentGivenAt: (row['smsConsentGivenAt'] as string | null) ?? null,
+        smsConsentRevokedAt: (row['smsConsentRevokedAt'] as string | null) ?? null,
       }
-    : { userId, communityId, ...defaults };
+    : { userId, communityId, ...defaults, smsEnabled: false, smsEmergencyOnly: true, smsConsentGivenAt: null, smsConsentRevokedAt: null };
 
   return NextResponse.json({ data });
 });
@@ -83,7 +91,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
-  const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled } = result.data;
+  const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled, smsEnabled, smsEmergencyOnly } = result.data;
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const userAgent = req.headers.get('user-agent') ?? 'unknown';
 
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
@@ -94,12 +104,36 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     (r) => r['userId'] === userId,
   );
 
-  const updateValues = {
+  const updateValues: Record<string, unknown> = {
     emailFrequency,
     emailAnnouncements,
     emailMeetings,
     inAppEnabled,
-  } as const;
+  };
+
+  // Phase 1B: Handle SMS consent with TCPA timestamps
+  if (smsEnabled !== undefined) {
+    updateValues['smsEnabled'] = smsEnabled;
+    if (smsEnabled) {
+      // Only set consent timestamp if not already set
+      const existingConsent = existing?.['smsConsentGivenAt'];
+      const existingRevoked = existing?.['smsConsentRevokedAt'];
+      if (!existingConsent || existingRevoked) {
+        updateValues['smsConsentGivenAt'] = new Date();
+        updateValues['smsConsentRevokedAt'] = null;
+        updateValues['smsConsentMethod'] = 'web_form';
+      }
+    } else {
+      // Record revocation timestamp (TCPA requires tracking)
+      const existingConsent = existing?.['smsConsentGivenAt'];
+      if (existingConsent) {
+        updateValues['smsConsentRevokedAt'] = new Date();
+      }
+    }
+  }
+  if (smsEmergencyOnly !== undefined) {
+    updateValues['smsEmergencyOnly'] = smsEmergencyOnly;
+  }
 
   if (!existing) {
     await scoped.insert(notificationPreferences, {
@@ -121,6 +155,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     resourceId: `${userId}:${communityId}`,
     communityId,
     newValues: updateValues as unknown as Record<string, unknown>,
+    metadata: {
+      ip,
+      userAgent,
+      ...(smsEnabled !== undefined ? { consentMethod: 'web_form' } : {}),
+    },
   });
 
   return NextResponse.json({

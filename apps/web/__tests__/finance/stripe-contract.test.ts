@@ -17,7 +17,7 @@ describeStripeContract('WS66 Stripe contract smoke', () => {
     const created = await stripe.paymentIntents.create({
       amount: 1099,
       currency: 'usd',
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card', 'us_bank_account'],
       metadata: {
         contractSuite: 'ws66',
       },

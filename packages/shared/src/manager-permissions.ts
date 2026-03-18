@@ -69,10 +69,16 @@ const DENY: ResourcePermission = { read: false, write: false };
 
 /**
  * Normalize raw JSONB into a complete ManagerPermissions object.
- * Fills missing resource keys with {read: false, write: false}.
+ * Fills missing resource keys with {read: false, write: false} by default.
+ * If `fallbackResources` is provided, uses those values for missing resources
+ * instead of DENY — this allows preset-based managers to automatically inherit
+ * RBAC matrix defaults when new resources are added.
  * Must be called on every read of manager permissions from the database.
  */
-export function normalizeManagerPermissions(raw: unknown): ManagerPermissions {
+export function normalizeManagerPermissions(
+  raw: unknown,
+  fallbackResources?: Partial<Record<RbacResource, ResourcePermission>>,
+): ManagerPermissions {
   const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const rawResources = (typeof obj.resources === 'object' && obj.resources !== null
     ? obj.resources : {}) as Record<string, unknown>;
@@ -87,7 +93,7 @@ export function normalizeManagerPermissions(raw: unknown): ManagerPermissions {
         write: e.write === true,
       };
     } else {
-      resources[r] = { ...DENY };
+      resources[r] = fallbackResources?.[r] ? { ...fallbackResources[r] } : { ...DENY };
     }
   }
 

@@ -6,14 +6,20 @@
  */
 import * as Sentry from '@sentry/nextjs';
 
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
+try {
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // Performance tracing
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    // Performance tracing
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-  // Session replay
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: process.env.NODE_ENV === 'production' ? 1.0 : 0,
-});
+    // Session replay
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: process.env.NODE_ENV === 'production' ? 1.0 : 0,
+  });
+} catch (error) {
+  console.error('[Sentry] Failed to initialize client instrumentation', error);
+}
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

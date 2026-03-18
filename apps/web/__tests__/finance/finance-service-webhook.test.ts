@@ -290,7 +290,7 @@ describe('processFinanceStripeEvent', () => {
     });
 
     await processFinanceStripeEvent(
-      makeEvent('charge.refunded', 'evt_fin_refund', { id: 'ch_refund_1' }),
+      makeEvent('charge.refunded', 'evt_fin_refund', { id: 'ch_refund_1', amount: 25000, amount_refunded: 25000 }),
     );
 
     expect(updateMock).toHaveBeenCalledWith(

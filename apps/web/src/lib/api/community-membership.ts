@@ -2,7 +2,7 @@ import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityType, NewCommunityRole, ManagerPermissions } from '@propertypro/shared';
-import { normalizeManagerPermissions } from '@propertypro/shared';
+import { normalizeManagerPermissions, getPresetPermissions, isPresetKey } from '@propertypro/shared';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
@@ -80,20 +80,28 @@ export async function requireCommunityMembership(
     ? membership['presetKey']
     : undefined;
 
-  // Normalize manager permissions from JSONB on every read (forward-compatible)
-  const permissions = role === 'manager'
-    ? normalizeManagerPermissions(membership['permissions'])
-    : undefined;
+  const communityType = requireCommunityType(
+    community['communityType'],
+    `requireCommunityMembership(communityId=${communityId}) community`,
+  );
+
+  // Normalize manager permissions from JSONB on every read.
+  // For preset-based managers, fall back to RBAC matrix defaults for resources
+  // missing from stored JSONB (e.g. newly-added resources like emergency_broadcasts).
+  let permissions: ManagerPermissions | undefined;
+  if (role === 'manager') {
+    const fallback = presetKey && isPresetKey(presetKey)
+      ? getPresetPermissions(presetKey, communityType).resources
+      : undefined;
+    permissions = normalizeManagerPermissions(membership['permissions'], fallback);
+  }
 
   return {
     userId,
     communityId,
     communityName: typeof community['name'] === 'string' ? community['name'] : '',
     role,
-    communityType: requireCommunityType(
-      community['communityType'],
-      `requireCommunityMembership(communityId=${communityId}) community`,
-    ),
+    communityType,
     timezone: typeof community['timezone'] === 'string' ? community['timezone'] : 'America/New_York',
     isUnitOwner,
     isAdmin,

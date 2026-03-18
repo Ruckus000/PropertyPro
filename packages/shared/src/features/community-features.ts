@@ -45,6 +45,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasCalendarSync: true,
     hasAccountingConnectors: true,
     hasEsign: true,
+    hasEmergencyNotifications: true,
   },
   hoa_720: {
     hasCompliance: true,
@@ -70,6 +71,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasCalendarSync: true,
     hasAccountingConnectors: true,
     hasEsign: true,
+    hasEmergencyNotifications: true,
   },
   apartment: {
     hasCompliance: false,
@@ -95,5 +97,6 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasCalendarSync: true,
     hasAccountingConnectors: true,
     hasEsign: true,
+    hasEmergencyNotifications: true,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;

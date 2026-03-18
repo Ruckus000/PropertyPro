@@ -10,6 +10,7 @@ import { loadWizardState } from '@/lib/queries/wizard-state';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
+import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -53,6 +54,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <div className="grid gap-6 lg:grid-cols-2">
         <DashboardAnnouncements items={data.announcements} />
         <DashboardMeetings items={data.meetings} timezone={data.timezone} />
+        {features.hasViolations && data.violationSummary && (
+          <DashboardViolations
+            summary={data.violationSummary}
+            communityId={context.communityId}
+            isAdmin={membership.isAdmin}
+          />
+        )}
       </div>
     </div>
   );

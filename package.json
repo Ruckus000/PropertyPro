@@ -20,6 +20,9 @@
     "perf:check": "tsx scripts/perf-check.ts",
     "lint:docs": "tsx scripts/lint-documentation.ts",
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
+    "playwright:install": "pnpm --filter @propertypro/web playwright:install",
+    "test:e2e": "pnpm --filter @propertypro/web test:e2e",
+    "test:e2e:headed": "pnpm --filter @propertypro/web test:e2e:headed",
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "lint": "turbo run lint && pnpm guard:db-access",
@@ -32,8 +35,10 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@propertypro/db": "workspace:*",
     "@vitest/coverage-v8": "^3.0.0",
+    "playwright": "^1.58.2",
     "postgres": "^3.4.8",
     "tsx": "^4.21.0",
     "turbo": "^2.3.0",

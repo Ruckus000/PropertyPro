@@ -38,6 +38,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
+  // Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
+  resolve(repoRoot, 'apps/web/src/lib/services/assessment-automation-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available
   resolve(repoRoot, 'apps/web/src/lib/services/stripe-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/actions/checkout.ts'),
@@ -73,6 +75,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/agent-login/route.ts'),
+  // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/send/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/confirm/route.ts'),
+  // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/twilio/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

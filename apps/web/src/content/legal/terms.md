@@ -98,7 +98,45 @@ Upon cancellation or termination of your account, we will retain your data for t
 
 ---
 
-## 6. Acceptable Use Policy
+## 6. SMS Notifications and TCPA Consent
+
+### 6.1 SMS Opt-In
+
+PropertyPro offers optional SMS text message notifications for emergency and community alerts. SMS notifications are not enabled by default. To receive SMS messages, you must:
+
+1. **Verify your phone number** by entering a valid US mobile number and confirming a one-time verification code sent to your device.
+2. **Provide explicit consent** by enabling SMS notifications in your account settings and agreeing to receive emergency and community alert text messages.
+
+By opting in, you consent to receive SMS messages from PropertyPro and its community associations at the phone number you provide. You understand that:
+
+- **Message and data rates may apply** depending on your mobile carrier and plan.
+- **Message frequency varies.** SMS messages are limited to emergency alerts (e.g., hurricanes, evacuations, gas leaks, fire, flooding) and critical community notifications. We do not send marketing or promotional text messages.
+- Consent to receive SMS messages is **not a condition** of purchasing any goods or services from PropertyPro.
+
+### 6.2 Opting Out
+
+You may opt out of SMS notifications at any time by:
+
+- **Replying STOP** to any SMS message you receive from PropertyPro.
+- **Disabling SMS notifications** in your account notification settings.
+
+After opting out, you will receive a confirmation message and no further SMS messages will be sent to you unless you opt in again.
+
+### 6.3 Emergency Exception
+
+In the event of an imminent life-safety emergency (such as a building evacuation, gas leak, hurricane, or fire), community administrators may send emergency broadcast messages to all verified residents, including those who have not opted in to general SMS notifications. This is permitted under the TCPA emergency purposes exception (47 U.S.C. § 227(b)(1)(A)).
+
+### 6.4 Help and Support
+
+For SMS-related support, reply **HELP** to any message or contact us at support@propertyprofl.com. You can also manage your SMS preferences at any time through your account settings.
+
+### 6.5 Carriers and Liability
+
+SMS messages are delivered through Twilio. Delivery is subject to your mobile carrier's network availability. PropertyPro is not responsible for delayed or undelivered messages due to carrier issues, network outages, or invalid phone numbers.
+
+---
+
+## 7. Acceptable Use Policy
 
 When using PropertyPro, you agree NOT to:
 
@@ -117,37 +155,37 @@ Violation of this acceptable use policy may result in immediate suspension or te
 
 ---
 
-## 7. Intellectual Property
+## 8. Intellectual Property
 
-### 7.1 Platform Ownership
+### 8.1 Platform Ownership
 
 PropertyPro and its original content, features, and functionality are owned by PropertyPro Florida and are protected by copyright, trademark, and other intellectual property laws.
 
-### 7.2 User Content
+### 8.2 User Content
 
 You retain ownership of all content you upload to PropertyPro. By uploading content, you grant PropertyPro a limited, non-exclusive license to store, display, and transmit that content solely for the purpose of operating the platform and providing our services to you and your community association.
 
 ---
 
-## 8. Termination
+## 9. Termination
 
 We reserve the right to suspend or terminate your access to PropertyPro at any time, with or without cause, including but not limited to violation of these Terms of Service. Upon termination, your right to use the platform will immediately cease.
 
 ---
 
-## 9. Governing Law
+## 10. Governing Law
 
 These Terms of Service shall be governed by and construed in accordance with the laws of the State of Florida, without regard to its conflict of law provisions. Any disputes arising from these terms shall be resolved in the courts located in Palm Beach County, Florida.
 
 ---
 
-## 10. Changes to Terms
+## 11. Changes to Terms
 
 We reserve the right to modify these Terms of Service at any time. We will notify you of material changes by posting the updated terms on this page and updating the "Effective Date" above. Your continued use of the platform after such changes constitutes acceptance of the modified terms.
 
 ---
 
-## 11. Contact Information
+## 12. Contact Information
 
 If you have questions about these Terms of Service, please contact us at:
 

@@ -40,6 +40,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/settings',
   '/documents',
   '/maintenance',
+  '/violations',
   '/contracts',
   '/audit-trail',
   '/announcements',
@@ -47,6 +48,10 @@ const PROTECTED_PATH_PREFIXES = [
   '/pm',
   '/communities',
   '/onboarding',
+  '/emergency',
+  '/payments',
+  '/assessments',
+  '/finance',
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';
@@ -59,12 +64,18 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
   { path: '/api/v1/internal/payment-reminders', method: 'POST' },
+  // Assessment crons: Bearer-token-authenticated, called by Vercel Cron [Phase 1A]
+  { path: '/api/v1/internal/assessment-overdue', method: 'POST' },
+  { path: '/api/v1/internal/late-fee-processor', method: 'POST' },
+  { path: '/api/v1/internal/generate-assessments', method: 'POST' },
   // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
   { path: '/api/v1/auth/demo-login', method: 'GET' },
   // Public transparency page data endpoint (community opt-in gated)
   { path: '/api/v1/transparency', method: 'GET' },
   // Public tenant ICS feed (community-scoped via middleware tenant headers)
   { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
+  // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
+  { path: '/api/v1/webhooks/twilio', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

@@ -12,11 +12,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock @sentry/nextjs
 const mockInit = vi.fn();
 const mockCaptureException = vi.fn();
+const mockCaptureRouterTransitionStart = vi.fn();
 const mockWithScope = vi.fn();
 
 vi.mock('@sentry/nextjs', () => ({
   init: mockInit,
   captureException: mockCaptureException,
+  captureRouterTransitionStart: mockCaptureRouterTransitionStart,
   withScope: mockWithScope,
 }));
 
@@ -116,28 +118,49 @@ describe('Sentry server config', () => {
   });
 });
 
-describe('Sentry client config', () => {
+describe('Sentry client instrumentation', () => {
   it('uses NEXT_PUBLIC_SENTRY_DSN', async () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public@sentry.io/456');
 
     vi.resetModules();
-    await import('../../sentry.client.config');
+    const module = await import('../../instrumentation-client');
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(config['dsn']).toBe('https://public@sentry.io/456');
     expect(config['enabled']).toBe(true);
+    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
   });
 
   it('disables client Sentry when DSN is not set', async () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', '');
 
     vi.resetModules();
-    await import('../../sentry.client.config');
+    const module = await import('../../instrumentation-client');
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(config['enabled']).toBe(false);
+    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
+  });
+
+  it('swallows client initialization errors so the app can keep rendering', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public@sentry.io/456');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInit.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+
+    vi.resetModules();
+    const module = await import('../../instrumentation-client');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[Sentry] Failed to initialize client instrumentation',
+      expect.any(Error),
+    );
+    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
+
+    consoleErrorSpy.mockRestore();
   });
 });
 

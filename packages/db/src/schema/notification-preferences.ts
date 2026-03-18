@@ -21,6 +21,19 @@ export const notificationPreferences = pgTable(
     emailAnnouncements: boolean('email_announcements').notNull().default(true),
     emailMeetings: boolean('email_meetings').notNull().default(true),
     inAppEnabled: boolean('in_app_enabled').notNull().default(true),
+
+    // Phase 1B: SMS consent fields (TCPA compliance)
+    /** Master SMS toggle — user must explicitly opt in */
+    smsEnabled: boolean('sms_enabled').notNull().default(false),
+    /** If true, only receive SMS for emergency broadcasts (not general notifications) */
+    smsEmergencyOnly: boolean('sms_emergency_only').notNull().default(true),
+    /** TCPA: when user opted in to SMS (null = never consented) */
+    smsConsentGivenAt: timestamp('sms_consent_given_at', { withTimezone: true }),
+    /** TCPA: when user revoked SMS consent (null = currently consented or never consented) */
+    smsConsentRevokedAt: timestamp('sms_consent_revoked_at', { withTimezone: true }),
+    /** How consent was given: 'web_form' | 'sms_keyword' | 'admin_import' */
+    smsConsentMethod: text('sms_consent_method'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

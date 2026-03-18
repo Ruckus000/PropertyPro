@@ -180,6 +180,8 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 # Run full integration preflight (migrations + seed verify + tests)
 scripts/with-env-local.sh pnpm test:integration:preflight
 
+# CI runs 7 parallel jobs on every PR: lint (includes DB access guard), typecheck, unit tests, no-mock-guard, migration-ordering, perf-check, then build
+
 # Performance budget check
 pnpm perf:check
 
@@ -204,9 +206,10 @@ The setup script creates a symlink at `apps/web/.env.local` pointing to the root
 ## Gotchas & Architecture Notes
 
 ### Scoped Database Access
-- All tenant queries MUST go through `createScopedClient()` from `@propertypro/db`
+- All tenant queries MUST go through `createScopedClient()` from `@propertypro/db` — enforced by CI import guard (`scripts/verify-scoped-db-access.ts`), database-level FORCE RLS, and a write trigger that blocks unscoped mutations
 - Direct Drizzle imports are blocked; use `@propertypro/db/filters` for operators (`eq`, `and`, `or`, `gte`, etc.)
-- CI guard (`pnpm guard:db-access`) scans for unauthorized imports — only 8 allowlisted files may bypass scoping
+- CI guard (`pnpm guard:db-access`) scans for unauthorized imports — see `scripts/verify-scoped-db-access.ts` for the current allowlist
+- Cross-tenant access: use `@propertypro/db/unsafe` with a documented authorization contract (see `AGENTS.md` Section 1)
 - The `communities` table is the root tenant table and cannot be scoped by `community_id`
 
 ### Middleware
@@ -280,6 +283,7 @@ preview_eval: fetch('/dev/agent-login?as=owner', { headers: { 'Accept': 'applica
 ## Documentation
 
 See `/docs` for detailed documentation:
+- `AGENTS.md` - Agent safety guide: tenant isolation enforcement, migration gotchas, compliance engine details, CI gates, synthesized failure rules
 - `00-DEMO-PLATFORM-TECH-SPEC.md` - Full technical specification
 - `01-DOCUMENT-CONTRADICTIONS-ANALYSIS.md` - Analysis notes
 - `02-NEXT-STEPS-TASK-LIST.md` - Development tasks

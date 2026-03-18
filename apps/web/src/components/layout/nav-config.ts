@@ -17,6 +17,10 @@ import {
   History,
   Building2,
   Paintbrush,
+  CreditCard,
+  DollarSign,
+  BarChart3,
+  AlertTriangle,
 } from 'lucide-react';
 import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -78,6 +82,24 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
+  {
+    id: 'payments',
+    label: 'Payments',
+    icon: CreditCard,
+    href: (cid) => `/payments?communityId=${cid}`,
+    featureKey: 'hasFinance',
+    group: 'main',
+    matchPrefixes: ['/payments'],
+  },
+  {
+    id: 'violations-report',
+    label: 'Report Violation',
+    icon: AlertTriangle,
+    href: (cid) => `/violations/report?communityId=${cid}`,
+    featureKey: 'hasViolations',
+    group: 'main',
+    matchPrefixes: ['/violations/report'],
+  },
 
   // ── Admin ──
   {
@@ -110,6 +132,16 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/contracts'],
   },
   {
+    id: 'violations-inbox',
+    label: 'Violations Inbox',
+    icon: AlertTriangle,
+    href: (cid) => `/violations/inbox?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasViolations',
+    group: 'admin',
+    matchPrefixes: ['/violations/inbox'],
+  },
+  {
     id: 'audit-trail',
     label: 'Audit Trail',
     icon: History,
@@ -117,6 +149,26 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     roles: ADMIN_ROLES,
     group: 'admin',
     matchPrefixes: ['/audit-trail'],
+  },
+  {
+    id: 'assessments',
+    label: 'Assessments',
+    icon: DollarSign,
+    href: (cid) => `/assessments?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasFinance',
+    group: 'admin',
+    matchPrefixes: ['/assessments'],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    icon: BarChart3,
+    href: (cid) => `/finance?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasFinance',
+    group: 'admin',
+    matchPrefixes: ['/finance'],
   },
 ];
 
@@ -201,7 +253,12 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
+  'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
+  'violations-inbox': { title: 'Violations Inbox', subtitle: 'Review & manage violations' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
+  payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
+  assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
+  finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
 };

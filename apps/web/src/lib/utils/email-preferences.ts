@@ -3,6 +3,7 @@ export type EmailFrequency = 'immediate' | 'daily_digest' | 'weekly_digest' | 'n
 export type NotificationKind =
   | 'password_reset' // critical
   | 'invitation' // critical
+  | 'emergency' // critical — always immediate, bypasses digest
   | 'announcement'
   | 'meeting'
   | 'document'
@@ -25,9 +26,9 @@ export function getDefaultPreferences(): UserNotificationPreferences {
   };
 }
 
-/** True if this kind is a critical email that must always send. */
+/** True if this kind is a critical email that must always send immediately. */
 export function isCriticalNotification(kind: NotificationKind): boolean {
-  return kind === 'password_reset' || kind === 'invitation';
+  return kind === 'password_reset' || kind === 'invitation' || kind === 'emergency';
 }
 
 /** True if frequency represents a digest cadence. */

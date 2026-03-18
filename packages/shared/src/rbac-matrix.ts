@@ -48,6 +48,7 @@ export const RBAC_RESOURCES = [
   'calendar_sync',
   'accounting',
   'esign',
+  'emergency_broadcasts',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -80,6 +81,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'calendar_sync',
   'accounting',
   'esign',
+  'emergency_broadcasts',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -317,6 +319,10 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     },
   },
   violations: {
+    // Two-tier permission model:
+    // - write: true allows residents to self-report violations (POST /api/v1/violations)
+    // - Admin-only mutations (update, resolve, dismiss, fine) additionally check
+    //   requireViolationAdminWrite() at the route layer
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
@@ -421,6 +427,17 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
+      board_member:           { read: true,  write: true  },
+      board_president:        { read: true,  write: true  },
+      cam:                    { read: true,  write: true  },
+      site_manager:           { read: true,  write: true  },
+      property_manager_admin: { read: true,  write: true  },
+    },
+  },
+  emergency_broadcasts: {
+    policy: {
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: false, write: false },
       board_member:           { read: true,  write: true  },
       board_president:        { read: true,  write: true  },
       cam:                    { read: true,  write: true  },
