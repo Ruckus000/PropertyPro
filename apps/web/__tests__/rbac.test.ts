@@ -56,8 +56,8 @@ describe('policy invariants', () => {
 
   // --- meetings and compliance are condo/HOA only ---
 
-  it('apartment tenant can read meetings', () => {
-    expect(checkPermission('tenant', 'apartment', 'meetings', 'read')).toBe(true);
+  it('apartment tenant cannot read meetings', () => {
+    expect(checkPermission('tenant', 'apartment', 'meetings', 'read')).toBe(false);
   });
 
   it('apartment tenant cannot write meetings', () => {
@@ -72,8 +72,8 @@ describe('policy invariants', () => {
     expect(checkPermission('site_manager', 'apartment', 'compliance', 'write')).toBe(false);
   });
 
-  it('apartment property_manager_admin can read meetings', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'meetings', 'read')).toBe(true);
+  it('apartment property_manager_admin cannot read meetings', () => {
+    expect(checkPermission('property_manager_admin', 'apartment', 'meetings', 'read')).toBe(false);
   });
 
   it('apartment property_manager_admin cannot read compliance', () => {
