@@ -1,3 +1,5 @@
+import { resolveEndsAt } from '@/lib/calendar/event-types';
+
 export interface IcsMeetingInput {
   id: number;
   title: string;
@@ -80,7 +82,7 @@ export function buildCalendarIcs(
   ];
 
   for (const meeting of meetings) {
-    const endsAt = meeting.endsAt ?? new Date(meeting.startsAt.getTime() + 60 * 60 * 1000);
+    const endsAt = resolveEndsAt(meeting.startsAt, meeting.endsAt);
 
     lines.push(
       'BEGIN:VEVENT',

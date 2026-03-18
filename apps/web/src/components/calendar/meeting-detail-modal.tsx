@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge, Button, Card } from '@propertypro/ui';
 import { X } from 'lucide-react';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
-import { MEETING_TYPE_TOKENS } from '@/lib/calendar/event-types';
+import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
 
 interface MeetingDetailModalProps {
   communityId: number;
@@ -64,9 +64,7 @@ export function MeetingDetailModal({
   const meeting = detailQuery.data;
   const meetingToken = meeting ? MEETING_TYPE_TOKENS[meeting.meetingType as keyof typeof MEETING_TYPE_TOKENS] : null;
   const startsAt = meeting ? new Date(meeting.startsAt) : null;
-  const endsAt = meeting
-    ? new Date(meeting.endsAt ?? new Date(new Date(meeting.startsAt).getTime() + 60 * 60 * 1000).toISOString())
-    : null;
+  const endsAt = meeting && startsAt ? resolveEndsAt(startsAt, meeting.endsAt) : null;
 
   return (
     <div

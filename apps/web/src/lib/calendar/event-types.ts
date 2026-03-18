@@ -48,6 +48,30 @@ export const MEETING_TYPE_TOKENS: Record<
   committee: { badgeVariant: 'info', label: 'Committee' },
 };
 
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+/** Resolve meeting end time, falling back to startsAt + 1 hour when null. */
+export function resolveEndsAt(startsAt: Date, endsAt?: Date | string | null): Date {
+  if (endsAt instanceof Date) return endsAt;
+  if (typeof endsAt === 'string') return new Date(endsAt);
+  return new Date(startsAt.getTime() + ONE_HOUR_MS);
+}
+
+const BADGE_VARIANT_TO_DOT_CLASS: Record<string, string> = {
+  info: 'bg-[var(--status-info)]',
+  success: 'bg-[var(--status-success)]',
+  warning: 'bg-[var(--status-warning)]',
+  neutral: 'bg-[var(--status-neutral)]',
+};
+
+/** CSS class for the colored dot indicator on the calendar grid. */
+export function meetingTypeDotClass(meetingType: string): string {
+  const token = MEETING_TYPE_TOKENS[meetingType as MeetingType];
+  return token
+    ? BADGE_VARIANT_TO_DOT_CLASS[token.badgeVariant] ?? 'bg-[var(--status-info)]'
+    : 'bg-[var(--status-info)]';
+}
+
 export function getCalendarEventDateKey(
   event: CalendarEvent,
   timeZone: string,

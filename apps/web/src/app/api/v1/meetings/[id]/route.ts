@@ -11,7 +11,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
-import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requirePermission } from '@/lib/db/access-control';
 import {
   serializeMeetingResponse,
@@ -40,21 +40,7 @@ interface DocumentCategoryRow {
   name: string;
 }
 
-function parseCommunityId(req: NextRequest): number {
-  const { searchParams } = new URL(req.url);
-  const rawCommunityId = searchParams.get('communityId');
-
-  if (!rawCommunityId) {
-    throw new BadRequestError('communityId query parameter is required');
-  }
-
-  const parsedCommunityId = Number(rawCommunityId);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new BadRequestError('communityId must be a positive integer');
-  }
-
-  return resolveEffectiveCommunityId(req, parsedCommunityId);
-}
+// parseCommunityIdFromQuery imported from @/lib/finance/request
 
 export const GET = withErrorHandler(
   async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -66,7 +52,7 @@ export const GET = withErrorHandler(
       throw new BadRequestError('Invalid meeting ID');
     }
 
-    const communityId = parseCommunityId(req);
+    const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'meetings', 'read');
 

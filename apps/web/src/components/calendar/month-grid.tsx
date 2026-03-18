@@ -15,7 +15,7 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { CalendarEvent } from '@/lib/calendar/event-types';
-import { getCalendarEventDateKey, MEETING_TYPE_TOKENS } from '@/lib/calendar/event-types';
+import { getCalendarEventDateKey, meetingTypeDotClass, MEETING_TYPE_TOKENS } from '@/lib/calendar/event-types';
 
 interface MonthGridProps {
   events: CalendarEvent[];
@@ -155,18 +155,7 @@ export function MonthGrid({
                     >
                       {event.type === 'meeting' ? (
                         <span className="inline-flex items-center gap-1.5">
-                          <span
-                            className={[
-                              'inline-flex h-2 w-2 rounded-full',
-                              event.meetingType === 'annual'
-                                ? 'bg-[var(--status-success)]'
-                                : event.meetingType === 'special'
-                                  ? 'bg-[var(--status-warning)]'
-                                  : event.meetingType === 'budget'
-                                    ? 'bg-[var(--status-neutral)]'
-                                    : 'bg-[var(--status-info)]',
-                            ].join(' ')}
-                          />
+                          <span className={`inline-flex h-2 w-2 rounded-full ${meetingTypeDotClass(event.meetingType)}`} />
                           <span className="truncate">{event.title}</span>
                         </span>
                       ) : (
@@ -188,18 +177,11 @@ export function MonthGrid({
                   {dayEvents.slice(0, 3).map((event) => (
                     <span
                       key={event.type === 'meeting' ? `meeting-${event.id}-m` : `${event.type}-${event.assessmentId}-${event.dueDate}-m`}
-                      className={[
-                        'inline-flex h-2 w-2 rounded-full',
+                      className={`inline-flex h-2 w-2 rounded-full ${
                         event.type === 'meeting'
-                          ? event.meetingType === 'annual'
-                            ? 'bg-[var(--status-success)]'
-                            : event.meetingType === 'special'
-                              ? 'bg-[var(--status-warning)]'
-                              : event.meetingType === 'budget'
-                                ? 'bg-[var(--status-neutral)]'
-                                : 'bg-[var(--status-info)]'
-                          : 'bg-[var(--status-warning)]',
-                      ].join(' ')}
+                          ? meetingTypeDotClass(event.meetingType)
+                          : 'bg-[var(--status-warning)]'
+                      }`}
                     />
                   ))}
                 </div>

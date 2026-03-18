@@ -13,7 +13,10 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import {
+  parseCommunityIdFromBody as sharedParseCommunityIdFromBody,
+  parseCommunityIdFromQuery,
+} from '@/lib/finance/request';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseOptionalCalendarDateRange } from '@/lib/calendar/date-range';
 import { requirePermission } from '@/lib/db/access-control';
@@ -96,36 +99,13 @@ const meetingColumns = {
   minutesApprovedAt: meetings.minutesApprovedAt,
 } as const;
 
-function parseCommunityIdFromQuery(req: NextRequest): number {
-  const { searchParams } = new URL(req.url);
-  const rawCommunityId = searchParams.get('communityId');
-
-  if (!rawCommunityId) {
-    throw new BadRequestError('communityId query parameter is required');
-  }
-
-  const parsedCommunityId = Number(rawCommunityId);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new BadRequestError('communityId must be a positive integer');
-  }
-
-  return resolveEffectiveCommunityId(req, parsedCommunityId);
-}
-
 function parseCommunityIdFromBody(
   req: NextRequest,
   body: Record<string, unknown>,
 ): number {
-  const rawCommunityId = body.communityId;
-  const parsedCommunityId = typeof rawCommunityId === 'number'
-    ? rawCommunityId
-    : Number(rawCommunityId);
-
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new BadRequestError('communityId must be a positive integer');
-  }
-
-  return resolveEffectiveCommunityId(req, parsedCommunityId);
+  const raw = body.communityId;
+  const communityId = typeof raw === 'number' ? raw : Number(raw);
+  return sharedParseCommunityIdFromBody(req, communityId);
 }
 
 function assertMeetingWindow(startsAt: string, endsAt?: string | null): void {
@@ -228,10 +208,18 @@ async function handleCreate(
     location,
   });
 
-  const createdMeeting = await findMeetingById(communityId, Number(created?.id));
+  const [createdMeeting, communityRows] = await Promise.all([
+    findMeetingById(communityId, Number(created?.id)),
+    scoped.selectFrom<{ timezone: string }>(
+      communities,
+      { timezone: communities.timezone },
+      eq(communities.id, communityId),
+    ),
+  ]);
   if (!createdMeeting) {
     throw new Error('Created meeting could not be reloaded');
   }
+  const communityTimezone = resolveTimezone(communityRows[0]?.timezone);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -254,13 +242,6 @@ async function handleCreate(
     : meetingType === 'special'
       ? 'special' as const
       : 'owner' as const;
-
-  const communityRows = await scoped.selectFrom<{ timezone: string }>(
-    communities,
-    { timezone: communities.timezone },
-    eq(communities.id, communityId),
-  );
-  const communityTimezone = resolveTimezone(communityRows[0]?.timezone);
 
   try {
     await queueNotification(
@@ -422,20 +403,13 @@ async function handleAttach(
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);
 
-  const meetingRows = await scoped.selectFrom(
-    meetings,
-    { id: meetings.id },
-    eq(meetings.id, meetingId),
-  );
+  const [meetingRows, documentRows] = await Promise.all([
+    scoped.selectFrom(meetings, { id: meetings.id }, eq(meetings.id, meetingId)),
+    scoped.selectFrom(documents, { id: documents.id }, eq(documents.id, documentId)),
+  ]);
   if (meetingRows.length === 0) {
     throw new NotFoundError('Meeting not found');
   }
-
-  const documentRows = await scoped.selectFrom(
-    documents,
-    { id: documents.id },
-    eq(documents.id, documentId),
-  );
   if (documentRows.length === 0) {
     throw new NotFoundError('Document not found');
   }
@@ -473,20 +447,13 @@ async function handleDetach(
   const { communityId, meetingId, documentId } = parsed.data;
   const scoped = createScopedClient(communityId);
 
-  const meetingRows = await scoped.selectFrom(
-    meetings,
-    { id: meetings.id },
-    eq(meetings.id, meetingId),
-  );
+  const [meetingRows, documentRows] = await Promise.all([
+    scoped.selectFrom(meetings, { id: meetings.id }, eq(meetings.id, meetingId)),
+    scoped.selectFrom(documents, { id: documents.id }, eq(documents.id, documentId)),
+  ]);
   if (meetingRows.length === 0) {
     throw new NotFoundError('Meeting not found');
   }
-
-  const documentRows = await scoped.selectFrom(
-    documents,
-    { id: documents.id },
-    eq(documents.id, documentId),
-  );
   if (documentRows.length === 0) {
     throw new NotFoundError('Document not found');
   }

@@ -3,7 +3,7 @@
 import { Badge, Button, Card } from '@propertypro/ui';
 import { format } from 'date-fns';
 import type { CalendarAssessmentEvent, CalendarEvent, CalendarMeetingEvent, CalendarMyAssessmentEvent } from '@/lib/calendar/event-types';
-import { MEETING_TYPE_TOKENS } from '@/lib/calendar/event-types';
+import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
 import { useMeeting } from '@/hooks/use-meetings';
 
 interface DayDetailPanelProps {
@@ -39,7 +39,7 @@ function MeetingCard({
   const docCount = detailQuery.data?.documents.length ?? 0;
   const token = MEETING_TYPE_TOKENS[event.meetingType];
   const startsAt = new Date(event.startsAt);
-  const endsAt = new Date(event.endsAt ?? new Date(startsAt.getTime() + 60 * 60 * 1000).toISOString());
+  const endsAt = resolveEndsAt(startsAt, event.endsAt);
 
   return (
     <Card.Section bordered className="space-y-3">
