@@ -456,13 +456,6 @@
       "when": 1773170000000,
       "tag": "0104_add_deleted_at_broadcast_recipients",
       "breakpoints": true
-    },
-    {
-      "idx": 105,
-      "version": "7",
-      "when": 1773180000000,
-      "tag": "0105_add_meetings_ends_at",
-      "breakpoints": true
     }
   ]
 }
