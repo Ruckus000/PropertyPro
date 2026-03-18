@@ -421,6 +421,48 @@
       "when": 1773120000000,
       "tag": "0099_add_template_variant",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1773130000000,
+      "tag": "0100_emergency_notifications_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1773140000000,
+      "tag": "0101_emergency_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1773150000000,
+      "tag": "0102_elections_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1773160000000,
+      "tag": "0103_otp_rate_limit_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1773170000000,
+      "tag": "0104_add_deleted_at_broadcast_recipients",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1773180000000,
+      "tag": "0105_add_meetings_ends_at",
+      "breakpoints": true
     }
   ]
 }
