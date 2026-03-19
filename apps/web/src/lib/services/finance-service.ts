@@ -1144,7 +1144,7 @@ async function sendPaymentConfirmationEmail(
   const portalUrl = `${getBaseUrl()}/payments?communityId=${communityId}`;
   const paymentDate = format(new Date(), 'MMM d, yyyy');
   const dueDate = lineItem.dueDate
-    ? format(new Date(lineItem.dueDate), 'MMM d, yyyy')
+    ? format(new Date(`${lineItem.dueDate}T00:00:00.000Z`), 'MMM d, yyyy')
     : 'N/A';
 
   await sendEmail({
