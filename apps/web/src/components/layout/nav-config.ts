@@ -21,6 +21,9 @@ import {
   DollarSign,
   BarChart3,
   AlertTriangle,
+  Package,
+  Users,
+  ClipboardCheck,
 } from 'lucide-react';
 import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -83,6 +86,33 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/maintenance/submit'],
   },
   {
+    id: 'leases',
+    label: 'Leases',
+    icon: FileText,
+    href: (cid) => `/dashboard/leases?communityId=${cid}`,
+    featureKey: 'hasLeaseTracking',
+    group: 'main',
+    matchPrefixes: ['/dashboard/leases'],
+  },
+  {
+    id: 'packages',
+    label: 'Packages',
+    icon: Package,
+    href: (cid) => `/dashboard/packages?communityId=${cid}`,
+    featureKey: 'hasPackageLogging',
+    group: 'main',
+    matchPrefixes: ['/dashboard/packages'],
+  },
+  {
+    id: 'visitors',
+    label: 'Visitors',
+    icon: Users,
+    href: (cid) => `/dashboard/visitors?communityId=${cid}`,
+    featureKey: 'hasVisitorLogging',
+    group: 'main',
+    matchPrefixes: ['/dashboard/visitors'],
+  },
+  {
     id: 'payments',
     label: 'Payments',
     icon: CreditCard,
@@ -142,6 +172,16 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/violations/inbox'],
   },
   {
+    id: 'move-in-out',
+    label: 'Move In/Out',
+    icon: ClipboardCheck,
+    href: (cid) => `/dashboard/move-in-out?communityId=${cid}`,
+    featureKey: 'hasLeaseTracking',
+    roles: ADMIN_ROLES,
+    group: 'admin',
+    matchPrefixes: ['/dashboard/move-in-out'],
+  },
+  {
     id: 'audit-trail',
     label: 'Audit Trail',
     icon: History,
@@ -189,6 +229,14 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     href: () => '/pm/settings/branding',
     group: 'main',
     matchPrefixes: ['/pm/settings'],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: BarChart3,
+    href: () => '/pm/reports',
+    group: 'main',
+    matchPrefixes: ['/pm/reports'],
   },
 ];
 
@@ -261,4 +309,9 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
+  leases: { title: 'Leases', subtitle: 'Manage unit leases' },
+  packages: { title: 'Packages', subtitle: 'Track package deliveries' },
+  visitors: { title: 'Visitors', subtitle: 'Manage visitor access' },
+  'move-in-out': { title: 'Move In/Out', subtitle: 'Move-in & move-out checklists' },
+  reports: { title: 'Reports', subtitle: 'Portfolio analytics & reports' },
 };

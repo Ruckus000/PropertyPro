@@ -10,7 +10,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
-import { ViolationsAdminInbox } from '@/components/violations/ViolationsAdminInbox';
+import { ViolationsInboxTabs } from '@/components/violations/ViolationsInboxTabs';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -53,7 +53,7 @@ export default async function ViolationsInboxPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <ViolationsAdminInbox
+      <ViolationsInboxTabs
         communityId={communityId}
         userId={userId}
         userRole={membership.role}

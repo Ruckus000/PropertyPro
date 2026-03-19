@@ -41,6 +41,7 @@ export * from './invitations';
 export * from './meetings';
 export * from './meeting-documents';
 export * from './leases';
+export * from './move-checklists';
 export * from './maintenance-requests';
 export * from './maintenance-comments';
 export * from './contracts';
@@ -331,6 +332,11 @@ export type NewEmergencyBroadcast = typeof emergencyBroadcasts.$inferInsert;
 import type { emergencyBroadcastRecipients } from './emergency-broadcast-recipients';
 export type EmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferSelect;
 export type NewEmergencyBroadcastRecipient = typeof emergencyBroadcastRecipients.$inferInsert;
+
+// Move Checklists (Phase 2C)
+import type { moveChecklists } from './move-checklists';
+export type MoveChecklist = typeof moveChecklists.$inferSelect;
+export type NewMoveChecklist = typeof moveChecklists.$inferInsert;
 
 // Elections (Phase 1D)
 import type { elections, electionCandidates, electionBallots, electionProxies, electionEligibilitySnapshots } from './elections';

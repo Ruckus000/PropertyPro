@@ -44,6 +44,8 @@ const patchSchema = z.object({
     .optional(),
   /** Raw Supabase Storage path of the user-uploaded image (pre-processing) */
   logoStoragePath: z.string().min(1).max(500).optional(),
+  /** Custom footer text for outbound emails */
+  customEmailFooter: z.string().max(500).optional(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -84,6 +86,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     fontHeading,
     fontBody,
     logoStoragePath,
+    customEmailFooter,
   } = parseResult.data;
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
@@ -145,6 +148,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     ...(fontHeading !== undefined && { fontHeading }),
     ...(fontBody !== undefined && { fontBody }),
     ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
+    ...(customEmailFooter !== undefined && { customEmailFooter }),
   });
 
   await logAuditEvent({

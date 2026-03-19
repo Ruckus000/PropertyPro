@@ -80,6 +80,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/confirm/route.ts'),
   // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
   resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/twilio/route.ts'),
+  // Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
+  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/dashboard/summary/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/reports/[reportType]/route.ts'),
+  // Phase 2C: Bulk operations — cross-community announcements + document uploads
+  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/announcements/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/documents/route.ts'),
+  // Phase 2C: Branding settings — communities is root tenant table
+  resolve(repoRoot, 'apps/web/src/app/(authenticated)/pm/settings/branding/page.tsx'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

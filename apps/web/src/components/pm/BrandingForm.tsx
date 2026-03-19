@@ -58,6 +58,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE');
   const [fontHeading, setFontHeading] = useState(initialBranding.fontHeading ?? 'Inter');
   const [fontBody, setFontBody] = useState(initialBranding.fontBody ?? 'Inter');
+  const [customEmailFooter, setCustomEmailFooter] = useState(initialBranding.customEmailFooter ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +162,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
           accentColor,
           fontHeading,
           fontBody,
+          customEmailFooter: customEmailFooter || undefined,
           ...(logoStoragePath !== undefined && { logoStoragePath }),
         }),
       });
@@ -317,6 +319,25 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Custom email footer */}
+        <div>
+          <label htmlFor="custom-email-footer" className="mb-1.5 block text-sm font-medium text-gray-700">
+            Custom Email Footer
+          </label>
+          <p className="mb-1.5 text-xs text-gray-500">
+            Optional text appended to all outbound emails for this community
+          </p>
+          <textarea
+            id="custom-email-footer"
+            value={customEmailFooter}
+            onChange={(e) => setCustomEmailFooter(e.target.value)}
+            rows={3}
+            maxLength={500}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            placeholder="e.g. Questions? Contact management at (305) 555-0100"
+          />
         </div>
 
         {/* Feedback */}
