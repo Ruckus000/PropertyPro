@@ -62,6 +62,15 @@ export type { AssessmentPaymentReceivedEmailProps } from "./templates/assessment
 export { AssessmentDueReminderEmail } from "./templates/assessment-due-reminder";
 export type { AssessmentDueReminderEmailProps } from "./templates/assessment-due-reminder";
 
+export { EsignInvitationEmail } from "./templates/esign-invitation-email";
+export type { EsignInvitationEmailProps } from "./templates/esign-invitation-email";
+
+export { EsignCompletedEmail } from "./templates/esign-completed-email";
+export type { EsignCompletedEmailProps } from "./templates/esign-completed-email";
+
+export { EsignReminderEmail } from "./templates/esign-reminder-email";
+export type { EsignReminderEmailProps } from "./templates/esign-reminder-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

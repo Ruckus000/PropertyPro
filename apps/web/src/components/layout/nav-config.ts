@@ -24,6 +24,7 @@ import {
   Package,
   Users,
   ClipboardCheck,
+  FileSignature,
 } from 'lucide-react';
 import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
 
@@ -160,6 +161,16 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     featureKey: 'hasCompliance',
     group: 'admin',
     matchPrefixes: ['/contracts'],
+  },
+  {
+    id: 'esign',
+    label: 'E-Sign',
+    icon: FileSignature,
+    href: (cid) => `/esign?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    featureKey: 'hasEsign',
+    group: 'admin',
+    matchPrefixes: ['/esign'],
   },
   {
     id: 'violations-inbox',
@@ -301,6 +312,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   'maintenance-inbox': { title: 'Maintenance Inbox', subtitle: 'Review requests' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
+  esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
   'violations-inbox': { title: 'Violations Inbox', subtitle: 'Review & manage violations' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },

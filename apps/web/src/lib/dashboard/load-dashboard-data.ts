@@ -10,6 +10,10 @@ import {
   type Violation,
 } from '@propertypro/db';
 import {
+  getFeaturesForCommunity,
+  type CommunityType,
+} from '@propertypro/shared';
+import {
   selectRecentAnnouncements,
   selectUpcomingMeetings,
   selectViolationSummary,
@@ -19,6 +23,17 @@ import {
   type DashboardViolationSummary,
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
+import { listMyPendingSigners } from '@/lib/services/esign-service';
+
+export interface DashboardPendingSigner {
+  signerId: number;
+  templateName: string;
+  messageSubject: string | null;
+  expiresAt: string | null;
+  submissionExternalId: string;
+  slug: string | null;
+  createdAt: string;
+}
 
 export interface DashboardData {
   communityName: string;
@@ -27,6 +42,7 @@ export interface DashboardData {
   announcements: DashboardAnnouncement[];
   meetings: DashboardMeeting[];
   violationSummary: DashboardViolationSummary | null;
+  pendingSigners: DashboardPendingSigner[];
 }
 
 export async function loadDashboardData(
@@ -49,6 +65,26 @@ export async function loadDashboardData(
 
   const user = userRows.find((row) => row['id'] === userId);
   const fullName = typeof user?.['fullName'] === 'string' ? (user['fullName'] as string) : null;
+  const userEmail = typeof user?.['email'] === 'string' ? (user['email'] as string) : '';
+
+  // Load pending e-sign signers if the feature is enabled
+  let pendingSigners: DashboardPendingSigner[] = [];
+  const communityType = community?.['communityType'] as string | undefined;
+  if (communityType) {
+    const features = getFeaturesForCommunity(communityType as CommunityType);
+    if (features.hasEsign && userEmail) {
+      const raw = await listMyPendingSigners(communityId, userId, userEmail);
+      pendingSigners = raw.map((r) => ({
+        signerId: r.signerId,
+        templateName: r.templateName,
+        messageSubject: r.messageSubject,
+        expiresAt: r.expiresAt?.toISOString() ?? null,
+        submissionExternalId: r.submissionExternalId,
+        slug: r.slug,
+        createdAt: r.createdAt.toISOString(),
+      }));
+    }
+  }
 
   return {
     communityName,
@@ -57,5 +93,6 @@ export async function loadDashboardData(
     announcements: selectRecentAnnouncements(announcementRows as Announcement[]),
     meetings: selectUpcomingMeetings(meetingRows as Meeting[]),
     violationSummary: selectViolationSummary(violationRows as unknown as Violation[]),
+    pendingSigners,
   };
 }
