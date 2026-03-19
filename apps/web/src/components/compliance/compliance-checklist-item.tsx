@@ -56,13 +56,13 @@ function deadlineLabel(item: ChecklistItemData): string | null {
 }
 
 function deadlineLabelColor(item: ChecklistItemData): string {
-  if (item.status === "satisfied") return "text-[var(--status-success)]";
+  if (item.status === "satisfied") return "text-status-success";
   if (item.status === "not_applicable") return "text-[var(--status-neutral)]";
-  if (!item.deadline) return "text-[var(--text-tertiary)]";
+  if (!item.deadline) return "text-content-tertiary";
   const days = daysUntil(item.deadline);
-  if (days < 0) return "text-[var(--status-danger)]";
-  if (days <= 7) return "text-[var(--status-warning)]";
-  return "text-[var(--text-tertiary)]";
+  if (days < 0) return "text-status-danger";
+  if (days <= 7) return "text-status-warning";
+  return "text-content-tertiary";
 }
 
 // ── Help Text ────────────────────────────────────────
@@ -99,15 +99,15 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
   const deadlineFormatted = formatDate(item.deadline ?? null);
 
   return (
-    <div className="border-b border-[var(--border-subtle)] last:border-b-0">
+    <div className="border-b border-edge-subtle last:border-b-0">
       {/* Collapsed row */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className={`
           group flex w-full items-center gap-3 px-4 py-3
-          text-left transition-colors duration-150
-          hover:bg-[var(--surface-hover)]
+          text-left transition-colors duration-quick
+          hover:bg-surface-hover
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--border-strong)]
           min-h-[48px] cursor-pointer
         `}
@@ -116,13 +116,13 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
         <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotColor(item.status)}`} />
 
         {/* Title */}
-        <span className="flex-1 min-w-0 text-sm font-medium text-[var(--text-primary)] truncate">
+        <span className="flex-1 min-w-0 text-sm font-medium text-content truncate">
           {item.title}
         </span>
 
         {/* Statute ref */}
         {item.statuteReference && (
-          <span className="hidden sm:inline text-xs text-[var(--text-tertiary)] shrink-0">
+          <span className="hidden sm:inline text-xs text-content-tertiary shrink-0">
             {item.statuteReference}
           </span>
         )}
@@ -136,23 +136,23 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
 
         {/* Chevron */}
         {expanded ? (
-          <ChevronDown size={14} className="text-[var(--text-tertiary)] shrink-0" />
+          <ChevronDown size={14} className="text-content-tertiary shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-[var(--text-tertiary)] shrink-0" />
+          <ChevronRight size={14} className="text-content-tertiary shrink-0" />
         )}
       </button>
 
       {/* Expanded detail */}
       <div
         className={`
-          overflow-hidden transition-all duration-200 ease-out
+          overflow-hidden transition-all duration-quick ease-out
           ${expanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}
         `}
       >
         <div className="px-4 pb-4 pt-1 ml-5">
           {/* Description */}
           {item.description && (
-            <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">
+            <p className="text-sm text-content-secondary leading-relaxed mb-3">
               {item.description}
             </p>
           )}
@@ -200,7 +200,7 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
 
           {/* Action buttons */}
           {actions && (
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-edge-subtle">
               {actions}
             </div>
           )}

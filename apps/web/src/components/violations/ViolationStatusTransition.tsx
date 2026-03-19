@@ -139,18 +139,18 @@ export function ViolationStatusTransition({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-      <h4 className="text-sm font-semibold text-gray-900">{config.title}</h4>
+    <form onSubmit={handleSubmit} className="mt-4 space-y-4 rounded-md border border-edge bg-surface-hover p-4">
+      <h4 className="text-sm font-semibold text-content">{config.title}</h4>
 
       {error && (
-        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{error}</div>
       )}
 
       {/* Hearing-specific fields */}
       {action === 'hearing' && (
         <>
           <div>
-            <label htmlFor="hearing-date" className="mb-1 block text-sm font-medium text-gray-700">
+            <label htmlFor="hearing-date" className="mb-1 block text-sm font-medium text-content-secondary">
               Hearing Date
             </label>
             <input
@@ -159,14 +159,14 @@ export function ViolationStatusTransition({
               value={hearingDate}
               min={minHearingDate}
               onChange={(e) => setHearingDate(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-content-disabled">
               Must be at least 14 days from today per Florida bylaw requirements.
             </p>
           </div>
           <div>
-            <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-gray-700">
+            <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-content-secondary">
               Hearing Location (optional)
             </label>
             <input
@@ -175,7 +175,7 @@ export function ViolationStatusTransition({
               value={hearingLocation}
               onChange={(e) => setHearingLocation(e.target.value)}
               placeholder="e.g., Community clubhouse, Room 101"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
         </>
@@ -185,7 +185,7 @@ export function ViolationStatusTransition({
       {action === 'fine' && (
         <>
           <div>
-            <label htmlFor="fine-amount" className="mb-1 block text-sm font-medium text-gray-700">
+            <label htmlFor="fine-amount" className="mb-1 block text-sm font-medium text-content-secondary">
               Fine Amount ($)
             </label>
             <input
@@ -196,11 +196,11 @@ export function ViolationStatusTransition({
               value={fineAmountDollars}
               onChange={(e) => setFineAmountDollars(e.target.value)}
               placeholder="0.00"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
           <div>
-            <label htmlFor="fine-due-date" className="mb-1 block text-sm font-medium text-gray-700">
+            <label htmlFor="fine-due-date" className="mb-1 block text-sm font-medium text-content-secondary">
               Due Date
             </label>
             <input
@@ -209,7 +209,7 @@ export function ViolationStatusTransition({
               value={fineDueDate}
               min={format(new Date(), 'yyyy-MM-dd')}
               onChange={(e) => setFineDueDate(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
         </>
@@ -217,7 +217,7 @@ export function ViolationStatusTransition({
 
       {/* Notes (always shown) */}
       <div>
-        <label htmlFor="transition-notes" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="transition-notes" className="mb-1 block text-sm font-medium text-content-secondary">
           {config.notesLabel}
         </label>
         <textarea
@@ -227,7 +227,7 @@ export function ViolationStatusTransition({
           rows={3}
           maxLength={4000}
           placeholder={config.notesRequired ? 'Required — provide a reason for this action.' : 'Optional notes for the audit trail.'}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
       </div>
 
@@ -236,7 +236,7 @@ export function ViolationStatusTransition({
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:opacity-50"
         >
           {submitting ? 'Processing...' : config.title}
         </button>
@@ -244,7 +244,7 @@ export function ViolationStatusTransition({
           type="button"
           onClick={onCancel}
           disabled={submitting}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          className="rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary transition-colors duration-quick hover:bg-surface-hover"
         >
           Cancel
         </button>

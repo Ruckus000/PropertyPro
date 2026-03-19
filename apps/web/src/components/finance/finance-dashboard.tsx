@@ -101,39 +101,39 @@ function RecentPayments({ communityId }: { communityId: number }) {
   });
 
   if (loading) {
-    return <div className="h-48 animate-pulse rounded-lg bg-gray-200" />;
+    return <div className="h-48 animate-pulse rounded-md bg-surface-muted" />;
   }
 
   if (!items || items.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-        <p className="text-sm text-gray-500">No payments received yet.</p>
+      <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
+        <p className="text-sm text-content-tertiary">No payments received yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+      <table className="min-w-full divide-y divide-edge">
+        <thead className="bg-surface-page">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Unit</th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Paid On</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Amount</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Late Fee</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Unit</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Paid On</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Late Fee</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-edge-subtle">
           {items.slice(0, 25).map((item) => (
-            <tr key={item.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">Unit #{item.unitId}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+            <tr key={item.id} className="hover:bg-surface-hover">
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-content">Unit #{item.unitId}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
                 {item.paidAt ? formatDateTime(item.paidAt) : '-'}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-900">
+              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">
                 {formatCents(item.amountCents)}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-500">
+              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content-tertiary">
                 {item.lateFeeCents > 0 ? formatCents(item.lateFeeCents) : '-'}
               </td>
             </tr>

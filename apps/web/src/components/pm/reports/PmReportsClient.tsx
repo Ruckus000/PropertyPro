@@ -39,14 +39,8 @@ export function PmReportsClient({ communities }: PmReportsClientProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Reports</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Cross-portfolio analytics and exportable reports
-          </p>
-        </div>
+      {/* Filters — page title handled by AppTopBar */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <ReportFilters communities={communities} />
       </div>
 

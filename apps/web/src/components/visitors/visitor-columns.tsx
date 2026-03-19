@@ -33,19 +33,19 @@ function StatusBadge({ visitor }: { visitor: VisitorListItem }) {
   switch (status) {
     case 'expected':
       return (
-        <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100">
+        <Badge className="bg-surface-muted text-content-secondary hover:bg-surface-muted">
           Expected
         </Badge>
       );
     case 'checked_in':
       return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+        <Badge className="bg-status-success-bg text-status-success hover:bg-status-success-bg">
           Checked In
         </Badge>
       );
     case 'checked_out':
       return (
-        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+        <Badge className="bg-interactive-muted text-content-link hover:bg-interactive-muted">
           Checked Out
         </Badge>
       );

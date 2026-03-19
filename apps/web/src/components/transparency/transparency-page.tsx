@@ -40,28 +40,28 @@ export function TransparencyPage({ data }: Props) {
       />
 
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Compliance Transparency</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-content-link">Compliance Transparency</p>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-gray-900 sm:text-4xl">{data.community.name}</h1>
+          <h1 className="text-3xl font-semibold text-content sm:text-4xl">{data.community.name}</h1>
           <Badge variant="info" size="md">{communityTypeLabel(data.community.communityType)}</Badge>
         </div>
-        <p className="text-sm text-gray-600">{cityState || 'Florida'} community records published by association opt-in.</p>
+        <p className="text-sm text-content-secondary">{cityState || 'Florida'} community records published by association opt-in.</p>
       </header>
 
       <ScopeNotice />
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold text-gray-900">Document Posting Status</h2>
+        <h2 className="text-xl font-semibold text-content">Document Posting Status</h2>
         <DocumentChecklistSection groups={data.documents} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold text-gray-900">Meeting Compliance Records</h2>
+        <h2 className="text-xl font-semibold text-content">Meeting Compliance Records</h2>
         <MeetingNoticeTable meetings={data.meetingNotices.meetings} timezone={data.community.timezone} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold text-gray-900">Minutes Tracking</h2>
+        <h2 className="text-xl font-semibold text-content">Minutes Tracking</h2>
         <MinutesAvailabilityGrid
           months={data.minutesAvailability.months}
           monthsWithMinutes={data.minutesAvailability.monthsWithMinutes}
@@ -69,7 +69,7 @@ export function TransparencyPage({ data }: Props) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold text-gray-900">Access Controls</h2>
+        <h2 className="text-xl font-semibold text-content">Access Controls</h2>
         <PortalStatusSection
           passwordProtected={data.portalStatus.passwordProtected}
           individualCredentials={data.portalStatus.individualCredentials}
@@ -77,7 +77,7 @@ export function TransparencyPage({ data }: Props) {
         />
       </section>
 
-      <Card className="hidden print:block print:border-black print:bg-white">
+      <Card className="hidden print:block print:border-black print:bg-surface-card">
         <Card.Body>
           <p className="text-sm font-semibold">Printed from PropertyPro Transparency Page</p>
           <p className="text-xs">Printed at {new Date().toLocaleString('en-US')}</p>

@@ -25,7 +25,7 @@ export function DataTableColumnHeader<TData, TValue>({
     <button
       type="button"
       className={cn(
-        '-ml-3 flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium hover:bg-accent hover:text-accent-foreground',
+        '-ml-3 flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium transition-colors duration-quick hover:bg-surface-hover hover:text-content',
         className
       )}
       onClick={() => column.toggleSorting(sorted === 'asc')}
@@ -36,7 +36,7 @@ export function DataTableColumnHeader<TData, TValue>({
       ) : sorted === 'desc' ? (
         <ArrowDown className="h-4 w-4" />
       ) : (
-        <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+        <ArrowUpDown className="h-4 w-4 text-content-tertiary" />
       )}
     </button>
   );

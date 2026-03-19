@@ -164,21 +164,21 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
     return (
         <div className="mx-auto max-w-4xl px-6 py-8">
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Welcome to PropertyPro</h1>
-                <p className="mt-2 text-gray-600">Set up your community compliance and profile in four quick steps.</p>
+                <h1 className="text-3xl font-bold text-content">Welcome to PropertyPro</h1>
+                <p className="mt-2 text-content-secondary">Set up your community compliance and profile in four quick steps.</p>
             </div>
 
             <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
 
             {error && (
-                <div className="my-4 rounded-md bg-red-50 p-4">
-                    <p className="text-sm text-red-800">{error}</p>
+                <div className="my-4 rounded-md bg-status-danger-bg p-4">
+                    <p className="text-sm text-status-danger">{error}</p>
                 </div>
             )}
 
             {isSaving && (
-                <div className="my-4 rounded-md bg-blue-50 p-4">
-                    <p className="text-sm text-blue-800">Saving progress...</p>
+                <div className="my-4 rounded-md bg-interactive-subtle p-4">
+                    <p className="text-sm text-content-link">Saving progress...</p>
                 </div>
             )}
 
@@ -221,7 +221,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                     type="button"
                     onClick={handleSkipWizard}
                     disabled={isSaving}
-                    className="text-sm text-gray-600 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="text-sm text-content-secondary hover:text-content disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     Skip entire setup and go to dashboard
                 </button>

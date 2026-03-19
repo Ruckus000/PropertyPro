@@ -160,13 +160,13 @@ export function StatutoryDocumentsStep({
     }
 
     if (loadError) {
-        return <div className="py-8 text-center text-sm text-red-600">{loadError}</div>;
+        return <div className="py-8 text-center text-sm text-status-danger">{loadError}</div>;
     }
 
     if (requiredItems.length === 0) {
         return (
             <div className="space-y-6">
-                <p className="text-sm text-gray-700">No statutory documents are required for your community type at this time.</p>
+                <p className="text-sm text-content-secondary">No statutory documents are required for your community type at this time.</p>
                 <div className="flex justify-end">
                     <Button onClick={handleNext}>Continue</Button>
                 </div>
@@ -177,8 +177,8 @@ export function StatutoryDocumentsStep({
     return (
         <div className="space-y-8">
             <div>
-                <h2 className="text-lg font-semibold text-gray-900">Statutory Documents</h2>
-                <p className="mt-1 text-sm text-gray-600">
+                <h2 className="text-lg font-semibold text-content">Statutory Documents</h2>
+                <p className="mt-1 text-sm text-content-secondary">
                     Upload required legal and governing documents for your community. These documents populate your compliance dashboard and will be made available to residents based on your state's laws.
                 </p>
             </div>
@@ -188,7 +188,7 @@ export function StatutoryDocumentsStep({
                     const isUploaded = uploadedDocs[item.templateKey] !== undefined || item.documentId !== null;
 
                     return (
-                        <Card key={item.templateKey} className={isUploaded ? 'border-green-200 bg-green-50' : ''}>
+                        <Card key={item.templateKey} className={isUploaded ? 'border-status-success-border bg-status-success-bg' : ''}>
                             <Card.Header>
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ export function StatutoryDocumentsStep({
                             </Card.Header>
                             <Card.Body>
                                 {item.description && (
-                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
+                                    <p className="mb-4 text-sm text-content-secondary dark:text-content-disabled">{item.description}</p>
                                 )}
 
                                 {!isUploaded ? (
@@ -211,7 +211,7 @@ export function StatutoryDocumentsStep({
                                         onUploaded={(doc) => handleDocumentUploaded(item.templateKey, doc)}
                                     />
                                 ) : (
-                                    <div className="text-sm text-green-700">
+                                    <div className="text-sm text-status-success">
                                         Document successfully linked to your compliance checklist.
                                     </div>
                                 )}
@@ -222,11 +222,11 @@ export function StatutoryDocumentsStep({
             </div>
 
             <div className="flex items-center justify-between border-t pt-6">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-content-tertiary">
                     {!allUploaded ? 'You can upload required documents later from the Compliance Dashboard.' : 'All set!'}
                 </p>
                 <div className="flex flex-col items-end gap-2">
-                    {nextError && <p className="max-w-sm text-right text-xs text-red-600">{nextError}</p>}
+                    {nextError && <p className="max-w-sm text-right text-xs text-status-danger">{nextError}</p>}
                     <Button onClick={handleNext}>
                         {allUploaded ? 'Continue' : 'Skip remaining & Continue'}
                     </Button>

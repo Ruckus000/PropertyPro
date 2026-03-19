@@ -2,8 +2,8 @@ import type { UserCommunityRow } from '@/lib/api/user-communities';
 import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
 
 const COMMUNITY_TYPE_COLORS: Record<string, string> = {
-  condo_718: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  hoa_720: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  condo_718: 'bg-interactive-muted text-content-link dark:bg-blue-900 dark:text-blue-200',
+  hoa_720: 'bg-status-success-bg text-status-success dark:bg-green-900 dark:text-green-200',
   apartment: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
 };
 
@@ -42,16 +42,16 @@ export function CommunityPickerGrid({ communities }: CommunityPickerGridProps) {
         <li key={community.communityId}>
           <a
             href={`/dashboard?communityId=${community.communityId}`}
-            className="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:hover:shadow-gray-800/40"
+            className="block rounded-lg border border-edge bg-surface-card p-5 shadow-e0 transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:border-gray-700 dark:bg-gray-900 dark:hover:shadow-gray-800/40"
             aria-label={`Open ${community.communityName}`}
           >
             <div className="flex items-start justify-between gap-2">
-              <h2 className="text-base font-semibold leading-tight text-gray-900 dark:text-gray-100">
+              <h2 className="text-base font-semibold leading-tight text-content dark:text-gray-100">
                 {community.communityName}
               </h2>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                  COMMUNITY_TYPE_COLORS[community.communityType] ?? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                  COMMUNITY_TYPE_COLORS[community.communityType] ?? 'bg-surface-muted text-content dark:bg-gray-700 dark:text-gray-200'
                 }`}
               >
                 {COMMUNITY_TYPE_DISPLAY_NAMES[community.communityType] ?? community.communityType}
@@ -59,12 +59,12 @@ export function CommunityPickerGrid({ communities }: CommunityPickerGridProps) {
             </div>
 
             {(community.city || community.state) && (
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-content-tertiary dark:text-content-disabled">
                 {[community.city, community.state].filter(Boolean).join(', ')}
               </p>
             )}
 
-            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-content-disabled dark:text-content-tertiary">
               {getRoleLabel(community)}
             </p>
           </a>

@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import type { PaginationState, SortingState } from '@tanstack/react-table';
 import type { CommunityType } from '@propertypro/shared';
 import { usePortfolioDashboard } from '@/hooks/use-portfolio-dashboard';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageHeader } from '@/components/shared/page-header';
 import { CommunityFilters } from './CommunityFilters';
 import { PortfolioKpiRow } from './PortfolioKpiRow';
 import { PortfolioTable } from './PortfolioTable';
@@ -37,30 +39,26 @@ export function PmDashboardClient() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Portfolio Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {isLoading
-              ? 'Loading...'
-              : `${data?.totalCount ?? 0} ${(data?.totalCount ?? 0) === 1 ? 'community' : 'communities'}`}
-          </p>
-        </div>
-        <CommunityFilters />
-      </div>
+      {/* Page header — no h1 here, AppTopBar owns the page title */}
+      <PageHeader
+        description={
+          isLoading
+            ? 'Loading...'
+            : `${data?.totalCount ?? 0} ${(data?.totalCount ?? 0) === 1 ? 'community' : 'communities'}`
+        }
+        actions={<CommunityFilters />}
+      />
 
       {/* KPI Row */}
       <PortfolioKpiRow kpis={data?.kpis} isLoading={isLoading} />
 
-      {/* Error Banner */}
+      {/* Error Banner — uses semantic tokens + icon + role="alert" */}
       {isError && (
-        <div
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-        >
-          Failed to load dashboard data. Please try again.
-        </div>
+        <AlertBanner
+          status="danger"
+          title="Failed to load dashboard data"
+          description="Please try again or contact support if the problem persists."
+        />
       )}
 
       {/* Portfolio Table */}

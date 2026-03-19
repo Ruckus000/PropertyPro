@@ -37,34 +37,34 @@ export function LoginForm({ returnTo }: LoginFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-      {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-md border border-edge bg-surface-card p-6">
+      {error ? <p className="text-sm text-status-danger" role="alert">{error}</p> : null}
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Email</span>
         <input
           type="email"
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           required
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Password</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Password</span>
         <input
           type="password"
           autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           required
         />
       </label>
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60"
       >
         {loading ? 'Signing in...' : 'Sign In'}
       </button>

@@ -24,7 +24,7 @@ export function PublicSiteHeader({ theme }: PublicSiteHeaderProps) {
             />
           ) : null}
           <span
-            className="text-xl font-bold text-white"
+            className="text-xl font-bold text-content-inverse"
             style={{ fontFamily: `'${theme.fontHeading}', sans-serif` }}
           >
             {theme.communityName}
@@ -33,7 +33,7 @@ export function PublicSiteHeader({ theme }: PublicSiteHeaderProps) {
         <nav>
           <a
             href="/auth/login"
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-white/20 text-white hover:bg-white/30 transition-colors"
+            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-surface-card/20 text-content-inverse hover:bg-surface-card/30 transition-colors"
           >
             Resident Login
           </a>

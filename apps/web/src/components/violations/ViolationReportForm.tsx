@@ -228,26 +228,26 @@ export function ViolationReportForm({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-gray-200 bg-white p-6">
+    <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-edge bg-surface-card p-6">
       {serverError && (
-        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</div>
+        <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{serverError}</div>
       )}
       {submitted && (
-        <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+        <div className="rounded-md bg-status-success-bg px-3 py-2 text-sm text-status-success">
           Violation report submitted successfully.
         </div>
       )}
 
       {/* Category */}
       <div>
-        <label htmlFor="violation-category" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="violation-category" className="mb-1 block text-sm font-medium text-content-secondary">
           Category
         </label>
         <select
           id="violation-category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         >
           <option value="">Select a category...</option>
           {VIOLATION_CATEGORIES.map((c) => (
@@ -257,13 +257,13 @@ export function ViolationReportForm({
           ))}
         </select>
         {fieldErrors['category'] && (
-          <p className="mt-1 text-xs text-red-600">{fieldErrors['category']}</p>
+          <p className="mt-1 text-xs text-status-danger">{fieldErrors['category']}</p>
         )}
       </div>
 
       {/* Description */}
       <div>
-        <label htmlFor="violation-description" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="violation-description" className="mb-1 block text-sm font-medium text-content-secondary">
           Description
         </label>
         <textarea
@@ -273,24 +273,24 @@ export function ViolationReportForm({
           rows={4}
           maxLength={4000}
           placeholder="Describe the violation in detail..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
-        <p className="mt-1 text-xs text-gray-400">{description.length}/4000</p>
+        <p className="mt-1 text-xs text-content-disabled">{description.length}/4000</p>
         {fieldErrors['description'] && (
-          <p className="mt-1 text-xs text-red-600">{fieldErrors['description']}</p>
+          <p className="mt-1 text-xs text-status-danger">{fieldErrors['description']}</p>
         )}
       </div>
 
       {/* Severity */}
       <div>
-        <label htmlFor="violation-severity" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="violation-severity" className="mb-1 block text-sm font-medium text-content-secondary">
           Severity
         </label>
         <select
           id="violation-severity"
           value={severity}
           onChange={(e) => setSeverity(e.target.value as ViolationSeverity)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         >
           {SEVERITY_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -302,7 +302,7 @@ export function ViolationReportForm({
 
       {/* Photo Evidence */}
       <div>
-        <label htmlFor="violation-photos" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="violation-photos" className="mb-1 block text-sm font-medium text-content-secondary">
           Photo Evidence (max {MAX_PHOTOS})
         </label>
         <input
@@ -312,15 +312,15 @@ export function ViolationReportForm({
           multiple
           disabled={photos.length >= MAX_PHOTOS}
           onChange={handlePhotoChange}
-          className="mt-1 block w-full text-sm text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+          className="mt-1 block w-full text-sm text-content-tertiary file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1 file:text-sm file:font-medium file:text-content-link hover:file:bg-interactive-muted disabled:opacity-50"
         />
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-content-disabled">
           JPEG, PNG, WebP, or GIF. Up to 10 MB each.
         </p>
         {photos.length > 0 && (
           <ul className="mt-2 space-y-1">
             {photos.map((f, idx) => (
-              <li key={idx} className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-1.5 text-xs text-gray-600">
+              <li key={idx} className="flex items-center justify-between rounded-md bg-surface-hover px-3 py-1.5 text-xs text-content-secondary">
                 <span className="truncate">{f.name}</span>
                 <button
                   type="button"
@@ -339,13 +339,13 @@ export function ViolationReportForm({
       <button
         type="submit"
         disabled={submitting || !defaultUnitId}
-        className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {uploading ? 'Uploading photos...' : submitting ? 'Submitting...' : 'Submit Violation Report'}
       </button>
 
       {!defaultUnitId && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-status-warning">
           You are not associated with a unit in this community. Contact your community manager to be assigned a unit.
         </p>
       )}

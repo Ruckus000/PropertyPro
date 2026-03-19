@@ -33,21 +33,21 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
   const subtitle = pageInfo?.subtitle ?? '';
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-8">
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-edge bg-surface-card px-4 lg:px-8">
       {/* Left: hamburger (mobile) + title */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="flex size-10 items-center justify-center rounded-[10px] text-gray-500 transition-colors hover:bg-gray-100 lg:hidden"
+          className="flex size-10 items-center justify-center rounded-md text-content-tertiary transition-colors duration-quick hover:bg-surface-muted lg:hidden"
           aria-label="Open navigation"
         >
           <Menu size={20} />
         </button>
         <div>
-          <h1 className="text-xl font-semibold leading-tight text-gray-900">{title}</h1>
+          <h1 className="text-xl font-semibold leading-tight text-content">{title}</h1>
           {subtitle && (
-            <p className="text-sm font-medium uppercase tracking-wider text-gray-600">
+            <p className="text-sm font-medium uppercase tracking-wider text-content-secondary">
               {subtitle}
             </p>
           )}
@@ -59,12 +59,12 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         <button
           type="button"
           onClick={onSearchOpen}
-          className="flex items-center gap-2 rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-gray-300 hover:bg-gray-100"
+          className="flex min-h-9 items-center gap-2 rounded-md border border-edge bg-surface-page px-3 py-1.5 text-sm text-content-placeholder transition-colors duration-quick hover:border-edge-strong hover:bg-surface-muted"
           aria-label="Search"
         >
           <Search size={14} />
           <span className="hidden sm:inline">Search...</span>
-          <kbd className="hidden rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-500 sm:inline">
+          <kbd className="hidden rounded border border-edge bg-surface-card px-1.5 py-0.5 text-xs font-medium text-content-tertiary sm:inline">
             ⌘K
           </kbd>
         </button>

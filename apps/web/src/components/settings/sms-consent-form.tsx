@@ -117,11 +117,11 @@ export function SmsConsentForm({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-gray-900">SMS Emergency Notifications</h3>
+    <div className="space-y-4 rounded-md border border-edge bg-surface-card p-4">
+      <h3 className="text-sm font-semibold text-content">SMS Emergency Notifications</h3>
 
       {error && (
-        <div className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">
+        <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
           {error}
         </div>
       )}
@@ -129,14 +129,14 @@ export function SmsConsentForm({
       {/* Step 1: Phone not verified yet */}
       {step === 'idle' && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-content-secondary">
             Verify your phone number to receive emergency SMS alerts. This is required before
             you can opt in to SMS notifications.
           </p>
           <button
             type="button"
             onClick={() => setStep('enter_phone')}
-            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+            className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover"
           >
             Verify Phone Number
           </button>
@@ -146,7 +146,7 @@ export function SmsConsentForm({
       {/* Step 2: Enter phone number */}
       {step === 'enter_phone' && (
         <form onSubmit={handleSendOtp} className="space-y-3">
-          <label className="block text-sm text-gray-700" htmlFor="phone-input">
+          <label className="block text-sm text-content-secondary" htmlFor="phone-input">
             Phone number (US)
           </label>
           <input
@@ -155,20 +155,20 @@ export function SmsConsentForm({
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="(305) 555-1234"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={loading || !phone.trim()}
-              className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               {loading ? 'Sending...' : 'Send Verification Code'}
             </button>
             <button
               type="button"
               onClick={() => setStep('idle')}
-              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-hover"
             >
               Cancel
             </button>
@@ -179,10 +179,10 @@ export function SmsConsentForm({
       {/* Step 3: Enter OTP */}
       {step === 'verify_otp' && (
         <form onSubmit={handleVerifyOtp} className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-content-secondary">
             We sent a verification code to <strong>{formatPhoneDisplay(phone)}</strong>.
           </p>
-          <label className="block text-sm text-gray-700" htmlFor="otp-input">
+          <label className="block text-sm text-content-secondary" htmlFor="otp-input">
             Verification code
           </label>
           <input
@@ -193,20 +193,20 @@ export function SmsConsentForm({
             onChange={(e) => setOtpCode(e.target.value)}
             placeholder="123456"
             maxLength={10}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={loading || !otpCode.trim()}
-              className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               {loading ? 'Verifying...' : 'Verify'}
             </button>
             <button
               type="button"
               onClick={() => { setStep('enter_phone'); setOtpCode(''); }}
-              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-hover"
             >
               Resend Code
             </button>
@@ -217,7 +217,7 @@ export function SmsConsentForm({
       {/* Step 4: Consent toggle */}
       {step === 'consent' && verified && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-green-700">
+          <div className="flex items-center gap-2 text-sm text-status-success">
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
@@ -232,29 +232,29 @@ export function SmsConsentForm({
               disabled={loading}
               className="mt-1"
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-content-secondary">
               By enabling SMS notifications, I consent to receive emergency and community
               alerts via text message from this community.
             </span>
           </label>
 
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-content-tertiary">
             Message and data rates may apply. You can opt out at any time by replying STOP
             to any message or by disabling SMS in your settings. Emergency notifications
             are sent only for life-safety events (hurricanes, evacuations, gas leaks, etc.).
             See our{' '}
-            <Link href="/legal/terms" className="text-blue-600 underline hover:text-blue-500">
+            <Link href="/legal/terms" className="text-content-link underline hover:text-content-link">
               Terms of Service
             </Link>{' '}
             and{' '}
-            <Link href="/legal/privacy" className="text-blue-600 underline hover:text-blue-500">
+            <Link href="/legal/privacy" className="text-content-link underline hover:text-content-link">
               Privacy Policy
             </Link>
             .
           </p>
 
           {smsConsentGivenAt && smsEnabled && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-content-disabled">
               Consent given: {new Date(smsConsentGivenAt).toLocaleDateString()}
             </p>
           )}

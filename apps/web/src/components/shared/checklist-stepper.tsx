@@ -62,7 +62,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
               <div
                 className={cn(
                   'absolute left-[11px] top-6 w-0.5 -bottom-0',
-                  step.completed ? 'bg-green-200' : 'bg-border',
+                  step.completed ? 'bg-status-success-bg' : 'bg-edge',
                 )}
               />
             )}
@@ -70,9 +70,9 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
             {/* Step indicator */}
             <div className="relative z-10 flex-shrink-0 pt-0.5">
               {step.completed ? (
-                <CheckCircle2 className="h-6 w-6 text-green-600" />
+                <CheckCircle2 className="h-6 w-6 text-status-success" />
               ) : (
-                <Circle className="h-6 w-6 text-muted-foreground/40" />
+                <Circle className="h-6 w-6 text-content-disabled" />
               )}
             </div>
 
@@ -90,7 +90,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
                   htmlFor={`step-${step.key}`}
                   className={cn(
                     'text-sm font-medium cursor-pointer select-none',
-                    step.completed && 'text-muted-foreground line-through',
+                    step.completed && 'text-content-tertiary line-through',
                     disabled && 'cursor-not-allowed opacity-50',
                   )}
                   onClick={() => !disabled && onStepToggle(step.key, !step.completed)}
@@ -105,7 +105,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
               </div>
 
               {step.completed && (step.completedBy || step.completedAt) && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-content-tertiary">
                   {step.completedBy && <>Completed by {step.completedBy}</>}
                   {step.completedBy && step.completedAt && ' at '}
                   {step.completedAt && formatDate(step.completedAt)}
@@ -118,7 +118,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
                     type="button"
                     onClick={step.onAction}
                     disabled={disabled}
-                    className="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                    className="rounded-md border border-edge px-2.5 py-1 text-xs font-medium transition-colors duration-quick hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50"
                   >
                     {step.actionLabel}
                   </button>
@@ -128,7 +128,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
                   <button
                     type="button"
                     onClick={() => toggleNotes(step.key)}
-                    className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground"
+                    className="inline-flex items-center gap-0.5 text-xs text-content-tertiary transition-colors duration-quick hover:text-content"
                   >
                     {notesOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     Notes
@@ -143,7 +143,7 @@ function ChecklistStepper({ steps, onStepToggle, onStepNotesChange, disabled }: 
                   disabled={disabled}
                   placeholder="Add notes..."
                   rows={2}
-                  className="mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-edge bg-transparent px-3 py-2 text-sm placeholder:text-content-placeholder focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               )}
             </div>

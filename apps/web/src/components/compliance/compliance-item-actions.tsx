@@ -34,7 +34,7 @@ export function ComplianceItemActions({
   if (item.status === "satisfied") {
     return (
       <>
-        <Button variant="ghost" size="sm" onClick={onUnlink} className="text-[var(--status-danger)]">
+        <Button variant="ghost" size="sm" onClick={onUnlink} className="text-status-danger">
           Unlink
         </Button>
         {item.documentId && (

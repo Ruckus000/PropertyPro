@@ -107,20 +107,20 @@ function CategoryGroup({
         onClick={() => setOpen(!open)}
         className={`
           group flex items-center gap-3 w-full px-4 py-3
-          text-left transition-colors duration-150 cursor-pointer
-          hover:bg-[var(--surface-hover)]
+          text-left transition-colors duration-quick cursor-pointer
+          hover:bg-surface-hover
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--border-strong)]
           min-h-[44px]
-          ${allSatisfied ? "bg-[var(--status-success-bg)]/30" : ""}
+          ${allSatisfied ? "bg-status-success-bg/30" : ""}
         `}
       >
         {/* Category label */}
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+        <span className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
           {formatCategoryLabel(category)}
         </span>
 
         {/* Count */}
-        <span className="text-xs text-[var(--text-tertiary)] tabular-nums">
+        <span className="text-xs text-content-tertiary tabular-nums">
           {satisfiedCount} of {items.length}
         </span>
 
@@ -143,11 +143,11 @@ function CategoryGroup({
         {/* Chevron or check */}
         <span className="ml-auto shrink-0">
           {allSatisfied ? (
-            <CheckCircle2 size={14} className="text-[var(--status-success)]" />
+            <CheckCircle2 size={14} className="text-status-success" />
           ) : open ? (
-            <ChevronDown size={14} className="text-[var(--text-tertiary)]" />
+            <ChevronDown size={14} className="text-content-tertiary" />
           ) : (
-            <ChevronRight size={14} className="text-[var(--text-tertiary)]" />
+            <ChevronRight size={14} className="text-content-tertiary" />
           )}
         </span>
       </button>
@@ -155,11 +155,11 @@ function CategoryGroup({
       {/* Items */}
       <div
         className={`
-          overflow-hidden transition-all duration-200 ease-out
+          overflow-hidden transition-all duration-quick ease-out
           ${open ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"}
         `}
       >
-        <div className="border-t border-[var(--border-subtle)]">
+        <div className="border-t border-edge-subtle">
           {items.map((item) => (
             <ComplianceChecklistItem
               key={item.id}
@@ -179,15 +179,15 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-8 animate-pulse">
       {/* Hero placeholder */}
-      <div className="flex items-center justify-between py-4 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center justify-between py-4 border-b border-edge-subtle">
         <div className="flex items-center gap-3">
-          <div className="h-6 w-6 rounded-full bg-[var(--surface-muted)]" />
+          <div className="h-6 w-6 rounded-full bg-surface-muted" />
           <div className="flex flex-col gap-1.5">
-            <div className="h-5 w-48 rounded bg-[var(--surface-muted)]" />
-            <div className="h-3.5 w-32 rounded bg-[var(--surface-muted)]" />
+            <div className="h-5 w-48 rounded bg-surface-muted" />
+            <div className="h-3.5 w-32 rounded bg-surface-muted" />
           </div>
         </div>
-        <div className="h-4 w-20 rounded bg-[var(--surface-muted)]" />
+        <div className="h-4 w-20 rounded bg-surface-muted" />
       </div>
 
       {/* Filter pills placeholder */}
@@ -195,7 +195,7 @@ function DashboardSkeleton() {
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="h-8 rounded-full bg-[var(--surface-muted)]"
+            className="h-8 rounded-full bg-surface-muted"
             style={{ width: `${60 + i * 8}px`, animationDelay: `${i * 50}ms` }}
           />
         ))}
@@ -208,14 +208,14 @@ function DashboardSkeleton() {
           className="flex items-center gap-3 px-4 py-3"
           style={{ animationDelay: `${150 + i * 50}ms` }}
         >
-          <div className="h-3 w-32 rounded bg-[var(--surface-muted)]" />
-          <div className="h-3 w-10 rounded bg-[var(--surface-muted)]" />
+          <div className="h-3 w-32 rounded bg-surface-muted" />
+          <div className="h-3 w-10 rounded bg-surface-muted" />
           <div className="flex gap-1 ml-auto">
             {[1, 2, 3].map((j) => (
-              <div key={j} className="h-1.5 w-1.5 rounded-full bg-[var(--surface-muted)]" />
+              <div key={j} className="h-1.5 w-1.5 rounded-full bg-surface-muted" />
             ))}
           </div>
-          <div className="h-3.5 w-3.5 rounded bg-[var(--surface-muted)]" />
+          <div className="h-3.5 w-3.5 rounded bg-surface-muted" />
         </div>
       ))}
     </div>
@@ -240,21 +240,21 @@ function HeroMetric({
   return (
     <div
       className={`
-        flex items-center justify-between py-4 border-b border-[var(--border-subtle)]
-        sticky top-0 z-10 bg-[var(--surface-page)] sm:static sm:z-auto
-        ${allSatisfied ? "sm:bg-[var(--status-success-bg)]/30 -mx-4 px-4 rounded-[var(--radius-md)]" : ""}
+        flex items-center justify-between py-4 border-b border-edge-subtle
+        sticky top-0 z-10 bg-surface-page sm:static sm:z-auto
+        ${allSatisfied ? "sm:bg-status-success-bg/30 -mx-4 px-4 rounded-[var(--radius-md)]" : ""}
       `}
     >
       <div className="flex items-center gap-3">
         {allSatisfied ? (
-          <CheckCircle2 size={24} className="text-[var(--status-success)] shrink-0" />
+          <CheckCircle2 size={24} className="text-status-success shrink-0" />
         ) : hasOverdue ? (
-          <span className="flex h-6 w-6 items-center justify-center text-[var(--status-danger)] shrink-0 text-lg leading-none">&#9650;</span>
+          <span className="flex h-6 w-6 items-center justify-center text-status-danger shrink-0 text-lg leading-none">&#9650;</span>
         ) : (
-          <span className="flex h-6 w-6 items-center justify-center text-[var(--status-warning)] shrink-0 text-lg leading-none">&#9684;</span>
+          <span className="flex h-6 w-6 items-center justify-center text-status-warning shrink-0 text-lg leading-none">&#9684;</span>
         )}
         <div className="flex flex-col">
-          <span className={`text-lg font-semibold ${hasOverdue ? "text-[var(--status-danger)]" : "text-[var(--text-primary)]"}`}>
+          <span className={`text-lg font-semibold ${hasOverdue ? "text-status-danger" : "text-content"}`}>
             {allSatisfied
               ? "All requirements satisfied"
               : hasOverdue
@@ -262,7 +262,7 @@ function HeroMetric({
               : `${statusCounts.unsatisfied} item${statusCounts.unsatisfied !== 1 ? "s" : ""} need attention`
             }
           </span>
-          <span className="text-sm text-[var(--text-tertiary)]">
+          <span className="text-sm text-content-tertiary">
             {statusCounts.satisfied} of {applicableTotal} items
             {primaryStatute ? ` \u00b7 Florida Statute ${primaryStatute}` : ""}
           </span>
@@ -272,8 +272,8 @@ function HeroMetric({
       {/* Mini progress */}
       {!allSatisfied && (
         <div className="hidden sm:flex flex-col items-end gap-1">
-          <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{pct}%</span>
-          <div className="flex h-1 w-24 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+          <span className="text-sm font-semibold text-content tabular-nums">{pct}%</span>
+          <div className="flex h-1 w-24 overflow-hidden rounded-full bg-surface-muted">
             {statusCounts.satisfied > 0 && (
               <div
                 className="bg-[var(--status-success)] transition-all duration-500"
@@ -368,7 +368,7 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
 
   if (error) {
     return (
-      <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3 text-sm text-[var(--status-danger)]">
+      <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
         <XCircle size={16} />
         {error.message}
       </div>
@@ -417,10 +417,10 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
             type="button"
             onClick={() => setCategoryFilter("all")}
             className={`
-              text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] transition-colors duration-150
+              text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] transition-colors duration-quick
               ${categoryFilter === "all"
-                ? "bg-[var(--surface-muted)] text-[var(--text-primary)] font-medium"
-                : "text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"}
+                ? "bg-surface-muted text-content font-medium"
+                : "text-content-tertiary hover:bg-surface-hover"}
             `}
           >
             All categories
@@ -431,10 +431,10 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
               type="button"
               onClick={() => setCategoryFilter(cat)}
               className={`
-                text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-150
+                text-xs px-2.5 py-1 min-h-[44px] sm:min-h-0 rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-quick
                 ${categoryFilter === cat
-                  ? "bg-[var(--surface-muted)] text-[var(--text-primary)] font-medium"
-                  : "text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"}
+                  ? "bg-surface-muted text-content font-medium"
+                  : "text-content-tertiary hover:bg-surface-hover"}
               `}
             >
               {formatCategoryLabel(cat)}
@@ -456,9 +456,9 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
               }}
               className="
                 text-xs px-3 py-2 min-h-[44px] flex items-center
-                rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-150
-                text-[var(--text-tertiary)] border border-[var(--border-subtle)]
-                hover:bg-[var(--surface-hover)] active:bg-[var(--surface-muted)]
+                rounded-[var(--radius-full)] whitespace-nowrap transition-colors duration-quick
+                text-content-tertiary border border-edge-subtle
+                hover:bg-surface-hover active:bg-surface-muted
               "
             >
               {formatCategoryLabel(cat)}
@@ -470,20 +470,20 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
       {/* ── Checklist ── */}
       <section>
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] py-12 text-center">
-            <Shield size={32} className="text-[var(--text-tertiary)] mb-2" />
-            <p className="text-sm text-[var(--text-secondary)]">
+          <div className="flex flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-edge py-12 text-center">
+            <Shield size={32} className="text-content-tertiary mb-2" />
+            <p className="text-sm text-content-secondary">
               No items match the current filters.
             </p>
           </div>
         ) : categoryFilter !== "all" || statusFilter !== "all" ? (
-          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-card)] overflow-hidden">
+          <div className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card overflow-hidden">
             {filtered.map((item) => (
               <ComplianceChecklistItem key={item.id} item={item} actions={renderActions(item)} />
             ))}
           </div>
         ) : (
-          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-card)] overflow-hidden divide-y divide-[var(--border-subtle)]">
+          <div className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card overflow-hidden divide-y divide-[var(--border-subtle)]">
             {Array.from(groupedItems.entries()).map(([cat, catItems]) => (
               <div key={cat} id={`cat-${cat}`} className="scroll-mt-20">
                 <CategoryGroup

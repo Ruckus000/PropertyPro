@@ -129,15 +129,15 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Upload Rules Document</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-2xl font-semibold text-content">Upload Rules Document</h2>
+        <p className="mt-1 text-sm text-content-secondary">
           Optional: upload your current community rules document now.
         </p>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6">
+      <div className="rounded-md border border-edge bg-surface-card p-6">
         {isLoadingCategories ? (
-          <p className="text-sm text-gray-600">Loading upload settings...</p>
+          <p className="text-sm text-content-secondary">Loading upload settings...</p>
         ) : (
           <DocumentUploadArea
             communityId={communityId}
@@ -147,14 +147,14 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
         )}
 
         {uploadedRule && (
-          <p className="mt-3 text-sm text-green-700">
+          <p className="mt-3 text-sm text-status-success">
             Rules document uploaded successfully.
           </p>
         )}
       </div>
 
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger">
           {error}
         </div>
       )}
@@ -163,7 +163,7 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-edge-strong bg-surface-card px-6 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
         >
           Back
         </button>
@@ -172,7 +172,7 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
             type="button"
             onClick={handleSkip}
             disabled={isSubmitting}
-            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-edge-strong bg-surface-card px-6 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-60"
           >
             Skip Step
           </button>
@@ -180,7 +180,7 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
             type="button"
             onClick={handleContinue}
             disabled={isSubmitting}
-            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-interactive px-6 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? 'Saving...' : 'Next'}
           </button>

@@ -34,29 +34,29 @@ export function PublicHome({ community }: PublicHomeProps) {
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">PropertyPro Florida</p>
-        <h1 className="text-4xl font-semibold text-gray-900">{community.name}</h1>
-        <p className="max-w-2xl text-sm text-gray-600">
+        <p className="text-xs font-semibold uppercase tracking-wide text-content-link">PropertyPro Florida</p>
+        <h1 className="text-4xl font-semibold text-content">{community.name}</h1>
+        <p className="max-w-2xl text-sm text-content-secondary">
           Official community information portal. Residents can log in to access documents, announcements,
           and community updates.
         </p>
       </header>
 
       <section className="mt-10 grid gap-4 sm:grid-cols-2">
-        <article className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">Community Address</h2>
-          <p className="mt-2 text-sm text-gray-700">
+        <article className="rounded-md border border-edge bg-surface-card p-5">
+          <h2 className="text-sm font-semibold text-content">Community Address</h2>
+          <p className="mt-2 text-sm text-content-secondary">
             {formatAddress(community) || 'Address unavailable'}
           </p>
         </article>
-        <article className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">Resident Portal</h2>
-          <p className="mt-2 text-sm text-gray-700">
+        <article className="rounded-md border border-edge bg-surface-card p-5">
+          <h2 className="text-sm font-semibold text-content">Resident Portal</h2>
+          <p className="mt-2 text-sm text-content-secondary">
             Log in to view private notices, meeting details, and documents.
           </p>
           <Link
             href="/auth/login"
-            className="mt-4 inline-flex rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+            className="mt-4 inline-flex rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
           >
             Log In
           </Link>
@@ -67,15 +67,15 @@ export function PublicHome({ community }: PublicHomeProps) {
         {isNoticesEnabled ? (
           <Link
             href={`/${community.slug}/notices`}
-            className="rounded-md border border-gray-300 px-3 py-2 text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-edge-strong px-3 py-2 text-content-secondary hover:bg-surface-page"
           >
             Notices
           </Link>
         ) : null}
-        <Link href="/legal/terms" className="rounded-md border border-gray-300 px-3 py-2 text-gray-700 hover:bg-gray-50">
+        <Link href="/legal/terms" className="rounded-md border border-edge-strong px-3 py-2 text-content-secondary hover:bg-surface-page">
           Terms of Service
         </Link>
-        <Link href="/legal/privacy" className="rounded-md border border-gray-300 px-3 py-2 text-gray-700 hover:bg-gray-50">
+        <Link href="/legal/privacy" className="rounded-md border border-edge-strong px-3 py-2 text-content-secondary hover:bg-surface-page">
           Privacy Policy
         </Link>
       </nav>

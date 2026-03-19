@@ -72,30 +72,30 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2"
+        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-content transition-colors duration-quick hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         aria-expanded={open}
         aria-haspopup="true"
       >
-        <div className="flex size-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
+        <div className="flex size-8 items-center justify-center rounded-full bg-surface-muted text-xs font-medium text-content-secondary">
           {toInitials(userName)}
         </div>
         <span className="hidden font-medium sm:inline">{userName ?? 'Account'}</span>
         <ChevronDown
           size={14}
-          className={`hidden text-gray-400 transition-transform duration-150 sm:inline ${open ? 'rotate-180' : ''}`}
+          className={`hidden text-content-disabled transition-transform duration-quick sm:inline ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[10px] border border-gray-200 bg-white py-1 shadow-md"
+          className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-edge bg-surface-card py-1 shadow-e2"
           role="menu"
         >
           {/* User info header */}
-          <div className="border-b border-gray-100 px-3 py-2">
-            <p className="truncate text-sm font-medium text-gray-900">{userName}</p>
+          <div className="border-b border-edge-subtle px-3 py-2">
+            <p className="truncate text-sm font-medium text-content">{userName}</p>
             {userEmail && (
-              <p className="truncate text-xs text-gray-500">{userEmail}</p>
+              <p className="truncate text-xs text-content-tertiary">{userEmail}</p>
             )}
           </div>
 
@@ -104,43 +104,43 @@ export function UserMenu({ userName, userEmail, communityId }: UserMenuProps) {
             <Link
               href={settingsHref}
               onClick={close}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-content transition-colors duration-quick hover:bg-surface-hover"
               role="menuitem"
             >
-              <Settings size={14} className="text-gray-400" />
+              <Settings size={14} className="text-content-disabled" />
               Settings
             </Link>
             <Link
               href={exportHref}
               onClick={close}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-content transition-colors duration-quick hover:bg-surface-hover"
               role="menuitem"
             >
-              <Download size={14} className="text-gray-400" />
+              <Download size={14} className="text-content-disabled" />
               Data Export
             </Link>
             {communityCount != null && communityCount > 1 && (
               <Link
                 href="/select-community"
                 onClick={close}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-content transition-colors duration-quick hover:bg-surface-hover"
                 role="menuitem"
               >
-                <ArrowRightLeft size={14} className="text-gray-400" />
+                <ArrowRightLeft size={14} className="text-content-disabled" />
                 Switch Community
               </Link>
             )}
           </div>
 
-          <div className="border-t border-gray-100 py-1">
+          <div className="border-t border-edge-subtle py-1">
             <button
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-content transition-colors duration-quick hover:bg-surface-hover disabled:opacity-50"
               role="menuitem"
             >
-              <LogOut size={14} className="text-gray-400" />
+              <LogOut size={14} className="text-content-disabled" />
               {loggingOut ? 'Logging out...' : 'Log out'}
             </button>
           </div>

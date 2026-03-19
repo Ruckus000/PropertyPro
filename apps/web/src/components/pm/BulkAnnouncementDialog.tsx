@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +69,7 @@ export function BulkAnnouncementDialog({
   const [isPinned, setIsPinned] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [resultIsError, setResultIsError] = useState(false);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -94,10 +96,12 @@ export function BulkAnnouncementDialog({
       const sent = data.results.filter((r) => r.status === 'sent').length;
       const total = data.results.length;
       setResultMessage(`Sent to ${sent}/${total} communities`);
+      setResultIsError(false);
       setShowConfirm(false);
     },
     onError: (error: Error) => {
-      setResultMessage(`Error: ${error.message}`);
+      setResultMessage(error.message);
+      setResultIsError(true);
       setShowConfirm(false);
     },
   });
@@ -109,6 +113,7 @@ export function BulkAnnouncementDialog({
     setIsPinned(false);
     setShowConfirm(false);
     setResultMessage(null);
+    setResultIsError(false);
     mutation.reset();
   }
 
@@ -142,15 +147,11 @@ export function BulkAnnouncementDialog({
 
         {resultMessage ? (
           <div className="space-y-4">
-            <p
-              className={`rounded border px-3 py-2 text-sm ${
-                resultMessage.startsWith('Error')
-                  ? 'border-red-200 bg-red-50 text-red-700'
-                  : 'border-green-200 bg-green-50 text-green-700'
-              }`}
-            >
-              {resultMessage}
-            </p>
+            <AlertBanner
+              status={resultIsError ? 'danger' : 'success'}
+              title={resultIsError ? 'Error' : 'Sent'}
+              description={resultMessage}
+            />
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Close
@@ -159,12 +160,12 @@ export function BulkAnnouncementDialog({
           </div>
         ) : showConfirm ? (
           <div className="space-y-4">
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-content">
               Send &ldquo;{title}&rdquo; to{' '}
               <strong>{selectedCommunities.length}</strong>{' '}
               {selectedCommunities.length === 1 ? 'community' : 'communities'}. Confirm?
             </p>
-            <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-gray-500">
+            <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-content-tertiary">
               {selectedCommunities.map((c) => (
                 <li key={c.id}>{c.name}</li>
               ))}
@@ -186,7 +187,7 @@ export function BulkAnnouncementDialog({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Title */}
             <div>
-              <label htmlFor="bulk-ann-title" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="bulk-ann-title" className="mb-1 block text-sm font-medium text-content">
                 Title
               </label>
               <input
@@ -195,14 +196,14 @@ export function BulkAnnouncementDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={500}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                 placeholder="Announcement title"
               />
             </div>
 
             {/* Body */}
             <div>
-              <label htmlFor="bulk-ann-body" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="bulk-ann-body" className="mb-1 block text-sm font-medium text-content">
                 Body
               </label>
               <textarea
@@ -210,14 +211,14 @@ export function BulkAnnouncementDialog({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={5}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                 placeholder="Announcement body text..."
               />
             </div>
 
             {/* Audience */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text-sm font-medium text-content">
                 Audience
               </label>
               <Select value={audience} onValueChange={(v) => setAudience(v as Audience)}>
@@ -240,7 +241,7 @@ export function BulkAnnouncementDialog({
                 checked={isPinned}
                 onCheckedChange={(checked) => setIsPinned(checked === true)}
               />
-              <label htmlFor="bulk-ann-pinned" className="text-sm text-gray-700">
+              <label htmlFor="bulk-ann-pinned" className="text-sm text-content">
                 Pin this announcement
               </label>
             </div>

@@ -48,7 +48,7 @@ export function CsvExportButton({
       type="button"
       className={
         className ??
-        'inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground'
+        'inline-flex h-9 items-center gap-2 rounded-md border border-edge px-3 text-sm font-medium transition-colors duration-quick hover:bg-surface-hover hover:text-content'
       }
       onClick={handleExport}
     >

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DataTableColumnHeader } from '@/components/shared/data-table-column-header';
+import { StatusBadge } from '@/components/shared/status-badge';
 import type { PortfolioCommunity } from '@/hooks/use-portfolio-dashboard';
 
 // ---------------------------------------------------------------------------
@@ -38,10 +39,19 @@ function formatCurrency(cents: number): string {
   }).format(cents / 100);
 }
 
-function maintenanceColor(count: number): string {
-  if (count === 0) return 'text-green-700';
-  if (count <= 5) return 'text-amber-600';
-  return 'text-red-600';
+/** Maps maintenance count to a status key for consistent icon+text+color display */
+function maintenanceStatus(count: number): string {
+  if (count === 0) return 'compliant';
+  if (count <= 5) return 'pending';
+  return 'overdue';
+}
+
+/** Maps compliance score to a status key */
+function complianceStatus(score: number): string {
+  if (score >= 90) return 'compliant';
+  if (score >= 80) return 'brand';
+  if (score >= 50) return 'pending';
+  return 'overdue';
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +101,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
     ),
     cell: ({ row }) => {
       const rate = row.original.occupancyRate;
-      if (rate === null) return <span className="text-muted-foreground">&mdash;</span>;
+      if (rate === null) return <span className="text-content-tertiary">&mdash;</span>;
       return `${rate}%`;
     },
     enableSorting: true,
@@ -103,7 +113,15 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
     ),
     cell: ({ row }) => {
       const count = row.original.openMaintenanceRequests;
-      return <span className={maintenanceColor(count)}>{count}</span>;
+      const status = maintenanceStatus(count);
+      return (
+        <StatusBadge
+          status={status}
+          label={String(count)}
+          size="sm"
+          subtle
+        />
+      );
     },
     enableSorting: true,
   },
@@ -114,8 +132,16 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
     ),
     cell: ({ row }) => {
       const score = row.original.complianceScore;
-      if (score == null) return <span className="text-muted-foreground">&mdash;</span>;
-      return `${score}%`;
+      if (score == null) return <span className="text-content-tertiary">&mdash;</span>;
+      const status = complianceStatus(score);
+      return (
+        <StatusBadge
+          status={status}
+          label={`${score}%`}
+          size="sm"
+          subtle
+        />
+      );
     },
     enableSorting: true,
   },
@@ -137,7 +163,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-surface-hover"
               aria-label={`Actions for ${community.communityName}`}
             >
               <MoreHorizontal className="h-4 w-4" />

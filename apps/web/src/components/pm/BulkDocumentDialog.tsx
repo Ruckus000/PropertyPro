@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +69,7 @@ export function BulkDocumentDialog({
   const [description, setDescription] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [resultIsError, setResultIsError] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,11 +139,13 @@ export function BulkDocumentDialog({
       const created = data.results.filter((r) => r.status === 'created').length;
       const total = data.results.length;
       setResultMessage(`Documents created in ${created}/${total} communities`);
+      setResultIsError(false);
       setShowConfirm(false);
       setUploadProgress(null);
     },
     onError: (error: Error) => {
-      setResultMessage(`Error: ${error.message}`);
+      setResultMessage(error.message);
+      setResultIsError(true);
       setShowConfirm(false);
       setUploadProgress(null);
     },
@@ -152,6 +156,7 @@ export function BulkDocumentDialog({
     setDescription('');
     setShowConfirm(false);
     setResultMessage(null);
+    setResultIsError(false);
     setUploadProgress(null);
     mutation.reset();
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -192,15 +197,11 @@ export function BulkDocumentDialog({
 
         {resultMessage ? (
           <div className="space-y-4">
-            <p
-              className={`rounded border px-3 py-2 text-sm ${
-                resultMessage.startsWith('Error')
-                  ? 'border-red-200 bg-red-50 text-red-700'
-                  : 'border-green-200 bg-green-50 text-green-700'
-              }`}
-            >
-              {resultMessage}
-            </p>
+            <AlertBanner
+              status={resultIsError ? 'danger' : 'success'}
+              title={resultIsError ? 'Error' : 'Complete'}
+              description={resultMessage}
+            />
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Close
@@ -209,28 +210,28 @@ export function BulkDocumentDialog({
           </div>
         ) : showConfirm ? (
           <div className="space-y-4">
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-content">
               Upload <strong>{files.length}</strong>{' '}
               {files.length === 1 ? 'document' : 'documents'} to{' '}
               <strong>{selectedCommunities.length}</strong>{' '}
               {selectedCommunities.length === 1 ? 'community' : 'communities'}. Confirm?
             </p>
             <div className="space-y-2">
-              <p className="text-xs font-medium text-gray-500">Files:</p>
-              <ul className="max-h-20 space-y-0.5 overflow-y-auto text-xs text-gray-600">
+              <p className="text-xs font-medium text-content-tertiary">Files:</p>
+              <ul className="max-h-20 space-y-0.5 overflow-y-auto text-xs text-content-secondary">
                 {files.map((f, i) => (
                   <li key={i}>{f.name}</li>
                 ))}
               </ul>
-              <p className="text-xs font-medium text-gray-500">Communities:</p>
-              <ul className="max-h-20 space-y-0.5 overflow-y-auto text-xs text-gray-600">
+              <p className="text-xs font-medium text-content-tertiary">Communities:</p>
+              <ul className="max-h-20 space-y-0.5 overflow-y-auto text-xs text-content-secondary">
                 {selectedCommunities.map((c) => (
                   <li key={c.id}>{c.name}</li>
                 ))}
               </ul>
             </div>
             {uploadProgress && (
-              <p className="text-xs text-blue-600">{uploadProgress}</p>
+              <p className="text-xs text-content-link">{uploadProgress}</p>
             )}
             <DialogFooter>
               <Button
@@ -249,7 +250,7 @@ export function BulkDocumentDialog({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* File input */}
             <div>
-              <label htmlFor="bulk-doc-files" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="bulk-doc-files" className="mb-1 block text-sm font-medium text-content">
                 Files
               </label>
               <input
@@ -258,10 +259,10 @@ export function BulkDocumentDialog({
                 type="file"
                 multiple
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-600 file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive/20"
               />
               {files.length > 0 && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-content-tertiary">
                   {files.length} {files.length === 1 ? 'file' : 'files'} selected
                 </p>
               )}
@@ -269,7 +270,7 @@ export function BulkDocumentDialog({
 
             {/* Description */}
             <div>
-              <label htmlFor="bulk-doc-description" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="bulk-doc-description" className="mb-1 block text-sm font-medium text-content">
                 Description (optional)
               </label>
               <textarea
@@ -277,7 +278,7 @@ export function BulkDocumentDialog({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                 placeholder="Optional description for these documents..."
               />
             </div>

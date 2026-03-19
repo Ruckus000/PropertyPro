@@ -159,14 +159,14 @@ export function SignatureCapture({
       />
 
       {/* Panel — full height on mobile, centered modal on desktop */}
-      <div className="relative z-10 bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-lg h-[85vh] md:h-auto md:max-h-[80vh] flex flex-col overflow-hidden shadow-xl">
+      <div className="relative z-10 bg-surface-card rounded-t-2xl md:rounded-2xl w-full md:max-w-lg h-[85vh] md:h-auto md:max-h-[80vh] flex flex-col overflow-hidden shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-lg font-semibold text-content">{title}</h2>
           <button
             type="button"
             onClick={onCancel}
-            className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            className="p-1 rounded-full hover:bg-surface-muted text-content-disabled hover:text-content-secondary"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -183,10 +183,10 @@ export function SignatureCapture({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-quick ${
                   isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-interactive text-content-link'
+                    : 'border-transparent text-content-tertiary hover:text-content-secondary'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -200,15 +200,15 @@ export function SignatureCapture({
         <div className="flex-1 overflow-auto p-5">
           {/* Use cached value */}
           {cachedValue && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">
+            <div className="mb-4 p-3 bg-surface-hover rounded-md border border-edge">
+              <p className="text-xs text-content-tertiary mb-2">
                 Use your previous {mode}:
               </p>
               <div className="flex items-center gap-3">
                 <img
                   src={cachedValue}
                   alt={`Previous ${mode}`}
-                  className="h-12 border rounded bg-white"
+                  className="h-12 border rounded bg-surface-card"
                 />
                 <Button
                   size="sm"
@@ -223,7 +223,7 @@ export function SignatureCapture({
 
           {activeTab === 'draw' && (
             <div>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg overflow-hidden bg-white">
+              <div className="border-2 border-dashed border-edge-strong rounded-md overflow-hidden bg-surface-card">
                 <canvas
                   ref={canvasRef}
                   className="w-full"
@@ -260,12 +260,12 @@ export function SignatureCapture({
                 placeholder={
                   mode === 'initials' ? 'Enter your initials' : 'Type your full name'
                 }
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full border border-edge-strong rounded-md px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent"
                 maxLength={mode === 'initials' ? 5 : 100}
                 autoFocus
               />
               {typedText.trim() && (
-                <div className="mt-4 p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center min-h-[80px]">
+                <div className="mt-4 p-4 bg-surface-card border-2 border-dashed border-edge-strong rounded-md flex items-center justify-center min-h-[80px]">
                   <span
                     style={{
                       fontFamily: CURSIVE_FONT_STACK,
@@ -282,7 +282,7 @@ export function SignatureCapture({
 
           {activeTab === 'upload' && (
             <div>
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-edge-strong rounded-md cursor-pointer hover:bg-surface-hover transition-colors duration-quick">
                 {uploadPreview ? (
                   <img
                     src={uploadPreview}
@@ -291,11 +291,11 @@ export function SignatureCapture({
                   />
                 ) : (
                   <div className="text-center">
-                    <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-500">
+                    <Upload className="h-8 w-8 mx-auto text-content-disabled mb-2" />
+                    <p className="text-sm text-content-tertiary">
                       Click to upload PNG or JPG
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">Max 2 MB</p>
+                    <p className="text-xs text-content-disabled mt-1">Max 2 MB</p>
                   </div>
                 )}
                 <input
@@ -306,7 +306,7 @@ export function SignatureCapture({
                 />
               </label>
               {uploadError && (
-                <p className="mt-2 text-sm text-red-600">{uploadError}</p>
+                <p className="mt-2 text-sm text-status-danger">{uploadError}</p>
               )}
             </div>
           )}

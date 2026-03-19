@@ -26,12 +26,12 @@ function formatDate(dateStr: string): string {
 }
 
 const ENTRY_TYPE_BADGE_CLASSES: Record<string, string> = {
-  assessment: 'bg-blue-100 text-blue-800 border-blue-200',
-  payment: 'bg-green-100 text-green-800 border-green-200',
-  refund: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  fine: 'bg-red-100 text-red-800 border-red-200',
+  assessment: 'bg-interactive-muted text-content-link border-status-info-border',
+  payment: 'bg-status-success-bg text-status-success border-status-success-border',
+  refund: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  fine: 'bg-status-danger-bg text-status-danger border-status-danger-border',
   fee: 'bg-orange-100 text-orange-800 border-orange-200',
-  adjustment: 'bg-gray-100 text-gray-800 border-gray-200',
+  adjustment: 'bg-surface-muted text-content border-edge',
 };
 
 const ENTRY_TYPE_OPTIONS = [
@@ -66,7 +66,7 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
           variant="outline"
           className={cn(
             'capitalize',
-            ENTRY_TYPE_BADGE_CLASSES[type] ?? 'bg-gray-100 text-gray-600',
+            ENTRY_TYPE_BADGE_CLASSES[type] ?? 'bg-surface-muted text-content-secondary',
           )}
         >
           {type}
@@ -106,7 +106,7 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
         <div
           className={cn(
             'text-right text-sm font-medium',
-            isPositive ? 'text-red-600' : 'text-green-600',
+            isPositive ? 'text-status-danger' : 'text-status-success',
           )}
         >
           {isPositive ? '+' : ''}

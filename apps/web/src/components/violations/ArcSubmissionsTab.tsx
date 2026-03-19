@@ -20,11 +20,11 @@ function formatDate(dateStr: string): string {
 }
 
 const STATUS_BADGE_CLASSES: Record<ArcSubmissionStatus, string> = {
-  submitted: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  under_review: 'bg-blue-100 text-blue-800 border-blue-200',
-  approved: 'bg-green-100 text-green-800 border-green-200',
-  denied: 'bg-red-100 text-red-800 border-red-200',
-  withdrawn: 'bg-gray-100 text-gray-700 border-gray-200',
+  submitted: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  under_review: 'bg-interactive-muted text-content-link border-status-info-border',
+  approved: 'bg-status-success-bg text-status-success border-status-success-border',
+  denied: 'bg-status-danger-bg text-status-danger border-status-danger-border',
+  withdrawn: 'bg-surface-muted text-content-secondary border-edge',
 };
 
 const STATUS_LABELS: Record<ArcSubmissionStatus, string> = {

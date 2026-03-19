@@ -63,18 +63,18 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
   const { bidSummary } = contract;
 
   return (
-    <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="mb-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-medium text-gray-900">
+        <h2 className="text-lg font-medium text-content">
           Bids for: {contract.title}
         </h2>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={onClose} className="text-sm text-content-tertiary hover:text-content-secondary">
           Close
         </button>
       </div>
 
       {bidSummary.embargoed ? (
-        <div className="rounded-md bg-amber-50 p-4 text-sm text-amber-700">
+        <div className="rounded-md bg-status-warning-bg p-4 text-sm text-status-warning">
           <p className="font-medium">Bidding is sealed</p>
           <p>
             {bidSummary.bidCount} bid(s) received. Details will be revealed after bidding closes
@@ -86,40 +86,40 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
       ) : (
         <div>
           {bidSummary.bids.length === 0 ? (
-            <p className="text-sm text-gray-500">No bids submitted yet.</p>
+            <p className="text-sm text-content-tertiary">No bids submitted yet.</p>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-edge">
+              <thead className="bg-surface-page">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-content-tertiary">
                     Vendor
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-content-tertiary">
                     Amount
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-content-tertiary">
                     Submitted
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-content-tertiary">
                     Notes
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-edge bg-surface-card">
                 {bidSummary.bids.map((bid) => (
                   <tr key={bid.id}>
-                    <td className="px-4 py-2 text-sm text-gray-900">
+                    <td className="px-4 py-2 text-sm text-content">
                       {bid.vendorName}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">
+                    <td className="px-4 py-2 text-sm text-content-secondary">
                       ${bid.bidAmount}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">
+                    <td className="px-4 py-2 text-sm text-content-secondary">
                       {bid.submittedAt
                         ? new Date(bid.submittedAt).toLocaleDateString()
                         : '-'}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">
+                    <td className="px-4 py-2 text-sm text-content-secondary">
                       {bid.notes ?? '-'}
                     </td>
                   </tr>
@@ -135,19 +135,19 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
         {!showAddBid ? (
           <button
             onClick={() => setShowAddBid(true)}
-            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+            className="text-sm font-medium text-content-link hover:text-content-link"
           >
             + Add Bid
           </button>
         ) : (
-          <div className="rounded-md border border-gray-200 p-4">
+          <div className="rounded-md border border-edge p-4">
             {error && (
-              <div className="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{error}</div>
+              <div className="mb-3 rounded-md bg-status-danger-bg p-2 text-sm text-status-danger">{error}</div>
             )}
             <form onSubmit={(e) => void handleAddBid(e)} className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="bid-vendor" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="bid-vendor" className="block text-sm font-medium text-content-secondary">
                     Vendor Name *
                   </label>
                   <input
@@ -156,11 +156,11 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                     required
                     value={vendorName}
                     onChange={(e) => setVendorName(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
                   />
                 </div>
                 <div>
-                  <label htmlFor="bid-amount" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="bid-amount" className="block text-sm font-medium text-content-secondary">
                     Bid Amount ($) *
                   </label>
                   <input
@@ -170,12 +170,12 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                     value={bidAmount}
                     onChange={(e) => setBidAmount(e.target.value)}
                     placeholder="0.00"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
                   />
                 </div>
               </div>
               <div>
-                <label htmlFor="bid-notes" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="bid-notes" className="block text-sm font-medium text-content-secondary">
                   Notes
                 </label>
                 <textarea
@@ -183,21 +183,21 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
                 />
               </div>
               <div className="flex justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setShowAddBid(false)}
-                  className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary hover:bg-surface-hover"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
                 >
                   {saving ? 'Adding...' : 'Add Bid'}
                 </button>

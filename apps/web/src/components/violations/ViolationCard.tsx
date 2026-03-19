@@ -15,18 +15,18 @@ interface ViolationLike {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  reported: 'bg-yellow-100 text-yellow-800',
-  noticed: 'bg-blue-100 text-blue-800',
-  hearing_scheduled: 'bg-purple-100 text-purple-800',
-  fined: 'bg-red-100 text-red-800',
-  resolved: 'bg-green-100 text-green-800',
-  dismissed: 'bg-gray-100 text-gray-700',
+  reported: 'bg-status-warning-bg text-status-warning',
+  noticed: 'bg-interactive-muted text-content-link',
+  hearing_scheduled: 'bg-status-brand-bg text-status-brand',
+  fined: 'bg-status-danger-bg text-status-danger',
+  resolved: 'bg-status-success-bg text-status-success',
+  dismissed: 'bg-surface-muted text-content-secondary',
 };
 
 const SEVERITY_STYLES: Record<string, string> = {
-  minor: 'bg-yellow-100 text-yellow-800',
+  minor: 'bg-status-warning-bg text-status-warning',
   moderate: 'bg-orange-100 text-orange-800',
-  major: 'bg-red-100 text-red-800',
+  major: 'bg-status-danger-bg text-status-danger',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -56,20 +56,20 @@ interface ViolationCardProps {
 }
 
 export function ViolationCard({ violation, communityId }: ViolationCardProps) {
-  const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-gray-100 text-gray-700';
-  const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-gray-100 text-gray-700';
+  const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-surface-muted text-content-secondary';
+  const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-surface-muted text-content-secondary';
   const categoryLabel = CATEGORY_LABELS[violation.category] ?? violation.category;
   const statusLabel = STATUS_LABELS[violation.status] ?? violation.status;
 
   return (
     <Link
       href={`/violations/${violation.id}?communityId=${communityId}`}
-      className="block rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+      className="block rounded-md border border-edge bg-surface-card p-4 transition-colors duration-quick hover:border-edge-strong hover:bg-surface-hover"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-sm font-medium text-content">
               #{violation.id} &middot; {categoryLabel}
             </span>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle}`}>
@@ -79,9 +79,9 @@ export function ViolationCard({ violation, communityId }: ViolationCardProps) {
               {violation.severity}
             </span>
           </div>
-          <p className="mt-1 line-clamp-2 text-sm text-gray-600">{violation.description}</p>
+          <p className="mt-1 line-clamp-2 text-sm text-content-secondary">{violation.description}</p>
         </div>
-        <time className="shrink-0 text-xs text-gray-400">
+        <time className="shrink-0 text-xs text-content-disabled">
           {new Date(violation.createdAt).toLocaleDateString()}
         </time>
       </div>

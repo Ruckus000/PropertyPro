@@ -172,53 +172,53 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
       {/* Back link */}
       <Link
         href={`/esign?communityId=${communityId}`}
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+        className="inline-flex items-center gap-1 text-sm text-content-tertiary hover:text-content-secondary mb-4"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to E-Sign
       </Link>
 
-      <h1 className="text-2xl font-semibold text-gray-900 mb-1">
+      <h1 className="text-2xl font-semibold text-content mb-1">
         Send Document for Signing
       </h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-content-tertiary mb-6">
         Select a template, add signers, and send.
       </p>
 
       <div className="space-y-6">
         {/* Step 1: Template */}
         <Card className="p-5">
-          <h2 className="text-sm font-medium text-gray-900 mb-3">
+          <h2 className="text-sm font-medium text-content mb-3">
             1. Select Template
           </h2>
           <div className="relative">
             <div
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 flex items-center justify-between cursor-pointer hover:border-gray-400 transition-colors"
+              className="w-full border border-edge-strong rounded-md px-3 py-2.5 flex items-center justify-between cursor-pointer hover:border-edge-strong transition-colors duration-quick"
               onClick={() => setShowTemplateDropdown((p) => !p)}
             >
               <span
                 className={
                   selectedTemplate
-                    ? 'text-gray-900 text-sm'
-                    : 'text-gray-400 text-sm'
+                    ? 'text-content text-sm'
+                    : 'text-content-disabled text-sm'
                 }
               >
                 {selectedTemplate?.name ?? 'Choose a template...'}
               </span>
-              <ChevronDown className="h-4 w-4 text-gray-400" />
+              <ChevronDown className="h-4 w-4 text-content-disabled" />
             </div>
 
             {showTemplateDropdown && (
-              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-hidden">
+              <div className="absolute z-20 w-full mt-1 bg-surface-card border border-edge rounded-md shadow-lg max-h-64 overflow-hidden">
                 <div className="p-2 border-b">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-content-disabled" />
                     <input
                       type="text"
                       value={templateSearch}
                       onChange={(e) => setTemplateSearch(e.target.value)}
                       placeholder="Search templates..."
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-edge rounded-md focus:outline-none focus:ring-2 focus:ring-focus"
                       autoFocus
                     />
                   </div>
@@ -226,12 +226,12 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 <div className="overflow-y-auto max-h-48">
                   {templatesLoading && (
                     <div className="px-3 py-4 text-center">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-gray-400" />
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-content-disabled" />
                     </div>
                   )}
                   {!templatesLoading &&
                     filteredTemplates.length === 0 && (
-                      <p className="px-3 py-4 text-sm text-gray-400 text-center">
+                      <p className="px-3 py-4 text-sm text-content-disabled text-center">
                         No templates found.
                       </p>
                     )}
@@ -240,13 +240,13 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                       key={t.id}
                       type="button"
                       onClick={() => handleSelectTemplate(t)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-gray-50 text-sm transition-colors"
+                      className="w-full text-left px-3 py-2.5 hover:bg-surface-hover text-sm transition-colors duration-quick"
                     >
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-content">
                         {t.name}
                       </span>
                       {t.description && (
-                        <span className="block text-xs text-gray-400 mt-0.5 truncate">
+                        <span className="block text-xs text-content-disabled mt-0.5 truncate">
                           {t.description}
                         </span>
                       )}
@@ -261,7 +261,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
         {/* Step 2: Signers */}
         {selectedTemplate && (
           <Card className="p-5">
-            <h2 className="text-sm font-medium text-gray-900 mb-3">
+            <h2 className="text-sm font-medium text-content mb-3">
               2. Configure Signers
             </h2>
             <div className="space-y-3">
@@ -275,7 +275,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                         updateSigner(idx, 'role', e.target.value)
                       }
                       placeholder="Role"
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-edge-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-focus"
                       readOnly={signerRoles.includes(signer.role)}
                     />
                     <input
@@ -285,7 +285,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                         updateSigner(idx, 'name', e.target.value)
                       }
                       placeholder="Full name"
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-edge-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-focus"
                     />
                     <input
                       type="email"
@@ -294,14 +294,14 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                         updateSigner(idx, 'email', e.target.value)
                       }
                       placeholder="Email address"
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-edge-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-focus"
                     />
                   </div>
                   {!signerRoles.includes(signer.role) && (
                     <button
                       type="button"
                       onClick={() => removeSigner(idx)}
-                      className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      className="p-2 text-content-disabled hover:text-red-500 transition-colors duration-quick"
                       title="Remove signer"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -324,23 +324,23 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
         {/* Step 3: Options */}
         {selectedTemplate && (
           <Card className="p-5">
-            <h2 className="text-sm font-medium text-gray-900 mb-3">
+            <h2 className="text-sm font-medium text-content mb-3">
               3. Options
             </h2>
             <div className="space-y-4">
               {/* Signing order toggle */}
               <div>
-                <label className="text-sm text-gray-700 block mb-1.5">
+                <label className="text-sm text-content-secondary block mb-1.5">
                   Signing order
                 </label>
-                <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+                <div className="flex gap-1 bg-surface-muted rounded-md p-1 w-fit">
                   <button
                     type="button"
                     onClick={() => setSigningOrder('parallel')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-quick ${
                       signingOrder === 'parallel'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-surface-card text-content shadow-e0'
+                        : 'text-content-tertiary hover:text-content-secondary'
                     }`}
                   >
                     Parallel
@@ -348,16 +348,16 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                   <button
                     type="button"
                     onClick={() => setSigningOrder('sequential')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-quick ${
                       signingOrder === 'sequential'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-surface-card text-content shadow-e0'
+                        : 'text-content-tertiary hover:text-content-secondary'
                     }`}
                   >
                     Sequential
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-content-disabled mt-1">
                   {signingOrder === 'parallel'
                     ? 'All signers can sign at the same time.'
                     : 'Signers will be notified in order.'}
@@ -368,7 +368,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
               <div>
                 <label
                   htmlFor="expiration"
-                  className="text-sm text-gray-700 block mb-1.5"
+                  className="text-sm text-content-secondary block mb-1.5"
                 >
                   Expires after
                 </label>
@@ -378,7 +378,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                   onChange={(e) =>
                     setExpirationDays(Number(e.target.value))
                   }
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="border border-edge-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-focus"
                 >
                   <option value={7}>7 days</option>
                   <option value={14}>14 days</option>
@@ -393,7 +393,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 <button
                   type="button"
                   onClick={() => setMessageExpanded((p) => !p)}
-                  className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
+                  className="flex items-center gap-1 text-sm text-content-secondary hover:text-content"
                 >
                   <span>Custom message</span>
                   {messageExpanded ? (
@@ -409,13 +409,13 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                       value={messageSubject}
                       onChange={(e) => setMessageSubject(e.target.value)}
                       placeholder="Email subject (optional)"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-edge-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-focus"
                     />
                     <textarea
                       value={messageBody}
                       onChange={(e) => setMessageBody(e.target.value)}
                       placeholder="Message to signers (optional)"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-edge-strong rounded-md px-3 py-2 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-focus"
                     />
                   </div>
                 )}
@@ -437,28 +437,28 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 Review & Send
               </Button>
             ) : (
-              <Card className="p-5 border-blue-200 bg-blue-50/50">
-                <h3 className="text-sm font-medium text-gray-900 mb-2">
+              <Card className="p-5 border-status-info-border bg-interactive-subtle/50">
+                <h3 className="text-sm font-medium text-content mb-2">
                   Confirm & Send
                 </h3>
-                <p className="text-sm text-gray-600 mb-1">
+                <p className="text-sm text-content-secondary mb-1">
                   Template:{' '}
                   <span className="font-medium">
                     {selectedTemplate.name}
                   </span>
                 </p>
-                <p className="text-sm text-gray-600 mb-1">
+                <p className="text-sm text-content-secondary mb-1">
                   Signers:{' '}
                   <span className="font-medium">{signers.length}</span> (
                   {signers.map((s) => s.name || s.email).join(', ')})
                 </p>
-                <p className="text-sm text-gray-600 mb-1">
+                <p className="text-sm text-content-secondary mb-1">
                   Order:{' '}
                   <span className="font-medium capitalize">
                     {signingOrder}
                   </span>
                 </p>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-content-secondary mb-4">
                   Expires in{' '}
                   <span className="font-medium">
                     {expirationDays} days
@@ -492,7 +492,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 </div>
 
                 {createMutation.isError && (
-                  <p className="mt-3 text-sm text-red-600">
+                  <p className="mt-3 text-sm text-status-danger">
                     {(createMutation.error as Error).message ?? 'Failed to create submission.'}
                   </p>
                 )}

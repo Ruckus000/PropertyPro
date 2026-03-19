@@ -31,7 +31,7 @@ function ChecklistCard({
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border border-gray-200 bg-white p-4 text-left shadow-e1 transition-shadow hover:shadow-e2"
+      className="w-full rounded-md border border-edge bg-surface-card p-4 text-left shadow-e1 transition-shadow hover:shadow-e2"
     >
       <div className="flex items-center justify-between">
         <div>
@@ -39,27 +39,27 @@ function ChecklistCard({
             {checklist.type === 'move_in' ? 'Move In' : 'Move Out'}
           </Badge>
           {checklist.completedAt && (
-            <Badge variant="outline" className="ml-2 text-green-600">
+            <Badge variant="outline" className="ml-2 text-status-success">
               Complete
             </Badge>
           )}
         </div>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-content-tertiary">
           {completed}/{total} steps
         </span>
       </div>
-      <p className="mt-2 text-sm font-medium text-gray-900">
+      <p className="mt-2 text-sm font-medium text-content">
         Unit {checklist.unitId} — Lease #{checklist.leaseId}
       </p>
       <div className="mt-3">
-        <div className="h-2 w-full rounded-full bg-gray-100">
+        <div className="h-2 w-full rounded-full bg-surface-muted">
           <div
-            className="h-2 rounded-full bg-blue-600 transition-all"
+            className="h-2 rounded-full bg-interactive transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
       </div>
-      <p className="mt-1 text-xs text-gray-400">
+      <p className="mt-1 text-xs text-content-disabled">
         Created {new Date(checklist.createdAt).toLocaleDateString()}
       </p>
     </button>
@@ -106,14 +106,14 @@ export function ChecklistListPage({ communityId }: Props) {
       {isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 rounded-lg" />
+            <Skeleton key={i} className="h-32 rounded-md" />
           ))}
         </div>
       )}
 
       {!isLoading && checklists && checklists.length === 0 && (
-        <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="rounded-md border-2 border-dashed border-edge p-12 text-center">
+          <p className="text-sm text-content-tertiary">
             No checklists found. Checklists are automatically created when leases are
             created or terminated.
           </p>

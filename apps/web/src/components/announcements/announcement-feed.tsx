@@ -56,7 +56,7 @@ export function AnnouncementFeed({
   if (visible.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-sm text-[var(--text-tertiary)] dark:text-gray-500">
+        <p className="text-sm text-content-tertiary dark:text-content-tertiary">
           No announcements yet.
         </p>
       </div>
@@ -68,7 +68,7 @@ export function AnnouncementFeed({
       {visible.map((announcement) => (
         <article
           key={announcement.id}
-          className={`flex flex-col gap-3 rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5 transition-colors dark:border-gray-700 dark:bg-gray-900 ${
+          className={`flex flex-col gap-3 rounded-md border border-edge-subtle bg-surface-card p-5 transition-colors dark:border-gray-700 dark:bg-gray-900 ${
             announcement.archivedAt ? 'opacity-60' : ''
           }`}
           data-testid={`announcement-${announcement.id}`}
@@ -76,26 +76,26 @@ export function AnnouncementFeed({
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-[var(--text-primary)] dark:text-gray-100">
+                <h3 className="text-base font-semibold text-content dark:text-gray-100">
                   {announcement.title}
                 </h3>
                 {announcement.isPinned && (
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  <span className="inline-flex items-center rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-medium text-interactive dark:bg-blue-900/30 dark:text-content-link">
                     Pinned
                   </span>
                 )}
                 {announcement.archivedAt && (
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                  <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary dark:bg-gray-800 dark:text-content-disabled">
                     Archived
                   </span>
                 )}
                 {announcement.audience === 'board_only' ? (
-                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                  <span className="inline-flex items-center rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-medium text-status-warning dark:bg-amber-900/30 dark:text-amber-400">
                     Board Only
                   </span>
                 ) : null}
                 {announcement.audience === 'owners_only' ? (
-                  <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                  <span className="inline-flex items-center rounded-full bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success dark:bg-green-900/30 dark:text-green-300">
                     Owners Only
                   </span>
                 ) : null}
@@ -105,7 +105,7 @@ export function AnnouncementFeed({
                   </span>
                 ) : null}
               </div>
-              <span className="text-xs text-[var(--text-tertiary)] dark:text-gray-500">
+              <span className="text-xs text-content-tertiary dark:text-content-tertiary">
                 {formatDate(announcement.publishedAt)}
               </span>
             </div>
@@ -122,7 +122,7 @@ export function AnnouncementFeed({
           </div>
 
           <div
-            className="prose prose-sm max-w-none text-[var(--text-secondary)] dark:prose-invert dark:text-gray-300"
+            className="prose prose-sm max-w-none text-content-secondary dark:prose-invert dark:text-content-disabled"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(announcement.body) }}
           />
         </article>

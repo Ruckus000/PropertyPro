@@ -68,35 +68,35 @@ export function ChecklistDetailView({ communityId, checklistId, onBack }: Props)
       <div>
         <button
           onClick={onBack}
-          className="mb-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
+          className="mb-4 flex items-center gap-1 text-sm text-content-tertiary hover:text-content"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to checklists
         </button>
 
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold text-content">
             {checklist.type === 'move_in' ? 'Move-In' : 'Move-Out'} Checklist
           </h2>
           <Badge variant={checklist.type === 'move_in' ? 'default' : 'secondary'}>
             {checklist.type === 'move_in' ? 'Move In' : 'Move Out'}
           </Badge>
           {checklist.completedAt && (
-            <Badge variant="outline" className="text-green-600">
+            <Badge variant="outline" className="text-status-success">
               <CheckCircle2 className="mr-1 h-3 w-3" />
               Complete
             </Badge>
           )}
         </div>
 
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-content-tertiary">
           Unit {checklist.unitId} — Lease #{checklist.leaseId} —{' '}
           {completedCount}/{stepKeys.length} steps complete
         </p>
 
-        <div className="mt-3 h-2 w-full max-w-md rounded-full bg-gray-100">
+        <div className="mt-3 h-2 w-full max-w-md rounded-full bg-surface-muted">
           <div
-            className="h-2 rounded-full bg-blue-600 transition-all"
+            className="h-2 rounded-full bg-interactive transition-all"
             style={{ width: `${Math.round((completedCount / stepKeys.length) * 100)}%` }}
           />
         </div>

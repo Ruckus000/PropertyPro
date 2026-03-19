@@ -226,7 +226,7 @@ export function PdfViewer({
       <div ref={containerRef} className="relative inline-block">
         <canvas
           ref={canvasRef}
-          className="rounded-sm shadow-md"
+          className="rounded-sm shadow-e1"
         />
         {/* Overlay slot for field markers */}
         {children && canvasDimensions.width > 0 && (

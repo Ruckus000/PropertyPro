@@ -41,7 +41,7 @@ const columns: ColumnDef<DelinquentUnit, unknown>[] = [
     accessorKey: 'overdueAmountCents',
     header: () => <div className="text-right">Overdue Amount</div>,
     cell: ({ row }) => (
-      <div className="text-right text-sm font-medium text-red-600">
+      <div className="text-right text-sm font-medium text-status-danger">
         {formatCents(row.original.overdueAmountCents)}
       </div>
     ),
@@ -116,7 +116,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
 
   if (!isLoading && units.length === 0) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 p-8 text-center">
+      <div className="rounded-md border border-status-success-border bg-status-success-bg p-8 text-center">
         <svg
           className="mx-auto h-10 w-10 text-green-400"
           fill="none"
@@ -131,7 +131,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
           />
         </svg>
         <p className="mt-2 text-sm font-medium text-green-900">No delinquent units</p>
-        <p className="text-sm text-green-700">
+        <p className="text-sm text-status-success">
           All units are current on their assessments.
         </p>
       </div>

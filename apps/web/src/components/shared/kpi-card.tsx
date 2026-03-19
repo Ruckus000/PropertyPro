@@ -33,9 +33,9 @@ function KpiCardSkeleton() {
 }
 
 const trendConfig = {
-  up: { icon: TrendingUp, positiveColor: 'text-green-600', negativeColor: 'text-red-600' },
-  down: { icon: TrendingDown, positiveColor: 'text-red-600', negativeColor: 'text-green-600' },
-  neutral: { icon: Minus, positiveColor: 'text-muted-foreground', negativeColor: 'text-muted-foreground' },
+  up: { icon: TrendingUp, positiveColor: 'text-status-success', negativeColor: 'text-status-danger' },
+  down: { icon: TrendingDown, positiveColor: 'text-status-danger', negativeColor: 'text-status-success' },
+  neutral: { icon: Minus, positiveColor: 'text-content-tertiary', negativeColor: 'text-content-tertiary' },
 };
 
 function KpiCard({
@@ -53,19 +53,19 @@ function KpiCard({
   const { icon: TrendIcon, positiveColor, negativeColor } = trendConfig[trend];
   const trendColor =
     trend === 'neutral'
-      ? 'text-muted-foreground'
+      ? 'text-content-tertiary'
       : invertTrend
         ? negativeColor
         : positiveColor;
 
   const content = (
-    <Card className={cn(href && 'transition-shadow hover:shadow-md')}>
+    <Card className={cn(href && 'transition-shadow duration-quick hover:shadow-md')}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-sm font-medium text-content-secondary">{title}</p>
           {Icon && (
-            <div className="rounded-md bg-muted p-2">
-              <Icon className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md bg-surface-muted p-2">
+              <Icon className="h-4 w-4 text-content-secondary" />
             </div>
           )}
         </div>
@@ -74,7 +74,7 @@ function KpiCard({
           <div className={cn('mt-2 flex items-center gap-1 text-sm', trendColor)}>
             <TrendIcon className="h-4 w-4" />
             <span>{Math.abs(delta)}%</span>
-            <span className="text-muted-foreground">vs last 30 days</span>
+            <span className="text-content-tertiary">vs last 30 days</span>
           </div>
         )}
       </CardContent>

@@ -115,13 +115,13 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+      <div className="w-full max-w-lg rounded-xl bg-surface-card shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Make Payment</h2>
+        <div className="flex items-center justify-between border-b border-edge px-6 py-4">
+          <h2 className="text-lg font-semibold text-content">Make Payment</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-md p-1 text-content-disabled hover:bg-surface-muted hover:text-content-secondary"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -132,36 +132,36 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
         {/* Body */}
         <div className="px-6 py-4">
           {/* Line Item Summary */}
-          <div className="mb-4 rounded-lg bg-gray-50 p-4">
+          <div className="mb-4 rounded-md bg-surface-page p-4">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Assessment Due</span>
-              <span className="text-gray-900">{formatDate(lineItem.dueDate)}</span>
+              <span className="text-content-secondary">Assessment Due</span>
+              <span className="text-content">{formatDate(lineItem.dueDate)}</span>
             </div>
             <div className="mt-1 flex justify-between text-sm">
-              <span className="text-gray-600">Amount</span>
-              <span className="text-gray-900">{formatCents(lineItem.amountCents)}</span>
+              <span className="text-content-secondary">Amount</span>
+              <span className="text-content">{formatCents(lineItem.amountCents)}</span>
             </div>
             {lineItem.lateFeeCents > 0 && (
               <div className="mt-1 flex justify-between text-sm">
-                <span className="text-red-600">Late Fee</span>
-                <span className="text-red-600">{formatCents(lineItem.lateFeeCents)}</span>
+                <span className="text-status-danger">Late Fee</span>
+                <span className="text-status-danger">{formatCents(lineItem.lateFeeCents)}</span>
               </div>
             )}
-            <div className="mt-2 flex justify-between border-t border-gray-200 pt-2 text-sm font-semibold">
-              <span className="text-gray-900">Subtotal</span>
-              <span className="text-gray-900">{formatCents(totalCents)}</span>
+            <div className="mt-2 flex justify-between border-t border-edge pt-2 text-sm font-semibold">
+              <span className="text-content">Subtotal</span>
+              <span className="text-content">{formatCents(totalCents)}</span>
             </div>
           </div>
 
           {/* Fee Estimate — only shown for owner_pays before method selection */}
           {feePolicy === 'owner_pays' && (
-            <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
+            <div className="mb-4 rounded-md border border-edge-subtle bg-interactive-subtle p-3">
               <p className="text-xs font-medium text-blue-900">Convenience Fee</p>
-              <div className="mt-1 flex gap-4 text-xs text-blue-700">
+              <div className="mt-1 flex gap-4 text-xs text-content-link">
                 <span>Card: ~{formatCents(calculateConvenienceFee(totalCents, 'card'))}</span>
                 <span>ACH: ~{formatCents(calculateConvenienceFee(totalCents, 'us_bank_account'))}</span>
               </div>
-              <p className="mt-1 text-xs text-blue-600">
+              <p className="mt-1 text-xs text-content-link">
                 A convenience fee applies for online payments. To avoid this fee,
                 mail a check to your association.
               </p>
@@ -171,21 +171,21 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
           {/* Stripe Payment Element */}
           {intentMutation.isPending && (
             <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-600" />
-              <span className="ml-2 text-sm text-gray-600">Preparing payment form...</span>
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-muted border-t-indigo-600" />
+              <span className="ml-2 text-sm text-content-secondary">Preparing payment form...</span>
             </div>
           )}
 
           {intentMutation.isError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-red-700">
+            <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-4">
+              <p className="text-sm text-status-danger">
                 {intentMutation.error instanceof Error
                   ? intentMutation.error.message
                   : 'Failed to prepare payment'}
               </p>
               <button
                 onClick={() => intentMutation.mutate()}
-                className="mt-2 text-sm font-medium text-red-700 underline hover:text-red-900"
+                className="mt-2 text-sm font-medium text-status-danger underline hover:text-red-900"
               >
                 Try Again
               </button>
@@ -321,24 +321,24 @@ function CheckoutForm({
 
       {/* Confirmed fee breakdown for owner_pays */}
       {feePolicy === 'owner_pays' && displayFee > 0 && (
-        <div className="mt-3 rounded-lg bg-gray-50 p-3">
+        <div className="mt-3 rounded-md bg-surface-page p-3">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Convenience Fee</span>
-            <span className="text-gray-900">{formatCents(displayFee)}</span>
+            <span className="text-content-secondary">Convenience Fee</span>
+            <span className="text-content">{formatCents(displayFee)}</span>
           </div>
           <div className="mt-1 flex justify-between text-sm font-semibold">
-            <span className="text-gray-900">Total</span>
-            <span className="text-gray-900">{formatCents(totalCharge)}</span>
+            <span className="text-content">Total</span>
+            <span className="text-content">{formatCents(totalCharge)}</span>
           </div>
         </div>
       )}
 
       {error && (
-        <p className="mt-3 text-sm text-red-600">{error}</p>
+        <p className="mt-3 text-sm text-status-danger">{error}</p>
       )}
 
       {updateMutation.isError && (
-        <p className="mt-3 text-sm text-red-600">
+        <p className="mt-3 text-sm text-status-danger">
           Failed to calculate fees.{' '}
           <button
             type="button"
@@ -354,14 +354,14 @@ function CheckoutForm({
         <button
           type="button"
           onClick={onClose}
-          className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="flex-1 rounded-md border border-edge-strong bg-surface-card px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface-hover"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={!stripe || submitting || updateMutation.isPending || updateMutation.isError}
-          className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-indigo-700 disabled:opacity-50"
         >
           {submitting
             ? 'Processing...'

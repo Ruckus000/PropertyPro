@@ -27,18 +27,18 @@ function ChartEmptyState({ type, message, onRetry, className }: ChartEmptyStateP
 
   return (
     <div className={cn('flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center', className)}>
-      <Icon className="h-10 w-10 text-muted-foreground/50" />
+      <Icon className="h-10 w-10 text-content-disabled" />
       <div className="space-y-1">
-        <p className="text-sm font-medium text-muted-foreground">{message ?? config.title}</p>
+        <p className="text-sm font-medium text-content-secondary">{message ?? config.title}</p>
         {config.subtitle && (
-          <p className="text-xs text-muted-foreground/70">{config.subtitle}</p>
+          <p className="text-xs text-content-tertiary">{config.subtitle}</p>
         )}
       </div>
       {type === 'error' && onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="mt-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className="mt-1 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover"
         >
           Retry
         </button>

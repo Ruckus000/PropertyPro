@@ -68,7 +68,7 @@ export function BrandingTable({ currentCommunityId, communities }: BrandingTable
 
   return (
     <>
-      <div className="rounded-lg border border-gray-200">
+      <div className="rounded-md border border-edge">
         <Table>
           <TableHeader>
             <TableRow>
@@ -82,7 +82,7 @@ export function BrandingTable({ currentCommunityId, communities }: BrandingTable
           <TableBody>
             {communities.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-gray-400">
+                <TableCell colSpan={5} className="py-8 text-center text-sm text-content-disabled">
                   No communities found
                 </TableCell>
               </TableRow>
@@ -100,11 +100,11 @@ export function BrandingTable({ currentCommunityId, communities }: BrandingTable
                     {/* Logo */}
                     <TableCell>
                       {hasLogo ? (
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-gray-100 text-xs text-gray-500">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-surface-muted text-xs text-content-tertiary">
                           Logo
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">Default</span>
+                        <span className="text-xs text-content-disabled">Default</span>
                       )}
                     </TableCell>
 
@@ -113,22 +113,22 @@ export function BrandingTable({ currentCommunityId, communities }: BrandingTable
                       {primaryColor ? (
                         <div className="flex items-center gap-2">
                           <div
-                            className="h-5 w-5 rounded border border-gray-200"
+                            className="h-5 w-5 rounded border border-edge"
                             style={{ backgroundColor: primaryColor }}
                           />
-                          <span className="font-mono text-xs text-gray-500">{primaryColor}</span>
+                          <span className="font-mono text-xs text-content-tertiary">{primaryColor}</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400">Default</span>
+                        <span className="text-xs text-content-disabled">Default</span>
                       )}
                     </TableCell>
 
                     {/* Font */}
                     <TableCell>
                       {font ? (
-                        <span className="text-sm text-gray-700">{font}</span>
+                        <span className="text-sm text-content">{font}</span>
                       ) : (
-                        <span className="text-xs text-gray-400">Default</span>
+                        <span className="text-xs text-content-disabled">Default</span>
                       )}
                     </TableCell>
 

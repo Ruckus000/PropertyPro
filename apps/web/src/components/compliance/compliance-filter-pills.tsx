@@ -44,13 +44,13 @@ export function ComplianceFilterPills({ active, counts, total, onChange }: Filte
             className={`
               inline-flex items-center gap-1.5 rounded-[var(--radius-full)]
               px-3 py-1.5 min-h-[44px] sm:min-h-0 text-sm font-medium
-              transition-colors duration-150 whitespace-nowrap
+              transition-colors duration-quick whitespace-nowrap
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-strong)]
               ${isActive
                 ? "bg-[var(--text-primary)] text-white"
-                : `bg-transparent text-[var(--text-secondary)]
-                   border border-[var(--border-subtle)]
-                   hover:bg-[var(--surface-hover)]
+                : `bg-transparent text-content-secondary
+                   border border-edge-subtle
+                   hover:bg-surface-hover
                    ${count === 0 ? "opacity-50" : ""}`
               }
             `}

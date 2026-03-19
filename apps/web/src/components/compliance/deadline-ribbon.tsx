@@ -31,11 +31,11 @@ export function DeadlineRibbon({ items, onItemClick }: DeadlineRibbonProps) {
   const overdueCount = upcoming.filter((i) => i.status === "overdue").length;
 
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 h-10 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card px-4 h-10 overflow-x-auto scrollbar-hide">
       {/* Label */}
       <span className="flex items-center gap-1.5 shrink-0">
-        <Zap size={14} className={overdueCount > 0 ? "text-[var(--status-danger)]" : "text-[var(--status-warning)]"} />
-        <span className="text-xs font-medium text-[var(--text-secondary)]">
+        <Zap size={14} className={overdueCount > 0 ? "text-status-danger" : "text-status-warning"} />
+        <span className="text-xs font-medium text-content-secondary">
           {upcoming.length} upcoming
         </span>
       </span>
@@ -50,19 +50,19 @@ export function DeadlineRibbon({ items, onItemClick }: DeadlineRibbonProps) {
         return (
           <React.Fragment key={item.id}>
             {idx > 0 && (
-              <span className="text-[var(--text-tertiary)] text-xs shrink-0">&middot;</span>
+              <span className="text-content-tertiary text-xs shrink-0">&middot;</span>
             )}
             <button
               type="button"
               onClick={() => onItemClick?.(item.id)}
               className="flex items-center gap-1.5 shrink-0 text-xs hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] rounded"
             >
-              <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">
+              <span className="font-medium text-content truncate max-w-[120px]">
                 {item.title}
               </span>
               <span
                 className={`tabular-nums font-medium ${
-                  isOverdue ? "text-[var(--status-danger)]" : "text-[var(--text-tertiary)]"
+                  isOverdue ? "text-status-danger" : "text-content-tertiary"
                 }`}
               >
                 {isOverdue ? `${Math.abs(days)}d overdue` : `${days}d`}

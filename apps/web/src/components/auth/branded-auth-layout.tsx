@@ -27,7 +27,7 @@ export function BrandedAuthLayout({
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <main
-        className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12"
+        className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-12"
         style={branding.cssVars as React.CSSProperties}
       >
         <div className={`w-full ${maxWidth} space-y-6`}>
@@ -37,11 +37,11 @@ export function BrandedAuthLayout({
               <img
                 src={branding.logoUrl}
                 alt={branding.communityName ?? 'Community logo'}
-                className="mx-auto mb-4 h-16 w-16 rounded-lg object-contain"
+                className="mx-auto mb-4 h-16 w-16 rounded-md object-contain"
               />
             )}
-            <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
-            <p className="mt-2 text-sm text-gray-600">{description}</p>
+            <h1 className="text-2xl font-semibold text-content">{heading}</h1>
+            <p className="mt-2 text-sm text-content-secondary">{description}</p>
           </div>
           {children}
         </div>

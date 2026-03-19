@@ -43,9 +43,9 @@ interface Props {
 export function DocumentChecklistSection({ groups }: Props) {
   if (groups.length === 0) {
     return (
-      <Card className="border-gray-200 bg-white">
+      <Card className="border-edge bg-surface-card">
         <Card.Body>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-content-secondary">
             No compliance checklist data has been generated yet for this community.
           </p>
         </Card.Body>
@@ -56,7 +56,7 @@ export function DocumentChecklistSection({ groups }: Props) {
   return (
     <div className="space-y-4">
       {groups.map((group) => (
-        <Card key={group.category} className="border-gray-200 bg-white">
+        <Card key={group.category} className="border-edge bg-surface-card">
           <Card.Header>
             <div className="flex flex-col">
               <Card.Title>{group.label}</Card.Title>
@@ -67,19 +67,19 @@ export function DocumentChecklistSection({ groups }: Props) {
             {group.items.map((item) => (
               <article
                 key={item.templateKey}
-                className="rounded-md border border-gray-200 p-3"
+                className="rounded-md border border-edge p-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-semibold text-gray-900">{item.title}</h3>
-                    <p className="text-xs text-gray-500">Statute: {item.statuteReference}</p>
+                    <h3 className="text-sm font-semibold text-content">{item.title}</h3>
+                    <p className="text-xs text-content-tertiary">Statute: {item.statuteReference}</p>
                   </div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <div className="flex items-center gap-2 text-sm font-medium text-content-secondary">
                     <StatusBadge status={mapStatus(item.status)} showLabel={false} />
                     <span>{statusLabel(item.status)}</span>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-gray-500">Last posted: {formatDate(item.postedAt)}</p>
+                <p className="mt-2 text-xs text-content-tertiary">Last posted: {formatDate(item.postedAt)}</p>
               </article>
             ))}
           </Card.Body>

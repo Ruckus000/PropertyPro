@@ -106,7 +106,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border">
+      <div className="rounded-md border border-edge">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -149,7 +149,7 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell colSpan={colCount} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
-                    <p className="text-muted-foreground">{emptyMessage}</p>
+                    <p className="text-content-tertiary">{emptyMessage}</p>
                     {emptyAction}
                   </div>
                 </TableCell>

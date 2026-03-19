@@ -6,20 +6,20 @@ import { CommentThread } from './CommentThread';
 import { getRequest } from '@/lib/api/maintenance-requests';
 
 const STATUS_COLORS: Record<string, string> = {
-  submitted: 'bg-yellow-100 text-yellow-800',
-  acknowledged: 'bg-blue-100 text-blue-800',
+  submitted: 'bg-status-warning-bg text-status-warning',
+  acknowledged: 'bg-interactive-subtle text-content-link',
   in_progress: 'bg-purple-100 text-purple-800',
-  resolved: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-700',
-  open: 'bg-yellow-100 text-yellow-800',
+  resolved: 'bg-status-success-bg text-status-success',
+  closed: 'bg-surface-muted text-content-secondary',
+  open: 'bg-status-warning-bg text-status-warning',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-700',
-  normal: 'bg-blue-100 text-blue-700',
-  medium: 'bg-blue-100 text-blue-700',
+  low: 'bg-surface-muted text-content-secondary',
+  normal: 'bg-interactive-subtle text-content-link',
+  medium: 'bg-interactive-subtle text-content-link',
   high: 'bg-orange-100 text-orange-800',
-  urgent: 'bg-red-100 text-red-800',
+  urgent: 'bg-status-danger-bg text-status-danger',
 };
 
 interface RequestCardProps {
@@ -44,50 +44,50 @@ export function RequestCard({ request, communityId }: RequestCardProps) {
   const priorityLabel = request.priority === 'normal' ? 'medium' : request.priority;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-md border border-edge bg-surface-card shadow-e0">
       <div
         className="flex cursor-pointer items-start justify-between p-4"
         onClick={() => setExpanded((e) => !e)}
       >
         <div className="flex-1 min-w-0">
-          <h3 className="truncate text-sm font-medium text-gray-900">{request.title}</h3>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <h3 className="truncate text-sm font-medium text-content">{request.title}</h3>
+          <p className="mt-0.5 text-xs text-content-tertiary">
             {request.category} &middot; {new Date(request.createdAt).toLocaleDateString()}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[statusLabel] ?? 'bg-gray-100 text-gray-700'}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[statusLabel] ?? 'bg-surface-muted text-content-secondary'}`}
             >
               {statusLabel}
             </span>
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[priorityLabel] ?? 'bg-gray-100 text-gray-700'}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[priorityLabel] ?? 'bg-surface-muted text-content-secondary'}`}
             >
               {priorityLabel} priority
             </span>
             {comments.length > 0 && (
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+              <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs text-content-secondary">
                 {comments.length} comment{comments.length !== 1 ? 's' : ''}
               </span>
             )}
           </div>
         </div>
-        <span className="ml-3 text-gray-400">{expanded ? '▲' : '▼'}</span>
+        <span className="ml-3 text-content-disabled">{expanded ? '\u25B2' : '\u25BC'}</span>
       </div>
 
       {expanded && (
-        <div className="border-t border-gray-100 px-4 py-3 space-y-3">
-          <p className="text-sm text-gray-700">{request.description}</p>
+        <div className="border-t border-edge-subtle px-4 py-3 space-y-3">
+          <p className="text-sm text-content-secondary">{request.description}</p>
           {request.resolutionDescription && (
-            <div className="rounded-md bg-green-50 p-3">
-              <p className="text-xs font-medium text-green-800">Resolution</p>
-              <p className="mt-0.5 text-sm text-green-700">{request.resolutionDescription}</p>
+            <div className="rounded-md bg-status-success-bg p-3">
+              <p className="text-xs font-medium text-status-success">Resolution</p>
+              <p className="mt-0.5 text-sm text-status-success">{request.resolutionDescription}</p>
             </div>
           )}
           {Array.isArray(request.photos) && request.photos.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {request.photos.map((photo, idx) => (
-                <div key={idx} className="h-20 w-20 overflow-hidden rounded-md bg-gray-100">
+                <div key={idx} className="h-20 w-20 overflow-hidden rounded-md bg-surface-muted">
                   {photo.thumbnailUrl ? (
                     <img
                       src={photo.thumbnailUrl}
@@ -95,7 +95,7 @@ export function RequestCard({ request, communityId }: RequestCardProps) {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-gray-400">
+                    <div className="flex h-full items-center justify-center text-xs text-content-disabled">
                       Photo
                     </div>
                   )}

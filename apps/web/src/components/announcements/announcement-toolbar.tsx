@@ -53,10 +53,10 @@ export function AnnouncementToolbar({
           disabled={isLoading}
           aria-label={isPinned ? 'Unpin announcement' : 'Pin announcement'}
           title={isPinned ? 'Unpin' : 'Pin to top'}
-          className={`rounded-md p-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)] disabled:opacity-50 ${
+          className={`rounded-md p-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50 ${
             isPinned
-              ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30'
-              : 'text-[var(--text-tertiary)] hover:bg-[var(--surface-subtle)] dark:text-gray-500 dark:hover:bg-gray-800'
+              ? 'text-content-link hover:bg-interactive-subtle dark:text-content-link dark:hover:bg-blue-900/30'
+              : 'text-content-tertiary hover:bg-surface-hover dark:text-content-tertiary dark:hover:bg-gray-800'
           }`}
         >
           {/* Pin icon (SVG) */}
@@ -83,10 +83,10 @@ export function AnnouncementToolbar({
           disabled={isLoading}
           aria-label={isArchived ? 'Unarchive announcement' : 'Archive announcement'}
           title={isArchived ? 'Unarchive' : 'Archive'}
-          className={`rounded-md p-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)] disabled:opacity-50 ${
+          className={`rounded-md p-1.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50 ${
             isArchived
-              ? 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30'
-              : 'text-[var(--text-tertiary)] hover:bg-[var(--surface-subtle)] dark:text-gray-500 dark:hover:bg-gray-800'
+              ? 'text-status-warning hover:bg-status-warning-bg dark:text-amber-400 dark:hover:bg-amber-900/30'
+              : 'text-content-tertiary hover:bg-surface-hover dark:text-content-tertiary dark:hover:bg-gray-800'
           }`}
         >
           {/* Archive icon (SVG) */}

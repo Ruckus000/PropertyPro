@@ -97,15 +97,15 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Invite Your First Resident</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-2xl font-semibold text-content">Invite Your First Resident</h2>
+        <p className="mt-1 text-sm text-content-secondary">
           This step is optional. Invite one resident now, or skip and invite later.
         </p>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+      <div className="space-y-4 rounded-md border border-edge bg-surface-card p-6">
         <div>
-          <label htmlFor="inviteEmail" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="inviteEmail" className="mb-1 block text-sm font-medium text-content-secondary">
             Resident Email
           </label>
           <input
@@ -116,13 +116,13 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
               setEmail(event.target.value);
               setError(null);
             }}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             placeholder="resident@example.com"
           />
         </div>
 
         <div>
-          <label htmlFor="inviteFullName" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="inviteFullName" className="mb-1 block text-sm font-medium text-content-secondary">
             Resident Full Name
           </label>
           <input
@@ -133,13 +133,13 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
               setFullName(event.target.value);
               setError(null);
             }}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             placeholder="Jane Resident"
           />
         </div>
 
         <div>
-          <label htmlFor="inviteUnit" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="inviteUnit" className="mb-1 block text-sm font-medium text-content-secondary">
             Unit
           </label>
           <select
@@ -149,7 +149,7 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
               setUnitNumber(event.target.value);
               setError(null);
             }}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
           >
             <option value="">Select a unit</option>
             {unitOptions.map((option) => (
@@ -161,13 +161,13 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
         </div>
       </div>
 
-      {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger">{error}</div>}
 
       <div className="flex justify-between">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-edge-strong bg-surface-card px-6 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
         >
           Back
         </button>
@@ -176,14 +176,14 @@ export function InviteStep({ units, initialData, onNext, onBack, onSkip }: Invit
             type="button"
             onClick={handleSkipInvite}
             disabled={isSubmitting}
-            className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-edge-strong bg-surface-card px-6 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-60"
           >
             Skip Invite
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-interactive px-6 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? 'Saving...' : 'Complete Setup'}
           </button>

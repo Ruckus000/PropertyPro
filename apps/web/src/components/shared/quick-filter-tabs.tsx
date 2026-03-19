@@ -31,10 +31,10 @@ export function QuickFilterTabs({
             key={tab.value}
             type="button"
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+              'inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-quick',
               isActive
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                ? 'bg-interactive text-content-inverse shadow-sm'
+                : 'text-content-tertiary hover:bg-surface-hover hover:text-content'
             )}
             onClick={() => onChange(tab.value)}
           >

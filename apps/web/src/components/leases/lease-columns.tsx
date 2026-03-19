@@ -58,31 +58,31 @@ function StatusBadge({ lease }: { lease: LeaseListItem }) {
   switch (status) {
     case 'active':
       return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+        <Badge className="bg-status-success-bg text-status-success hover:bg-status-success-bg">
           Active
         </Badge>
       );
     case 'expiring_soon':
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+        <Badge className="bg-status-warning-bg text-status-warning hover:bg-status-warning-bg">
           Expiring Soon
         </Badge>
       );
     case 'expired':
       return (
-        <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+        <Badge className="bg-status-danger-bg text-status-danger hover:bg-status-danger-bg">
           Expired
         </Badge>
       );
     case 'renewed':
       return (
-        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+        <Badge className="bg-interactive-muted text-content-link hover:bg-interactive-muted">
           Renewed
         </Badge>
       );
     case 'terminated':
       return (
-        <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">
+        <Badge className="bg-surface-muted text-content-secondary hover:bg-surface-muted">
           Terminated
         </Badge>
       );

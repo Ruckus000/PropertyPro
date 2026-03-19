@@ -40,14 +40,14 @@ export function CommunityFilters() {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-2">
-        <label htmlFor="communityType" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+        <label htmlFor="communityType" className="whitespace-nowrap text-sm font-medium text-content-secondary">
           Type
         </label>
         <select
           id="communityType"
           value={currentType}
           onChange={(e) => updateParams('communityType', e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         >
           {COMMUNITY_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -58,7 +58,7 @@ export function CommunityFilters() {
       </div>
 
       <div className="flex items-center gap-2">
-        <label htmlFor="search" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+        <label htmlFor="search" className="whitespace-nowrap text-sm font-medium text-content-secondary">
           Search
         </label>
         <input
@@ -67,7 +67,7 @@ export function CommunityFilters() {
           value={currentSearch}
           onChange={(e) => updateParams('search', e.target.value)}
           placeholder="Name or slug..."
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 placeholder:text-content-placeholder focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
       </div>
     </div>

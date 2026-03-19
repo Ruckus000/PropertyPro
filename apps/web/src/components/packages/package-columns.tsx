@@ -23,19 +23,19 @@ function StatusBadge({ status }: { status: PackageListItem['status'] }) {
   switch (status) {
     case 'received':
       return (
-        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+        <Badge className="bg-interactive-muted text-content-link hover:bg-interactive-muted">
           Received
         </Badge>
       );
     case 'notified':
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+        <Badge className="bg-status-warning-bg text-status-warning hover:bg-status-warning-bg">
           Notified
         </Badge>
       );
     case 'picked_up':
       return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+        <Badge className="bg-status-success-bg text-status-success hover:bg-status-success-bg">
           Picked Up
         </Badge>
       );

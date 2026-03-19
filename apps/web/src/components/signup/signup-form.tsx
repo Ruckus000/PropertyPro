@@ -136,58 +136,58 @@ export function SignupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <form onSubmit={handleSubmit} className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
       {verificationReturn ? (
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-md border border-status-info-border bg-interactive/10 px-4 py-3 text-sm text-content-link">
           Verification returned successfully. Complete signup with the same request details below.
         </div>
       ) : null}
 
       {errorMessage ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+        <div className="rounded-md border border-status-danger bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert">
           {errorMessage}
         </div>
       ) : null}
 
       {successResult ? (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+        <div className="rounded-md border border-status-success-border bg-status-success-bg px-4 py-3 text-sm text-status-success" role="status">
           {successResult.message}
         </div>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Primary Contact Name</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Primary Contact Name</span>
           <input
             type="text"
             value={primaryContactName}
             onChange={(event) => setPrimaryContactName(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Email</span>
           <input
             type="email"
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Password</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Password</span>
         <input
           type="password"
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           placeholder="At least 8 chars, mixed case, number, symbol"
           required
         />
@@ -195,23 +195,23 @@ export function SignupForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Community Name</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Community Name</span>
           <input
             type="text"
             value={communityName}
             onChange={(event) => handleCommunityNameChange(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Address</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Address</span>
           <input
             type="text"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
@@ -219,25 +219,25 @@ export function SignupForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">County</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">County</span>
           <input
             type="text"
             value={county}
             onChange={(event) => setCounty(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Unit Count</span>
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Unit Count</span>
           <input
             type="number"
             min={1}
             step={1}
             value={unitCount}
             onChange={(event) => setUnitCount(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
             required
           />
         </label>
@@ -250,7 +250,7 @@ export function SignupForm({
       />
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-gray-700">Plan Selection</h2>
+        <h2 className="mb-2 text-sm font-medium text-content-secondary">Plan Selection</h2>
         <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Plan selection">
           {plans.map((plan) => {
             const selected = plan.id === planKey;
@@ -263,13 +263,13 @@ export function SignupForm({
                 disabled={isSubmitting}
                 className={`rounded-md border p-3 text-left transition-colors ${
                   selected
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-300 bg-white hover:border-gray-400'
+                    ? 'border-interactive bg-interactive/10'
+                    : 'border-edge-strong bg-surface-card hover:border-edge-strong'
                 }`}
               >
-                <span className="block text-sm font-semibold text-gray-900">{plan.label}</span>
-                <span className="mt-1 block text-sm text-gray-700">${plan.monthlyPriceUsd}/month</span>
-                <span className="mt-1 block text-xs text-gray-600">{plan.description}</span>
+                <span className="block text-sm font-semibold text-content">{plan.label}</span>
+                <span className="mt-1 block text-sm text-content-secondary">${plan.monthlyPriceUsd}/month</span>
+                <span className="mt-1 block text-xs text-content-secondary">{plan.description}</span>
               </button>
             );
           })}
@@ -284,21 +284,21 @@ export function SignupForm({
         disabled={isSubmitting}
       />
 
-      <label className="flex items-start gap-2 text-sm text-gray-700">
+      <label className="flex items-start gap-2 text-sm text-content-secondary">
         <input
           type="checkbox"
           checked={termsAccepted}
           onChange={(event) => setTermsAccepted(event.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300"
+          className="mt-0.5 h-4 w-4 rounded border-edge-strong"
           required
         />
         <span>
           I agree to the{' '}
-          <Link href="/legal/terms" className="text-blue-600 hover:text-blue-500">
+          <Link href="/legal/terms" className="text-content-link hover:text-content-link">
             Terms of Service
           </Link>
           {' '}and{' '}
-          <Link href="/legal/privacy" className="text-blue-600 hover:text-blue-500">
+          <Link href="/legal/privacy" className="text-content-link hover:text-content-link">
             Privacy Policy
           </Link>
           .
@@ -308,7 +308,7 @@ export function SignupForm({
       <button
         type="submit"
         disabled={isSubmitting || isSubdomainBlocked}
-        className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-semibold text-content-inverse hover:bg-interactive/100 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? 'Submitting...' : 'Create Account'}
       </button>

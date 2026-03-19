@@ -137,14 +137,14 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="flex items-center gap-2 text-sm text-content-tertiary">
         {['Template', 'Compose', 'Recipients', 'Confirm'].map((label, i) => {
           const stepIndex = ['template', 'compose', 'recipients', 'confirm'].indexOf(step);
           const isActive = i <= stepIndex;
           return (
             <React.Fragment key={label}>
-              {i > 0 && <span className="text-gray-300">&rarr;</span>}
-              <span className={isActive ? 'font-medium text-gray-900' : ''}>{label}</span>
+              {i > 0 && <span className="text-content-disabled">&rarr;</span>}
+              <span className={isActive ? 'font-medium text-content' : ''}>{label}</span>
             </React.Fragment>
           );
         })}
@@ -153,24 +153,24 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 1: Template selection */}
       {step === 'template' && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Choose a Template</h2>
+          <h2 className="text-lg font-semibold text-content">Choose a Template</h2>
           <div className="grid grid-cols-2 gap-3">
             {templates?.map((t) => (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => handleSelectTemplate(t.key)}
-                className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50"
+                className="rounded-md border border-edge bg-surface-card p-4 text-left hover:border-interactive hover:bg-interactive-subtle"
               >
-                <div className="text-sm font-medium text-gray-900">{t.label}</div>
-                <div className="mt-1 text-xs text-gray-500">{t.severity}</div>
+                <div className="text-sm font-medium text-content">{t.label}</div>
+                <div className="mt-1 text-xs text-content-tertiary">{t.severity}</div>
               </button>
             ))}
           </div>
           <button
             type="button"
             onClick={handleStartBlank}
-            className="w-full rounded-lg border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            className="w-full rounded-md border border-dashed border-edge-strong bg-surface-card p-4 text-sm text-content-tertiary hover:border-edge-strong hover:text-content-secondary"
           >
             Start from scratch
           </button>
@@ -180,15 +180,15 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 2: Compose */}
       {step === 'compose' && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Compose Alert</h2>
+          <h2 className="text-lg font-semibold text-content">Compose Alert</h2>
 
           <div>
-            <label htmlFor="severity" className="block text-sm font-medium text-gray-700">Severity</label>
+            <label htmlFor="severity" className="block text-sm font-medium text-content-secondary">Severity</label>
             <select
               id="severity"
               value={severity}
               onChange={(e) => setSeverity(e.target.value as 'emergency' | 'urgent' | 'info')}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
             >
               <option value="emergency">Emergency</option>
               <option value="urgent">Urgent</option>
@@ -197,37 +197,37 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
           </div>
 
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
+            <label htmlFor="title" className="block text-sm font-medium text-content-secondary">Title</label>
             <input
               id="title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
               placeholder="Emergency alert title"
             />
           </div>
 
           <div>
-            <label htmlFor="body" className="block text-sm font-medium text-gray-700">Email body</label>
+            <label htmlFor="body" className="block text-sm font-medium text-content-secondary">Email body</label>
             <textarea
               id="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={5}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
               placeholder="Full message for email recipients..."
             />
           </div>
 
           <div>
-            <label htmlFor="smsBody" className="block text-sm font-medium text-gray-700">SMS body</label>
+            <label htmlFor="smsBody" className="block text-sm font-medium text-content-secondary">SMS body</label>
             <textarea
               id="smsBody"
               value={smsBody}
               onChange={(e) => setSmsBody(e.target.value)}
               rows={3}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
               placeholder="Short SMS message (160 chars recommended)..."
             />
             <SmsPreview body={smsBody} />
@@ -237,7 +237,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
             <button
               type="button"
               onClick={() => setStep('template')}
-              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-page"
             >
               Back
             </button>
@@ -245,7 +245,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
               type="button"
               onClick={() => setStep('recipients')}
               disabled={!title.trim() || !body.trim()}
-              className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               Next: Recipients
             </button>
@@ -256,15 +256,15 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 3: Recipients */}
       {step === 'recipients' && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Select Recipients</h2>
+          <h2 className="text-lg font-semibold text-content">Select Recipients</h2>
 
           <div>
-            <label htmlFor="audience" className="block text-sm font-medium text-gray-700">Audience</label>
+            <label htmlFor="audience" className="block text-sm font-medium text-content-secondary">Audience</label>
             <select
               id="audience"
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value as 'all' | 'owners_only')}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
             >
               <option value="all">All residents</option>
               <option value="owners_only">Owners only</option>
@@ -272,7 +272,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
           </div>
 
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-gray-700">Channels</span>
+            <span className="block text-sm font-medium text-content-secondary">Channels</span>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -303,7 +303,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
             <button
               type="button"
               onClick={() => setStep('compose')}
-              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-page"
             >
               Back
             </button>
@@ -311,7 +311,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
               type="button"
               onClick={handleCreateDraft}
               disabled={channels.length === 0 || createMutation.isPending}
-              className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               {createMutation.isPending ? 'Resolving...' : 'Next: Confirm'}
             </button>
@@ -322,39 +322,39 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 4: Confirm */}
       {step === 'confirm' && recipientInfo && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Confirm & Send</h2>
+          <h2 className="text-lg font-semibold text-content">Confirm & Send</h2>
 
-          <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+          <div className="rounded-md border border-edge bg-surface-card p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Title:</span>
+              <span className="text-content-tertiary">Title:</span>
               <span className="font-medium">{title}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Severity:</span>
+              <span className="text-content-tertiary">Severity:</span>
               <span className="font-medium capitalize">{severity}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Total recipients:</span>
+              <span className="text-content-tertiary">Total recipients:</span>
               <span className="font-medium">{recipientInfo.recipientCount}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">SMS eligible:</span>
+              <span className="text-content-tertiary">SMS eligible:</span>
               <span className="font-medium">{recipientInfo.smsEligibleCount}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Email recipients:</span>
+              <span className="text-content-tertiary">Email recipients:</span>
               <span className="font-medium">{recipientInfo.emailCount}</span>
             </div>
           </div>
 
-          <label className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+          <label className="flex items-start gap-3 rounded-md border border-status-danger-border bg-status-danger-bg p-3">
             <input
               type="checkbox"
               checked={confirmed}
               onChange={(e) => setConfirmed(e.target.checked)}
               className="mt-1"
             />
-            <span className="text-sm text-red-800">
+            <span className="text-sm text-status-danger">
               I understand this will immediately alert{' '}
               <strong>{recipientInfo.recipientCount} people</strong> via{' '}
               {channels.join(' and ')}.
@@ -362,7 +362,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
           </label>
 
           {createMutation.error && (
-            <div className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">
+            <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
               {createMutation.error.message}
             </div>
           )}
@@ -371,7 +371,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
             <button
               type="button"
               onClick={() => setStep('recipients')}
-              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-page"
             >
               Back
             </button>
@@ -379,7 +379,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
               type="button"
               onClick={handleConfirmSend}
               disabled={!confirmed}
-              className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-red-700 disabled:opacity-50"
             >
               Send Emergency Alert
             </button>
@@ -390,12 +390,12 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 5: Sending with undo */}
       {step === 'sending' && (
         <div className="space-y-4 text-center">
-          <div className="text-4xl font-bold text-red-600">{undoCountdown}</div>
-          <p className="text-sm text-gray-600">Sending in {undoCountdown} seconds...</p>
+          <div className="text-4xl font-bold text-status-danger">{undoCountdown}</div>
+          <p className="text-sm text-content-secondary">Sending in {undoCountdown} seconds...</p>
           <button
             type="button"
             onClick={handleUndo}
-            className="rounded border-2 border-red-600 px-6 py-3 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="rounded border-2 border-status-danger px-6 py-3 text-sm font-medium text-status-danger hover:bg-status-danger-bg"
           >
             UNDO - Cancel Broadcast
           </button>
@@ -405,14 +405,14 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
       {/* Step 6: Sent */}
       {step === 'sent' && broadcastId && (
         <div className="space-y-4 text-center">
-          <div className="text-lg font-semibold text-green-600">Emergency alert sent!</div>
-          <p className="text-sm text-gray-600">
+          <div className="text-lg font-semibold text-status-success">Emergency alert sent!</div>
+          <p className="text-sm text-content-secondary">
             Delivery tracking is in progress. View the report for real-time updates.
           </p>
           <button
             type="button"
             onClick={() => router.push(`/emergency/${broadcastId}?communityId=${communityId}`)}
-            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+            className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover"
           >
             View Delivery Report
           </button>

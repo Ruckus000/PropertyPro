@@ -22,7 +22,7 @@ export function DataTablePagination<TData>({
 
   return (
     <div className="flex items-center justify-between px-2">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm text-content-tertiary">
         <span>Rows per page</span>
         <Select
           value={String(table.getState().pagination.pageSize)}
@@ -42,13 +42,13 @@ export function DataTablePagination<TData>({
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-content-tertiary">
           Page {pageIndex + 1} of {pageCount || 1}
         </span>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border text-sm disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-edge text-sm transition-colors duration-quick disabled:pointer-events-none disabled:opacity-50 hover:bg-surface-hover hover:text-content"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
             aria-label="Previous page"
@@ -57,7 +57,7 @@ export function DataTablePagination<TData>({
           </button>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border text-sm disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-edge text-sm transition-colors duration-quick disabled:pointer-events-none disabled:opacity-50 hover:bg-surface-hover hover:text-content"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
             aria-label="Next page"

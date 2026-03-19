@@ -75,23 +75,23 @@ export function AnnouncementComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="pp-announcement-composer flex flex-col gap-4 rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5 dark:border-gray-700 dark:bg-gray-900"
+      className="pp-announcement-composer flex flex-col gap-4 rounded-md border border-edge-subtle bg-surface-card p-5 dark:border-gray-700 dark:bg-gray-900"
     >
-      <h3 className="text-lg font-semibold text-[var(--text-primary)] dark:text-gray-100">
+      <h3 className="text-lg font-semibold text-content dark:text-gray-100">
         New Announcement
       </h3>
 
       {error && (
         <div
           role="alert"
-          className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400"
+          className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger dark:bg-red-900/20 dark:text-red-400"
         >
           {error}
         </div>
       )}
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-[var(--text-secondary)] dark:text-gray-300">
+        <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
           Title
         </span>
         <input
@@ -101,12 +101,12 @@ export function AnnouncementComposer({
           placeholder="Announcement title"
           maxLength={500}
           required
-          className="rounded-md border border-[var(--border-default)] bg-[var(--surface-default)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-placeholder)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content placeholder:text-content-disabled focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-[var(--text-secondary)] dark:text-gray-300">
+        <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
           Body
         </span>
         <textarea
@@ -115,19 +115,19 @@ export function AnnouncementComposer({
           placeholder="Write your announcement..."
           rows={6}
           required
-          className="resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-default)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-placeholder)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="resize-y rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content placeholder:text-content-disabled focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         />
       </label>
 
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-[var(--text-secondary)] dark:text-gray-300">
+          <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
             Audience
           </span>
           <select
             value={audience}
             onChange={(e) => setAudience(e.target.value as AnnouncementAudience)}
-            className="rounded-md border border-[var(--border-default)] bg-[var(--surface-default)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            className="rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="all">All Residents</option>
             <option value="owners_only">Owners Only</option>
@@ -141,9 +141,9 @@ export function AnnouncementComposer({
             type="checkbox"
             checked={isPinned}
             onChange={(e) => setIsPinned(e.target.checked)}
-            className="h-4 w-4 rounded border-[var(--border-default)] text-[var(--interactive-primary)] focus:ring-[var(--interactive-primary)]"
+            className="h-4 w-4 rounded border-edge text-interactive focus:ring-interactive"
           />
-          <span className="text-sm text-[var(--text-secondary)] dark:text-gray-300">
+          <span className="text-sm text-content-secondary dark:text-content-disabled">
             Pin to top
           </span>
         </label>
@@ -155,7 +155,7 @@ export function AnnouncementComposer({
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="rounded-md px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)] dark:text-gray-300 dark:hover:bg-gray-800"
+            className="rounded-md px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-interactive dark:text-content-disabled dark:hover:bg-gray-800"
           >
             Cancel
           </button>
@@ -163,7 +163,7 @@ export function AnnouncementComposer({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--interactive-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)] focus:ring-offset-2 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 disabled:opacity-50 dark:bg-interactive dark:hover:bg-interactive-subtle0"
         >
           {isSubmitting ? 'Publishing...' : 'Publish'}
         </button>

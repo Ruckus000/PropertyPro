@@ -23,8 +23,8 @@ function BulkActionBar({ selectedCount, actions, onClear }: BulkActionBarProps) 
   return (
     <div
       className={cn(
-        'fixed inset-x-0 bottom-0 z-50 border-t bg-white shadow-lg',
-        'animate-in slide-in-from-bottom-full duration-200',
+        'fixed inset-x-0 bottom-0 z-50 border-t border-edge bg-surface-card shadow-lg',
+        'animate-in slide-in-from-bottom-full duration-quick',
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
@@ -42,11 +42,11 @@ function BulkActionBar({ selectedCount, actions, onClear }: BulkActionBarProps) 
                 onClick={action.onClick}
                 disabled={action.disabled}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-quick',
                   'disabled:pointer-events-none disabled:opacity-50',
                   action.variant === 'destructive'
-                    ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                    ? 'bg-status-danger text-content-inverse hover:bg-status-danger/90'
+                    : 'bg-interactive text-content-inverse hover:bg-interactive-hover',
                 )}
               >
                 {Icon && <Icon className="h-4 w-4" />}
@@ -59,7 +59,7 @@ function BulkActionBar({ selectedCount, actions, onClear }: BulkActionBarProps) 
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
+          className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-content-tertiary transition-colors duration-quick hover:bg-surface-muted"
         >
           <X className="h-4 w-4" />
           Clear

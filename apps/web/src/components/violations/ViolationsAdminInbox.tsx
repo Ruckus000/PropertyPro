@@ -28,18 +28,18 @@ const SEVERITY_OPTIONS: { value: ViolationSeverity | ''; label: string }[] = [
 ];
 
 const STATUS_STYLES: Record<string, string> = {
-  reported: 'bg-yellow-100 text-yellow-800',
-  noticed: 'bg-blue-100 text-blue-800',
-  hearing_scheduled: 'bg-purple-100 text-purple-800',
-  fined: 'bg-red-100 text-red-800',
-  resolved: 'bg-green-100 text-green-800',
-  dismissed: 'bg-gray-100 text-gray-700',
+  reported: 'bg-status-warning-bg text-status-warning',
+  noticed: 'bg-interactive-muted text-content-link',
+  hearing_scheduled: 'bg-status-brand-bg text-status-brand',
+  fined: 'bg-status-danger-bg text-status-danger',
+  resolved: 'bg-status-success-bg text-status-success',
+  dismissed: 'bg-surface-muted text-content-secondary',
 };
 
 const SEVERITY_STYLES: Record<string, string> = {
-  minor: 'bg-yellow-100 text-yellow-800',
+  minor: 'bg-status-warning-bg text-status-warning',
   moderate: 'bg-orange-100 text-orange-800',
-  major: 'bg-red-100 text-red-800',
+  major: 'bg-status-danger-bg text-status-danger',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -128,7 +128,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
         <select
           value={selectedStatus}
           onChange={(e) => handleFilterChange(setSelectedStatus as (val: string) => void, e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         >
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -140,7 +140,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
         <select
           value={selectedSeverity}
           onChange={(e) => handleFilterChange(setSelectedSeverity as (val: string) => void, e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         >
           {SEVERITY_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -154,37 +154,37 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
           value={createdAfter}
           onChange={(e) => handleFilterChange(setCreatedAfter, e.target.value)}
           aria-label="Filter violations from date"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
-        <span className="text-sm text-gray-400">to</span>
+        <span className="text-sm text-content-disabled">to</span>
         <input
           type="date"
           value={createdBefore}
           onChange={(e) => handleFilterChange(setCreatedBefore, e.target.value)}
           aria-label="Filter violations until date"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
 
-        <span className="ml-auto text-sm text-gray-500">
+        <span className="ml-auto text-sm text-content-tertiary">
           {total} violation{total !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Error */}
       {error && (
-        <div role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="mb-4 rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{error}</div>
       )}
 
       {/* List */}
       {loading && violations.length === 0 ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 animate-pulse rounded-lg border border-gray-200 bg-gray-50" />
+            <div key={i} className="h-20 animate-pulse rounded-md border border-edge bg-surface-hover" />
           ))}
         </div>
       ) : violations.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 px-6 py-12 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="rounded-md border border-dashed border-edge-strong px-6 py-12 text-center">
+          <p className="text-sm text-content-tertiary">
             {selectedStatus || selectedSeverity || createdAfter || createdBefore
               ? 'No violations match your filters. Try adjusting your filter criteria.'
               : 'No violations have been reported. When community members report violations, they will appear here.'}
@@ -199,21 +199,21 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
                 onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}
                 aria-expanded={expandedId === v.id}
                 aria-label={`Violation #${v.id} — ${CATEGORY_LABELS[v.category] ?? v.category}, Unit ${v.unitId}`}
-                className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
+                className={`w-full rounded-md border px-4 py-3 text-left transition-colors duration-quick ${
                   expandedId === v.id
-                    ? 'border-blue-300 bg-blue-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-blue-300 bg-interactive-subtle'
+                    : 'border-edge bg-surface-card hover:border-edge-strong hover:bg-surface-hover'
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-content">
                       #{v.id}
                     </span>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-content-secondary">
                       Unit {v.unitId}
                     </span>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-content-secondary">
                       {CATEGORY_LABELS[v.category] ?? v.category}
                     </span>
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[v.severity] ?? ''}`}>
@@ -223,7 +223,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
                       {STATUS_LABELS[v.status] ?? v.status}
                     </span>
                   </div>
-                  <time className="shrink-0 text-xs text-gray-400">
+                  <time className="shrink-0 text-xs text-content-disabled">
                     {new Date(v.createdAt).toLocaleDateString()}
                   </time>
                 </div>
@@ -250,18 +250,18 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary transition-colors duration-quick hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Previous
           </button>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-content-tertiary">
             Page {page} of {totalPages}
           </span>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary transition-colors duration-quick hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next
           </button>

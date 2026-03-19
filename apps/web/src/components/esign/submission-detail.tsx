@@ -120,7 +120,7 @@ export function SubmissionDetail({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-content-disabled" />
       </div>
     );
   }
@@ -129,14 +129,14 @@ export function SubmissionDetail({
     return (
       <Card className="p-8 text-center">
         <AlertTriangle className="h-8 w-8 mx-auto text-amber-500 mb-2" />
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-content-secondary">
           {error
             ? (error as Error).message
             : 'Submission not found.'}
         </p>
         <Link
           href={`/esign?communityId=${communityId}`}
-          className="text-sm text-blue-600 hover:underline mt-4 inline-block"
+          className="text-sm text-content-link hover:underline mt-4 inline-block"
         >
           Back to E-Sign
         </Link>
@@ -154,7 +154,7 @@ export function SubmissionDetail({
       {/* Back link */}
       <Link
         href={`/esign?communityId=${communityId}`}
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+        className="inline-flex items-center gap-1 text-sm text-content-tertiary hover:text-content-secondary mb-4"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to E-Sign
@@ -165,10 +165,10 @@ export function SubmissionDetail({
         {/* Left: PDF preview */}
         <div className="lg:col-span-3">
           <Card className="overflow-hidden">
-            <div className="relative min-h-[500px] bg-gray-100 flex items-center justify-center">
+            <div className="relative min-h-[500px] bg-surface-muted flex items-center justify-center">
               <div className="text-center">
-                <FileSignature className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                <p className="text-sm text-gray-400">
+                <FileSignature className="h-12 w-12 mx-auto text-content-disabled mb-3" />
+                <p className="text-sm text-content-disabled">
                   PDF Document Preview
                 </p>
               </div>
@@ -181,7 +181,7 @@ export function SubmissionDetail({
           {/* Status header */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-content">
                 {submission.messageSubject ?? `Submission #${submission.id}`}
               </h2>
               <Badge variant={submissionConfig.variant} size="sm">
@@ -193,27 +193,27 @@ export function SubmissionDetail({
             </div>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <dt className="text-gray-500">Created</dt>
-                <dd className="text-gray-900">
+                <dt className="text-content-tertiary">Created</dt>
+                <dd className="text-content">
                   {formatDateTime(submission.createdAt)}
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500">Expires</dt>
-                <dd className="text-gray-900">
+                <dt className="text-content-tertiary">Expires</dt>
+                <dd className="text-content">
                   {formatDateTime(submission.expiresAt)}
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500">Signing order</dt>
-                <dd className="text-gray-900 capitalize">
+                <dt className="text-content-tertiary">Signing order</dt>
+                <dd className="text-content capitalize">
                   {submission.signingOrder}
                 </dd>
               </div>
               {submission.completedAt && (
                 <div>
-                  <dt className="text-gray-500">Completed</dt>
-                  <dd className="text-gray-900">
+                  <dt className="text-content-tertiary">Completed</dt>
+                  <dd className="text-content">
                     {formatDateTime(submission.completedAt)}
                   </dd>
                 </div>
@@ -223,7 +223,7 @@ export function SubmissionDetail({
 
           {/* Signer cards */}
           <Card className="p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">
+            <h3 className="text-sm font-medium text-content mb-3">
               Signers
             </h3>
             <div className="space-y-3">
@@ -238,14 +238,14 @@ export function SubmissionDetail({
                 return (
                   <div
                     key={signer.id}
-                    className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                    className="flex items-start gap-3 p-3 bg-surface-hover rounded-md"
                   >
-                    <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                      <User className="h-4 w-4 text-gray-500" />
+                    <div className="h-8 w-8 rounded-full bg-surface-muted flex items-center justify-center shrink-0">
+                      <User className="h-4 w-4 text-content-tertiary" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 truncate">
+                        <span className="text-sm font-medium text-content truncate">
                           {signer.name ?? 'Unnamed'}
                         </span>
                         <Badge variant={signerConfig.variant} size="sm">
@@ -255,10 +255,10 @@ export function SubmissionDetail({
                           <Badge.Label>{signerConfig.label}</Badge.Label>
                         </Badge>
                       </div>
-                      <p className="text-xs text-gray-500 truncate">
+                      <p className="text-xs text-content-tertiary truncate">
                         {signer.email}
                       </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-xs text-content-disabled mt-0.5">
                         Role: {signer.role}
                         {signer.completedAt &&
                           ` \u00B7 Signed ${formatDateTime(signer.completedAt)}`}
@@ -286,7 +286,7 @@ export function SubmissionDetail({
             <div className="flex gap-2">
               <Button
                 variant="ghost"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="text-status-danger hover:text-red-700 hover:bg-status-danger-bg"
                 onClick={handleCancel}
                 disabled={cancelMutation.isPending}
               >
@@ -305,11 +305,11 @@ export function SubmissionDetail({
 
           {/* Event timeline */}
           <Card className="p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">
+            <h3 className="text-sm font-medium text-content mb-3">
               Activity Timeline
             </h3>
             {events.length === 0 && (
-              <p className="text-sm text-gray-400">No events recorded.</p>
+              <p className="text-sm text-content-disabled">No events recorded.</p>
             )}
             <div className="relative">
               {events.map((event: EsignEventRecord, idx: number) => {
@@ -319,18 +319,18 @@ export function SubmissionDetail({
                 return (
                   <div key={event.id} className="flex gap-3 pb-4 last:pb-0">
                     <div className="relative flex flex-col items-center">
-                      <div className="h-6 w-6 rounded-full bg-gray-100 flex items-center justify-center shrink-0 z-10">
-                        <Icon className="h-3 w-3 text-gray-500" />
+                      <div className="h-6 w-6 rounded-full bg-surface-muted flex items-center justify-center shrink-0 z-10">
+                        <Icon className="h-3 w-3 text-content-tertiary" />
                       </div>
                       {!isLast && (
-                        <div className="w-px flex-1 bg-gray-200 mt-1" />
+                        <div className="w-px flex-1 bg-edge mt-1" />
                       )}
                     </div>
                     <div className="min-w-0 pt-0.5">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm text-content">
                         {formatEventType(event.eventType)}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-content-disabled">
                         {formatDateTime(event.createdAt)}
                       </p>
                     </div>
