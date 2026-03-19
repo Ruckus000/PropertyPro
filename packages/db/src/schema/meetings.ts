@@ -18,6 +18,8 @@ export const meetings = pgTable('meetings', {
   meetingType: text('meeting_type').notNull(),
   /** UTC start datetime */
   startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  /** Optional end datetime; consumers fall back to startsAt + 1hr when null. */
+  endsAt: timestamp('ends_at', { withTimezone: true }),
   /** Location string (address or virtual link text) */
   location: text('location').notNull(),
 
@@ -29,4 +31,3 @@ export const meetings = pgTable('meetings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
-

@@ -5,13 +5,22 @@ import {
   decryptToken,
   encryptToken,
   logAuditEvent,
-  meetings,
   type CalendarSyncProvider,
 } from '@propertypro/db';
-import { and, asc, eq } from '@propertypro/db/filters';
+import { and, eq } from '@propertypro/db/filters';
+import type { CommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { deterministicGoogleCalendarAdapter } from '@/lib/calendar/google-calendar-adapter';
-import { buildMeetingsIcs, type IcsMeetingInput } from '@/lib/calendar/ics';
+import {
+  buildCalendarIcs,
+  type IcsAssessmentInput,
+  type IcsMeetingInput,
+} from '@/lib/calendar/ics';
+import {
+  listAggregateAssessmentDueRecords,
+  listCommunityCalendarMeetings,
+  listOwnerAssessmentDueRecords,
+} from '@/lib/services/calendar-data-service';
 
 interface CalendarSyncTokenRow {
   [key: string]: unknown;
@@ -25,15 +34,6 @@ interface CalendarSyncTokenRow {
   channelId: string | null;
   channelExpiry: Date | null;
   lastSyncAt: Date | null;
-}
-
-interface MeetingRow {
-  [key: string]: unknown;
-  id: number;
-  title: string;
-  meetingType: string;
-  startsAt: Date;
-  location: string;
 }
 
 function getCalendarCallbackUrl(): string {
@@ -114,24 +114,6 @@ export function validateOAuthState(
   }
 }
 
-async function listCommunityMeetings(
-  communityId: number,
-): Promise<IcsMeetingInput[]> {
-  const scoped = createScopedClient(communityId);
-
-  const rows = await scoped
-    .selectFrom<MeetingRow>(meetings, {}, undefined)
-    .orderBy(asc(meetings.startsAt), asc(meetings.id));
-
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    meetingType: row.meetingType,
-    startsAt: row.startsAt,
-    location: row.location,
-  }));
-}
-
 async function getGoogleConnection(
   communityId: number,
   actorUserId: string,
@@ -148,24 +130,114 @@ async function getGoogleConnection(
   return rows[0] ?? null;
 }
 
+function formatCurrency(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
+}
+
+function toOpenUnitDescription(
+  pendingCount: number,
+  unitCount: number,
+): string {
+  const overdueCount = Math.max(0, unitCount - pendingCount);
+  if (overdueCount === 0) {
+    return `${unitCount} units pending`;
+  }
+  if (pendingCount === 0) {
+    return `${unitCount} units overdue`;
+  }
+  return `${pendingCount} pending, ${overdueCount} overdue`;
+}
+
+export async function listCommunityAssessmentDueDates(
+  communityId: number,
+): Promise<IcsAssessmentInput[]> {
+  const records = await listAggregateAssessmentDueRecords(communityId);
+
+  return records.map((record) => ({
+    assessmentId: record.assessmentId,
+    dueDate: record.dueDate,
+    title: record.assessmentTitle,
+    description: toOpenUnitDescription(record.pendingCount, record.unitCount),
+  }));
+}
+
+export async function listMyAssessmentDueDates(
+  communityId: number,
+  actorUserId: string,
+  membership?: CommunityMembership,
+): Promise<IcsAssessmentInput[]> {
+  if (!membership) {
+    return [];
+  }
+
+  if (membership.isAdmin) {
+    const records = await listAggregateAssessmentDueRecords(communityId);
+    return records.map((record) => ({
+      assessmentId: record.assessmentId,
+      dueDate: record.dueDate,
+      title: record.assessmentTitle,
+      description: `${toOpenUnitDescription(record.pendingCount, record.unitCount)} • ${formatCurrency(record.totalAmountCents)} total due`,
+    }));
+  }
+
+  if (membership.role === 'resident' && membership.isUnitOwner) {
+    const records = await listOwnerAssessmentDueRecords(communityId, actorUserId);
+    return records.map((record) => ({
+      assessmentId: record.assessmentId,
+      dueDate: record.dueDate,
+      title: record.assessmentTitle,
+      description: `${record.unitLabel} • ${formatCurrency(record.amountCents)} • ${record.status}`,
+    }));
+  }
+
+  return [];
+}
+
+export async function generateCommunityCalendarIcs(
+  communityId: number,
+  calendarName?: string,
+): Promise<string> {
+  const [meetingsForCalendar, assessmentDueDates] = await Promise.all([
+    listCommunityCalendarMeetings(communityId),
+    listCommunityAssessmentDueDates(communityId),
+  ]);
+
+  return buildCalendarIcs(meetingsForCalendar, assessmentDueDates, {
+    calendarName,
+  });
+}
+
+export async function generateMyCalendarIcs(
+  communityId: number,
+  actorUserId: string,
+  membership?: CommunityMembership,
+): Promise<string> {
+  const [meetingsForCalendar, assessmentDueDates] = await Promise.all([
+    listCommunityCalendarMeetings(communityId),
+    listMyAssessmentDueDates(communityId, actorUserId, membership),
+  ]);
+
+  return buildCalendarIcs(meetingsForCalendar, assessmentDueDates, {
+    calendarName: `PropertyPro Meetings (${actorUserId.slice(0, 8)})`,
+  });
+}
+
 export async function generateCommunityMeetingsIcs(
   communityId: number,
   calendarName?: string,
 ): Promise<string> {
-  const meetingsForCalendar = await listCommunityMeetings(communityId);
-  return buildMeetingsIcs(meetingsForCalendar, {
-    calendarName,
-  });
+  return generateCommunityCalendarIcs(communityId, calendarName);
 }
 
 export async function generateMyMeetingsIcs(
   communityId: number,
   actorUserId: string,
+  membership?: CommunityMembership,
 ): Promise<string> {
-  const meetingsForCalendar = await listCommunityMeetings(communityId);
-  return buildMeetingsIcs(meetingsForCalendar, {
-    calendarName: `PropertyPro Meetings (${actorUserId.slice(0, 8)})`,
-  });
+  return generateMyCalendarIcs(communityId, actorUserId, membership);
 }
 
 export async function initiateGoogleCalendarConnect(
@@ -286,7 +358,7 @@ export async function syncGoogleCalendar(
     throw new NotFoundError('Google calendar is not connected for this user');
   }
 
-  const meetingsForCalendar = await listCommunityMeetings(communityId);
+  const meetingsForCalendar = await listCommunityCalendarMeetings(communityId);
 
   const syncResult = await deterministicGoogleCalendarAdapter.syncMeetings({
     accessToken: decryptToken(existing.accessToken),

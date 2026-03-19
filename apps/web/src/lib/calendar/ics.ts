@@ -1,9 +1,20 @@
+import { resolveEndsAt } from '@/lib/calendar/event-types';
+
 export interface IcsMeetingInput {
   id: number;
   title: string;
   meetingType: string;
   startsAt: Date;
+  endsAt?: Date | null;
   location: string;
+  description?: string;
+}
+
+export interface IcsAssessmentInput {
+  assessmentId: number;
+  dueDate: string;
+  title: string;
+  description?: string;
 }
 
 function pad2(value: number): string {
@@ -20,6 +31,10 @@ function toIcsTimestamp(date: Date): string {
   return `${year}${month}${day}T${hour}${minute}${second}Z`;
 }
 
+function toIcsDate(dateOnly: string): string {
+  return dateOnly.replaceAll('-', '');
+}
+
 function escapeIcsText(value: string): string {
   return value
     .replace(/\\/g, '\\\\')
@@ -28,8 +43,25 @@ function escapeIcsText(value: string): string {
     .replace(/;/g, '\\;');
 }
 
-export function buildMeetingsIcs(
+/**
+ * Fold a content line per RFC 5545 §3.1: lines SHOULD NOT exceed 75 octets.
+ * Long lines are split with CRLF followed by a single space continuation.
+ */
+function foldLine(line: string): string {
+  if (line.length <= 75) return line;
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < line.length) {
+    const chunkSize = offset === 0 ? 75 : 74; // continuation lines lose 1 char to leading space
+    parts.push(line.slice(offset, offset + chunkSize));
+    offset += chunkSize;
+  }
+  return parts.join('\r\n ');
+}
+
+export function buildCalendarIcs(
   meetings: readonly IcsMeetingInput[],
+  assessments: readonly IcsAssessmentInput[],
   options?: {
     calendarName?: string;
     productId?: string;
@@ -37,8 +69,8 @@ export function buildMeetingsIcs(
   },
 ): string {
   const generatedAt = options?.generatedAt ?? new Date();
-  const calendarName = options?.calendarName ?? 'PropertyPro Meetings';
-  const productId = options?.productId ?? '-//PropertyPro//Meetings//EN';
+  const calendarName = options?.calendarName ?? 'PropertyPro Calendar';
+  const productId = options?.productId ?? '-//PropertyPro//Calendar//EN';
 
   const lines: string[] = [
     'BEGIN:VCALENDAR',
@@ -50,26 +82,46 @@ export function buildMeetingsIcs(
   ];
 
   for (const meeting of meetings) {
-    const startsAt = meeting.startsAt;
-    const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
-    const uid = `meeting-${meeting.id}@propertyprofl.com`;
-    const summary = escapeIcsText(meeting.title);
-    const location = escapeIcsText(meeting.location);
-    const description = escapeIcsText(`Meeting type: ${meeting.meetingType}`);
+    const endsAt = resolveEndsAt(meeting.startsAt, meeting.endsAt);
 
     lines.push(
       'BEGIN:VEVENT',
-      `UID:${uid}`,
+      `UID:meeting-${meeting.id}@propertyprofl.com`,
       `DTSTAMP:${toIcsTimestamp(generatedAt)}`,
-      `DTSTART:${toIcsTimestamp(startsAt)}`,
+      `DTSTART:${toIcsTimestamp(meeting.startsAt)}`,
       `DTEND:${toIcsTimestamp(endsAt)}`,
-      `SUMMARY:${summary}`,
-      `DESCRIPTION:${description}`,
-      `LOCATION:${location}`,
+      `SUMMARY:${escapeIcsText(meeting.title)}`,
+      `DESCRIPTION:${escapeIcsText(meeting.description ?? `Meeting type: ${meeting.meetingType}`)}`,
+      `LOCATION:${escapeIcsText(meeting.location)}`,
+      'END:VEVENT',
+    );
+  }
+
+  for (const assessment of assessments) {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:assessment-${assessment.assessmentId}-${assessment.dueDate}@propertyprofl.com`,
+      `DTSTAMP:${toIcsTimestamp(generatedAt)}`,
+      `DTSTART;VALUE=DATE:${toIcsDate(assessment.dueDate)}`,
+      `SUMMARY:${escapeIcsText(assessment.title)}`,
+      ...(assessment.description
+        ? [`DESCRIPTION:${escapeIcsText(assessment.description)}`]
+        : []),
       'END:VEVENT',
     );
   }
 
   lines.push('END:VCALENDAR');
-  return `${lines.join('\r\n')}\r\n`;
+  return `${lines.map(foldLine).join('\r\n')}\r\n`;
+}
+
+export function buildMeetingsIcs(
+  meetings: readonly IcsMeetingInput[],
+  options?: {
+    calendarName?: string;
+    productId?: string;
+    generatedAt?: Date;
+  },
+): string {
+  return buildCalendarIcs(meetings, [], options);
 }
