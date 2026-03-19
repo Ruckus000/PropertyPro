@@ -30,6 +30,7 @@ vi.mock('@/lib/calendar/google-calendar-adapter', () => ({
   deterministicGoogleCalendarAdapter: {},
 }));
 vi.mock('@/lib/calendar/ics', () => ({
+  buildCalendarIcs: vi.fn(),
   buildMeetingsIcs: vi.fn(),
 }));
 vi.mock('@/lib/accounting/adapters', () => ({

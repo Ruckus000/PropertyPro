@@ -5,7 +5,7 @@
  * given community type. This is a pure module — no I/O, no side effects.
  *
  * Policy decisions per ADR-001:
- * - meetings / compliance: condo/HOA only (apartment → false for all roles)
+ * - compliance: condo/HOA only (apartment → false for all roles)
  * - audit write: always false (logAuditEvent() is internal-only)
  * - settings write: board_president and property_manager_admin only
  * - maintenance write: both residents (own requests) and admins (all requests)
@@ -218,7 +218,7 @@ const BASE_RBAC_MATRIX = {
     },
     tenant: {
       documents:     { read: true,  write: false },
-      meetings:      { read: false, write: false }, // apartments have no meetings
+      meetings:      { read: true,  write: false },
       announcements: { read: true,  write: false },
       residents:     { read: false, write: false },
       settings:      { read: false, write: false },
@@ -265,7 +265,7 @@ const BASE_RBAC_MATRIX = {
     },
     site_manager: {
       documents:     { read: true,  write: true  },
-      meetings:      { read: false, write: false }, // apartments have no meetings
+      meetings:      { read: true,  write: true  },
       announcements: { read: true,  write: true  },
       residents:     { read: true,  write: true  },
       settings:      { read: true,  write: false },
@@ -276,7 +276,7 @@ const BASE_RBAC_MATRIX = {
     },
     property_manager_admin: {
       documents:     { read: true,  write: true  },
-      meetings:      { read: false, write: false }, // apartments have no meetings
+      meetings:      { read: true,  write: true  },
       announcements: { read: true,  write: true  },
       residents:     { read: true,  write: true  },
       settings:      { read: true,  write: true  },
@@ -403,9 +403,9 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
   },
   calendar_sync: {
     policy: {
-      owner:                  { read: false, write: false },
-      tenant:                 { read: false, write: false },
-      board_member:           { read: false, write: false },
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: true,  write: false },
+      board_member:           { read: true,  write: false },
       board_president:        { read: true,  write: true  },
       cam:                    { read: true,  write: true  },
       site_manager:           { read: true,  write: true  },

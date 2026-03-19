@@ -70,7 +70,7 @@
         "write": true
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -156,7 +156,7 @@
         "write": true
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -242,7 +242,7 @@
         "write": false
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -674,7 +674,7 @@
         "write": true
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -760,7 +760,7 @@
         "write": true
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -846,7 +846,7 @@
         "write": false
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -1300,7 +1300,7 @@
         "write": false
       },
       "meetings": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "announcements": {
@@ -1364,7 +1364,7 @@
         "write": true
       },
       "calendar_sync": {
-        "read": false,
+        "read": true,
         "write": false
       },
       "accounting": {
@@ -1644,8 +1644,8 @@
         "write": true
       },
       "meetings": {
-        "read": false,
-        "write": false
+        "read": true,
+        "write": true
       },
       "announcements": {
         "read": true,
@@ -1730,8 +1730,8 @@
         "write": true
       },
       "meetings": {
-        "read": false,
-        "write": false
+        "read": true,
+        "write": true
       },
       "announcements": {
         "read": true,

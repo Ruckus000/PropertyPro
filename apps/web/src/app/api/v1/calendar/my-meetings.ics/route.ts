@@ -7,7 +7,7 @@ import {
   requireCalendarSyncEnabledForMembership,
   requireCalendarSyncReadPermission,
 } from '@/lib/calendar/common';
-import { generateMyMeetingsIcs } from '@/lib/services/calendar-sync-service';
+import { generateMyCalendarIcs } from '@/lib/services/calendar-sync-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -17,7 +17,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requireCalendarSyncEnabledForMembership(membership);
   requireCalendarSyncReadPermission(membership);
 
-  const body = await generateMyMeetingsIcs(communityId, actorUserId);
+  const body = await generateMyCalendarIcs(communityId, actorUserId, membership);
 
   return new NextResponse(body, {
     status: 200,
