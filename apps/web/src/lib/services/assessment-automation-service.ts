@@ -1,7 +1,7 @@
 /**
  * Assessment automation service — Phase 1A
  *
- * Three automated operations called by daily/monthly cron endpoints:
+ * Four automated operations called by daily/monthly cron endpoints:
  *
  * 1. processOverdueTransitions() — Daily at 06:00 UTC
  *    Moves pending line items past their due date to 'overdue' status.
@@ -12,21 +12,36 @@
  * 3. processRecurringAssessments() — Monthly on the 1st at 05:00 UTC
  *    Auto-generates line items for active recurring assessments.
  *
- * All three use createUnscopedClient() because they scan across communities.
+ * 4. processAssessmentDueReminders() — Daily at 08:00 UTC
+ *    Sends reminder emails 7 days before assessment due dates.
+ *
+ * All four use createUnscopedClient() because they scan across communities.
  * Each uses createScopedClient() for tenant-scoped mutations.
  */
-import { format } from 'date-fns';
+import { createElement } from 'react';
+import { addDays, format } from 'date-fns';
 import {
   assessmentLineItems,
   assessments,
   communities,
   createScopedClient,
   postLedgerEntry,
+  units,
+  users,
+  userRoles,
 } from '@propertypro/db';
 import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { AssessmentDueReminderEmail, sendEmail } from '@propertypro/email';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
+import { centsToDollars } from '@/lib/finance/common';
+
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return 'http://localhost:3000';
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,6 +349,152 @@ export async function processRecurringAssessments(
     } catch (err) {
       console.error(
         `[generate-assessments] Failed for community ${community.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      summary.errors += 1;
+    }
+  }
+
+  return summary;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Assessment due date reminders
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DueReminderSummary {
+  communitiesScanned: number;
+  emailsSent: number;
+  errors: number;
+}
+
+/**
+ * Sends reminder emails to unit owners whose assessment line items are due
+ * in exactly 7 days. Scans across all non-deleted communities.
+ *
+ * Only sends to 'pending' line items (not already paid/overdue/waived).
+ * Looks up the unit owner via userRoles → users join.
+ */
+export async function processAssessmentDueReminders(
+  now: Date = new Date(),
+): Promise<DueReminderSummary> {
+  const db = createUnscopedClient();
+  const reminderDate = format(addDays(now, 7), 'yyyy-MM-dd');
+
+  const activeCommunities = await db
+    .select({ id: communities.id, name: communities.name })
+    .from(communities)
+    .where(isNull(communities.deletedAt));
+
+  const summary: DueReminderSummary = {
+    communitiesScanned: activeCommunities.length,
+    emailsSent: 0,
+    errors: 0,
+  };
+
+  for (const community of activeCommunities) {
+    try {
+      const scoped = createScopedClient(community.id);
+
+      // Find pending line items due in exactly 7 days
+      const dueItems = await scoped.selectFrom<{
+        id: number;
+        assessmentId: number | null;
+        unitId: number;
+        amountCents: number;
+        dueDate: string;
+        lateFeeCents: number;
+      }>(
+        assessmentLineItems,
+        {
+          id: assessmentLineItems.id,
+          assessmentId: assessmentLineItems.assessmentId,
+          unitId: assessmentLineItems.unitId,
+          amountCents: assessmentLineItems.amountCents,
+          dueDate: assessmentLineItems.dueDate,
+          lateFeeCents: assessmentLineItems.lateFeeCents,
+        },
+        and(
+          eq(assessmentLineItems.status, 'pending'),
+          eq(assessmentLineItems.dueDate, reminderDate),
+        ),
+      );
+
+      if (dueItems.length === 0) continue;
+
+      // Load assessment titles
+      const assessmentIds = [...new Set(dueItems.map((i) => i.assessmentId).filter(Boolean))] as number[];
+      const assessmentRows = assessmentIds.length > 0
+        ? await scoped.selectFrom<{ id: number; title: string }>(
+            assessments,
+            { id: assessments.id, title: assessments.title },
+            inArray(assessments.id, assessmentIds),
+          )
+        : [];
+      const assessmentMap = new Map(assessmentRows.map((a) => [a.id, a.title]));
+
+      // Find unit owners: look up via userRoles which unit each user owns
+      const unitIds = [...new Set(dueItems.map((i) => i.unitId))];
+
+      // Get all owner-role users for these units in this community
+      const ownerRows = await db
+        .select({
+          unitId: units.id,
+          email: users.email,
+          fullName: users.fullName,
+        })
+        .from(userRoles)
+        .innerJoin(users, eq(userRoles.userId, users.id))
+        .innerJoin(units, eq(userRoles.unitId, units.id))
+        .where(
+          and(
+            eq(userRoles.communityId, community.id),
+            eq(userRoles.role, 'resident'),
+            inArray(units.id, unitIds),
+            isNull(users.deletedAt),
+          ),
+        );
+
+      const ownerByUnit = new Map(
+        ownerRows.map((r) => [r.unitId, { email: r.email, fullName: r.fullName }]),
+      );
+
+      const portalUrl = `${getBaseUrl()}/payments?communityId=${community.id}`;
+
+      for (const item of dueItems) {
+        const owner = ownerByUnit.get(item.unitId);
+        if (!owner?.email) continue;
+
+        const assessmentTitle = (item.assessmentId && assessmentMap.get(item.assessmentId)) || 'Assessment';
+        const totalCents = item.amountCents + item.lateFeeCents;
+        const dueDate = format(new Date(`${item.dueDate}T00:00:00.000Z`), 'MMM d, yyyy');
+
+        try {
+          await sendEmail({
+            to: owner.email,
+            subject: `Reminder: ${assessmentTitle} of $${centsToDollars(totalCents)} due ${dueDate}`,
+            category: 'transactional',
+            react: createElement(AssessmentDueReminderEmail, {
+              branding: { communityName: community.name },
+              recipientName: owner.fullName ?? owner.email,
+              assessmentTitle,
+              amountDue: `$${centsToDollars(totalCents)}`,
+              dueDate,
+              portalUrl,
+            }),
+          });
+          summary.emailsSent += 1;
+        } catch (emailErr) {
+          console.error(
+            `[due-reminders] Email failed for unit ${item.unitId} in community ${community.id}:`,
+            emailErr instanceof Error ? emailErr.message : String(emailErr),
+          );
+          summary.errors += 1;
+        }
+      }
+    } catch (err) {
+      console.error(
+        `[due-reminders] Failed for community ${community.id}:`,
         err instanceof Error ? err.message : String(err),
       );
       summary.errors += 1;

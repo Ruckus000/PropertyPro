@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 /* ─────── Types ─────── */
 
@@ -165,7 +165,7 @@ export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashb
       )}
 
       {activeTab === 'delinquent' && (
-        <DelinquentUnitsTable units={delinquent ?? []} loading={delinquentLoading} />
+        <DelinquentUnitsTable units={delinquent ?? []} loading={delinquentLoading} communityId={communityId} />
       )}
     </div>
   );
@@ -316,7 +316,27 @@ function LedgerViewer({
   );
 }
 
-function DelinquentUnitsTable({ units, loading }: { units: DelinquentUnit[]; loading: boolean }) {
+function DelinquentUnitsTable({ units, loading, communityId }: { units: DelinquentUnit[]; loading: boolean; communityId: number }) {
+  const queryClient = useQueryClient();
+  const [waivingUnitId, setWaivingUnitId] = useState<number | null>(null);
+
+  const waiveMutation = useMutation({
+    mutationFn: async (unitId: number) => {
+      const res = await fetch(`/api/v1/delinquency/${unitId}/waive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId }),
+      });
+      if (!res.ok) throw new Error('Failed to waive late fees');
+      return res.json();
+    },
+    onSuccess: () => {
+      setWaivingUnitId(null);
+      queryClient.invalidateQueries({ queryKey: ['finance-delinquent', communityId] });
+      queryClient.invalidateQueries({ queryKey: ['finance-ledger', communityId] });
+    },
+  });
+
   if (loading) {
     return <div className="h-48 animate-pulse rounded-lg bg-gray-200" />;
   }
@@ -349,6 +369,7 @@ function DelinquentUnitsTable({ units, loading }: { units: DelinquentUnit[]; loa
             <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Days Overdue</th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Line Items</th>
             <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Lien Eligible</th>
+            <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -369,10 +390,40 @@ function DelinquentUnitsTable({ units, loading }: { units: DelinquentUnit[]; loa
                   <span className="text-xs text-gray-400">No</span>
                 )}
               </td>
+              <td className="px-4 py-3 text-center">
+                {waivingUnitId === unit.unitId ? (
+                  <div className="inline-flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Waive fees?</span>
+                    <button
+                      onClick={() => waiveMutation.mutate(unit.unitId)}
+                      disabled={waiveMutation.isPending}
+                      className="rounded bg-yellow-500 px-2 py-1 text-xs font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+                    >
+                      {waiveMutation.isPending ? 'Waiving...' : 'Confirm'}
+                    </button>
+                    <button
+                      onClick={() => setWaivingUnitId(null)}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setWaivingUnitId(unit.unitId)}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    Waive Fees
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {waiveMutation.isError && (
+        <p className="px-4 py-2 text-xs text-red-600">Failed to waive fees. Please try again.</p>
+      )}
     </div>
   );
 }
