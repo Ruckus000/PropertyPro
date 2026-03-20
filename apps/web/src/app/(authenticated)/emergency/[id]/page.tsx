@@ -20,21 +20,21 @@ export default function BroadcastDetailPage() {
   const { data: report, isLoading, error } = useEmergencyBroadcast(communityId, broadcastId);
 
   if (!communityId || !broadcastId) {
-    return <p className="text-sm text-red-600">Missing communityId or broadcast ID.</p>;
+    return <p className="text-sm text-status-danger">Missing communityId or broadcast ID.</p>;
   }
 
   if (isLoading) {
-    return <p className="text-sm text-gray-500">Loading delivery report...</p>;
+    return <p className="text-sm text-content-secondary">Loading delivery report...</p>;
   }
 
   if (error || !report) {
-    return <p className="text-sm text-red-600">Failed to load broadcast: {error?.message}</p>;
+    return <p className="text-sm text-status-danger">Failed to load broadcast: {error?.message}</p>;
   }
 
   const SEVERITY_BADGE: Record<string, string> = {
-    emergency: 'bg-red-100 text-red-800',
-    urgent: 'bg-orange-100 text-orange-800',
-    info: 'bg-blue-100 text-blue-800',
+    emergency: 'bg-status-danger-bg text-status-danger',
+    urgent: 'bg-status-warning-bg text-status-warning',
+    info: 'bg-interactive-subtle text-interactive',
   };
 
   return (
@@ -42,36 +42,36 @@ export default function BroadcastDetailPage() {
       <div className="flex items-center gap-4">
         <Link
           href={`/emergency?communityId=${communityId}`}
-          className="text-sm text-blue-600 hover:underline"
+          className="text-sm text-content-link hover:underline"
         >
           &larr; Back
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-900">{report.title}</h1>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-gray-100'}`}>
+        <h1 className="text-2xl font-semibold text-content">{report.title}</h1>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-surface-muted'}`}>
           {report.severity}
         </span>
       </div>
 
       {/* Status banner */}
       {report.canceledAt && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+        <div className="rounded-md border border-edge bg-surface-hover p-3 text-sm text-content-secondary">
           This broadcast was canceled.
         </div>
       )}
       {!report.canceledAt && !report.completedAt && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+        <div className="rounded-md border border-edge bg-status-warning-bg p-3 text-sm text-status-warning">
           This broadcast is pending confirmation.
         </div>
       )}
 
       {/* Message preview */}
-      <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
-        <div className="text-xs font-medium uppercase text-gray-500">Message</div>
-        <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.body}</p>
+      <div className="rounded-md border border-edge bg-surface-card p-4 space-y-2">
+        <div className="text-xs font-medium uppercase text-content-secondary">Message</div>
+        <p className="text-sm text-content whitespace-pre-wrap">{report.body}</p>
         {report.smsBody && (
           <>
-            <div className="mt-3 text-xs font-medium uppercase text-gray-500">SMS</div>
-            <p className="text-sm text-gray-800">{report.smsBody}</p>
+            <div className="mt-3 text-xs font-medium uppercase text-content-secondary">SMS</div>
+            <p className="text-sm text-content">{report.smsBody}</p>
           </>
         )}
       </div>

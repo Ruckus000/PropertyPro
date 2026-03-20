@@ -9,12 +9,12 @@ interface Props {
 function cellClasses(status: TransparencyMinutesMonth['status']): string {
   switch (status) {
     case 'minutes_posted':
-      return 'border-green-700 bg-green-100 text-green-900';
+      return 'border-status-success bg-status-success-bg text-status-success';
     case 'minutes_missing':
-      return 'border-red-700 bg-red-100 text-red-900';
+      return 'border-status-danger bg-status-danger-bg text-status-danger';
     case 'not_expected':
     default:
-      return 'border-gray-300 bg-gray-100 text-gray-500';
+      return 'border-edge-strong bg-surface-muted text-content-tertiary';
   }
 }
 
@@ -32,7 +32,7 @@ function statusText(status: TransparencyMinutesMonth['status']): string {
 
 export function MinutesAvailabilityGrid({ months, monthsWithMinutes }: Props) {
   return (
-    <Card className="border-gray-200 bg-white">
+    <Card className="border-edge bg-surface-card">
       <Card.Header>
         <div className="flex flex-col">
           <Card.Title>Minutes Availability</Card.Title>
@@ -40,7 +40,7 @@ export function MinutesAvailabilityGrid({ months, monthsWithMinutes }: Props) {
         </div>
       </Card.Header>
       <Card.Body>
-        <p className="mb-4 text-sm text-gray-600">
+        <p className="mb-4 text-sm text-content-secondary">
           {monthsWithMinutes} of {months.length} months have posted minutes.
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
@@ -49,7 +49,7 @@ export function MinutesAvailabilityGrid({ months, monthsWithMinutes }: Props) {
               <div className={`rounded-md border p-3 text-xs font-semibold ${cellClasses(month.status)}`}>
                 {statusText(month.status)}
               </div>
-              <p className="text-xs text-gray-500">{month.label}</p>
+              <p className="text-xs text-content-tertiary">{month.label}</p>
             </div>
           ))}
         </div>

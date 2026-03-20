@@ -12,15 +12,15 @@ export function SmsPreview({ body, maxLength = 160 }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500">SMS Preview</span>
-        <span className={`text-xs ${charCount > maxLength ? 'text-orange-600' : 'text-gray-400'}`}>
+        <span className="text-xs font-medium text-content-tertiary">SMS Preview</span>
+        <span className={`text-xs ${charCount > maxLength ? 'text-status-warning' : 'text-content-disabled'}`}>
           {charCount}/{maxLength} chars
           {parts > 1 && ` (${parts} parts)`}
         </span>
       </div>
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-        <p className="whitespace-pre-wrap text-sm text-gray-800">
-          {body || <span className="italic text-gray-400">Enter SMS message...</span>}
+      <div className="rounded-md border border-edge bg-surface-page p-3">
+        <p className="whitespace-pre-wrap text-sm text-content">
+          {body || <span className="italic text-content-disabled">Enter SMS message...</span>}
         </p>
       </div>
     </div>

@@ -92,22 +92,22 @@ export function DocumentUploadArea({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+        className={`flex flex-col items-center justify-center rounded-md border-2 border-dashed p-8 transition-colors ${
           isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+            ? 'border-interactive bg-interactive-subtle'
+            : 'border-edge-strong bg-surface-page hover:border-edge-strong'
         }`}
       >
         {selectedFile ? (
           <div className="text-center">
-            <p className="font-medium text-gray-900">{selectedFile.name}</p>
-            <p className="text-sm text-gray-500">
+            <p className="font-medium text-content">{selectedFile.name}</p>
+            <p className="text-sm text-content-tertiary">
               {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
             </p>
             <button
               type="button"
               onClick={() => setSelectedFile(null)}
-              className="mt-2 text-sm text-red-600 hover:text-red-700"
+              className="mt-2 text-sm text-status-danger hover:text-status-danger"
             >
               Remove
             </button>
@@ -115,7 +115,7 @@ export function DocumentUploadArea({
         ) : (
           <>
             <svg
-              className="mb-3 h-10 w-10 text-gray-400"
+              className="mb-3 h-10 w-10 text-content-disabled"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -127,9 +127,9 @@ export function DocumentUploadArea({
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
               />
             </svg>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-content-secondary">
               Drag and drop a file, or{' '}
-              <label className="cursor-pointer text-blue-600 hover:text-blue-700">
+              <label className="cursor-pointer text-content-link hover:text-interactive">
                 browse
                 <input
                   type="file"
@@ -139,7 +139,7 @@ export function DocumentUploadArea({
                 />
               </label>
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               PDF, DOCX, PNG, JPG up to 50MB
             </p>
           </>
@@ -149,7 +149,7 @@ export function DocumentUploadArea({
       {selectedFile && (
         <>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-content-secondary">
               Title
             </label>
             <input
@@ -157,20 +157,20 @@ export function DocumentUploadArea({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
               placeholder="Document title"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-content-secondary">
               Description (optional)
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
               placeholder="Brief description of the document"
             />
           </div>
@@ -179,25 +179,25 @@ export function DocumentUploadArea({
 
       {isUploading && (
         <div className="space-y-1">
-          <div className="flex justify-between text-sm text-gray-600">
+          <div className="flex justify-between text-sm text-content-secondary">
             <span>Uploading...</span>
             <span>{progress}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
             <div
-              className="h-full bg-blue-600 transition-all duration-300"
+              className="h-full bg-interactive transition-all duration-standard"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-status-danger">{error}</p>}
 
       <button
         type="submit"
         disabled={isUploading || !selectedFile || !title.trim()}
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isUploading ? 'Uploading...' : 'Upload Document'}
       </button>

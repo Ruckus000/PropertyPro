@@ -55,6 +55,11 @@ export function EmailLayout({
             <Text style={footerTextStyle}>
               Powered by PropertyPro Florida
             </Text>
+            {branding.customEmailFooter && (
+              <Text style={customFooterTextStyle}>
+                {branding.customEmailFooter}
+              </Text>
+            )}
           </Section>
         </Container>
       </Body>
@@ -116,4 +121,11 @@ const footerTextStyle: React.CSSProperties = {
   color: "#9ca3af",
   fontSize: "12px",
   margin: "4px 0",
+};
+
+const customFooterTextStyle: React.CSSProperties = {
+  color: "#6b7280",
+  fontSize: "12px",
+  margin: "8px 0 0 0",
+  fontStyle: "italic",
 };

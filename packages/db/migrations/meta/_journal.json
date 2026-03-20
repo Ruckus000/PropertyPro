@@ -463,6 +463,20 @@
       "when": 1773180000000,
       "tag": "0105_add_meetings_ends_at",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1773190000000,
+      "tag": "0106_create_move_checklists",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1773200000000,
+      "tag": "0107_esign_native_template_support",
+      "breakpoints": true
     }
   ]
 }

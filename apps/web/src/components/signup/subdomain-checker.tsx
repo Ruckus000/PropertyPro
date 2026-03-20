@@ -99,14 +99,14 @@ export function SubdomainChecker({
   }, [availability, onAvailabilityChange]);
 
   const helperColor = availability?.reason === 'available'
-    ? 'text-green-700'
+    ? 'text-status-success'
     : availability?.reason === 'checking'
-      ? 'text-gray-500'
-      : 'text-red-600';
+      ? 'text-content-tertiary'
+      : 'text-status-danger';
 
   return (
     <div>
-      <label htmlFor="candidateSlug" className="mb-1 block text-sm font-medium text-gray-700">
+      <label htmlFor="candidateSlug" className="mb-1 block text-sm font-medium text-content-secondary">
         Subdomain
       </label>
       <div className="flex items-center">
@@ -117,10 +117,10 @@ export function SubdomainChecker({
           onChange={(event) => onChange(normalizeSignupSubdomain(event.target.value))}
           placeholder="your-community"
           disabled={disabled}
-          className="w-full rounded-l-md border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100"
+          className="w-full rounded-l-md border border-edge-strong px-3 py-2 text-sm text-content disabled:cursor-not-allowed disabled:bg-surface-muted"
           required
         />
-        <span className="rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+        <span className="rounded-r-md border border-l-0 border-edge-strong bg-surface-page px-3 py-2 text-sm text-content-secondary">
           .propertyprofl.com
         </span>
       </div>
@@ -128,7 +128,7 @@ export function SubdomainChecker({
       {availability ? (
         <p className={`mt-1 text-xs ${helperColor}`}>{availability.message}</p>
       ) : (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-content-tertiary">
           Suggested from your community name. You can customize it.
         </p>
       )}

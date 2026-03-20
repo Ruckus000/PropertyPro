@@ -30,6 +30,7 @@ import {
   getRenewalChain,
   type LeaseRecord,
 } from '@/lib/services/lease-expiration-service';
+import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -273,6 +274,29 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     },
   });
 
+  // Best-effort: auto-create move-in checklist for apartment communities
+  if (membership.communityType === 'apartment') {
+    try {
+      await createMoveChecklist(
+        {
+          communityId,
+          leaseId: created['id'] as number,
+          unitId: payload.unitId,
+          residentId: payload.residentId,
+          type: 'move_in',
+        },
+        actorUserId,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[leases] auto-create move-in checklist failed', {
+        communityId,
+        leaseId: created['id'],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return NextResponse.json({ data: created }, { status: 201 });
 });
 
@@ -346,6 +370,29 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     oldValues,
     newValues,
   });
+
+  // Best-effort: auto-create move-out checklist when lease is terminated
+  if (fields.status === 'terminated' && membership.communityType === 'apartment') {
+    try {
+      await createMoveChecklist(
+        {
+          communityId,
+          leaseId: id,
+          unitId: existing['unitId'] as number,
+          residentId: existing['residentId'] as string,
+          type: 'move_out',
+        },
+        actorUserId,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[leases] auto-create move-out checklist failed', {
+        communityId,
+        leaseId: id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   return NextResponse.json({ data: updated });
 });

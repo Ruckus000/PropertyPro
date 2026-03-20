@@ -8,9 +8,9 @@ interface Props {
 
 function renderBooleanItem(label: string, value: boolean) {
   return (
-    <li className="flex items-center justify-between gap-3 rounded-md border border-gray-200 p-3">
-      <span className="text-sm font-medium text-gray-800">{label}</span>
-      <div className="flex items-center gap-2 text-sm text-gray-600">
+    <li className="flex items-center justify-between gap-3 rounded-md border border-edge p-3">
+      <span className="text-sm font-medium text-content">{label}</span>
+      <div className="flex items-center gap-2 text-sm text-content-secondary">
         <StatusBadge status={value ? 'completed' : 'neutral'} showLabel={false} />
         <span>{value ? 'Active' : 'Not available'}</span>
       </div>
@@ -24,7 +24,7 @@ export function PortalStatusSection({
   publicNoticesPage,
 }: Props) {
   return (
-    <Card className="border-gray-200 bg-white">
+    <Card className="border-edge bg-surface-card">
       <Card.Header>
         <div className="flex flex-col">
           <Card.Title>Portal Status</Card.Title>

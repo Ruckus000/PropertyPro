@@ -38,12 +38,12 @@ const PRIORITY_OPTIONS = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  submitted: 'bg-yellow-100 text-yellow-800',
-  acknowledged: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-purple-100 text-purple-800',
-  resolved: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-700',
-  open: 'bg-yellow-100 text-yellow-800',
+  submitted: 'bg-status-warning-bg text-status-warning',
+  acknowledged: 'bg-interactive-subtle text-content-link',
+  in_progress: 'bg-status-info-bg text-status-info',
+  resolved: 'bg-status-success-bg text-status-success',
+  closed: 'bg-surface-muted text-content-secondary',
+  open: 'bg-status-warning-bg text-status-warning',
 };
 
 interface AdminInboxProps {
@@ -104,31 +104,31 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
         <select
           value={selectedStatus}
           onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm"
+          className="rounded-md border border-edge-strong px-3 py-1.5 text-sm shadow-e0"
         >
           {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select
           value={selectedCategory}
           onChange={(e) => { setSelectedCategory(e.target.value); setPage(1); }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm"
+          className="rounded-md border border-edge-strong px-3 py-1.5 text-sm shadow-e0"
         >
           {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select
           value={selectedPriority}
           onChange={(e) => { setSelectedPriority(e.target.value); setPage(1); }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm"
+          className="rounded-md border border-edge-strong px-3 py-1.5 text-sm shadow-e0"
         >
           {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-content-tertiary">Loading...</p>}
+      {error && <p className="text-sm text-status-danger">{error}</p>}
 
       {!loading && requests.length === 0 && (
-        <p className="text-sm text-gray-500">No requests found.</p>
+        <p className="text-sm text-content-tertiary">No requests found.</p>
       )}
 
       {/* Request list */}
@@ -138,18 +138,18 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
           return (
             <div
               key={r.id}
-              className="cursor-pointer rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50"
+              className="cursor-pointer rounded-md border border-edge bg-surface-card p-4 hover:bg-surface-hover"
               onClick={() => setDetailRequest((d) => d?.id === r.id ? null : r)}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900">{r.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="truncate text-sm font-medium text-content">{r.title}</p>
+                  <p className="text-xs text-content-tertiary mt-0.5">
                     {r.category} &middot; {new Date(r.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 <span
-                  className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[statusLabel] ?? 'bg-gray-100 text-gray-700'}`}
+                  className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[statusLabel] ?? 'bg-surface-muted text-content-secondary'}`}
                 >
                   {statusLabel}
                 </span>
@@ -157,15 +157,15 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
 
               {detailRequest?.id === r.id && (
                 <div
-                  className="mt-4 space-y-4 border-t border-gray-100 pt-4"
+                  className="mt-4 space-y-4 border-t border-edge-subtle pt-4"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="text-sm text-gray-700">{r.description}</p>
+                  <p className="text-sm text-content-secondary">{r.description}</p>
 
                   {r.internalNotes && (
-                    <div className="rounded-md bg-yellow-50 p-3">
-                      <p className="text-xs font-medium text-yellow-800">Internal Notes</p>
-                      <p className="mt-0.5 text-sm text-yellow-700">{r.internalNotes}</p>
+                    <div className="rounded-md bg-status-warning-bg p-3">
+                      <p className="text-xs font-medium text-status-warning">Internal Notes</p>
+                      <p className="mt-0.5 text-sm text-status-warning">{r.internalNotes}</p>
                     </div>
                   )}
 
@@ -173,7 +173,7 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
                     <button
                       type="button"
                       onClick={() => setAssignModalRequest(r)}
-                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      className="rounded-md border border-edge-strong px-3 py-1.5 text-xs text-content-secondary hover:bg-surface-hover"
                     >
                       {r.assignedToId ? 'Reassign' : 'Assign'}
                     </button>
@@ -212,18 +212,18 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
             type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-sm disabled:opacity-50"
           >
             Previous
           </button>
-          <span className="flex items-center text-sm text-gray-600">
+          <span className="flex items-center text-sm text-content-secondary">
             Page {page} of {totalPages}
           </span>
           <button
             type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-sm disabled:opacity-50"
           >
             Next
           </button>

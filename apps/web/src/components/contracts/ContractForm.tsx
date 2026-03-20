@@ -109,24 +109,24 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="mb-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-medium text-gray-900">
+        <h2 className="text-lg font-medium text-content">
           {isEdit ? 'Edit Contract' : 'New Contract'}
         </h2>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={onClose} className="text-sm text-content-tertiary hover:text-content-secondary">
           Cancel
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger">{error}</div>
       )}
 
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="contract-title" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="contract-title" className="block text-sm font-medium text-content-secondary">
               Title *
             </label>
             <input
@@ -135,11 +135,11 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
           </div>
           <div>
-            <label htmlFor="vendor-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="vendor-name" className="block text-sm font-medium text-content-secondary">
               Vendor Name *
             </label>
             <input
@@ -148,13 +148,13 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="description" className="block text-sm font-medium text-content-secondary">
             Description
           </label>
           <textarea
@@ -162,13 +162,13 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label htmlFor="contract-value" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="contract-value" className="block text-sm font-medium text-content-secondary">
               Contract Value ($)
             </label>
             <input
@@ -177,11 +177,11 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={contractValue}
               onChange={(e) => setContractValue(e.target.value)}
               placeholder="0.00"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
           </div>
           <div>
-            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="start-date" className="block text-sm font-medium text-content-secondary">
               Start Date *
             </label>
             <input
@@ -190,11 +190,11 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
           </div>
           <div>
-            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="end-date" className="block text-sm font-medium text-content-secondary">
               End Date
             </label>
             <input
@@ -202,13 +202,13 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="bidding-closes" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="bidding-closes" className="block text-sm font-medium text-content-secondary">
             Bidding Closes At
           </label>
           <input
@@ -216,16 +216,16 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             type="datetime-local"
             value={biddingClosesAt}
             onChange={(e) => setBiddingClosesAt(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-content-tertiary">
             Bid details are hidden until this date passes (embargo).
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="document-id" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="document-id" className="block text-sm font-medium text-content-secondary">
               Linked Document ID
             </label>
             <input
@@ -235,14 +235,14 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={documentId}
               onChange={(e) => setDocumentId(e.target.value)}
               placeholder="Optional document ID"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
-            <p className="mt-1 text-xs text-gray-500">Link to an uploaded document by its numeric ID.</p>
+            <p className="mt-1 text-xs text-content-tertiary">Link to an uploaded document by its numeric ID.</p>
           </div>
           <div>
             <label
               htmlFor="compliance-checklist-item-id"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-content-secondary"
             >
               Compliance Checklist Item ID
             </label>
@@ -253,9 +253,9 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={complianceChecklistItemId}
               onChange={(e) => setComplianceChecklistItemId(e.target.value)}
               placeholder="Optional checklist item ID"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               Link to a compliance checklist item by its numeric ID.
             </p>
           </div>
@@ -267,9 +267,9 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             type="checkbox"
             checked={conflictOfInterest}
             onChange={(e) => setConflictOfInterest(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="h-4 w-4 rounded border-edge-strong text-interactive focus:ring-focus"
           />
-          <label htmlFor="conflict-of-interest" className="ml-2 block text-sm text-gray-700">
+          <label htmlFor="conflict-of-interest" className="ml-2 block text-sm text-content-secondary">
             Conflict of interest declared
           </label>
         </div>
@@ -278,14 +278,14 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
           >
             {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
           </button>

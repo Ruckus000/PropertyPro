@@ -29,11 +29,11 @@ export default async function PreviewPage({
   const communityId = Number(params.communityId);
   if (!communityId || !Number.isInteger(communityId) || communityId <= 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-surface-page">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Preview Mode</h1>
-          <p className="text-gray-500 mb-4">
-            Add <code className="bg-gray-100 px-2 py-0.5 rounded text-sm">?communityId=X</code> to preview a community&apos;s branding.
+          <h1 className="text-xl font-semibold text-content mb-2">Preview Mode</h1>
+          <p className="text-content-secondary mb-4">
+            Add <code className="bg-surface-muted px-2 py-0.5 rounded text-sm">?communityId=X</code> to preview a community&apos;s branding.
           </p>
         </div>
       </div>
@@ -44,7 +44,7 @@ export default async function PreviewPage({
   if (!community) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-500">Community {communityId} not found.</p>
+        <p className="text-content-secondary">Community {communityId} not found.</p>
       </div>
     );
   }
@@ -84,16 +84,16 @@ export default async function PreviewPage({
           {/* Hero section */}
           <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <h1 className="font-heading text-4xl font-bold text-white sm:text-5xl">
+              <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
                 {community.name}
               </h1>
-              <p className="mt-4 text-lg text-white/80">
+              <p className="mt-4 text-lg text-content-inverse/80">
                 Your community portal for documents, meetings, and more.
               </p>
               <div className="mt-8">
                 <a
                   href="/auth/login"
-                  className="inline-flex items-center rounded-md bg-white px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center rounded-md bg-surface-card px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-surface-hover transition-colors"
                 >
                   Resident Login
                 </a>
@@ -102,18 +102,18 @@ export default async function PreviewPage({
           </section>
 
           {/* Sample content to show branding tokens in action */}
-          <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
+          <section className="bg-surface-card px-4 py-16 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-5xl">
-              <h2 className="font-heading text-2xl font-semibold text-gray-900 text-center mb-10">
+              <h2 className="font-heading text-2xl font-semibold text-content text-center mb-10">
                 Community Resources
               </h2>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {['Documents', 'Meetings', 'Announcements'].map((title) => (
-                  <div key={title} className="rounded-lg border border-gray-200 bg-white p-6 shadow-e1">
+                  <div key={title} className="rounded-md border border-edge bg-surface-card p-6 shadow-e1">
                     <div className="mb-3 h-8 w-8 rounded bg-primary-light flex items-center justify-center">
                       <div className="h-4 w-4 rounded-sm bg-primary" />
                     </div>
-                    <h3 className="font-heading text-lg font-semibold text-gray-900">{title}</h3>
+                    <h3 className="font-heading text-lg font-semibold text-content">{title}</h3>
                     <p className="mt-1 text-sm text-secondary">
                       Sample content using semantic branding tokens.
                     </p>
@@ -125,7 +125,7 @@ export default async function PreviewPage({
 
           <section className="bg-accent px-4 py-12 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-3xl text-center">
-              <h2 className="font-heading text-xl font-semibold text-gray-900">
+              <h2 className="font-heading text-xl font-semibold text-content">
                 Accent Section
               </h2>
               <p className="mt-2 text-secondary">

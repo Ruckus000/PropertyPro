@@ -76,9 +76,9 @@ export function SetPasswordForm({ token, communityId }: Props) {
   if (success) {
     return (
       <div className="text-center" data-testid="invite-success">
-        <h2 className="mb-2 text-xl font-semibold text-gray-900">Welcome aboard!</h2>
-        <p className="mb-4 text-gray-600">Your account is ready.</p>
-        <a href="/" className="inline-block text-blue-600 underline hover:text-blue-700">
+        <h2 className="mb-2 text-xl font-semibold text-content">Welcome aboard!</h2>
+        <p className="mb-4 text-content-secondary">Your account is ready.</p>
+        <a href="/" className="inline-block text-content-link underline hover:text-content-link">
           Go to dashboard
         </a>
       </div>
@@ -88,7 +88,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="set-password-form">
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="password" className="mb-1 block text-sm font-medium text-content-secondary">
           Password
         </label>
         <input
@@ -101,14 +101,14 @@ export function SetPasswordForm({ token, communityId }: Props) {
           maxLength={72}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="At least 8 characters"
           disabled={loading}
         />
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-content-secondary">
           Confirm password
         </label>
         <input
@@ -119,14 +119,14 @@ export function SetPasswordForm({ token, communityId }: Props) {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="Re-enter your password"
           disabled={loading}
         />
       </div>
 
       {error && (
-        <p className="text-sm text-red-600" role="alert" data-testid="set-password-error">
+        <p className="text-sm text-status-danger" role="alert" data-testid="set-password-error">
           {error}
         </p>
       )}
@@ -134,7 +134,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? 'Setting up...' : 'Set password and join'}
       </button>

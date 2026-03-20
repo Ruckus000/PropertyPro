@@ -76,23 +76,23 @@ export function UploadDocumentModal({
       <div
         className="
           w-full max-w-lg mx-4
-          rounded-[var(--radius-lg)] bg-[var(--surface-card)]
-          border border-[var(--border-subtle)]
+          rounded-[var(--radius-lg)] bg-surface-card
+          border border-edge-subtle
           shadow-[var(--elevation-e3)]
-          animate-in fade-in-0 zoom-in-95 duration-200
+          animate-in fade-in-0 zoom-in-95 duration-quick
           flex flex-col
         "
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">Upload Document</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
+          <h3 className="text-base font-semibold text-content">Upload Document</h3>
           <button
             type="button"
             onClick={onClose}
             disabled={isUploading}
-            className="rounded-[var(--radius-sm)] p-1 hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-50"
+            className="rounded-[var(--radius-sm)] p-1 hover:bg-surface-hover transition-colors disabled:opacity-50"
           >
-            <X size={16} className="text-[var(--text-tertiary)]" />
+            <X size={16} className="text-content-tertiary" />
           </button>
         </div>
 
@@ -100,7 +100,7 @@ export function UploadDocumentModal({
         <div className="px-4 py-4 flex flex-col gap-4">
           {/* Title input */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="upload-title" className="text-xs font-medium text-[var(--text-secondary)]">
+            <label htmlFor="upload-title" className="text-xs font-medium text-content-secondary">
               Title
             </label>
             <input
@@ -112,9 +112,9 @@ export function UploadDocumentModal({
               className="
                 w-full px-3 py-2 text-sm
                 rounded-[var(--radius-md)]
-                border border-[var(--border-default)]
-                bg-[var(--surface-page)]
-                text-[var(--text-primary)]
+                border border-edge
+                bg-surface-page
+                text-content
                 focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]/20 focus:border-[var(--border-focus)]
                 transition-colors disabled:opacity-50
               "
@@ -131,28 +131,28 @@ export function UploadDocumentModal({
               flex flex-col items-center justify-center gap-2
               rounded-[var(--radius-md)]
               border-2 border-dashed
-              py-8 cursor-pointer transition-colors duration-150
+              py-8 cursor-pointer transition-colors duration-quick
               ${dragOver
                 ? "border-[var(--border-focus)] bg-[var(--status-info-bg)]"
                 : file
-                ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)]"
-                : "border-[var(--border-default)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]"
+                ? "border-status-success-border bg-status-success-bg"
+                : "border-edge hover:border-edge-strong hover:bg-surface-hover"
               }
               ${isUploading ? "pointer-events-none opacity-50" : ""}
             `}
           >
             {file ? (
               <>
-                <FileUp size={24} className="text-[var(--status-success)]" />
-                <span className="text-sm font-medium text-[var(--text-primary)]">{file.name}</span>
-                <span className="text-xs text-[var(--text-tertiary)]">
+                <FileUp size={24} className="text-status-success" />
+                <span className="text-sm font-medium text-content">{file.name}</span>
+                <span className="text-xs text-content-tertiary">
                   {(file.size / 1024).toFixed(0)} KB
                 </span>
               </>
             ) : (
               <>
-                <Upload size={24} className="text-[var(--text-tertiary)]" />
-                <span className="text-sm text-[var(--text-secondary)]">
+                <Upload size={24} className="text-content-tertiary" />
+                <span className="text-sm text-content-secondary">
                   Drop a file here or click to browse
                 </span>
               </>
@@ -168,9 +168,9 @@ export function UploadDocumentModal({
 
           {/* Upload progress */}
           {isUploading && (
-            <div className="flex h-1 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+            <div className="flex h-1 w-full overflow-hidden rounded-full bg-surface-muted">
               <div
-                className="bg-[var(--status-info)] transition-all duration-300"
+                className="bg-[var(--status-info)] transition-all duration-standard"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -178,12 +178,12 @@ export function UploadDocumentModal({
 
           {/* Error */}
           {error && (
-            <p className="text-sm text-[var(--status-danger)]">{error}</p>
+            <p className="text-sm text-status-danger">{error}</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-edge-subtle">
           <Button variant="secondary" size="sm" onClick={onClose} disabled={isUploading}>
             Cancel
           </Button>

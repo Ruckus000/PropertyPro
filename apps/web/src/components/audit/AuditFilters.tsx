@@ -39,14 +39,14 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
   return (
     <div className="flex flex-wrap gap-3">
       <div>
-        <label htmlFor="filter-action" className="block text-xs font-medium text-gray-500">
+        <label htmlFor="filter-action" className="block text-xs font-medium text-content-tertiary">
           Action
         </label>
         <select
           id="filter-action"
           value={filters.action ?? ''}
           onChange={(e) => handleChange('action', e.target.value)}
-          className="mt-1 block rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
         >
           {AUDIT_ACTIONS.map((a) => (
             <option key={a.value} value={a.value}>
@@ -57,7 +57,7 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
       </div>
 
       <div>
-        <label htmlFor="filter-start" className="block text-xs font-medium text-gray-500">
+        <label htmlFor="filter-start" className="block text-xs font-medium text-content-tertiary">
           Start Date
         </label>
         <input
@@ -65,12 +65,12 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
           type="date"
           value={filters.startDate ?? ''}
           onChange={(e) => handleChange('startDate', e.target.value)}
-          className="mt-1 block rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
         />
       </div>
 
       <div>
-        <label htmlFor="filter-end" className="block text-xs font-medium text-gray-500">
+        <label htmlFor="filter-end" className="block text-xs font-medium text-content-tertiary">
           End Date
         </label>
         <input
@@ -78,12 +78,12 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
           type="date"
           value={filters.endDate ?? ''}
           onChange={(e) => handleChange('endDate', e.target.value)}
-          className="mt-1 block rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
         />
       </div>
 
       <div>
-        <label htmlFor="filter-user" className="block text-xs font-medium text-gray-500">
+        <label htmlFor="filter-user" className="block text-xs font-medium text-content-tertiary">
           User ID
         </label>
         <input
@@ -92,7 +92,7 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
           value={filters.userId ?? ''}
           onChange={(e) => handleChange('userId', e.target.value)}
           placeholder="Filter by user..."
-          className="mt-1 block w-48 rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="mt-1 block w-48 rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
         />
       </div>
     </div>

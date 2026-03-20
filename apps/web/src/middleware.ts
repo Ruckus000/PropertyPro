@@ -52,6 +52,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/payments',
   '/assessments',
   '/finance',
+  '/esign',
   '/api/v1',
 ];
 const API_PATH_PREFIX = '/api/v1';
@@ -115,6 +116,11 @@ function isApiPath(pathname: string): boolean {
 }
 
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
+  // E-sign signing routes use dynamic segments (e.g. /api/v1/esign/sign/:token)
+  // so they can't use exact-path matching via TOKEN_AUTH_ROUTES.
+  if (request.nextUrl.pathname.startsWith('/api/v1/esign/sign/')) {
+    return true;
+  }
   return TOKEN_AUTH_ROUTES.some(
     (route) =>
       request.nextUrl.pathname === route.path &&

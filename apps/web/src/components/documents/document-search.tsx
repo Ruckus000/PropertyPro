@@ -67,27 +67,27 @@ export function DocumentSearch({ communityId }: DocumentSearchProps) {
         }}
       >
         <input
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           placeholder="Search documents"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <button
           type="submit"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={isPending}
         >
           Search
         </button>
       </form>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-status-danger">{error}</p> : null}
 
       <ul className="space-y-2">
         {items.map((item) => (
-          <li key={item.id} className="rounded-md border border-gray-200 p-3">
-            <p className="font-medium text-gray-900">{item.title}</p>
-            <p className="text-sm text-gray-600">{item.description ?? item.fileName}</p>
+          <li key={item.id} className="rounded-md border border-edge p-3">
+            <p className="font-medium text-content">{item.title}</p>
+            <p className="text-sm text-content-secondary">{item.description ?? item.fileName}</p>
           </li>
         ))}
       </ul>
@@ -96,7 +96,7 @@ export function DocumentSearch({ communityId }: DocumentSearchProps) {
         <button
           type="button"
           onClick={() => fetchResults(nextCursor)}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm"
+          className="rounded-md border border-edge-strong px-4 py-2 text-sm"
           disabled={isPending}
         >
           Load more

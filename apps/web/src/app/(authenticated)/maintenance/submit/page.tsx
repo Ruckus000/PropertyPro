@@ -72,8 +72,8 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Maintenance Requests</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-content">Maintenance Requests</h1>
+        <p className="mt-1 text-sm text-content-secondary">
           Submit a new request or view the status of existing ones.
         </p>
       </div>
@@ -82,7 +82,7 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
 
       {ownRequests.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">Your Requests</h2>
+          <h2 className="mb-4 text-lg font-medium text-content">Your Requests</h2>
           <div className="space-y-3">
             {ownRequests.map((r) => (
               <RequestCard

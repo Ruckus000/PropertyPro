@@ -19,8 +19,8 @@ export default async function AssessmentsPage({ params }: PageProps) {
   if (!Number.isFinite(communityId) || communityId <= 0) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-gray-900">Assessments</h1>
-        <p className="mt-2 text-sm text-red-600">Invalid community ID</p>
+        <h1 className="text-2xl font-semibold text-content">Assessments</h1>
+        <p className="mt-2 text-sm text-status-danger">Invalid community ID</p>
       </div>
     );
   }

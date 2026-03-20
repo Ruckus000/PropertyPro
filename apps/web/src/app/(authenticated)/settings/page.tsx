@@ -35,7 +35,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     return (
       <>
         <h1 className="mb-4 text-xl font-semibold">Settings</h1>
-        <p className="text-sm text-gray-600">Provide a communityId to edit preferences.</p>
+        <p className="text-sm text-content-secondary">Provide a communityId to edit preferences.</p>
       </>
     );
   }
@@ -47,7 +47,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-8">
       <div>
         <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
-        <p className="mb-4 text-sm text-gray-600">
+        <p className="mb-4 text-sm text-content-secondary">
           Choose which emails you receive and when they should be delivered.
         </p>
         <NotificationPreferencesForm communityId={context.communityId} />

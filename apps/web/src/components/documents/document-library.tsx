@@ -67,8 +67,8 @@ export function DocumentLibrary({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Documents</h1>
-          <p className="mt-1 text-sm text-gray-600">
+          <h1 className="text-2xl font-semibold text-content">Documents</h1>
+          <p className="mt-1 text-sm text-content-secondary">
             Manage and view community documents
           </p>
         </div>
@@ -78,8 +78,8 @@ export function DocumentLibrary({
             onClick={() => setSearchMode(!searchMode)}
             className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
               searchMode
-                ? 'border-blue-600 bg-blue-50 text-blue-700'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                ? 'border-interactive bg-interactive-subtle text-interactive'
+                : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
             }`}
           >
             {searchMode ? 'Hide Search' : 'Search'}
@@ -90,8 +90,8 @@ export function DocumentLibrary({
               onClick={() => setShowEsignBanner(!showEsignBanner)}
               className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
                 showEsignBanner
-                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  ? 'border-interactive bg-interactive-subtle text-interactive'
+                  : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
               }`}
             >
               <PenTool size={16} />
@@ -104,8 +104,8 @@ export function DocumentLibrary({
               onClick={() => setShowUpload(!showUpload)}
               className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 showUpload
-                  ? 'bg-gray-200 text-gray-800'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-surface-muted text-content'
+                  : 'bg-interactive text-white hover:bg-interactive-hover'
               }`}
             >
               {showUpload ? 'Cancel' : 'Upload Document'}
@@ -115,22 +115,22 @@ export function DocumentLibrary({
       </div>
 
       {showEsignBanner && (
-        <div className="relative rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="relative rounded-md border border-interactive bg-interactive-subtle p-4">
           <button
             type="button"
             onClick={() => setShowEsignBanner(false)}
-            className="absolute right-3 top-3 text-blue-400 hover:text-blue-600"
+            className="absolute right-3 top-3 text-content-disabled hover:text-content-link"
             aria-label="Dismiss"
           >
             <X size={16} />
           </button>
           <div className="flex items-start gap-3">
-            <PenTool size={20} className="mt-0.5 shrink-0 text-blue-600" />
+            <PenTool size={20} className="mt-0.5 shrink-0 text-content-link" />
             <div>
-              <h3 className="text-sm font-semibold text-blue-900">
+              <h3 className="text-sm font-semibold text-content">
                 E-Signatures Coming Soon
               </h3>
-              <p className="mt-1 text-sm text-blue-700">
+              <p className="mt-1 text-sm text-interactive">
                 Built-in document signing is on the way. Create templates,
                 send for signature, and track completions — all without
                 leaving PropertyPro.
@@ -141,8 +141,8 @@ export function DocumentLibrary({
       )}
 
       {showUpload && canUpload && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">Upload Document</h2>
+        <div className="rounded-md border border-edge bg-surface-card p-6">
+          <h2 className="mb-4 text-lg font-medium text-content">Upload Document</h2>
           <DocumentUploadArea
             communityId={communityId}
             categoryId={selectedCategoryId}
@@ -152,13 +152,13 @@ export function DocumentLibrary({
       )}
 
       {searchMode && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-md border border-edge bg-surface-card p-6">
           <DocumentSearch communityId={communityId} />
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-6 py-4">
+      <div className="rounded-md border border-edge bg-surface-card">
+        <div className="border-b border-edge px-6 py-4">
           <DocumentCategoryFilter
             communityId={communityId}
             selectedCategoryId={selectedCategoryId}
@@ -167,7 +167,7 @@ export function DocumentLibrary({
         </div>
 
         <div className="grid min-h-[500px] lg:grid-cols-2">
-          <div className="border-r border-gray-200 p-6">
+          <div className="border-r border-edge p-6">
             <DocumentList
               communityId={communityId}
               categoryId={selectedCategoryId}

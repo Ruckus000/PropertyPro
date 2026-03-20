@@ -97,10 +97,10 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
         <div className="flex items-center gap-2.5">
           <Sparkles size={18} className="text-[var(--status-brand)] shrink-0" />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-[var(--text-primary)]">
+            <span className="text-sm font-semibold text-content">
               Getting Started
             </span>
-            <span className="text-xs text-[var(--text-tertiary)]">
+            <span className="text-xs text-content-tertiary">
               Upload your key governing documents to get compliant
             </span>
           </div>
@@ -112,7 +112,7 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
           className="
             rounded-[var(--radius-sm)] p-1
             hover:bg-[var(--status-brand-subtle)] transition-colors
-            text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]
+            text-content-tertiary hover:text-content-secondary
           "
           aria-label="Dismiss onboarding"
         >
@@ -149,11 +149,11 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
 
               {/* Item info */}
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-[var(--text-primary)] block truncate">
+                <span className="text-sm font-medium text-content block truncate">
                   {item.title}
                 </span>
                 {description && (
-                  <span className="text-xs text-[var(--text-tertiary)] block truncate">
+                  <span className="text-xs text-content-tertiary block truncate">
                     {description}
                   </span>
                 )}
@@ -161,7 +161,7 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
 
               {/* Action */}
               {isSatisfied ? (
-                <span className="text-xs font-medium text-[var(--status-success)] shrink-0">
+                <span className="text-xs font-medium text-status-success shrink-0">
                   Done
                 </span>
               ) : (
@@ -187,7 +187,7 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
             <span
               key={item.id}
               className={`
-                h-1.5 w-1.5 rounded-full transition-colors duration-200
+                h-1.5 w-1.5 rounded-full transition-colors duration-quick
                 ${i < completedCount
                   ? "bg-[var(--status-success)]"
                   : "bg-[var(--border-default)]"
@@ -201,8 +201,8 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
           type="button"
           onClick={handleDismiss}
           className="
-            flex items-center gap-1 text-xs text-[var(--text-tertiary)]
-            hover:text-[var(--text-secondary)] transition-colors
+            flex items-center gap-1 text-xs text-content-tertiary
+            hover:text-content-secondary transition-colors
           "
         >
           Skip for now

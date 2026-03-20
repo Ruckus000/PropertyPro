@@ -19,8 +19,8 @@ export default async function AcceptInvitePage({
   if (!token || !communityId || Number.isNaN(communityId)) {
     return (
       <div className="text-center">
-        <h2 className="mb-2 text-xl font-semibold text-gray-900">Invalid invitation link</h2>
-        <p className="text-gray-600">This link is missing required information.</p>
+        <h2 className="mb-2 text-xl font-semibold text-content">Invalid invitation link</h2>
+        <p className="text-content-secondary">This link is missing required information.</p>
       </div>
     );
   }
@@ -48,8 +48,8 @@ export default async function AcceptInvitePage({
             />
           )}
         </div>
-        <h1 className="mb-3 text-2xl font-semibold text-gray-900">{heading}</h1>
-        <p className="mb-6 text-gray-600">
+        <h1 className="mb-3 text-2xl font-semibold text-content">{heading}</h1>
+        <p className="mb-6 text-content-secondary">
           Choose a password to activate your account.
         </p>
         <SetPasswordForm token={token} communityId={communityId} />

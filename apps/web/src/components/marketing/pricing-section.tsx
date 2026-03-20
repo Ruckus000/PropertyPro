@@ -7,17 +7,17 @@ import React from 'react';
  */
 export function PricingSection() {
   return (
-    <section id="pricing" className="bg-gray-50 px-6 py-16 sm:py-20">
+    <section id="pricing" className="bg-surface-page px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl">
         {/* Section header */}
         <div className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-link">
             Pricing
           </p>
-          <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
+          <h2 className="mt-2 text-2xl font-bold text-content sm:text-3xl">
             Simple, Transparent Pricing
           </h2>
-          <p className="mt-3 text-base text-gray-600">
+          <p className="mt-3 text-base text-content-secondary">
             Get compliant in minutes. All plans include Florida statute
             compliance monitoring, document hosting, and SSL certificates.
           </p>
@@ -28,33 +28,33 @@ export function PricingSection() {
           {tiers.map((tier) => (
             <div
               key={tier.name}
-              className={`flex flex-col rounded-lg border bg-white p-6 ${
+              className={`flex flex-col rounded-md border bg-surface-card p-6 ${
                 tier.featured
-                  ? 'border-blue-600 shadow-e2 ring-1 ring-blue-600'
-                  : 'border-gray-200'
+                  ? 'border-interactive shadow-e2 ring-1 ring-interactive'
+                  : 'border-edge'
               }`}
             >
               {tier.featured && (
-                <div className="mb-3 inline-flex self-start rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white">
+                <div className="mb-3 inline-flex self-start rounded-md bg-interactive px-2.5 py-1 text-xs font-semibold text-content-inverse">
                   Most Popular
                 </div>
               )}
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-content">
                 {tier.name}
               </h3>
-              <p className="mt-1 text-sm text-gray-500">{tier.audience}</p>
+              <p className="mt-1 text-sm text-content-tertiary">{tier.audience}</p>
 
               {/* Price */}
               <div className="mt-4">
                 {tier.price ? (
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold text-gray-900">
+                    <span className="text-3xl font-bold text-content">
                       ${tier.price}
                     </span>
-                    <span className="text-sm text-gray-500">/month</span>
+                    <span className="text-sm text-content-tertiary">/month</span>
                   </div>
                 ) : (
-                  <div className="text-2xl font-bold text-gray-900">
+                  <div className="text-2xl font-bold text-content">
                     Contact Us
                   </div>
                 )}
@@ -65,7 +65,7 @@ export function PricingSection() {
                 {tier.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2">
                     <CheckIcon />
-                    <span className="text-sm text-gray-700">{feature}</span>
+                    <span className="text-sm text-content-secondary">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -75,8 +75,8 @@ export function PricingSection() {
                 href={tier.ctaHref}
                 className={`mt-6 inline-flex items-center justify-center rounded-md px-4 py-2.5 text-sm font-semibold transition-colors ${
                   tier.featured
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                    ? 'bg-interactive text-content-inverse hover:bg-interactive-hover'
+                    : 'border border-edge-strong bg-surface-card text-content-secondary hover:bg-surface-page'
                 }`}
               >
                 {tier.ctaText}
@@ -86,7 +86,7 @@ export function PricingSection() {
         </div>
 
         {/* Additional note */}
-        <p className="mt-8 text-center text-sm text-gray-500">
+        <p className="mt-8 text-center text-sm text-content-tertiary">
           All plans include a 14-day free trial. No credit card required to
           start. Prices shown are per association per month.
         </p>
@@ -185,7 +185,7 @@ function CheckIcon() {
       strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="mt-0.5 shrink-0 text-blue-500"
+      className="mt-0.5 shrink-0 text-content-link"
       aria-hidden="true"
     >
       <polyline points="20 6 9 17 4 12" />

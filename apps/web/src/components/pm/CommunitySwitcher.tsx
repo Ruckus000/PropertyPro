@@ -86,13 +86,13 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
         aria-expanded={isOpen}
         aria-controls={listboxId}
         onClick={handleButtonClick}
-        className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        className="flex items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm font-medium text-content shadow-e0 hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <span className="truncate max-w-[200px]">
           {currentCommunity ? currentCommunity.communityName : 'Switch Community'}
         </span>
         <svg
-          className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-content-disabled transition-transform duration-quick ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -103,8 +103,8 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 z-50 mt-1 w-72 rounded-md border border-gray-200 bg-white shadow-lg">
-          <div className="p-2 border-b border-gray-100">
+        <div className="absolute left-0 z-50 mt-1 w-72 rounded-md border border-edge bg-surface-card shadow-lg">
+          <div className="p-2 border-b border-edge-subtle">
             <input
               ref={inputRef}
               type="search"
@@ -112,7 +112,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search communities..."
               aria-label="Search communities"
-              className="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="w-full rounded border border-edge px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
 
@@ -123,7 +123,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
             className="max-h-64 overflow-y-auto py-1"
           >
             {filtered.length === 0 ? (
-              <li role="none" className="px-3 py-2 text-sm text-gray-400">No communities found</li>
+              <li role="none" className="px-3 py-2 text-sm text-content-disabled">No communities found</li>
             ) : (
               filtered.map((community, index) => {
                 const isRecent = recentCommunityIds.includes(community.communityId);
@@ -136,22 +136,22 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
                 return (
                   <li key={community.communityId} role="none">
                     {showRecentDivider && (
-                      <p role="presentation" className="px-3 pt-1 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+                      <p role="presentation" className="px-3 pt-1 pb-0.5 text-xs font-medium uppercase tracking-wide text-content-disabled">
                         Recent
                       </p>
                     )}
                     {showRestDivider && recentCommunityIds.length > 0 && (
-                      <div role="presentation" className="my-1 border-t border-gray-100" />
+                      <div role="presentation" className="my-1 border-t border-edge-subtle" />
                     )}
                     <button
                       type="button"
                       role="option"
                       aria-selected={community.communityId === currentCommunityId}
                       onClick={() => handleSelect(community)}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 focus:bg-blue-50 focus:outline-none ${
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-surface-hover focus:bg-surface-hover focus:outline-none ${
                         community.communityId === currentCommunityId
-                          ? 'bg-blue-50 font-medium text-blue-700'
-                          : 'text-gray-700'
+                          ? 'bg-surface-hover font-medium text-content-link'
+                          : 'text-content'
                       }`}
                     >
                       {community.communityName}

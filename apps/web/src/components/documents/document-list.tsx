@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useTransition, useEffect, useCallback } from 'react';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
 
 export type ExtractionStatus = 'pending' | 'completed' | 'failed' | 'not_applicable' | 'skipped';
 
@@ -55,19 +57,19 @@ function getMimeIcon(mimeType: string): string {
 const EXTRACTION_BADGE_CONFIG: Record<string, { label: string; className: string } | null> = {
   completed: {
     label: 'Searchable',
-    className: 'bg-green-100 text-green-700',
+    className: 'bg-status-success-bg text-status-success',
   },
   pending: {
     label: 'Processing',
-    className: 'bg-yellow-100 text-yellow-700',
+    className: 'bg-status-warning-bg text-status-warning',
   },
   failed: {
     label: 'Search unavailable',
-    className: 'bg-red-100 text-red-700',
+    className: 'bg-status-danger-bg text-status-danger',
   },
   skipped: {
     label: 'Not searchable',
-    className: 'bg-gray-100 text-gray-600',
+    className: 'bg-surface-muted text-content-secondary',
   },
   not_applicable: null,
 };
@@ -164,72 +166,49 @@ export function DocumentList({
 
   if (error) {
     return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4">
-        <p className="text-sm text-red-600">{error}</p>
-        <button
-          type="button"
-          onClick={fetchDocuments}
-          className="mt-2 text-sm text-red-700 underline"
-        >
-          Try again
-        </button>
-      </div>
+      <AlertBanner
+        status="danger"
+        title="Something went wrong"
+        description={error}
+      />
     );
   }
 
   if (isPending && documents.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-        <span className="ml-2 text-sm text-gray-600">Loading documents...</span>
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
+        <span className="ml-2 text-sm text-content-secondary">Loading documents...</span>
       </div>
     );
   }
 
   if (documents.length === 0) {
     return (
-      <div className="rounded-md border border-gray-200 bg-gray-50 p-8 text-center">
-        <svg
-          className="mx-auto h-12 w-12 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
-        </svg>
-        <p className="mt-2 text-sm text-gray-600">No documents found</p>
-        <p className="text-xs text-gray-500">
-          Upload a document to get started
-        </p>
-      </div>
+      <EmptyState preset="no_documents" />
     );
   }
 
   return (
-    <div className="divide-y divide-gray-200 rounded-md border border-gray-200">
+    <div className="divide-y divide-edge rounded-md border border-edge">
       {documents.map((doc) => (
         <div
           key={doc.id}
-          className="flex items-center justify-between p-4 hover:bg-gray-50"
+          className="flex items-center justify-between p-4 hover:bg-surface-hover"
         >
           <div
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
             onClick={() => onSelectDocument?.(doc)}
           >
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-600">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-surface-muted text-xs font-medium text-content-secondary">
               {getMimeIcon(doc.mimeType)}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="truncate font-medium text-gray-900">{doc.title}</p>
+                <p className="truncate font-medium text-content">{doc.title}</p>
                 <ExtractionStatusBadge status={doc.extractionStatus} />
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-content-tertiary">
                 {doc.fileName} &middot; {formatFileSize(doc.fileSize)} &middot;{' '}
                 {formatDate(doc.createdAt)}
               </p>
@@ -239,7 +218,7 @@ export function DocumentList({
             <button
               type="button"
               onClick={() => handleDownload(doc)}
-              className="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="rounded p-2 text-content-tertiary hover:bg-surface-muted hover:text-content-secondary"
               title="Download"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -256,11 +235,11 @@ export function DocumentList({
                 type="button"
                 onClick={() => handleDelete(doc)}
                 disabled={deletingId === doc.id}
-                className="rounded p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                className="rounded p-2 text-content-tertiary hover:bg-status-danger-bg hover:text-status-danger disabled:opacity-50"
                 title="Delete"
               >
                 {deletingId === doc.id ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-status-danger border-t-transparent" />
                 ) : (
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path

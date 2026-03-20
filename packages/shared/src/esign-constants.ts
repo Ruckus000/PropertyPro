@@ -93,6 +93,43 @@ export const ESIGN_CONSENT_TEXT =
   'and request a paper-based process instead.';
 
 // ---------------------------------------------------------------------------
+// Signing orders
+// ---------------------------------------------------------------------------
+
+export const ESIGN_SIGNING_ORDERS = ['parallel', 'sequential'] as const;
+export type EsignSigningOrder = (typeof ESIGN_SIGNING_ORDERS)[number];
+
+// ---------------------------------------------------------------------------
+// Field types and schema
+// ---------------------------------------------------------------------------
+
+export const ESIGN_FIELD_TYPES = ['signature', 'initials', 'date', 'text', 'checkbox'] as const;
+export type EsignFieldType = (typeof ESIGN_FIELD_TYPES)[number];
+
+/** A single placeable field on a PDF template page. */
+export interface EsignFieldDefinition {
+  id: string;               // client-generated UUID
+  type: EsignFieldType;
+  signerRole: string;        // which signer fills this field
+  page: number;              // 0-indexed page number
+  /** All position/size values are percentages (0-100) relative to the
+   *  pdfjs-dist rendered viewport at scale=1 (CropBox).
+   *  The PDF service translates to absolute MediaBox points when embedding. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  required: boolean;
+  label?: string;
+}
+
+export interface EsignFieldsSchema {
+  version: 1;
+  fields: EsignFieldDefinition[];
+  signerRoles: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Reminder limits
 // ---------------------------------------------------------------------------
 

@@ -13,18 +13,18 @@ import { FinesSummary } from './FinesSummary';
 import type { ViolationItem, ViolationFineItem } from '@/lib/api/violations';
 
 const STATUS_STYLES: Record<string, string> = {
-  reported: 'bg-yellow-100 text-yellow-800',
-  noticed: 'bg-blue-100 text-blue-800',
-  hearing_scheduled: 'bg-purple-100 text-purple-800',
-  fined: 'bg-red-100 text-red-800',
-  resolved: 'bg-green-100 text-green-800',
-  dismissed: 'bg-gray-100 text-gray-700',
+  reported: 'bg-status-warning-bg text-status-warning',
+  noticed: 'bg-interactive-muted text-content-link',
+  hearing_scheduled: 'bg-status-brand-bg text-status-brand',
+  fined: 'bg-status-danger-bg text-status-danger',
+  resolved: 'bg-status-success-bg text-status-success',
+  dismissed: 'bg-surface-muted text-content-secondary',
 };
 
 const SEVERITY_STYLES: Record<string, string> = {
-  minor: 'bg-yellow-100 text-yellow-800',
-  moderate: 'bg-orange-100 text-orange-800',
-  major: 'bg-red-100 text-red-800',
+  minor: 'bg-status-warning-bg text-status-warning',
+  moderate: 'bg-status-warning-bg text-status-warning',
+  major: 'bg-status-danger-bg text-status-danger',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -73,10 +73,10 @@ function getAvailableActions(status: string): { label: string; action: ActionTyp
 }
 
 const VARIANT_STYLES: Record<string, string> = {
-  primary: 'bg-blue-600 text-white hover:bg-blue-700',
-  danger: 'bg-red-600 text-white hover:bg-red-700',
-  success: 'bg-green-600 text-white hover:bg-green-700',
-  secondary: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+  primary: 'bg-interactive text-content-inverse hover:bg-interactive-hover',
+  danger: 'bg-status-danger text-content-inverse hover:bg-status-danger-hover',
+  success: 'bg-status-success text-content-inverse hover:bg-status-success-hover',
+  secondary: 'border border-edge-strong bg-surface-card text-content-secondary hover:bg-surface-hover',
 };
 
 interface ViolationDetailViewProps {
@@ -96,8 +96,8 @@ export function ViolationDetailView({
 }: ViolationDetailViewProps) {
   const [activeAction, setActiveAction] = useState<ActionType>(null);
 
-  const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-gray-100 text-gray-700';
-  const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-gray-100 text-gray-700';
+  const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-surface-muted text-content-secondary';
+  const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-surface-muted text-content-secondary';
   const actions = isAdmin ? getAvailableActions(violation.status) : [];
 
   // Map ViolationRecord to ViolationItem shape for the transition component
@@ -124,19 +124,19 @@ export function ViolationDetailView({
       {/* Back link */}
       <Link
         href={isAdmin ? `/violations/inbox?communityId=${communityId}` : `/violations/report?communityId=${communityId}`}
-        className="mb-4 inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+        className="mb-4 inline-flex items-center text-sm text-content-link hover:text-content-link"
       >
         &larr; Back to {isAdmin ? 'Violations Inbox' : 'Your Reports'}
       </Link>
 
       {/* Header */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+      <div className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-xl font-semibold text-content">
               Violation #{violation.id}
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-content-tertiary">
               {CATEGORY_LABELS[violation.category] ?? violation.category} &middot; Unit {violation.unitId}
             </p>
           </div>
@@ -152,37 +152,37 @@ export function ViolationDetailView({
       </div>
 
       {/* Description */}
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">Description</h2>
-        <p className="whitespace-pre-wrap text-sm text-gray-700">{violation.description}</p>
+      <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-content-tertiary">Description</h2>
+        <p className="whitespace-pre-wrap text-sm text-content-secondary">{violation.description}</p>
       </section>
 
       {/* Timeline / Dates */}
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Timeline</h2>
+      <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">Timeline</h2>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
-            <span className="text-gray-500">Reported:</span>{' '}
-            <span className="text-gray-700">{new Date(violation.createdAt).toLocaleString()}</span>
+            <span className="text-content-tertiary">Reported:</span>{' '}
+            <span className="text-content-secondary">{new Date(violation.createdAt).toLocaleString()}</span>
           </div>
           {violation.noticeDate && (
             <div>
-              <span className="text-gray-500">Notice Sent:</span>{' '}
-              <span className="text-gray-700">{violation.noticeDate}</span>
+              <span className="text-content-tertiary">Notice Sent:</span>{' '}
+              <span className="text-content-secondary">{violation.noticeDate}</span>
             </div>
           )}
           {violation.hearingDate && (
             <div>
-              <span className="text-gray-500">Hearing Date:</span>{' '}
-              <span className="text-gray-700">{new Date(violation.hearingDate).toLocaleString()}</span>
+              <span className="text-content-tertiary">Hearing Date:</span>{' '}
+              <span className="text-content-secondary">{new Date(violation.hearingDate).toLocaleString()}</span>
             </div>
           )}
           {violation.resolutionDate && (
             <div>
-              <span className="text-gray-500">
+              <span className="text-content-tertiary">
                 {violation.status === 'dismissed' ? 'Dismissed:' : 'Resolved:'}
               </span>{' '}
-              <span className="text-gray-700">{new Date(violation.resolutionDate).toLocaleString()}</span>
+              <span className="text-content-secondary">{new Date(violation.resolutionDate).toLocaleString()}</span>
             </div>
           )}
         </div>
@@ -190,21 +190,21 @@ export function ViolationDetailView({
 
       {/* Resolution notes */}
       {violation.resolutionNotes && (
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+        <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-content-tertiary">
             {violation.status === 'dismissed' ? 'Dismissal Reason' : 'Resolution Notes'}
           </h2>
-          <p className="whitespace-pre-wrap text-sm text-gray-700">{violation.resolutionNotes}</p>
+          <p className="whitespace-pre-wrap text-sm text-content-secondary">{violation.resolutionNotes}</p>
         </section>
       )}
 
       {/* Evidence */}
       {violation.evidenceDocumentIds.length > 0 && (
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+        <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-content-tertiary">
             Evidence ({violation.evidenceDocumentIds.length} document{violation.evidenceDocumentIds.length !== 1 ? 's' : ''})
           </h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-content-tertiary">
             Document IDs: {violation.evidenceDocumentIds.join(', ')}
           </p>
         </section>
@@ -215,15 +215,15 @@ export function ViolationDetailView({
 
       {/* Admin actions */}
       {isAdmin && actions.length > 0 && !activeAction && (
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Actions</h2>
+        <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">Actions</h2>
           <div className="flex flex-wrap gap-2">
             {actions.map(({ label, action, variant }) => (
               <button
                 key={action}
                 type="button"
                 onClick={() => setActiveAction(action)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${VARIANT_STYLES[variant] ?? ''}`}
+                className={`rounded-md px-4 py-2 text-sm font-medium transition-colors duration-quick ${VARIANT_STYLES[variant] ?? ''}`}
               >
                 {label}
               </button>

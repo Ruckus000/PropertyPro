@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 /* ─────── Types ─────── */
 
@@ -61,10 +62,10 @@ function formatDate(dateStr: string): string {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  overdue: 'bg-red-100 text-red-800',
-  paid: 'bg-green-100 text-green-800',
-  waived: 'bg-gray-100 text-gray-600',
+  pending: 'bg-status-warning-bg text-status-warning',
+  overdue: 'bg-status-danger-bg text-status-danger',
+  paid: 'bg-status-success-bg text-status-success',
+  waived: 'bg-surface-muted text-content-secondary',
 };
 
 /* ─────── Fetch ─────── */
@@ -108,8 +109,8 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
     return (
       <div className="space-y-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-24 rounded-lg bg-gray-200" />
-          <div className="h-64 rounded-lg bg-gray-200" />
+          <div className="h-24 rounded-md bg-surface-muted" />
+          <div className="h-64 rounded-md bg-surface-muted" />
         </div>
       </div>
     );
@@ -117,11 +118,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-        <p className="text-sm text-red-700">
-          {error instanceof Error ? error.message : 'Failed to load payment data. Please try again later.'}
-        </p>
-      </div>
+      <AlertBanner status="danger" title={error instanceof Error ? error.message : 'Failed to load payment data. Please try again later.'} />
     );
   }
 
@@ -154,7 +151,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
       </div>
 
       {/* Tab Navigation + Actions */}
-      <div className="flex items-end justify-between border-b border-gray-200">
+      <div className="flex items-end justify-between border-b border-edge">
         <nav className="-mb-px flex gap-6">
           <TabButton
             label="Upcoming"
@@ -175,7 +172,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
             if (unitId) params.set('unitId', String(unitId));
             window.open(`/api/v1/finance/export/statement?${params}`, '_blank');
           }}
-          className="mb-1 inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          className="mb-1 inline-flex items-center gap-1.5 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-hover"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -224,21 +221,21 @@ function SummaryCard({
   accent: 'red' | 'green' | 'yellow' | 'blue';
 }) {
   const colors: Record<string, string> = {
-    red: 'border-red-200 bg-red-50',
-    green: 'border-green-200 bg-green-50',
-    yellow: 'border-yellow-200 bg-yellow-50',
-    blue: 'border-blue-200 bg-blue-50',
+    red: 'border-status-danger-border bg-status-danger-bg',
+    green: 'border-status-success-border bg-status-success-bg',
+    yellow: 'border-status-warning-border bg-status-warning-bg',
+    blue: 'border-status-info-border bg-interactive-subtle',
   };
   const textColors: Record<string, string> = {
-    red: 'text-red-900',
-    green: 'text-green-900',
-    yellow: 'text-yellow-900',
-    blue: 'text-blue-900',
+    red: 'text-status-danger',
+    green: 'text-status-success',
+    yellow: 'text-status-warning',
+    blue: 'text-interactive',
   };
 
   return (
-    <div className={`rounded-lg border p-4 ${colors[accent]}`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+    <div className={`rounded-md border p-4 ${colors[accent]}`}>
+      <p className="text-xs font-medium uppercase tracking-wide text-content-tertiary">{label}</p>
       <p className={`mt-1 text-2xl font-semibold ${textColors[accent]}`}>{value}</p>
     </div>
   );
@@ -260,15 +257,15 @@ function TabButton({
       onClick={onClick}
       className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
         active
-          ? 'border-indigo-600 text-indigo-600'
-          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+          ? 'border-interactive text-interactive'
+          : 'border-transparent text-content-tertiary hover:border-edge-strong hover:text-content-secondary'
       }`}
     >
       {label}
       {count > 0 && (
         <span
           className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+            active ? 'bg-interactive-subtle text-interactive' : 'bg-surface-muted text-content-secondary'
           }`}
         >
           {count}
@@ -291,9 +288,9 @@ function UpcomingAssessments({
 }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
+      <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
         <svg
-          className="mx-auto h-10 w-10 text-green-400"
+          className="mx-auto h-10 w-10 text-status-success"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -301,46 +298,46 @@ function UpcomingAssessments({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <p className="mt-2 text-sm font-medium text-gray-900">All caught up!</p>
-        <p className="text-sm text-gray-500">You have no outstanding assessments.</p>
+        <p className="mt-2 text-sm font-medium text-content">All caught up!</p>
+        <p className="text-sm text-content-tertiary">You have no outstanding assessments.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+      <table className="min-w-full divide-y divide-edge">
+        <thead className="bg-surface-page">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Due Date</th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Amount</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Late Fee</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Total</th>
-            {canPay && <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Action</th>}
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Due Date</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Late Fee</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Total</th>
+            {canPay && <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Action</th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-edge-subtle">
           {items.map((item) => {
             const totalCents = item.amountCents + item.lateFeeCents;
             return (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">{formatDate(item.dueDate)}</td>
+              <tr key={item.id} className="hover:bg-surface-hover">
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[item.status] || ''}`}>
                     {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-900">{formatCents(item.amountCents)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-500">
+                <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">{formatCents(item.amountCents)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content-tertiary">
                   {item.lateFeeCents > 0 ? formatCents(item.lateFeeCents) : '-'}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatCents(totalCents)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-content">{formatCents(totalCents)}</td>
                 {canPay && (
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button
                       onClick={() => onPay(item)}
-                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                      className="rounded-md bg-interactive px-3 py-1.5 text-xs font-medium text-content-inverse hover:bg-interactive-hover"
                     >
                       Pay Now
                     </button>
@@ -352,7 +349,7 @@ function UpcomingAssessments({
         </tbody>
       </table>
       {feePolicy === 'owner_pays' && canPay && (
-        <p className="px-4 py-2 text-xs text-gray-500">
+        <p className="px-4 py-2 text-xs text-content-tertiary">
           Online payments include a small convenience fee.
         </p>
       )}
@@ -363,33 +360,33 @@ function UpcomingAssessments({
 function PaymentHistory({ items }: { items: LineItem[] }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-        <p className="text-sm text-gray-500">No payment history yet.</p>
+      <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
+        <p className="text-sm text-content-tertiary">No payment history yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+      <table className="min-w-full divide-y divide-edge">
+        <thead className="bg-surface-page">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Due Date</th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Paid On</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Amount</th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Due Date</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Paid On</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-edge-subtle">
           {items.map((item) => (
-            <tr key={item.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">{formatDate(item.dueDate)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+            <tr key={item.id} className="hover:bg-surface-hover">
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
                 {item.paidAt ? new Date(item.paidAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-900">{formatCents(item.amountCents)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">{formatCents(item.amountCents)}</td>
               <td className="px-4 py-3 text-right">
-                <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                <span className="inline-flex rounded-full bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success">
                   Paid
                 </span>
               </td>

@@ -5,15 +5,15 @@ import React from 'react';
  */
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-gray-200 bg-gray-900 px-6 py-12">
+    <footer className="border-t border-edge bg-surface-inverse px-6 py-12">
       <div className="mx-auto max-w-6xl">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Company info */}
           <div className="lg:col-span-1">
-            <p className="text-lg font-semibold text-white">
-              PropertyPro<span className="text-blue-400"> Florida</span>
+            <p className="text-lg font-semibold text-content-inverse">
+              PropertyPro<span className="text-content-link"> Florida</span>
             </p>
-            <p className="mt-2 text-sm leading-relaxed text-gray-400">
+            <p className="mt-2 text-sm leading-relaxed text-content-disabled">
               Compliance and community management platform for Florida
               condominium and HOA associations.
             </p>
@@ -21,12 +21,12 @@ export function MarketingFooter() {
 
           {/* Product links */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-200">Product</h4>
+            <h4 className="text-sm font-semibold text-content-inverse">Product</h4>
             <ul className="mt-3 space-y-2">
               <li>
                 <a
                   href="#features"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Features
                 </a>
@@ -34,7 +34,7 @@ export function MarketingFooter() {
               <li>
                 <a
                   href="#pricing"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Pricing
                 </a>
@@ -42,7 +42,7 @@ export function MarketingFooter() {
               <li>
                 <a
                   href="#compliance"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Compliance Info
                 </a>
@@ -50,7 +50,7 @@ export function MarketingFooter() {
               <li>
                 <a
                   href="/signup"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Get Started
                 </a>
@@ -60,12 +60,12 @@ export function MarketingFooter() {
 
           {/* Legal links */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-200">Legal</h4>
+            <h4 className="text-sm font-semibold text-content-inverse">Legal</h4>
             <ul className="mt-3 space-y-2">
               <li>
                 <a
                   href="/legal/terms"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Terms of Service
                 </a>
@@ -73,7 +73,7 @@ export function MarketingFooter() {
               <li>
                 <a
                   href="/legal/privacy"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   Privacy Policy
                 </a>
@@ -83,18 +83,18 @@ export function MarketingFooter() {
 
           {/* Contact */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-200">Contact</h4>
+            <h4 className="text-sm font-semibold text-content-inverse">Contact</h4>
             <ul className="mt-3 space-y-2">
               <li>
                 <a
                   href="mailto:support@propertyprofl.com"
-                  className="text-sm text-gray-400 transition-colors hover:text-white"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
                   support@propertyprofl.com
                 </a>
               </li>
               <li>
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-content-disabled">
                   West Palm Beach, FL
                 </span>
               </li>
@@ -103,8 +103,8 @@ export function MarketingFooter() {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-10 border-t border-gray-800 pt-6">
-          <p className="text-center text-xs text-gray-500">
+        <div className="mt-10 border-t border-surface-inverse pt-6">
+          <p className="text-center text-xs text-content-tertiary">
             &copy; {new Date().getFullYear()} PropertyPro Florida. All rights
             reserved. PropertyPro is not a law firm and does not provide legal
             advice.

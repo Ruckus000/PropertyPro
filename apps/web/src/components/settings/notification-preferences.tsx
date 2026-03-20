@@ -72,18 +72,18 @@ export function NotificationPreferencesForm({ communityId }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">
+        <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
           {error}
         </div>
       )}
       {success && (
-        <div className="rounded border border-green-300 bg-green-50 p-2 text-sm text-green-800">
+        <div className="rounded border border-status-success-border bg-status-success-bg p-2 text-sm text-status-success">
           Preferences saved.
         </div>
       )}
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700" htmlFor="emailFrequency">
+        <label className="block text-sm font-medium text-content-secondary" htmlFor="emailFrequency">
           Email frequency
         </label>
         <select
@@ -95,7 +95,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
               emailFrequency: e.target.value as EmailFrequency,
             }))
           }
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
         >
           <option value="immediate">Immediate</option>
           <option value="daily_digest">Daily digest</option>
@@ -135,7 +135,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
 
       <button
         type="submit"
-        className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+        className="rounded bg-interactive px-4 py-2 text-content-inverse disabled:opacity-50"
         disabled={saving}
       >
         {saving ? 'Saving...' : 'Save Preferences'}

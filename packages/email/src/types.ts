@@ -5,6 +5,8 @@ export interface CommunityBranding {
   communityName: string;
   logoUrl?: string;
   accentColor?: string;
+  /** Custom footer text appended after the standard footer. */
+  customEmailFooter?: string;
 }
 
 /** Base props shared by all email templates. */

@@ -7,6 +7,9 @@ import {
   documents,
   emergencyBroadcastRecipients,
   emergencyBroadcasts,
+  esignSigners,
+  esignSubmissions,
+  esignTemplates,
   meetings,
   notificationPreferences,
   units,
@@ -564,6 +567,143 @@ async function seedEmergencyBroadcastData(
   debugSeed(`seeded emergency broadcast with ${recipientUserIds.length} recipients for community ${communityId}`);
 }
 
+// ---------------------------------------------------------------------------
+// E-Sign seed data
+// ---------------------------------------------------------------------------
+
+/**
+ * Prebuilt e-sign template definitions for seeding.
+ * Inlined here to avoid importing from apps/web/src (no path alias from scripts/).
+ * Source of truth: apps/web/src/lib/esign/prebuilt-templates.ts
+ */
+const ESIGN_SEED_TEMPLATES = [
+  {
+    name: 'Proxy Designation Form',
+    templateType: 'proxy',
+    description:
+      'Standard proxy form allowing unit owners to designate a voting representative for association meetings.',
+    fieldsSchema: {
+      version: 1,
+      signerRoles: ['owner', 'proxy_holder'],
+      fields: [
+        { id: 'owner_name', type: 'text', signerRole: 'owner', page: 0, x: 10, y: 25, width: 35, height: 4, required: true, label: 'Owner Name' },
+        { id: 'owner_unit', type: 'text', signerRole: 'owner', page: 0, x: 55, y: 25, width: 20, height: 4, required: true, label: 'Unit Number' },
+        { id: 'proxy_holder_name', type: 'text', signerRole: 'owner', page: 0, x: 10, y: 35, width: 35, height: 4, required: true, label: 'Proxy Holder Name' },
+        { id: 'meeting_date', type: 'date', signerRole: 'owner', page: 0, x: 55, y: 35, width: 20, height: 4, required: true, label: 'Meeting Date' },
+        { id: 'owner_signature', type: 'signature', signerRole: 'owner', page: 0, x: 10, y: 70, width: 35, height: 8, required: true, label: 'Owner Signature' },
+        { id: 'owner_sign_date', type: 'date', signerRole: 'owner', page: 0, x: 55, y: 72, width: 20, height: 4, required: true, label: 'Date' },
+        { id: 'proxy_holder_signature', type: 'signature', signerRole: 'proxy_holder', page: 0, x: 10, y: 82, width: 35, height: 8, required: true, label: 'Proxy Holder Signature' },
+        { id: 'proxy_holder_sign_date', type: 'date', signerRole: 'proxy_holder', page: 0, x: 55, y: 84, width: 20, height: 4, required: true, label: 'Date' },
+      ],
+    },
+  },
+  {
+    name: 'Violation Acknowledgment',
+    templateType: 'violation_ack',
+    description:
+      'Acknowledgment form for unit owners to confirm receipt of a violation notice and agree to corrective action.',
+    fieldsSchema: {
+      version: 1,
+      signerRoles: ['owner'],
+      fields: [
+        { id: 'owner_name', type: 'text', signerRole: 'owner', page: 0, x: 10, y: 20, width: 35, height: 4, required: true, label: 'Owner Name' },
+        { id: 'owner_unit', type: 'text', signerRole: 'owner', page: 0, x: 55, y: 20, width: 20, height: 4, required: true, label: 'Unit Number' },
+        { id: 'violation_description', type: 'text', signerRole: 'owner', page: 0, x: 10, y: 32, width: 65, height: 4, required: false, label: 'Violation Description' },
+        { id: 'corrective_deadline', type: 'date', signerRole: 'owner', page: 0, x: 10, y: 42, width: 20, height: 4, required: true, label: 'Correction Deadline' },
+        { id: 'acknowledge_checkbox', type: 'checkbox', signerRole: 'owner', page: 0, x: 10, y: 55, width: 3, height: 3, required: true, label: 'I acknowledge receipt of this violation notice' },
+        { id: 'agree_checkbox', type: 'checkbox', signerRole: 'owner', page: 0, x: 10, y: 62, width: 3, height: 3, required: true, label: 'I agree to take corrective action by the deadline' },
+        { id: 'owner_signature', type: 'signature', signerRole: 'owner', page: 0, x: 10, y: 75, width: 35, height: 8, required: true, label: 'Owner Signature' },
+        { id: 'sign_date', type: 'date', signerRole: 'owner', page: 0, x: 55, y: 77, width: 20, height: 4, required: true, label: 'Date' },
+      ],
+    },
+  },
+] as const;
+
+/**
+ * Seed e-sign templates and (optionally) a demo submission for a community.
+ */
+async function seedEsignData(
+  communityId: number,
+  createdByUserId: string,
+  ownerUserId?: string,
+): Promise<void> {
+  // Idempotent: delete existing e-sign data for this community
+  await db.delete(esignTemplates).where(eq(esignTemplates.communityId, communityId));
+
+  const insertedTemplates: Array<{ id: number; name: string }> = [];
+
+  for (const tpl of ESIGN_SEED_TEMPLATES) {
+    const [row] = await db
+      .insert(esignTemplates)
+      .values({
+        communityId,
+        externalId: crypto.randomUUID(),
+        name: tpl.name,
+        description: tpl.description,
+        templateType: tpl.templateType,
+        fieldsSchema: tpl.fieldsSchema,
+        status: 'active',
+        createdBy: createdByUserId,
+      })
+      .returning({ id: esignTemplates.id, name: esignTemplates.name });
+
+    if (row) insertedTemplates.push(row);
+  }
+
+  debugSeed(`seeded ${insertedTemplates.length} esign templates for community ${communityId}`);
+
+  // For Sunset Condos: create a demo submission so the my-pending widget has data
+  if (ownerUserId) {
+    const proxyTemplate = insertedTemplates.find((t) => t.name === 'Proxy Designation Form');
+    if (!proxyTemplate) return;
+
+    const [submission] = await db
+      .insert(esignSubmissions)
+      .values({
+        communityId,
+        templateId: proxyTemplate.id,
+        externalId: crypto.randomUUID(),
+        status: 'pending',
+        signingOrder: 'sequential',
+        sendEmail: false,
+        messageSubject: 'Annual Meeting Proxy Form',
+        messageBody: 'Please designate your proxy holder for the upcoming annual meeting.',
+        expiresAt: addDays(new Date(), 30),
+        createdBy: createdByUserId,
+      })
+      .returning({ id: esignSubmissions.id });
+
+    if (!submission) return;
+
+    await db.insert(esignSigners).values({
+      communityId,
+      submissionId: submission.id,
+      externalId: crypto.randomUUID(),
+      userId: ownerUserId,
+      email: 'owner.one@sunset.local',
+      name: 'Owner One',
+      role: 'owner',
+      slug: crypto.randomUUID(),
+      sortOrder: 0,
+      status: 'pending',
+    });
+
+    await db.insert(esignSigners).values({
+      communityId,
+      submissionId: submission.id,
+      externalId: crypto.randomUUID(),
+      email: 'board.president@sunset.local',
+      name: 'Board President',
+      role: 'proxy_holder',
+      slug: crypto.randomUUID(),
+      sortOrder: 1,
+      status: 'pending',
+    });
+
+    debugSeed(`seeded demo esign submission with 2 signers for community ${communityId}`);
+  }
+}
+
 export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> {
   const syncAuthUsers = options.syncAuthUsers ?? true;
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
@@ -694,6 +834,12 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   const emergencyRecipientIds = [ownerUserId, boardPresidentId, tenantUserId];
   await seedEmergencyBroadcastData(sunsetCommunityId, camUserId, emergencyRecipientIds);
   debugSeed('emergency broadcast seed complete');
+
+  // Seed e-sign templates for all communities, demo submission for Sunset only
+  await seedEsignData(sunsetCommunityId, boardPresidentId, ownerUserId);
+  await seedEsignData(palmCommunityId, boardPresidentId);
+  await seedEsignData(apartmentCommunityId, resolveUserId(userIdsByEmail, 'site.manager@sunsetridge.local'));
+  debugSeed('esign seed complete');
 
   // Seed assessment + line item data for Sunset Condos
   await seedAssessmentData(sunsetCommunityId, boardPresidentId);

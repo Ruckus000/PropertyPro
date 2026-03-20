@@ -50,7 +50,7 @@ export function DocumentCategoryFilter({
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-8 w-20 animate-pulse rounded-full bg-gray-200"
+            className="h-8 w-20 animate-pulse rounded-full bg-surface-muted"
           />
         ))}
       </div>
@@ -63,11 +63,11 @@ export function DocumentCategoryFilter({
         <button
           type="button"
           onClick={() => onCategoryChange(null)}
-          className="w-fit rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white"
+          className="w-fit rounded-full bg-interactive px-4 py-1.5 text-sm font-medium text-white"
         >
           All
         </button>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-content-secondary">
           No categories configured yet.
         </p>
       </div>
@@ -81,8 +81,8 @@ export function DocumentCategoryFilter({
         onClick={() => onCategoryChange(null)}
         className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
           selectedCategoryId === null
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            ? 'bg-interactive text-white'
+            : 'bg-surface-muted text-content-secondary hover:bg-surface-muted'
         }`}
       >
         All
@@ -94,8 +94,8 @@ export function DocumentCategoryFilter({
           onClick={() => onCategoryChange(category.id)}
           className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
             selectedCategoryId === category.id
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-interactive text-white'
+              : 'bg-surface-muted text-content-secondary hover:bg-surface-muted'
           }`}
         >
           {category.name}

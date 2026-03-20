@@ -17,11 +17,11 @@ export type AuditAction =
   | 'document_accessed' | 'validation_failed'                  // Read-path + validation audit
   | 'notification_sent'                                        // Email notification dispatch (P2-41)
   // E-sign audit actions — retained for native e-signature builder
-  | 'esign_template_created' | 'esign_template_archived'       // E-sign template lifecycle
-  | 'esign_template_cloned'                                    // E-sign template cloning
+  | 'esign_template_created' | 'esign_template_updated'        // E-sign template lifecycle
+  | 'esign_template_archived' | 'esign_template_cloned'       // E-sign template actions
   | 'esign_submission_created' | 'esign_submission_completed'  // E-sign submission lifecycle
   | 'esign_submission_cancelled' | 'esign_reminder_sent'       // E-sign submission actions
-  | 'esign_document_verified'                                   // E-sign document verification
+  | 'esign_document_verified' | 'esign_consent_revoked'        // E-sign verification + consent
   // Emergency broadcast audit actions (Phase 1B)
   | 'emergency_broadcast_created' | 'emergency_broadcast_sent'  // Broadcast lifecycle
   | 'emergency_broadcast_canceled'                               // Broadcast cancellation

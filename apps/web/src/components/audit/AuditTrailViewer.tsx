@@ -112,22 +112,22 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
         />
         <button
           onClick={handleExportCSV}
-          className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="shrink-0 rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover"
         >
           Export CSV
         </button>
       </div>
 
       {loading && (
-        <div className="text-sm text-gray-500">Loading audit trail...</div>
+        <div className="text-sm text-content-tertiary">Loading audit trail...</div>
       )}
 
       {error && (
-        <div className="text-sm text-red-600">Error: {error}</div>
+        <div className="text-sm text-status-danger">Error: {error}</div>
       )}
 
       {!loading && !error && entries.length === 0 && (
-        <p className="text-sm text-gray-500">No audit entries found.</p>
+        <p className="text-sm text-content-tertiary">No audit entries found.</p>
       )}
 
       {!loading && entries.length > 0 && (
@@ -141,7 +141,7 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
               <button
                 onClick={() => void fetchMore()}
                 disabled={loadingMore}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover disabled:opacity-50"
               >
                 {loadingMore ? 'Loading...' : 'Load More'}
               </button>

@@ -2,7 +2,7 @@
  * Apartment metrics card grid — P2-36
  *
  * Renders four metric cards consistent with the existing dashboard card style
- * (rounded-lg border border-gray-200 bg-white p-5).
+ * (rounded-md border border-edge bg-surface-card p-5).
  */
 import type { ApartmentMetrics } from '@/lib/queries/apartment-metrics';
 
@@ -28,23 +28,23 @@ interface MetricCardProps {
 
 function MetricCard({ title, value, detail, subDetail, badge }: MetricCardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <p className="text-sm font-medium text-gray-500">{title}</p>
+    <div className="rounded-md border border-edge bg-surface-card p-5">
+      <p className="text-sm font-medium text-content-secondary">{title}</p>
       <div className="mt-1 flex items-baseline gap-2">
-        <p className="text-3xl font-semibold text-gray-900">{value}</p>
+        <p className="text-3xl font-semibold text-content">{value}</p>
         {badge === 'urgent' && (
-          <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+          <span className="rounded-full bg-status-danger-bg px-2 py-0.5 text-xs font-semibold text-status-danger">
             Action needed
           </span>
         )}
         {badge === 'warning' && (
-          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+          <span className="rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-semibold text-status-warning">
             Review
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-gray-600">{detail}</p>
-      {subDetail && <p className="mt-0.5 text-xs text-gray-400">{subDetail}</p>}
+      <p className="mt-1 text-sm text-content-secondary">{detail}</p>
+      {subDetail && <p className="mt-0.5 text-xs text-content-disabled">{subDetail}</p>}
     </div>
   );
 }

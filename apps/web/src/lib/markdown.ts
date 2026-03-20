@@ -29,19 +29,19 @@ function processInline(text: string): string {
   // Links: [text](url)
   result = result.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" class="text-blue-600 underline hover:text-blue-800">$1</a>',
+    '<a href="$2" class="text-content-link underline hover:text-interactive">$1</a>',
   );
 
   return result;
 }
 
 const HEADING_STYLES: Record<number, string> = {
-  1: 'text-3xl font-semibold text-gray-900 mt-8 mb-4',
-  2: 'text-2xl font-semibold text-gray-900 mt-8 mb-3',
-  3: 'text-xl font-medium text-gray-800 mt-6 mb-2',
-  4: 'text-lg font-medium text-gray-800 mt-4 mb-2',
-  5: 'text-base font-medium text-gray-700 mt-4 mb-1',
-  6: 'text-sm font-medium text-gray-700 mt-4 mb-1',
+  1: 'text-3xl font-semibold text-content mt-8 mb-4',
+  2: 'text-2xl font-semibold text-content mt-8 mb-3',
+  3: 'text-xl font-medium text-content mt-6 mb-2',
+  4: 'text-lg font-medium text-content mt-4 mb-2',
+  5: 'text-base font-medium text-content-secondary mt-4 mb-1',
+  6: 'text-sm font-medium text-content-secondary mt-4 mb-1',
 };
 
 function isBlankLine(line: string): boolean {
@@ -90,7 +90,7 @@ export function renderMarkdown(markdown: string): string {
         htmlParts.push('</ul>');
         inList = false;
       }
-      htmlParts.push('<hr class="my-8 border-gray-200" />');
+      htmlParts.push('<hr class="my-8 border-edge" />');
       i++;
       continue;
     }
@@ -104,7 +104,7 @@ export function renderMarkdown(markdown: string): string {
       }
       const level = (headingMatch[1] ?? '#').length;
       const text = processInline(headingMatch[2] ?? '');
-      const style = HEADING_STYLES[level] ?? 'text-3xl font-semibold text-gray-900 mt-8 mb-4';
+      const style = HEADING_STYLES[level] ?? 'text-3xl font-semibold text-content mt-8 mb-4';
       htmlParts.push(`<h${level} class="${style}">${text}</h${level}>`);
       i++;
       continue;
@@ -114,7 +114,7 @@ export function renderMarkdown(markdown: string): string {
     const listMatch = line.match(/^- (.+)$/);
     if (listMatch) {
       if (!inList) {
-        htmlParts.push('<ul class="list-disc pl-8 my-4 space-y-2 text-gray-700">');
+        htmlParts.push('<ul class="list-disc pl-8 my-4 space-y-2 text-content-secondary">');
         inList = true;
       }
       htmlParts.push(`<li>${processInline(listMatch[1] ?? '')}</li>`);
@@ -141,7 +141,7 @@ export function renderMarkdown(markdown: string): string {
 
     const paragraphText = paragraphLines.map((l) => l.trim()).join(' ');
     htmlParts.push(
-      `<p class="my-4 text-gray-700 leading-relaxed">${processInline(paragraphText)}</p>`,
+      `<p class="my-4 text-content-secondary leading-relaxed">${processInline(paragraphText)}</p>`,
     );
   }
 

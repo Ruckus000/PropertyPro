@@ -55,9 +55,9 @@ export function DocumentViewer({
 
   if (!document) {
     return (
-      <div className="flex h-full flex-col items-center justify-center rounded-lg border border-gray-200 bg-gray-50 p-8">
+      <div className="flex h-full flex-col items-center justify-center rounded-md border border-edge bg-surface-page p-8">
         <svg
-          className="h-16 w-16 text-gray-300"
+          className="h-16 w-16 text-content-disabled"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -69,7 +69,7 @@ export function DocumentViewer({
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
         </svg>
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-content-tertiary">
           Select a document to preview
         </p>
       </div>
@@ -81,25 +81,25 @@ export function DocumentViewer({
   const canPreview = isPdf || isImage;
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+    <div className="flex h-full flex-col rounded-md border border-edge bg-surface-card">
+      <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-medium text-gray-900">{document.title}</h3>
-          <p className="text-sm text-gray-500">{document.fileName}</p>
+          <h3 className="truncate font-medium text-content">{document.title}</h3>
+          <p className="text-sm text-content-tertiary">{document.fileName}</p>
         </div>
         <div className="ml-4 flex items-center gap-2">
           {onViewVersions && (
             <button
               type="button"
               onClick={() => onViewVersions(document)}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary hover:bg-surface-hover"
             >
               Version History
             </button>
           )}
           <a
             href={`/api/v1/documents/${document.id}/download?communityId=${communityId}&attachment=true`}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover"
           >
             Download
           </a>
@@ -107,7 +107,7 @@ export function DocumentViewer({
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="rounded p-1.5 text-content-tertiary hover:bg-surface-muted hover:text-content-secondary"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -125,13 +125,13 @@ export function DocumentViewer({
       <div className="flex-1 overflow-auto p-4">
         {isLoading && (
           <div className="flex h-full items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
           </div>
         )}
 
         {error && (
           <div className="flex h-full flex-col items-center justify-center">
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-status-danger">{error}</p>
           </div>
         )}
 
@@ -140,7 +140,7 @@ export function DocumentViewer({
             {isPdf && (
               <iframe
                 src={downloadUrl}
-                className="h-full w-full rounded border border-gray-200"
+                className="h-full w-full rounded border border-edge"
                 title={document.title}
               />
             )}
@@ -159,7 +159,7 @@ export function DocumentViewer({
         {!isLoading && !error && !canPreview && (
           <div className="flex h-full flex-col items-center justify-center">
             <svg
-              className="h-16 w-16 text-gray-300"
+              className="h-16 w-16 text-content-disabled"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -171,10 +171,10 @@ export function DocumentViewer({
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <p className="mt-4 text-sm text-gray-600">
+            <p className="mt-4 text-sm text-content-secondary">
               Preview not available for this file type
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-content-tertiary">
               Download the file to view its contents
             </p>
           </div>
@@ -182,8 +182,8 @@ export function DocumentViewer({
       </div>
 
       {document.description && (
-        <div className="border-t border-gray-200 px-4 py-3">
-          <p className="text-sm text-gray-600">{document.description}</p>
+        <div className="border-t border-edge px-4 py-3">
+          <p className="text-sm text-content-secondary">{document.description}</p>
         </div>
       )}
     </div>

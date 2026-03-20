@@ -98,13 +98,13 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-600">Loading transparency settings...</p>;
+    return <p className="text-sm text-content-secondary">Loading transparency settings...</p>;
   }
 
   const needsAcknowledgment = enabled && !acknowledgedAt && !acknowledged;
 
   return (
-    <Card className="border-gray-200 bg-white">
+    <Card className="border-edge bg-surface-card">
       <Card.Header>
         <div className="flex flex-col">
           <Card.Title>Compliance Transparency Page</Card.Title>
@@ -115,18 +115,18 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
       <Card.Body>
         <form className="space-y-4" onSubmit={onSubmit}>
           {error ? (
-            <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>
+            <p className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger">{error}</p>
           ) : null}
           {success ? (
-            <p className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            <p className="rounded-md border border-status-success-border bg-status-success-bg p-3 text-sm text-status-success">
               Transparency settings updated.
             </p>
           ) : null}
 
-          <div className="rounded-md border border-gray-200 p-3">
-            <p className="text-sm font-medium text-gray-800">Preview</p>
+          <div className="rounded-md border border-edge p-3">
+            <p className="text-sm font-medium text-content">Preview</p>
             <a
-              className="mt-1 inline-flex text-sm font-medium text-blue-700 underline"
+              className="mt-1 inline-flex text-sm font-medium text-content-link underline"
               href={transparencyUrl}
               rel="noreferrer"
               target="_blank"
@@ -135,38 +135,38 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
             </a>
           </div>
 
-          <label className="flex items-start gap-3 rounded-md border border-gray-200 p-3">
+          <label className="flex items-start gap-3 rounded-md border border-edge p-3">
             <input
               aria-label="Enable compliance transparency page"
               checked={enabled}
-              className="mt-1 h-5 w-5 rounded border-gray-300"
+              className="mt-1 h-5 w-5 rounded border-edge-strong"
               onChange={(event) => setEnabled(event.target.checked)}
               type="checkbox"
             />
             <span>
-              <span className="block text-sm font-medium text-gray-900">Enable public transparency page</span>
-              <span className="block text-sm text-gray-600">
+              <span className="block text-sm font-medium text-content">Enable public transparency page</span>
+              <span className="block text-sm text-content-secondary">
                 When enabled, your public URL is available at <code>{transparencyUrl}</code>.
               </span>
             </span>
           </label>
 
-          <label className="flex items-start gap-3 rounded-md border border-gray-200 p-3">
+          <label className="flex items-start gap-3 rounded-md border border-edge p-3">
             <input
               aria-label="Acknowledge transparency page scope"
               checked={acknowledged}
-              className="mt-1 h-5 w-5 rounded border-gray-300"
+              className="mt-1 h-5 w-5 rounded border-edge-strong"
               onChange={(event) => setAcknowledged(event.target.checked)}
               type="checkbox"
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-content-secondary">
               I understand that this page displays factual data tracked within PropertyPro. It does not constitute
               legal certification, and tracked items are publicly visible.
             </span>
           </label>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm text-gray-700">
+            <div className="flex items-center gap-2 text-sm text-content-secondary">
               <StatusBadge status={enabled ? 'completed' : 'neutral'} showLabel={false} />
               <span>{enabled ? 'Page is live' : 'Page is not publicly visible'}</span>
             </div>
@@ -176,7 +176,7 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
           </div>
 
           {needsAcknowledgment ? (
-            <p className="text-xs text-red-700">
+            <p className="text-xs text-status-danger">
               Check the acknowledgment box before enabling transparency for the first time.
             </p>
           ) : null}

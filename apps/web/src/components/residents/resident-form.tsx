@@ -57,47 +57,47 @@ export function ResidentForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="resident-form">
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-status-danger">{error}</p> : null}
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Full name</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Full name</span>
         <input
           required
           value={values.fullName}
           onChange={(event) => setValues((prev) => ({ ...prev, fullName: event.target.value }))}
-          className="w-full rounded-md border border-gray-300 px-3 py-2"
+          className="w-full rounded-md border border-edge-strong px-3 py-2"
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Email</span>
         <input
           required
           type="email"
           value={values.email}
           onChange={(event) => setValues((prev) => ({ ...prev, email: event.target.value }))}
-          className="w-full rounded-md border border-gray-300 px-3 py-2"
+          className="w-full rounded-md border border-edge-strong px-3 py-2"
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Phone</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Phone</span>
         <input
           value={values.phone}
           onChange={(event) => setValues((prev) => ({ ...prev, phone: event.target.value }))}
-          className="w-full rounded-md border border-gray-300 px-3 py-2"
+          className="w-full rounded-md border border-edge-strong px-3 py-2"
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Role</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Role</span>
         <select
           value={values.role}
           onChange={(event) => setValues((prev) => ({
             ...prev,
             role: event.target.value as CommunityRole,
           }))}
-          className="w-full rounded-md border border-gray-300 px-3 py-2"
+          className="w-full rounded-md border border-edge-strong px-3 py-2"
         >
           {COMMUNITY_ROLES.map((role) => (
             <option key={role} value={role}>
@@ -108,7 +108,7 @@ export function ResidentForm({
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Unit ID (optional)</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">Unit ID (optional)</span>
         <input
           type="number"
           value={values.unitId ?? ''}
@@ -119,14 +119,14 @@ export function ResidentForm({
               unitId: value === '' ? null : Number(value),
             }));
           }}
-          className="w-full rounded-md border border-gray-300 px-3 py-2"
+          className="w-full rounded-md border border-edge-strong px-3 py-2"
         />
       </label>
 
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+        className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60"
       >
         {submitting ? 'Saving...' : 'Save resident'}
       </button>

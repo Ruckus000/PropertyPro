@@ -28,7 +28,7 @@ export default async function PublicSitePage() {
   if (!communityId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-500">Community not found.</p>
+        <p className="text-content-secondary">Community not found.</p>
       </div>
     );
   }
@@ -37,7 +37,7 @@ export default async function PublicSitePage() {
   if (!community) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-500">Community not found.</p>
+        <p className="text-content-secondary">Community not found.</p>
       </div>
     );
   }
@@ -94,16 +94,16 @@ export default async function PublicSitePage() {
           {/* Hero section */}
           <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <h1 className="font-heading text-4xl font-bold text-white sm:text-5xl">
+              <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
                 {community.name}
               </h1>
-              <p className="mt-4 text-lg text-white/80">
+              <p className="mt-4 text-lg text-content-inverse/80">
                 Your community portal for documents, meetings, and more.
               </p>
               <div className="mt-8">
                 <a
                   href="/auth/login"
-                  className="inline-flex items-center rounded-md bg-white px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center rounded-md bg-surface-card px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-surface-hover transition-colors"
                 >
                   Resident Login
                 </a>
@@ -112,9 +112,9 @@ export default async function PublicSitePage() {
           </section>
 
           {/* Features / Quick Links */}
-          <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
+          <section className="bg-surface-card px-4 py-16 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-5xl">
-              <h2 className="font-heading text-2xl font-semibold text-gray-900 text-center mb-10">
+              <h2 className="font-heading text-2xl font-semibold text-content text-center mb-10">
                 Community Resources
               </h2>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -140,7 +140,7 @@ export default async function PublicSitePage() {
           {/* CTA section */}
           <section className="bg-accent px-4 py-12 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-3xl text-center">
-              <h2 className="font-heading text-xl font-semibold text-gray-900">
+              <h2 className="font-heading text-xl font-semibold text-content">
                 Have questions?
               </h2>
               <p className="mt-2 text-secondary">
@@ -184,9 +184,9 @@ function FeatureCard({
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-e1">
+    <div className="rounded-md border border-edge bg-surface-card p-6 shadow-e1">
       <div className="mb-3">{icons[icon]}</div>
-      <h3 className="font-heading text-lg font-semibold text-gray-900">{title}</h3>
+      <h3 className="font-heading text-lg font-semibold text-content">{title}</h3>
       <p className="mt-1 text-sm text-secondary">{description}</p>
     </div>
   );

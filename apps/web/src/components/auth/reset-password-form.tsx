@@ -81,13 +81,13 @@ export function ResetPasswordForm() {
   if (sessionError) {
     return (
       <div className="text-center" data-testid="reset-password-expired">
-        <h2 className="mb-2 text-xl font-semibold text-gray-900">Invalid or expired link</h2>
-        <p className="mb-4 text-gray-600">
+        <h2 className="mb-2 text-xl font-semibold text-content">Invalid or expired link</h2>
+        <p className="mb-4 text-content-secondary">
           This password reset link has expired or is invalid. Please request a new one.
         </p>
         <a
           href="/auth/forgot-password"
-          className="inline-block text-blue-600 underline hover:text-blue-700"
+          className="inline-block text-content-link underline hover:text-content-link"
         >
           Request new reset link
         </a>
@@ -98,11 +98,11 @@ export function ResetPasswordForm() {
   if (success) {
     return (
       <div className="text-center" data-testid="reset-password-success">
-        <h2 className="mb-2 text-xl font-semibold text-gray-900">Password updated</h2>
-        <p className="mb-4 text-gray-600">
+        <h2 className="mb-2 text-xl font-semibold text-content">Password updated</h2>
+        <p className="mb-4 text-content-secondary">
           Your password has been updated successfully. You can now log in with your new password.
         </p>
-        <a href="/auth/login" className="inline-block text-blue-600 underline hover:text-blue-700">
+        <a href="/auth/login" className="inline-block text-content-link underline hover:text-content-link">
           Go to login
         </a>
       </div>
@@ -112,7 +112,7 @@ export function ResetPasswordForm() {
   if (!sessionReady) {
     return (
       <div className="text-center" data-testid="reset-password-loading">
-        <p className="text-gray-600">Verifying reset link...</p>
+        <p className="text-content-secondary">Verifying reset link...</p>
       </div>
     );
   }
@@ -120,7 +120,7 @@ export function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="reset-password-form">
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="password" className="mb-1 block text-sm font-medium text-content-secondary">
           New password
         </label>
         <input
@@ -133,14 +133,14 @@ export function ResetPasswordForm() {
           maxLength={72}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="At least 8 characters"
           disabled={loading}
         />
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-gray-700">
+        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-content-secondary">
           Confirm new password
         </label>
         <input
@@ -151,14 +151,14 @@ export function ResetPasswordForm() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="Re-enter your new password"
           disabled={loading}
         />
       </div>
 
       {error && (
-        <p className="text-sm text-red-600" role="alert" data-testid="reset-password-error">
+        <p className="text-sm text-status-danger" role="alert" data-testid="reset-password-error">
           {error}
         </p>
       )}
@@ -166,7 +166,7 @@ export function ResetPasswordForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? 'Updating...' : 'Set new password'}
       </button>

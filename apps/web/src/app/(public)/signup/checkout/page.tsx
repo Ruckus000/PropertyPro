@@ -38,7 +38,7 @@ function CheckoutInner() {
   if (error) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-status-danger">{error}</p>
       </main>
     );
   }
@@ -46,7 +46,7 @@ function CheckoutInner() {
   if (!clientSecret) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <p className="text-sm text-gray-500">Loading checkout…</p>
+        <p className="text-sm text-content-secondary">Loading checkout…</p>
       </main>
     );
   }
@@ -65,7 +65,7 @@ export default function CheckoutPage() {
     <Suspense
       fallback={
         <main className="mx-auto max-w-lg px-6 py-16 text-center">
-          <p className="text-sm text-gray-500">Loading checkout…</p>
+          <p className="text-sm text-content-secondary">Loading checkout…</p>
         </main>
       }
     >

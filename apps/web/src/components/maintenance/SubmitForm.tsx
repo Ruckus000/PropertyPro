@@ -115,12 +115,12 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-      <h2 className="text-lg font-semibold text-gray-900">Submit Maintenance Request</h2>
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-md border border-edge bg-surface-card p-6">
+      <h2 className="text-lg font-semibold text-content">Submit Maintenance Request</h2>
 
       <div>
-        <label htmlFor="mr-title" className="block text-sm font-medium text-gray-700">
-          Title <span className="text-red-500">*</span>
+        <label htmlFor="mr-title" className="block text-sm font-medium text-content-secondary">
+          Title <span className="text-status-danger">*</span>
         </label>
         <input
           id="mr-title"
@@ -128,16 +128,16 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={500}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
         />
         {fieldErrors['title'] && (
-          <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors['title']}</p>
+          <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['title']}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="mr-description" className="block text-sm font-medium text-gray-700">
-          Description <span className="text-red-500">*</span>
+        <label htmlFor="mr-description" className="block text-sm font-medium text-content-secondary">
+          Description <span className="text-status-danger">*</span>
         </label>
         <textarea
           id="mr-description"
@@ -145,23 +145,23 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           onChange={(e) => setDescription(e.target.value)}
           maxLength={5000}
           rows={4}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
         />
         {fieldErrors['description'] && (
-          <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors['description']}</p>
+          <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['description']}</p>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="mr-category" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="mr-category" className="block text-sm font-medium text-content-secondary">
             Category
           </label>
           <select
             id="mr-category"
             value={category}
             onChange={(e) => setCategory(e.target.value as typeof CATEGORIES[number])}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -172,14 +172,14 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
         </div>
 
         <div>
-          <label htmlFor="mr-priority" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="mr-priority" className="block text-sm font-medium text-content-secondary">
             Priority
           </label>
           <select
             id="mr-priority"
             value={priority}
             onChange={(e) => setPriority(e.target.value as typeof PRIORITIES[number])}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
           >
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
@@ -191,7 +191,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       </div>
 
       <div>
-        <label htmlFor="mr-photos" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="mr-photos" className="block text-sm font-medium text-content-secondary">
           Photos (max 5)
         </label>
         <input
@@ -200,17 +200,17 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           accept="image/jpeg,image/png,image/webp,image/gif"
           multiple
           onChange={handlePhotoChange}
-          className="mt-1 block w-full text-sm text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+          className="mt-1 block w-full text-sm text-content-tertiary file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1 file:text-sm file:font-medium file:text-interactive hover:file:bg-interactive-subtle"
         />
         {photos.length > 0 && (
           <ul className="mt-2 space-y-1">
             {photos.map((f, idx) => (
-              <li key={idx} className="flex items-center justify-between text-xs text-gray-600">
+              <li key={idx} className="flex items-center justify-between text-xs text-content-secondary">
                 <span className="truncate">{f.name}</span>
                 <button
                   type="button"
                   onClick={() => removePhoto(idx)}
-                  className="ml-2 text-red-500 hover:text-red-700"
+                  className="ml-2 text-status-danger hover:text-status-danger"
                 >
                   Remove
                 </button>
@@ -221,15 +221,15 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       </div>
 
       {serverError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p>
+        <p className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger" role="alert">{serverError}</p>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:opacity-50"
       >
-        {uploading ? 'Uploading photos…' : submitting ? 'Submitting…' : 'Submit Request'}
+        {uploading ? 'Uploading photos...' : submitting ? 'Submitting...' : 'Submit Request'}
       </button>
     </form>
   );

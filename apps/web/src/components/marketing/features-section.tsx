@@ -8,17 +8,17 @@ import React from 'react';
  */
 export function FeaturesSection() {
   return (
-    <section id="features" className="bg-white px-6 py-16 sm:py-20">
+    <section id="features" className="bg-surface-card px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl">
         {/* Section header */}
         <div className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-link">
             Platform Features
           </p>
-          <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
+          <h2 className="mt-2 text-2xl font-bold text-content sm:text-3xl">
             Everything Your Association Needs
           </h2>
-          <p className="mt-3 text-base text-gray-600">
+          <p className="mt-3 text-base text-content-secondary">
             A complete compliance and community management platform designed
             specifically for Florida condominium and HOA associations.
           </p>
@@ -29,15 +29,15 @@ export function FeaturesSection() {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="rounded-lg border border-gray-200 bg-white p-6 transition-shadow hover:shadow-e2"
+              className="rounded-md border border-edge bg-surface-card p-6 transition-shadow hover:shadow-e2"
             >
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-blue-50">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-interactive-subtle">
                 {feature.icon}
               </div>
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-content">
                 {feature.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              <p className="mt-2 text-sm leading-relaxed text-content-secondary">
                 {feature.description}
               </p>
             </div>
@@ -104,7 +104,7 @@ function DocumentIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
@@ -127,7 +127,7 @@ function CalendarIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -149,7 +149,7 @@ function UsersIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -171,7 +171,7 @@ function SmartphoneIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
@@ -191,7 +191,7 @@ function ShieldCheckIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -211,7 +211,7 @@ function BuildingIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-blue-600"
+      className="text-content-link"
       aria-hidden="true"
     >
       <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />

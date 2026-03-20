@@ -6,7 +6,7 @@ import { MarketingFooter } from '@/components/marketing/footer';
 
 export default function MarketingLandingPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-surface-card">
       <MarketingNav />
       <main id="main-content">
         <HeroSection />
@@ -21,39 +21,39 @@ export default function MarketingLandingPage() {
 
 function MarketingNav() {
   return (
-    <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
+    <nav className="sticky top-0 z-50 border-b border-edge bg-surface-card/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="/" className="text-lg font-semibold text-gray-900">
-          PropertyPro<span className="text-blue-600"> Florida</span>
+        <a href="/" className="text-lg font-semibold text-content">
+          PropertyPro<span className="text-content-link"> Florida</span>
         </a>
         <div className="hidden items-center gap-8 sm:flex">
           <a
             href="#features"
-            className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            className="text-sm font-medium text-content-secondary transition-colors hover:text-content"
           >
             Features
           </a>
           <a
             href="#compliance"
-            className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            className="text-sm font-medium text-content-secondary transition-colors hover:text-content"
           >
             Compliance
           </a>
           <a
             href="#pricing"
-            className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            className="text-sm font-medium text-content-secondary transition-colors hover:text-content"
           >
             Pricing
           </a>
           <a
             href="/auth/login"
-            className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            className="text-sm font-medium text-content-secondary transition-colors hover:text-content"
           >
             Log In
           </a>
           <a
             href="/signup"
-            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-colors hover:bg-interactive-hover"
           >
             Get Started
           </a>
@@ -62,7 +62,7 @@ function MarketingNav() {
         <div className="flex items-center gap-4 sm:hidden">
           <a
             href="/signup"
-            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center rounded-md bg-interactive px-3 py-2 text-sm font-medium text-content-inverse transition-colors hover:bg-interactive-hover"
           >
             Get Started
           </a>

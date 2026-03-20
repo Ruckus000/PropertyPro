@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { CommunityBranding } from '@propertypro/shared';
 import { ALLOWED_FONTS } from '@propertypro/theme';
 import { BrandingPreview } from './BrandingPreview';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 const MAX_LOGO_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -58,6 +59,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE');
   const [fontHeading, setFontHeading] = useState(initialBranding.fontHeading ?? 'Inter');
   const [fontBody, setFontBody] = useState(initialBranding.fontBody ?? 'Inter');
+  const [customEmailFooter, setCustomEmailFooter] = useState(initialBranding.customEmailFooter ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
           accentColor,
           fontHeading,
           fontBody,
+          customEmailFooter: customEmailFooter || undefined,
           ...(logoStoragePath !== undefined && { logoStoragePath }),
         }),
       });
@@ -195,10 +198,10 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Logo */}
         <div>
-          <label htmlFor="logo-upload" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="logo-upload" className="mb-1.5 block text-sm font-medium text-content">
             Company Logo
           </label>
-          <p className="mb-2 text-xs text-gray-500">
+          <p className="mb-2 text-xs text-content-tertiary">
             PNG, JPEG, or WebP · max 10 MB · will be resized to 400×400 WebP
           </p>
           <input
@@ -207,13 +210,13 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             type="file"
             accept="image/png,image/jpeg,image/jpg,image/webp"
             onChange={handleLogoChange}
-            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive/20"
           />
         </div>
 
         {/* Primary color */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label className="mb-1.5 block text-sm font-medium text-content">
             Primary Brand Color
           </label>
           <div className="flex items-center gap-3">
@@ -221,7 +224,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               type="color"
               value={primaryColor}
               onChange={(e) => setPrimaryColor(e.target.value)}
-              className="h-9 w-16 cursor-pointer rounded border border-gray-300 p-0.5"
+              className="h-9 w-16 cursor-pointer rounded border border-edge-strong p-0.5"
             />
             <input
               type="text"
@@ -229,14 +232,14 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setPrimaryColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
         </div>
 
         {/* Secondary color */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label className="mb-1.5 block text-sm font-medium text-content">
             Secondary Brand Color
           </label>
           <div className="flex items-center gap-3">
@@ -244,7 +247,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               type="color"
               value={secondaryColor}
               onChange={(e) => setSecondaryColor(e.target.value)}
-              className="h-9 w-16 cursor-pointer rounded border border-gray-300 p-0.5"
+              className="h-9 w-16 cursor-pointer rounded border border-edge-strong p-0.5"
             />
             <input
               type="text"
@@ -252,23 +255,23 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setSecondaryColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
         </div>
 
         {/* Accent color */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label className="mb-1.5 block text-sm font-medium text-content">
             Accent Color
           </label>
-          <p className="mb-1.5 text-xs text-gray-500">Used for badges and highlighted backgrounds</p>
+          <p className="mb-1.5 text-xs text-content-tertiary">Used for badges and highlighted backgrounds</p>
           <div className="flex items-center gap-3">
             <input
               type="color"
               value={accentColor}
               onChange={(e) => setAccentColor(e.target.value)}
-              className="h-9 w-16 cursor-pointer rounded border border-gray-300 p-0.5"
+              className="h-9 w-16 cursor-pointer rounded border border-edge-strong p-0.5"
             />
             <input
               type="text"
@@ -276,21 +279,21 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setAccentColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
         </div>
 
         {/* Font heading */}
         <div>
-          <label htmlFor="font-heading" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="font-heading" className="mb-1.5 block text-sm font-medium text-content">
             Heading Font
           </label>
           <select
             id="font-heading"
             value={fontHeading}
             onChange={(e) => setFontHeading(e.target.value)}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
           >
             {ALLOWED_FONTS.map((font) => (
               <option key={font} value={font}>
@@ -302,14 +305,14 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
 
         {/* Font body */}
         <div>
-          <label htmlFor="font-body" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="font-body" className="mb-1.5 block text-sm font-medium text-content">
             Body Font
           </label>
           <select
             id="font-body"
             value={fontBody}
             onChange={(e) => setFontBody(e.target.value)}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
           >
             {ALLOWED_FONTS.map((font) => (
               <option key={font} value={font}>
@@ -319,24 +322,39 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
           </select>
         </div>
 
+        {/* Custom email footer */}
+        <div>
+          <label htmlFor="custom-email-footer" className="mb-1.5 block text-sm font-medium text-content">
+            Custom Email Footer
+          </label>
+          <p className="mb-1.5 text-xs text-content-tertiary">
+            Optional text appended to all outbound emails for this community
+          </p>
+          <textarea
+            id="custom-email-footer"
+            value={customEmailFooter}
+            onChange={(e) => setCustomEmailFooter(e.target.value)}
+            rows={3}
+            maxLength={500}
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            placeholder="e.g. Questions? Contact management at (305) 555-0100"
+          />
+        </div>
+
         {/* Feedback */}
         {error && (
-          <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
+          <AlertBanner status="danger" title="Error" description={error} />
         )}
         {success && (
-          <p className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-            Branding saved successfully.
-          </p>
+          <AlertBanner status="success" title="Branding saved successfully" />
         )}
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
         >
-          {isSubmitting ? 'Saving…' : 'Save Branding'}
+          {isSubmitting ? 'Saving...' : 'Save Branding'}
         </button>
       </form>
 

@@ -20,7 +20,7 @@ function formatDate(value: string): string {
 
 export function TransparencyFooter({ communityType, generatedAt }: Props) {
   return (
-    <footer className="rounded-lg border border-gray-200 bg-white p-5 text-xs text-gray-500 print:border-none print:p-0 print:text-black">
+    <footer className="rounded-md border border-edge bg-surface-card p-5 text-xs text-content-tertiary print:border-none print:p-0 print:text-black">
       <div className="space-y-1">
         <p>Data source: PropertyPro Platform</p>
         <p>Community type: {communityType}</p>
@@ -28,12 +28,12 @@ export function TransparencyFooter({ communityType, generatedAt }: Props) {
       </div>
 
       <div className="mt-4 space-y-1">
-        <p className="font-semibold text-gray-600 print:text-black">What this page tracks</p>
+        <p className="font-semibold text-content-secondary print:text-black">What this page tracks</p>
         <p>Document posting status, notice lead-time records, and monthly minutes availability tracked in PropertyPro.</p>
       </div>
 
       <div className="mt-4 space-y-1">
-        <p className="font-semibold text-gray-600 print:text-black">What this page does not track</p>
+        <p className="font-semibold text-content-secondary print:text-black">What this page does not track</p>
         <p>Off-platform records, legal interpretations, or statutory certification outcomes.</p>
       </div>
 
@@ -41,7 +41,7 @@ export function TransparencyFooter({ communityType, generatedAt }: Props) {
         Powered by{' '}
         <a
           href="https://propertyprofl.com/?utm_source=transparency-page&utm_medium=referral&utm_campaign=public-trust"
-          className="font-medium text-blue-700 underline"
+          className="font-medium text-content-link underline"
           rel="noreferrer"
           target="_blank"
         >

@@ -22,7 +22,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <main
-        className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12"
+        className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-12"
         style={branding.cssVars as React.CSSProperties}
       >
         <div className="w-full max-w-sm space-y-5">
@@ -35,14 +35,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 className="mx-auto mb-4 h-16 w-16 rounded-lg object-contain"
               />
             )}
-            <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-2xl font-semibold text-content">{heading}</h1>
+            <p className="mt-2 text-sm text-content-secondary">
               Use your email and password to access your community portal.
             </p>
           </div>
           <LoginForm returnTo={returnTo} />
           <div className="text-center text-sm">
-            <Link href="/auth/forgot-password" className="text-blue-600 hover:text-blue-500">
+            <Link href="/auth/forgot-password" className="text-content-link hover:text-interactive">
               Forgot password?
             </Link>
           </div>

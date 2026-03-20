@@ -37,7 +37,7 @@ export const esignTemplates = pgTable(
     communityId: bigint('community_id', { mode: 'number' })
       .notNull()
       .references(() => communities.id, { onDelete: 'cascade' }),
-    docusealTemplateId: integer('docuseal_template_id').notNull(),
+    docusealTemplateId: integer('docuseal_template_id'),
     externalId: text('external_id').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
@@ -84,6 +84,8 @@ export const esignSubmissions = pgTable(
       { onDelete: 'set null' },
     ),
     messageSubject: text('message_subject'),
+    signingOrder: text('signing_order').notNull().default('parallel'),
+    documentHash: text('document_hash'),
     messageBody: text('message_body'),
     createdBy: uuid('created_by')
       .notNull()
@@ -119,6 +121,7 @@ export const esignSigners = pgTable(
     name: text('name'),
     role: text('role').notNull(),
     slug: text('slug'),
+    sortOrder: integer('sort_order').notNull().default(0),
     status: text('status').notNull().default('pending'),
     openedAt: timestamp('opened_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),

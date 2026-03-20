@@ -156,38 +156,38 @@ export function CommandPalette({ open, onOpenChange, communityId, role, features
       {/* Command dialog */}
       <div className="relative mx-auto mt-[15vh] w-full max-w-[560px] px-4">
         <Command
-          className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+          className="overflow-hidden rounded-2xl border border-edge bg-surface-card shadow-2xl"
           label="Search commands"
         >
-          <div className="flex items-center border-b border-gray-100 px-4">
-            <Search size={18} className="shrink-0 text-gray-400" />
+          <div className="flex items-center border-b border-edge-subtle px-4">
+            <Search size={18} className="shrink-0 text-content-disabled" />
             <Command.Input
               value={search}
               onValueChange={setSearch}
               placeholder="Search pages, actions..."
-              className="flex-1 border-0 bg-transparent px-3 py-4 text-sm outline-none placeholder:text-gray-400"
+              className="flex-1 border-0 bg-transparent px-3 py-4 text-sm outline-none placeholder:text-content-disabled"
             />
-            <kbd className="hidden shrink-0 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-400 sm:inline-block">
+            <kbd className="hidden shrink-0 rounded-md border border-edge bg-surface-page px-2 py-0.5 text-[11px] font-medium text-content-disabled sm:inline-block">
               ESC
             </kbd>
           </div>
 
           <Command.List className="max-h-[360px] overflow-y-auto p-2">
-            <Command.Empty className="px-4 py-8 text-center text-sm text-gray-500">
+            <Command.Empty className="px-4 py-8 text-center text-sm text-content-tertiary">
               No results found.
             </Command.Empty>
 
             {/* Recent pages */}
             {!search && recentPages.length > 0 && (
-              <Command.Group heading="Recent" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-gray-500">
+              <Command.Group heading="Recent" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-content-tertiary">
                 {recentPages.map((page) => (
                   <Command.Item
                     key={`recent-${page.path}`}
                     value={`recent ${page.label}`}
                     onSelect={() => handleSelect(page.path, page.label)}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition-colors data-[selected=true]:bg-gray-100"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-content-secondary transition-colors data-[selected=true]:bg-surface-muted"
                   >
-                    <Clock size={16} className="shrink-0 text-gray-400" />
+                    <Clock size={16} className="shrink-0 text-content-disabled" />
                     <span>{page.label}</span>
                   </Command.Item>
                 ))}
@@ -195,30 +195,30 @@ export function CommandPalette({ open, onOpenChange, communityId, role, features
             )}
 
             {/* Pages */}
-            <Command.Group heading="Pages" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-gray-500">
+            <Command.Group heading="Pages" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-content-tertiary">
               {pages.map((item) => (
                 <Command.Item
                   key={item.id}
                   value={`${item.label} ${item.keywords ?? ''}`}
                   onSelect={() => handleSelect(item.href, item.label)}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition-colors data-[selected=true]:bg-gray-100"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-content-secondary transition-colors data-[selected=true]:bg-surface-muted"
                 >
-                  <item.icon size={16} className="shrink-0 text-gray-400" />
+                  <item.icon size={16} className="shrink-0 text-content-disabled" />
                   <span>{item.label}</span>
                 </Command.Item>
               ))}
             </Command.Group>
 
             {/* Quick Actions */}
-            <Command.Group heading="Quick Actions" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-gray-500">
+            <Command.Group heading="Quick Actions" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-content-tertiary">
               {actions.map((item) => (
                 <Command.Item
                   key={item.id}
                   value={`${item.label} ${item.keywords ?? ''}`}
                   onSelect={() => handleSelect(item.href, item.label)}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition-colors data-[selected=true]:bg-gray-100"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-content-secondary transition-colors data-[selected=true]:bg-surface-muted"
                 >
-                  <item.icon size={16} className="shrink-0 text-gray-400" />
+                  <item.icon size={16} className="shrink-0 text-content-disabled" />
                   <span>{item.label}</span>
                 </Command.Item>
               ))}

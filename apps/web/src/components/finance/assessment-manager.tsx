@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 /* ─────── Types ─────── */
 
@@ -60,10 +61,10 @@ const FREQUENCY_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  overdue: 'bg-red-100 text-red-800',
-  paid: 'bg-green-100 text-green-800',
-  waived: 'bg-gray-100 text-gray-600',
+  pending: 'bg-status-warning-bg text-status-warning',
+  overdue: 'bg-status-danger-bg text-status-danger',
+  paid: 'bg-status-success-bg text-status-success',
+  waived: 'bg-surface-muted text-content-secondary',
 };
 
 /* ─────── Fetch ─────── */
@@ -124,17 +125,15 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-10 w-48 rounded bg-gray-200" />
-        <div className="h-64 rounded-lg bg-gray-200" />
+        <div className="h-10 w-48 rounded bg-surface-muted" />
+        <div className="h-64 rounded-md bg-surface-muted" />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-        <p className="text-sm text-red-700">Failed to load assessments.</p>
-      </div>
+      <AlertBanner status="danger" title="Failed to load assessments." />
     );
   }
 
@@ -143,12 +142,12 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Assessments</h2>
-          <p className="text-sm text-gray-600">Create and manage community assessments and dues.</p>
+          <h2 className="text-lg font-semibold text-content">Assessments</h2>
+          <p className="text-sm text-content-secondary">Create and manage community assessments and dues.</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
         >
           Create Assessment
         </button>
@@ -156,11 +155,11 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
 
       {/* Assessment List */}
       {assessments && assessments.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-          <p className="text-sm text-gray-500">No assessments created yet.</p>
+        <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
+          <p className="text-sm text-content-tertiary">No assessments created yet.</p>
           <button
             onClick={() => setShowCreate(true)}
-            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+            className="mt-3 text-sm font-medium text-interactive hover:text-interactive-hover"
           >
             Create your first assessment
           </button>
@@ -236,24 +235,24 @@ function AssessmentCard({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
-      className={`w-full cursor-pointer rounded-lg border bg-white p-4 text-left transition-colors hover:border-indigo-300 ${
-        isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-200'
+      className={`w-full cursor-pointer rounded-md border bg-surface-card p-4 text-left transition-colors duration-quick hover:border-interactive ${
+        isSelected ? 'border-interactive ring-1 ring-interactive' : 'border-edge'
       }`}
     >
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">{assessment.title}</h3>
+          <h3 className="text-sm font-semibold text-content">{assessment.title}</h3>
           {assessment.description && (
-            <p className="mt-0.5 text-sm text-gray-500 line-clamp-1">{assessment.description}</p>
+            <p className="mt-0.5 text-sm text-content-tertiary line-clamp-1">{assessment.description}</p>
           )}
         </div>
         <div className="text-right">
-          <p className="text-sm font-semibold text-gray-900">{formatCents(assessment.amountCents)}</p>
-          <p className="text-xs text-gray-500">{FREQUENCY_LABELS[assessment.frequency] || assessment.frequency}</p>
+          <p className="text-sm font-semibold text-content">{formatCents(assessment.amountCents)}</p>
+          <p className="text-xs text-content-tertiary">{FREQUENCY_LABELS[assessment.frequency] || assessment.frequency}</p>
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-3 text-xs text-gray-500">
-        <span className={`inline-flex rounded-full px-2 py-0.5 font-medium ${assessment.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+      <div className="mt-3 flex items-center gap-3 text-xs text-content-tertiary">
+        <span className={`inline-flex rounded-full px-2 py-0.5 font-medium ${assessment.isActive ? 'bg-status-success-bg text-status-success' : 'bg-surface-muted text-content-secondary'}`}>
           {assessment.isActive ? 'Active' : 'Inactive'}
         </span>
         {assessment.dueDay && <span>Due on day {assessment.dueDay}</span>}
@@ -262,7 +261,7 @@ function AssessmentCard({
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="ml-auto rounded px-2 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+          className="ml-auto rounded px-2 py-0.5 text-xs font-medium text-interactive hover:bg-interactive-subtle hover:text-interactive-hover"
         >
           Edit
         </button>
@@ -297,16 +296,16 @@ function LineItemsPanel({
   ) ?? {};
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+    <div className="rounded-md border border-edge bg-surface-card">
+      <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">{assessment.title} — Line Items</h3>
+          <h3 className="text-sm font-semibold text-content">{assessment.title} — Line Items</h3>
           {lineItems && (
             <div className="mt-1 flex gap-2">
               {Object.entries(statusCounts).map(([status, count]) => (
                 <span
                   key={status}
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-600'}`}
+                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] || 'bg-surface-muted text-content-secondary'}`}
                 >
                   {count} {status}
                 </span>
@@ -316,7 +315,7 @@ function LineItemsPanel({
         </div>
         <button
           onClick={onClose}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-md p-1 text-content-disabled hover:bg-surface-muted hover:text-content-secondary"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -327,39 +326,39 @@ function LineItemsPanel({
       <div className="p-4">
         {isLoading ? (
           <div className="animate-pulse space-y-2">
-            <div className="h-8 rounded bg-gray-200" />
-            <div className="h-8 rounded bg-gray-200" />
-            <div className="h-8 rounded bg-gray-200" />
+            <div className="h-8 rounded bg-surface-muted" />
+            <div className="h-8 rounded bg-surface-muted" />
+            <div className="h-8 rounded bg-surface-muted" />
           </div>
         ) : lineItems && lineItems.length === 0 ? (
-          <p className="py-4 text-center text-sm text-gray-500">
+          <p className="py-4 text-center text-sm text-content-tertiary">
             No line items generated yet. Line items are created automatically on the 1st of each month,
             or when manually triggered.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-edge">
               <thead>
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Unit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Due Date</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Status</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">Amount</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">Late Fee</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-content-tertiary">Unit</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-content-tertiary">Due Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase text-content-tertiary">Late Fee</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-edge-subtle">
                 {lineItems?.map((li) => (
-                  <tr key={li.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-900">Unit #{li.unitId}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-600">{formatDate(li.dueDate)}</td>
+                  <tr key={li.id} className="hover:bg-surface-hover">
+                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content">Unit #{li.unitId}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content-secondary">{formatDate(li.dueDate)}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[li.status] || ''}`}>
                         {li.status.charAt(0).toUpperCase() + li.status.slice(1)}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm text-gray-900">{formatCents(li.amountCents)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm text-content">{formatCents(li.amountCents)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm text-content-tertiary">
                       {li.lateFeeCents > 0 ? formatCents(li.lateFeeCents) : '-'}
                     </td>
                   </tr>
@@ -437,12 +436,12 @@ function CreateAssessmentDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Create Assessment</h2>
+      <div className="w-full max-w-lg rounded-xl bg-surface-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-edge px-6 py-4">
+          <h2 className="text-lg font-semibold text-content">Create Assessment</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-md p-1 text-content-disabled hover:bg-surface-muted hover:text-content-secondary"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -452,29 +451,29 @@ function CreateAssessmentDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Title</label>
+            <label className="block text-sm font-medium text-content-secondary">Title</label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => updateField('title', e.target.value)}
               placeholder="Monthly Maintenance Assessment"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Description (optional)</label>
+            <label className="block text-sm font-medium text-content-secondary">Description (optional)</label>
             <textarea
               value={formData.description}
               onChange={(e) => updateField('description', e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Amount ($)</label>
+              <label className="block text-sm font-medium text-content-secondary">Amount ($)</label>
               <input
                 type="number"
                 step="0.01"
@@ -482,15 +481,15 @@ function CreateAssessmentDialog({
                 value={formData.amountDollars}
                 onChange={(e) => updateField('amountDollars', e.target.value)}
                 placeholder="350.00"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Frequency</label>
+              <label className="block text-sm font-medium text-content-secondary">Frequency</label>
               <select
                 value={formData.frequency}
                 onChange={(e) => updateField('frequency', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               >
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
@@ -502,18 +501,18 @@ function CreateAssessmentDialog({
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Due Day</label>
+              <label className="block text-sm font-medium text-content-secondary">Due Day</label>
               <input
                 type="number"
                 min="1"
                 max="31"
                 value={formData.dueDay}
                 onChange={(e) => updateField('dueDay', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Late Fee ($)</label>
+              <label className="block text-sm font-medium text-content-secondary">Late Fee ($)</label>
               <input
                 type="number"
                 step="0.01"
@@ -521,35 +520,35 @@ function CreateAssessmentDialog({
                 value={formData.lateFeeDollars}
                 onChange={(e) => updateField('lateFeeDollars', e.target.value)}
                 placeholder="25.00"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Grace Days</label>
+              <label className="block text-sm font-medium text-content-secondary">Grace Days</label>
               <input
                 type="number"
                 min="0"
                 value={formData.lateFeeDaysGrace}
                 onChange={(e) => updateField('lateFeeDaysGrace', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-status-danger">{error}</p>}
 
           <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="flex-1 rounded-md border border-edge-strong bg-surface-card px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="flex-1 rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               {mutation.isPending ? 'Creating...' : 'Create Assessment'}
             </button>
@@ -654,12 +653,12 @@ function EditAssessmentDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Assessment</h2>
+      <div className="w-full max-w-lg rounded-xl bg-surface-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-edge px-6 py-4">
+          <h2 className="text-lg font-semibold text-content">Edit Assessment</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-md p-1 text-content-disabled hover:bg-surface-muted hover:text-content-secondary"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -669,43 +668,43 @@ function EditAssessmentDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Title</label>
+            <label className="block text-sm font-medium text-content-secondary">Title</label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => updateField('title', e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Description (optional)</label>
+            <label className="block text-sm font-medium text-content-secondary">Description (optional)</label>
             <textarea
               value={formData.description}
               onChange={(e) => updateField('description', e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Amount ($)</label>
+              <label className="block text-sm font-medium text-content-secondary">Amount ($)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
                 value={formData.amountDollars}
                 onChange={(e) => updateField('amountDollars', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Frequency</label>
+              <label className="block text-sm font-medium text-content-secondary">Frequency</label>
               <select
                 value={formData.frequency}
                 onChange={(e) => updateField('frequency', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               >
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
@@ -717,35 +716,35 @@ function EditAssessmentDialog({
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Due Day</label>
+              <label className="block text-sm font-medium text-content-secondary">Due Day</label>
               <input
                 type="number"
                 min="1"
                 max="31"
                 value={formData.dueDay}
                 onChange={(e) => updateField('dueDay', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Late Fee ($)</label>
+              <label className="block text-sm font-medium text-content-secondary">Late Fee ($)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={formData.lateFeeDollars}
                 onChange={(e) => updateField('lateFeeDollars', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Grace Days</label>
+              <label className="block text-sm font-medium text-content-secondary">Grace Days</label>
               <input
                 type="number"
                 min="0"
                 value={formData.lateFeeDaysGrace}
                 onChange={(e) => updateField('lateFeeDaysGrace', e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
               />
             </div>
           </div>
@@ -755,29 +754,29 @@ function EditAssessmentDialog({
               type="checkbox"
               checked={formData.isActive}
               onChange={(e) => updateField('isActive', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-edge-strong text-interactive focus:ring-focus"
             />
-            <span className="text-sm text-gray-700">Active</span>
+            <span className="text-sm text-content-secondary">Active</span>
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-status-danger">{error}</p>}
 
           <div className="flex items-center gap-3 pt-2">
             {confirmDelete ? (
               <>
-                <span className="text-xs text-red-600">Delete this assessment?</span>
+                <span className="text-xs text-status-danger">Delete this assessment?</span>
                 <button
                   type="button"
                   onClick={() => deleteMutation.mutate()}
                   disabled={deleteMutation.isPending}
-                  className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-md bg-status-danger px-3 py-1.5 text-xs font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
                 >
                   {deleteMutation.isPending ? 'Deleting...' : 'Confirm Delete'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(false)}
-                  className="text-xs text-gray-500 hover:text-gray-700"
+                  className="text-xs text-content-tertiary hover:text-content-secondary"
                 >
                   Cancel
                 </button>
@@ -786,7 +785,7 @@ function EditAssessmentDialog({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                className="rounded-md border border-status-danger-border px-3 py-1.5 text-xs font-medium text-status-danger hover:bg-status-danger-bg"
               >
                 Delete
               </button>
@@ -795,14 +794,14 @@ function EditAssessmentDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-edge-strong bg-surface-card px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface-hover"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={updateMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
               >
                 {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
               </button>

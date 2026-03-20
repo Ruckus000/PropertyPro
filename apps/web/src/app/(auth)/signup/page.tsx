@@ -30,11 +30,11 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const verified = pickFirst(params.verified) === '1';
 
   return (
-    <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-12">
+    <main id="main-content" className="min-h-screen bg-surface-page px-4 py-12">
       <div className="mx-auto w-full max-w-3xl space-y-5">
         <div className="text-center">
-          <h1 className="text-3xl font-semibold text-gray-900">Start Your PropertyPro Signup</h1>
-          <p className="mt-2 text-sm text-gray-600">
+          <h1 className="text-3xl font-semibold text-content">Start Your PropertyPro Signup</h1>
+          <p className="mt-2 text-sm text-content-secondary">
             Capture your community details now. Billing checkout opens after email verification.
           </p>
         </div>
@@ -45,9 +45,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           verificationReturn={verified}
         />
 
-        <p className="text-center text-sm text-gray-600">
+        <p className="text-center text-sm text-content-secondary">
           Already have an account?{' '}
-          <Link href="/auth/login" className="text-blue-600 hover:text-blue-500">
+          <Link href="/auth/login" className="text-content-link hover:text-interactive">
             Sign in
           </Link>
         </p>

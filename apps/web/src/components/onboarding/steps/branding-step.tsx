@@ -58,8 +58,8 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Choose Your Branding</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-xl font-semibold text-content">Choose Your Branding</h2>
+        <p className="mt-1 text-sm text-content-secondary">
           Pick a theme preset or customize your own colors and fonts.
         </p>
       </div>
@@ -72,10 +72,10 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
             type="button"
             onClick={() => selectPreset(preset)}
             className={[
-              'rounded-lg border-2 p-4 text-left transition-all',
+              'rounded-md border-2 p-4 text-left transition-all',
               selectedPresetId === preset.id
-                ? 'border-blue-600 ring-2 ring-blue-100'
-                : 'border-gray-200 hover:border-gray-300',
+                ? 'border-interactive ring-2 ring-interactive-muted'
+                : 'border-edge hover:border-edge-strong',
             ].join(' ')}
           >
             {/* Color swatches */}
@@ -89,13 +89,13 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
                 style={{ backgroundColor: preset.secondaryColor }}
               />
               <div
-                className="h-8 w-8 rounded border border-gray-200"
+                className="h-8 w-8 rounded border border-edge"
                 style={{ backgroundColor: preset.accentColor }}
               />
             </div>
-            <p className="text-sm font-medium text-gray-900">{preset.name}</p>
-            <p className="mt-0.5 text-xs text-gray-500">{preset.description}</p>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="text-sm font-medium text-content">{preset.name}</p>
+            <p className="mt-0.5 text-xs text-content-tertiary">{preset.description}</p>
+            <p className="mt-1 text-xs text-content-disabled">
               {preset.fontHeading} / {preset.fontBody}
             </p>
           </button>
@@ -106,25 +106,25 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
           type="button"
           onClick={selectCustom}
           className={[
-            'rounded-lg border-2 border-dashed p-4 text-left transition-all',
+            'rounded-md border-2 border-dashed p-4 text-left transition-all',
             isCustom
-              ? 'border-blue-600 ring-2 ring-blue-100'
-              : 'border-gray-300 hover:border-gray-400',
+              ? 'border-interactive ring-2 ring-interactive-muted'
+              : 'border-edge-strong hover:border-edge-strong',
           ].join(' ')}
         >
           <div className="mb-3 flex h-8 items-center">
-            <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-6 w-6 text-content-disabled" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-gray-900">Custom</p>
-          <p className="mt-0.5 text-xs text-gray-500">Pick your own colors and fonts</p>
+          <p className="text-sm font-medium text-content">Custom</p>
+          <p className="mt-0.5 text-xs text-content-tertiary">Pick your own colors and fonts</p>
         </button>
       </div>
 
       {/* Custom editor — only shown when Custom is selected */}
       {isCustom && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 space-y-4">
+        <div className="rounded-md border border-edge bg-surface-page p-5 space-y-4">
           <ColorPickerField
             label="Primary Brand Color"
             value={primaryColor}
@@ -157,19 +157,19 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
       )}
 
       {/* Preview swatch */}
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Preview</p>
+      <div className="rounded-md border border-edge bg-surface-card p-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-content-tertiary">Preview</p>
         <div className="flex items-center gap-4">
           <div className="flex gap-1.5">
             <div className="h-10 w-10 rounded" style={{ backgroundColor: primaryColor }} />
             <div className="h-10 w-10 rounded" style={{ backgroundColor: secondaryColor }} />
-            <div className="h-10 w-10 rounded border border-gray-200" style={{ backgroundColor: accentColor }} />
+            <div className="h-10 w-10 rounded border border-edge" style={{ backgroundColor: accentColor }} />
           </div>
           <div>
             <p className="text-sm font-medium" style={{ fontFamily: `'${fontHeading}', sans-serif` }}>
               {fontHeading}
             </p>
-            <p className="text-xs text-gray-500" style={{ fontFamily: `'${fontBody}', sans-serif` }}>
+            <p className="text-xs text-content-tertiary" style={{ fontFamily: `'${fontBody}', sans-serif` }}>
               {fontBody}
             </p>
           </div>
@@ -181,14 +181,14 @@ export function BrandingStep({ onNext, onBack, initialData }: BrandingStepProps)
         <button
           type="button"
           onClick={onBack}
-          className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
         >
           Back
         </button>
         <button
           type="button"
           onClick={handleNext}
-          className="rounded bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded bg-interactive px-6 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
         >
           Continue
         </button>

@@ -61,7 +61,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
 
   if (allowed.length === 0) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-content-tertiary">
         No further transitions available for <strong>{currentStatus}</strong>.
       </p>
     );
@@ -70,14 +70,14 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label htmlFor={`status-${request.id}`} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={`status-${request.id}`} className="block text-sm font-medium text-content-secondary">
           Change Status
         </label>
         <select
           id={`status-${request.id}`}
           value={newStatus}
           onChange={(e) => setNewStatus(e.target.value)}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
         >
           {allowed.map((s) => (
             <option key={s} value={s}>
@@ -88,7 +88,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
       </div>
 
       <div>
-        <label htmlFor={`notes-${request.id}`} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={`notes-${request.id}`} className="block text-sm font-medium text-content-secondary">
           Internal Notes
         </label>
         <textarea
@@ -96,7 +96,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
           value={internalNotes}
           onChange={(e) => setInternalNotes(e.target.value)}
           rows={2}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
           placeholder="Internal notes (not visible to residents)"
         />
       </div>
@@ -104,7 +104,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
       {isResolvingStatus && (
         <>
           <div>
-            <label htmlFor={`resolution-${request.id}`} className="block text-sm font-medium text-gray-700">
+            <label htmlFor={`resolution-${request.id}`} className="block text-sm font-medium text-content-secondary">
               Resolution Description
             </label>
             <textarea
@@ -112,11 +112,11 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
               value={resolutionDescription}
               onChange={(e) => setResolutionDescription(e.target.value)}
               rows={2}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
             />
           </div>
           <div>
-            <label htmlFor={`resolution-date-${request.id}`} className="block text-sm font-medium text-gray-700">
+            <label htmlFor={`resolution-date-${request.id}`} className="block text-sm font-medium text-content-secondary">
               Resolution Date
             </label>
             <input
@@ -124,20 +124,20 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
               type="date"
               value={resolutionDate}
               onChange={(e) => setResolutionDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
             />
           </div>
         </>
       )}
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-status-danger">{error}</p>}
 
       <button
         type="submit"
         disabled={submitting || !newStatus}
-        className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover disabled:opacity-50"
       >
-        {submitting ? 'Updating…' : 'Update Status'}
+        {submitting ? 'Updating...' : 'Update Status'}
       </button>
     </form>
   );

@@ -114,29 +114,29 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Add Units</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-2xl font-semibold text-content">Add Units</h2>
+        <p className="mt-1 text-sm text-content-secondary">
           Add the units in your community. You can edit this later.
         </p>
       </div>
 
       <div className="space-y-4">
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="overflow-x-auto rounded-md border border-edge">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Unit #</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Floor</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Bedrooms</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Bathrooms</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Sq Ft</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Rent/Month</th>
+              <tr className="bg-surface-page">
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Unit #</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Floor</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Bedrooms</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Bathrooms</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Sq Ft</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-content-secondary">Rent/Month</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {units.map((unit, index) => (
-                <tr key={index} className="border-t border-gray-100">
+                <tr key={index} className="border-t border-edge-subtle">
                   <td className="px-3 py-2">
                     <input
                       type="text"
@@ -146,7 +146,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                           unitNumber: event.target.value,
                         })
                       }
-                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-24 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       placeholder="101"
                       required
                     />
@@ -160,7 +160,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                           floor: parseIntegerInput(event.target.value),
                         })
                       }
-                      className="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-20 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       placeholder="1"
                     />
                   </td>
@@ -173,7 +173,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                           bedrooms: parseIntegerInput(event.target.value),
                         })
                       }
-                      className="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-20 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       min="0"
                       placeholder="2"
                     />
@@ -187,7 +187,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                           bathrooms: parseIntegerInput(event.target.value),
                         })
                       }
-                      className="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-20 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       min="0"
                       placeholder="2"
                     />
@@ -201,7 +201,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                           sqft: parseIntegerInput(event.target.value),
                         })
                       }
-                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-24 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       min="0"
                       placeholder="900"
                     />
@@ -218,7 +218,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                         }
                         handleUnitChange(index, { rentAmount: parsed });
                       }}
-                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-28 rounded border border-edge-strong px-2 py-1 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
                       placeholder="1500.00"
                     />
                   </td>
@@ -227,7 +227,7 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
                       <button
                         type="button"
                         onClick={() => handleRemoveUnit(index)}
-                        className="text-sm text-red-600 hover:text-red-700"
+                        className="text-sm text-status-danger hover:text-status-danger"
                       >
                         Remove
                       </button>
@@ -242,14 +242,14 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
         <button
           type="button"
           onClick={handleAddUnit}
-          className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          className="text-sm font-medium text-content-link hover:text-content-link"
         >
           + Add Another Unit
         </button>
       </div>
 
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger">
           {error}
         </div>
       )}
@@ -258,14 +258,14 @@ export function UnitsStep({ onNext, onBack, initialData }: UnitsStepProps) {
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-edge-strong bg-surface-card px-6 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
         >
           Back
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-interactive px-6 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? 'Saving...' : 'Next'}
         </button>

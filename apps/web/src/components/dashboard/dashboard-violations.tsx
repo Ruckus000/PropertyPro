@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import type { DashboardViolationSummary } from '@/lib/dashboard/dashboard-selectors';
+import { StatusBadge } from '@/components/shared/status-badge';
+import { EmptyState } from '@/components/shared/empty-state';
 
-const STATUS_STYLES: Record<string, string> = {
-  reported: 'bg-yellow-100 text-yellow-800',
-  noticed: 'bg-blue-100 text-blue-800',
-  hearing_scheduled: 'bg-purple-100 text-purple-800',
-  fined: 'bg-red-100 text-red-800',
-  resolved: 'bg-green-100 text-green-800',
-  dismissed: 'bg-gray-100 text-gray-700',
+const STATUS_KEY_MAP: Record<string, string> = {
+  reported: 'open',
+  noticed: 'submitted',
+  hearing_scheduled: 'pending',
+  fined: 'overdue',
+  resolved: 'completed',
+  dismissed: 'neutral',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -45,20 +47,20 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
     (summary.byStatus['fined'] ?? 0);
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-5">
+    <section className="rounded-md border border-edge bg-surface-card p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Violations</h2>
+        <h2 className="text-lg font-semibold text-content">Violations</h2>
         {isAdmin ? (
           <Link
             href={`/violations/inbox?communityId=${communityId}`}
-            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+            className="text-sm font-medium text-content-link hover:text-interactive-hover"
           >
             View All
           </Link>
         ) : (
           <Link
             href={`/violations/report?communityId=${communityId}`}
-            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+            className="text-sm font-medium text-content-link hover:text-interactive-hover"
           >
             Report
           </Link>
@@ -71,12 +73,13 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
           {Object.entries(summary.byStatus)
             .filter(([status]) => !['resolved', 'dismissed'].includes(status))
             .map(([status, count]) => (
-              <span
+              <StatusBadge
                 key={status}
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-700'}`}
-              >
-                {STATUS_LABELS[status] ?? status}: {count}
-              </span>
+                status={STATUS_KEY_MAP[status] ?? 'neutral'}
+                label={`${STATUS_LABELS[status] ?? status}: ${count}`}
+                size="sm"
+                subtle
+              />
             ))}
         </div>
       )}
@@ -84,26 +87,27 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
       {/* Recent violations list */}
       <div className="mt-4 space-y-3">
         {summary.recentViolations.length === 0 ? (
-          <p className="text-base text-gray-600">No violations reported.</p>
+          <EmptyState preset="no_violations" size="sm" />
         ) : (
           summary.recentViolations.map((v) => (
             <Link
               key={v.id}
               href={`/violations/${v.id}?communityId=${communityId}`}
-              className="block rounded-md border border-gray-100 p-3 transition-colors hover:bg-gray-50"
+              className="block rounded-md border border-edge-subtle p-3 transition-colors duration-quick hover:bg-surface-hover"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-content">
                     {CATEGORY_LABELS[v.category] ?? v.category}
                   </span>
-                  <span className="ml-2 text-gray-500">Unit {v.unitId}</span>
+                  <span className="ml-2 text-content-tertiary">Unit {v.unitId}</span>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[v.status] ?? 'bg-gray-100 text-gray-700'}`}
-                >
-                  {STATUS_LABELS[v.status] ?? v.status}
-                </span>
+                <StatusBadge
+                  status={STATUS_KEY_MAP[v.status] ?? 'neutral'}
+                  label={STATUS_LABELS[v.status] ?? v.status}
+                  size="sm"
+                  subtle
+                />
               </div>
             </Link>
           ))

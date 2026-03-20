@@ -106,15 +106,15 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
   if (isLoading && entries.length === 0) {
     return (
       <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
           Recent Activity
         </h3>
         <div className="flex flex-col gap-2 animate-pulse">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center gap-2.5 px-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-[var(--surface-muted)]" />
-              <div className="h-3 rounded bg-[var(--surface-muted)]" style={{ width: `${100 + i * 30}px` }} />
-              <div className="h-3 w-10 rounded bg-[var(--surface-muted)] ml-auto" />
+              <div className="h-1.5 w-1.5 rounded-full bg-surface-muted" />
+              <div className="h-3 rounded bg-surface-muted" style={{ width: `${100 + i * 30}px` }} />
+              <div className="h-3 w-10 rounded bg-surface-muted ml-auto" />
             </div>
           ))}
         </div>
@@ -126,7 +126,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
         Recent Activity
       </h3>
 
@@ -142,7 +142,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
               key={entry.id}
               className={`
                 flex items-start gap-2.5 py-2 px-1
-                ${idx < entries.length - 1 ? "border-b border-[var(--border-subtle)]" : ""}
+                ${idx < entries.length - 1 ? "border-b border-edge-subtle" : ""}
               `}
             >
               {/* Action dot */}
@@ -150,15 +150,15 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                  <span className="inline-flex items-center gap-1 text-[var(--text-tertiary)]">
+                <p className="text-xs text-content-secondary leading-relaxed">
+                  <span className="inline-flex items-center gap-1 text-content-tertiary">
                     {actionIcon(entry.action)}
                   </span>{" "}
                   {actionLabel(entry.action)}
                   {itemTitle && (
                     <>
                       {" \u2014 "}
-                      <span className="font-medium text-[var(--text-primary)]">
+                      <span className="font-medium text-content">
                         {itemTitle}
                       </span>
                     </>
@@ -167,7 +167,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
               </div>
 
               {/* Timestamp */}
-              <span className="text-xs text-[var(--text-tertiary)] tabular-nums shrink-0 mt-0.5">
+              <span className="text-xs text-content-tertiary tabular-nums shrink-0 mt-0.5">
                 {relativeTime(entry.createdAt)}
               </span>
             </div>

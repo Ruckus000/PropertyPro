@@ -46,10 +46,10 @@ function getAvailableActions(status: string): { label: string; action: ActionTyp
 }
 
 const VARIANT_STYLES: Record<string, string> = {
-  primary: 'bg-blue-600 text-white hover:bg-blue-700',
-  danger: 'bg-red-600 text-white hover:bg-red-700',
-  success: 'bg-green-600 text-white hover:bg-green-700',
-  secondary: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+  primary: 'bg-interactive text-content-inverse hover:bg-interactive-hover',
+  danger: 'bg-status-danger text-content-inverse hover:bg-status-danger-hover',
+  success: 'bg-status-success text-content-inverse hover:bg-status-success-hover',
+  secondary: 'border border-edge-strong bg-surface-card text-content-secondary hover:bg-surface-hover',
 };
 
 interface ViolationDetailPanelProps {
@@ -72,39 +72,39 @@ export function ViolationDetailPanel({
   const actions = getAvailableActions(violation.status);
 
   return (
-    <div className="mt-1 rounded-b-lg border border-t-0 border-gray-200 bg-white p-4">
+    <div className="mt-1 rounded-b-md border border-t-0 border-edge bg-surface-card p-4">
       {/* Description */}
       <div className="mb-4">
-        <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Description</h4>
-        <p className="whitespace-pre-wrap text-sm text-gray-700">{violation.description}</p>
+        <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-content-tertiary">Description</h4>
+        <p className="whitespace-pre-wrap text-sm text-content-secondary">{violation.description}</p>
       </div>
 
       {/* Metadata */}
       <div className="mb-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div>
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Category</span>
-          <p className="text-gray-700">{CATEGORY_LABELS[violation.category] ?? violation.category}</p>
+          <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Category</span>
+          <p className="text-content-secondary">{CATEGORY_LABELS[violation.category] ?? violation.category}</p>
         </div>
         <div>
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Unit</span>
-          <p className="text-gray-700">{violation.unitId}</p>
+          <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Unit</span>
+          <p className="text-content-secondary">{violation.unitId}</p>
         </div>
         {violation.noticeDate && (
           <div>
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Notice Date</span>
-            <p className="text-gray-700">{violation.noticeDate}</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Notice Date</span>
+            <p className="text-content-secondary">{violation.noticeDate}</p>
           </div>
         )}
         {violation.hearingDate && (
           <div>
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Hearing Date</span>
-            <p className="text-gray-700">{new Date(violation.hearingDate).toLocaleDateString()}</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Hearing Date</span>
+            <p className="text-content-secondary">{new Date(violation.hearingDate).toLocaleDateString()}</p>
           </div>
         )}
         {violation.resolutionNotes && (
           <div className="col-span-2 sm:col-span-4">
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Resolution Notes</span>
-            <p className="whitespace-pre-wrap text-gray-700">{violation.resolutionNotes}</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Resolution Notes</span>
+            <p className="whitespace-pre-wrap text-content-secondary">{violation.resolutionNotes}</p>
           </div>
         )}
       </div>
@@ -112,7 +112,7 @@ export function ViolationDetailPanel({
       {/* Evidence */}
       {violation.evidenceDocumentIds.length > 0 && (
         <div className="mb-4">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">
             Evidence ({violation.evidenceDocumentIds.length} document{violation.evidenceDocumentIds.length !== 1 ? 's' : ''})
           </span>
         </div>
@@ -126,7 +126,7 @@ export function ViolationDetailPanel({
               key={action}
               type="button"
               onClick={() => setActiveAction(action)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${VARIANT_STYLES[variant] ?? ''}`}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors duration-quick ${VARIANT_STYLES[variant] ?? ''}`}
             >
               {label}
             </button>

@@ -23,8 +23,24 @@ export type { DigestFrequency } from './queries/notification-digest';
 export {
   isPmAdminInAnyCommunity,
   findManagedCommunitiesPortfolioUnscoped,
+  getPortfolioDashboard,
+  getMaintenanceVolumeReport,
+  getComplianceStatusReport,
+  getOccupancyTrendsReport,
+  getViolationSummaryReport,
+  getDelinquencyAgingReport,
   type ManagedCommunityPortfolioRow,
+  type DashboardCommunityRow,
+  type DashboardKpis,
+  type DashboardFilters,
+  type PortfolioDashboardResult,
   type PortfolioQueryFilters,
+  type DateRange,
+  type MaintenanceVolumeReport,
+  type ComplianceStatusReport,
+  type OccupancyTrendsReport,
+  type ViolationSummaryReport,
+  type DelinquencyAgingReport,
 } from './queries/pm-portfolio';
 
 /**

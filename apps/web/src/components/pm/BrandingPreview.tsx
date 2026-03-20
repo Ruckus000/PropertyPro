@@ -20,14 +20,14 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
   const logoSrc = logoObjectUrl ?? null;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+    <div className="rounded-md border border-edge bg-surface-page p-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-content-tertiary">
         Portal Preview
       </p>
 
       {/* Miniature portal mockup */}
       <div
-        className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-e1"
+        className="overflow-hidden rounded-md border border-edge bg-surface-card shadow-e1"
         style={{ '--theme-primary': primary, '--theme-secondary': secondary } as React.CSSProperties}
       >
         {/* Mock header */}
@@ -45,7 +45,7 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
         </div>
 
         {/* Mock nav */}
-        <div className="flex gap-1 border-b border-gray-100 px-3 py-1.5">
+        <div className="flex gap-1 border-b border-edge-subtle px-3 py-1.5">
           {['Home', 'Documents', 'Meetings'].map((label) => (
             <span
               key={label}
@@ -73,17 +73,17 @@ export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProp
       <div className="mt-3 flex gap-3">
         <div className="flex items-center gap-1.5">
           <div
-            className="h-4 w-4 rounded border border-gray-200"
+            className="h-4 w-4 rounded border border-edge"
             style={{ backgroundColor: primary }}
           />
-          <span className="text-xs text-gray-600">Primary</span>
+          <span className="text-xs text-content-secondary">Primary</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div
-            className="h-4 w-4 rounded border border-gray-200"
+            className="h-4 w-4 rounded border border-edge"
             style={{ backgroundColor: secondary }}
           />
-          <span className="text-xs text-gray-600">Secondary</span>
+          <span className="text-xs text-content-secondary">Secondary</span>
         </div>
       </div>
     </div>

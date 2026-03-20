@@ -21,13 +21,13 @@ interface Props {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  delivered: 'text-green-600',
-  sent: 'text-blue-600',
-  queued: 'text-yellow-600',
-  pending: 'text-gray-400',
-  failed: 'text-red-600',
-  undelivered: 'text-red-600',
-  skipped: 'text-gray-400',
+  delivered: 'text-status-success',
+  sent: 'text-content-link',
+  queued: 'text-status-warning',
+  pending: 'text-content-disabled',
+  failed: 'text-status-danger',
+  undelivered: 'text-status-danger',
+  skipped: 'text-content-disabled',
 };
 
 export function DeliveryReport({ recipients, recipientCount, deliveredCount, failedCount, sentCount }: Props) {
@@ -35,46 +35,46 @@ export function DeliveryReport({ recipients, recipientCount, deliveredCount, fai
     <div className="space-y-4">
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
-          <div className="text-2xl font-bold text-gray-900">{recipientCount}</div>
-          <div className="text-xs text-gray-500">Total</div>
+        <div className="rounded-md border border-edge bg-surface-card p-3 text-center">
+          <div className="text-2xl font-bold text-content">{recipientCount}</div>
+          <div className="text-xs text-content-tertiary">Total</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
-          <div className="text-2xl font-bold text-blue-600">{sentCount}</div>
-          <div className="text-xs text-gray-500">Sent</div>
+        <div className="rounded-md border border-edge bg-surface-card p-3 text-center">
+          <div className="text-2xl font-bold text-content-link">{sentCount}</div>
+          <div className="text-xs text-content-tertiary">Sent</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
-          <div className="text-2xl font-bold text-green-600">{deliveredCount}</div>
-          <div className="text-xs text-gray-500">Delivered</div>
+        <div className="rounded-md border border-edge bg-surface-card p-3 text-center">
+          <div className="text-2xl font-bold text-status-success">{deliveredCount}</div>
+          <div className="text-xs text-content-tertiary">Delivered</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
-          <div className="text-2xl font-bold text-red-600">{failedCount}</div>
-          <div className="text-xs text-gray-500">Failed</div>
+        <div className="rounded-md border border-edge bg-surface-card p-3 text-center">
+          <div className="text-2xl font-bold text-status-danger">{failedCount}</div>
+          <div className="text-xs text-content-tertiary">Failed</div>
         </div>
       </div>
 
       {/* Recipient table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+        <table className="min-w-full divide-y divide-edge">
+          <thead className="bg-surface-page">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">SMS</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Email</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Name</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">SMS</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Email</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-edge">
             {recipients.map((r) => (
               <tr key={r.userId}>
-                <td className="px-4 py-2 text-sm text-gray-900">{r.fullName}</td>
+                <td className="px-4 py-2 text-sm text-content">{r.fullName}</td>
                 <td className="px-4 py-2">
-                  <span className={`text-sm font-medium ${STATUS_COLOR[r.smsStatus] ?? 'text-gray-400'}`}>
+                  <span className={`text-sm font-medium ${STATUS_COLOR[r.smsStatus] ?? 'text-content-disabled'}`}>
                     {r.smsStatus}
                   </span>
-                  {r.phone && <span className="ml-1 text-xs text-gray-400">{r.phone}</span>}
+                  {r.phone && <span className="ml-1 text-xs text-content-disabled">{r.phone}</span>}
                 </td>
                 <td className="px-4 py-2">
-                  <span className={`text-sm font-medium ${STATUS_COLOR[r.emailStatus] ?? 'text-gray-400'}`}>
+                  <span className={`text-sm font-medium ${STATUS_COLOR[r.emailStatus] ?? 'text-content-disabled'}`}>
                     {r.emailStatus}
                   </span>
                 </td>

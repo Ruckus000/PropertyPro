@@ -35,13 +35,13 @@ export function CommentThread({ communityId, requestId, comments, onCommentAdded
   return (
     <div className="space-y-4">
       {comments.length === 0 && (
-        <p className="text-sm text-gray-500">No comments yet.</p>
+        <p className="text-sm text-content-tertiary">No comments yet.</p>
       )}
       <ul className="space-y-3">
         {comments.map((c) => (
-          <li key={c.id} className="rounded-md bg-gray-50 p-3">
-            <p className="text-sm text-gray-800">{c.text}</p>
-            <p className="mt-1 text-xs text-gray-400">
+          <li key={c.id} className="rounded-md bg-surface-page p-3">
+            <p className="text-sm text-content">{c.text}</p>
+            <p className="mt-1 text-xs text-content-disabled">
               {new Date(c.createdAt).toLocaleString()}
             </p>
           </li>
@@ -49,7 +49,7 @@ export function CommentThread({ communityId, requestId, comments, onCommentAdded
       </ul>
 
       <form onSubmit={handleSubmit} className="space-y-2">
-        <label htmlFor={`comment-${requestId}`} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={`comment-${requestId}`} className="block text-sm font-medium text-content-secondary">
           Add a comment
         </label>
         <textarea
@@ -58,16 +58,16 @@ export function CommentThread({ communityId, requestId, comments, onCommentAdded
           onChange={(e) => setText(e.target.value)}
           maxLength={5000}
           rows={3}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          placeholder="Write a comment… (max 5000 characters)"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          placeholder="Write a comment... (max 5000 characters)"
         />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-status-danger">{error}</p>}
         <button
           type="submit"
           disabled={submitting || !text.trim()}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover disabled:opacity-50"
         >
-          {submitting ? 'Posting…' : 'Post comment'}
+          {submitting ? 'Posting...' : 'Post comment'}
         </button>
       </form>
     </div>

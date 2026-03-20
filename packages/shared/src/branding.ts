@@ -18,6 +18,8 @@ export interface CommunityBranding {
   fontBody?: string;
   /** Supabase Storage path to the processed 400×400 WebP logo. */
   logoPath?: string;
+  /** Custom footer text appended to outbound emails. Plain text. */
+  customEmailFooter?: string;
 }
 
 /** Default branding colors used when no community branding is configured. */

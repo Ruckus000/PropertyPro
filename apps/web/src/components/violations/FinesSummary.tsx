@@ -8,9 +8,9 @@
 import type { ViolationFineItem } from '@/lib/api/violations';
 
 const FINE_STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  paid: 'bg-green-100 text-green-800',
-  waived: 'bg-gray-100 text-gray-700',
+  pending: 'bg-status-warning-bg text-status-warning',
+  paid: 'bg-status-success-bg text-status-success',
+  waived: 'bg-surface-muted text-content-secondary',
 };
 
 const FINE_STATUS_LABELS: Record<string, string> = {
@@ -39,23 +39,23 @@ export function FinesSummary({ fines }: FinesSummaryProps) {
     .reduce((sum, f) => sum + f.amountCents, 0);
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+    <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
+      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">
         Fines ({fines.length})
       </h2>
 
       {/* Summary row */}
       <div className="mb-4 flex flex-wrap gap-4 text-sm">
         {totalPending > 0 && (
-          <div className="rounded-lg bg-yellow-50 px-3 py-1.5">
-            <span className="text-yellow-700">Outstanding: </span>
-            <span className="font-semibold text-yellow-800">{toUsd(totalPending)}</span>
+          <div className="rounded-md bg-status-warning-bg px-3 py-1.5">
+            <span className="text-status-warning">Outstanding: </span>
+            <span className="font-semibold text-status-warning">{toUsd(totalPending)}</span>
           </div>
         )}
         {totalPaid > 0 && (
-          <div className="rounded-lg bg-green-50 px-3 py-1.5">
-            <span className="text-green-700">Paid: </span>
-            <span className="font-semibold text-green-800">{toUsd(totalPaid)}</span>
+          <div className="rounded-md bg-status-success-bg px-3 py-1.5">
+            <span className="text-status-success">Paid: </span>
+            <span className="font-semibold text-status-success">{toUsd(totalPaid)}</span>
           </div>
         )}
       </div>
@@ -65,26 +65,26 @@ export function FinesSummary({ fines }: FinesSummaryProps) {
         {fines.map((fine) => (
           <div
             key={fine.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3"
           >
             <div className="text-sm">
-              <span className="font-medium text-gray-900">{toUsd(fine.amountCents)}</span>
-              <span className="ml-2 text-gray-500">
+              <span className="font-medium text-content">{toUsd(fine.amountCents)}</span>
+              <span className="ml-2 text-content-tertiary">
                 Issued {new Date(fine.issuedAt).toLocaleDateString()}
               </span>
               {fine.paidAt && (
-                <span className="ml-2 text-gray-500">
+                <span className="ml-2 text-content-tertiary">
                   &middot; Paid {new Date(fine.paidAt).toLocaleDateString()}
                 </span>
               )}
               {fine.waivedAt && (
-                <span className="ml-2 text-gray-500">
+                <span className="ml-2 text-content-tertiary">
                   &middot; Waived {new Date(fine.waivedAt).toLocaleDateString()}
                 </span>
               )}
             </div>
             <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${FINE_STATUS_STYLES[fine.status] ?? 'bg-gray-100 text-gray-700'}`}
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${FINE_STATUS_STYLES[fine.status] ?? 'bg-surface-muted text-content-secondary'}`}
             >
               {FINE_STATUS_LABELS[fine.status] ?? fine.status}
             </span>

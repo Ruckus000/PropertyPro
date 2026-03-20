@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
   const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
@@ -59,14 +60,12 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
   });
 
   if (isPending) {
-    return <div className="h-32 animate-pulse rounded-lg bg-gray-200" />;
+    return <div className="h-32 animate-pulse rounded-md bg-surface-muted" />;
   }
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-        <p className="text-sm text-red-700">Failed to load fee policy settings.</p>
-      </div>
+      <AlertBanner status="danger" title="Failed to load fee policy settings." />
     );
   }
 
@@ -74,19 +73,19 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
   const isDirty = selectedPolicy !== null && selectedPolicy !== currentPolicy;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6">
-      <h3 className="text-base font-semibold text-gray-900">Payment Fee Policy</h3>
-      <p className="mt-1 text-sm text-gray-600">
+    <div className="rounded-md border border-edge bg-surface-card p-6">
+      <h3 className="text-base font-semibold text-content">Payment Fee Policy</h3>
+      <p className="mt-1 text-sm text-content-secondary">
         Choose how online payment processing fees are handled for this community.
       </p>
 
       <div className="mt-4 space-y-3">
         {/* Owner Pays */}
         <label
-          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 ${
+          className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 ${
             displayPolicy === 'owner_pays'
-              ? 'border-indigo-300 bg-indigo-50'
-              : 'border-gray-200 hover:bg-gray-50'
+              ? 'border-interactive bg-interactive-subtle'
+              : 'border-edge hover:bg-surface-hover'
           }`}
         >
           <input
@@ -95,18 +94,18 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
             value="owner_pays"
             checked={displayPolicy === 'owner_pays'}
             onChange={() => setSelectedPolicy('owner_pays')}
-            className="mt-0.5 h-4 w-4 text-indigo-600"
+            className="mt-0.5 h-4 w-4 text-interactive"
           />
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-content">
               Pass fees to unit owners
-              <span className="ml-2 text-xs font-normal text-indigo-600">(recommended)</span>
+              <span className="ml-2 text-xs font-normal text-interactive">(recommended)</span>
             </p>
-            <p className="mt-1 text-xs text-gray-600">
+            <p className="mt-1 text-xs text-content-secondary">
               Owners pay a small convenience fee when paying online. The association receives
               100% of the assessment amount.
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               Example for a $500 assessment: Card fee ~{formatCents(sampleCardFee)},
               ACH fee ~{formatCents(sampleAchFee)}
             </p>
@@ -115,10 +114,10 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
 
         {/* Association Absorbs */}
         <label
-          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 ${
+          className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 ${
             displayPolicy === 'association_absorbs'
-              ? 'border-indigo-300 bg-indigo-50'
-              : 'border-gray-200 hover:bg-gray-50'
+              ? 'border-interactive bg-interactive-subtle'
+              : 'border-edge hover:bg-surface-hover'
           }`}
         >
           <input
@@ -127,15 +126,15 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
             value="association_absorbs"
             checked={displayPolicy === 'association_absorbs'}
             onChange={() => setSelectedPolicy('association_absorbs')}
-            className="mt-0.5 h-4 w-4 text-indigo-600"
+            className="mt-0.5 h-4 w-4 text-interactive"
           />
           <div>
-            <p className="text-sm font-medium text-gray-900">Association absorbs fees</p>
-            <p className="mt-1 text-xs text-gray-600">
+            <p className="text-sm font-medium text-content">Association absorbs fees</p>
+            <p className="mt-1 text-xs text-content-secondary">
               No fee shown to owners. The association&apos;s net collection is reduced by ~3% for
               card payments and ~0.8% for ACH.
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               For a $500/month assessment across 25 units paying by card, this costs the
               association ~$375/month.
             </p>
@@ -148,14 +147,14 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
           <button
             onClick={() => setSelectedPolicy(null)}
             disabled={mutation.isPending}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={() => selectedPolicy && mutation.mutate(selectedPolicy)}
             disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -163,7 +162,7 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
       )}
 
       {mutation.isError && (
-        <p className="mt-2 text-sm text-red-600">
+        <p className="mt-2 text-sm text-status-danger">
           {mutation.error instanceof Error ? mutation.error.message : 'Failed to save'}
         </p>
       )}

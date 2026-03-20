@@ -11,6 +11,7 @@ import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
+import { DashboardEsignPending } from '@/components/dashboard/dashboard-esign-pending';
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -60,6 +61,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             communityId={context.communityId}
             isAdmin={membership.isAdmin}
           />
+        )}
+        {features.hasEsign && data.pendingSigners.length > 0 && (
+          <DashboardEsignPending items={data.pendingSigners} />
         )}
       </div>
     </div>

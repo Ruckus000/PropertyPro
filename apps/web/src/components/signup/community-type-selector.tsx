@@ -37,7 +37,7 @@ export function CommunityTypeSelector({
 }: CommunityTypeSelectorProps) {
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium text-gray-700">Community Type</legend>
+      <legend className="mb-2 text-sm font-medium text-content-secondary">Community Type</legend>
       <div className="grid gap-2 sm:grid-cols-3">
         {COMMUNITY_TYPE_OPTIONS.map((option) => {
           const isSelected = option.value === value;
@@ -49,13 +49,13 @@ export function CommunityTypeSelector({
               onClick={() => onChange(option.value)}
               className={`rounded-md border px-3 py-3 text-left transition-colors ${
                 isSelected
-                  ? 'border-blue-600 bg-blue-50'
-                  : 'border-gray-300 bg-white hover:border-gray-400'
+                  ? 'border-interactive bg-interactive/10'
+                  : 'border-edge-strong bg-surface-card hover:border-edge-strong'
               } disabled:cursor-not-allowed disabled:opacity-60`}
               aria-pressed={isSelected}
             >
-              <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
-              <span className="mt-1 block text-xs text-gray-600">{option.description}</span>
+              <span className="block text-sm font-semibold text-content">{option.label}</span>
+              <span className="mt-1 block text-xs text-content-secondary">{option.description}</span>
             </button>
           );
         })}

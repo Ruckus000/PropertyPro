@@ -59,7 +59,12 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
   const closeMobileNav = useCallback(() => setMobileOpen(false), [setMobileOpen]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--surface-page,#F9FAFB)]">
+    <div className="flex h-screen overflow-hidden bg-surface-page">
+      {/* Skip link for keyboard users */}
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+
       {/* Desktop sidebar */}
       <div className="hidden lg:block">
         <AppSidebar
@@ -99,7 +104,7 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
             <button
               type="button"
               onClick={closeMobileNav}
-              className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-[10px] text-white/60 transition-colors hover:text-white"
+              className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
               aria-label="Close navigation"
             >
               <X size={18} />

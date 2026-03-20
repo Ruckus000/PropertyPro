@@ -1,5 +1,6 @@
 import type { Announcement } from '@propertypro/db';
 import { Pin } from 'lucide-react';
+import { EmptyState } from '@/components/shared/empty-state';
 
 interface AnnouncementListProps {
   items: Announcement[];
@@ -72,23 +73,23 @@ function formatDate(value: Date | string): string {
 
 function AnnouncementCard({ item }: { item: Announcement }) {
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-5">
+    <article className="rounded-md border border-edge bg-surface-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-gray-900">{item.title}</h3>
+            <h3 className="text-base font-semibold text-content">{item.title}</h3>
             {item.isPinned && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-semibold text-interactive">
                 <Pin size={12} />
                 Pinned
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-gray-500">{formatDate(item.publishedAt)}</p>
+          <p className="mt-1 text-xs text-content-tertiary">{formatDate(item.publishedAt)}</p>
         </div>
       </div>
       {item.body && (
-        <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-gray-600">
+        <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-content-secondary">
           {stripHtml(item.body)}
         </p>
       )}
@@ -110,12 +111,10 @@ export function AnnouncementList({ items }: AnnouncementListProps) {
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-8 py-16 text-center">
-        <p className="text-sm font-medium text-gray-600">No announcements yet.</p>
-        <p className="mt-1 text-sm text-gray-400">
-          Announcements from your community will appear here.
-        </p>
-      </div>
+      <EmptyState
+        title="No announcements yet"
+        description="Announcements from your community will appear here."
+      />
     );
   }
 
@@ -123,7 +122,7 @@ export function AnnouncementList({ items }: AnnouncementListProps) {
     <div className="space-y-6">
       {pinned.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">
             Pinned
           </h2>
           <div className="space-y-3">
@@ -137,7 +136,7 @@ export function AnnouncementList({ items }: AnnouncementListProps) {
       {unpinned.length > 0 && (
         <section>
           {pinned.length > 0 && (
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">
               Recent
             </h2>
           )}

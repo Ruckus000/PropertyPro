@@ -66,9 +66,9 @@ export function AppSidebar({
 
   const groupSeparator = showGroupSeparator ? (
     <div className="my-1 px-3">
-      <div className="border-t border-white/10 dark:border-gray-800" />
+      <div className="border-t border-white/10 dark:border-surface-inverse" />
       <span
-        className={`mt-2 block text-xs font-semibold uppercase tracking-wider text-white/60 transition-opacity duration-150 dark:text-gray-500 ${expanded ? 'opacity-100' : 'opacity-0'}`}
+        className={`mt-2 block text-xs font-semibold uppercase tracking-wider text-white/60 transition-opacity duration-quick dark:text-content-tertiary ${expanded ? 'opacity-100' : 'opacity-0'}`}
       >
         Admin
       </span>
@@ -77,12 +77,12 @@ export function AppSidebar({
 
   // Brand header
   const header = (
-    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-3 dark:border-gray-800">
+    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-3 dark:border-surface-inverse">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary,#2563EB)]">
         <Building size={20} color="white" />
       </div>
       <div
-        className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}
+        className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${expanded ? 'opacity-100' : 'opacity-0'}`}
       >
         <span className="text-[15px] font-semibold text-white">PropertyPro</span>
         {communityName && (
@@ -94,13 +94,13 @@ export function AppSidebar({
 
   // User profile footer
   const footer = userName ? (
-    <div className="border-t border-white/10 px-3 py-3 dark:border-gray-800">
+    <div className="border-t border-white/10 px-3 py-3 dark:border-surface-inverse">
       <div className="flex items-center gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-card/10 text-xs font-medium text-white">
           {toInitials(userName)}
         </div>
         <div
-          className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0'}`}
+          className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${expanded ? 'opacity-100' : 'opacity-0'}`}
         >
           <span className="truncate text-xs font-medium text-white">{userName}</span>
           {role && (

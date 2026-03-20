@@ -75,6 +75,8 @@ export interface BrandingPatch {
   fontBody?: string;
   /** Supabase Storage path of the already-processed 400×400 WebP logo */
   logoPath?: string;
+  /** Custom footer text for outbound emails */
+  customEmailFooter?: string;
 }
 
 /**

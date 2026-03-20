@@ -24,10 +24,10 @@ export function ProgressIndicator({ currentStep, stepTitles }: ProgressIndicator
                     flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors
                     ${
                       isCompleted
-                        ? "border-blue-600 bg-blue-600 text-white"
+                        ? "border-interactive bg-interactive text-content-inverse"
                         : isCurrent
-                          ? "border-blue-600 bg-blue-600 text-white"
-                          : "border-gray-300 bg-white text-gray-400"
+                          ? "border-interactive bg-interactive text-content-inverse"
+                          : "border-edge-strong bg-surface-card text-content-disabled"
                     }
                   `}
                   aria-current={isCurrent ? "step" : undefined}
@@ -45,8 +45,8 @@ export function ProgressIndicator({ currentStep, stepTitles }: ProgressIndicator
                     text-sm font-medium transition-colors
                     ${
                       isCompleted || isCurrent
-                        ? "text-gray-900"
-                        : "text-gray-400"
+                        ? "text-content"
+                        : "text-content-disabled"
                     }
                   `}
                 >
@@ -61,8 +61,8 @@ export function ProgressIndicator({ currentStep, stepTitles }: ProgressIndicator
                     mx-2 h-0.5 flex-1 transition-colors sm:mx-4
                     ${
                       stepNumber < currentStep
-                        ? "bg-blue-600"
-                        : "bg-gray-300"
+                        ? "bg-interactive"
+                        : "bg-edge-strong"
                     }
                   `}
                   aria-hidden="true"
