@@ -23,7 +23,7 @@ interface Props {
 const STATUS_COLOR: Record<string, string> = {
   delivered: 'text-status-success',
   sent: 'text-content-link',
-  queued: 'text-yellow-600',
+  queued: 'text-status-warning',
   pending: 'text-content-disabled',
   failed: 'text-status-danger',
   undelivered: 'text-status-danger',

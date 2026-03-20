@@ -40,7 +40,7 @@ describe('ExtractionStatusBadge', () => {
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toBe('Searchable');
     expect(badge?.getAttribute('data-extraction-status')).toBe('completed');
-    expect(badge?.className).toContain('bg-green-100');
+    expect(badge?.className).toContain('bg-status-success-bg');
   });
 
   it('renders yellow "Processing" badge for pending status', async () => {
@@ -51,7 +51,7 @@ describe('ExtractionStatusBadge', () => {
     const badge = container.querySelector('[data-testid="extraction-badge"]');
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toBe('Processing');
-    expect(badge?.className).toContain('bg-yellow-100');
+    expect(badge?.className).toContain('bg-status-warning-bg');
   });
 
   it('renders red "Search unavailable" badge for failed status', async () => {
@@ -62,7 +62,7 @@ describe('ExtractionStatusBadge', () => {
     const badge = container.querySelector('[data-testid="extraction-badge"]');
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toBe('Search unavailable');
-    expect(badge?.className).toContain('bg-red-100');
+    expect(badge?.className).toContain('bg-status-danger-bg');
   });
 
   it('renders gray "Not searchable" badge for skipped status', async () => {
@@ -73,7 +73,7 @@ describe('ExtractionStatusBadge', () => {
     const badge = container.querySelector('[data-testid="extraction-badge"]');
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toBe('Not searchable');
-    expect(badge?.className).toContain('bg-gray-100');
+    expect(badge?.className).toContain('bg-surface-muted');
   });
 
   it('renders nothing for not_applicable status', async () => {

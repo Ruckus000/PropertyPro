@@ -140,7 +140,7 @@ export function DocumentVersionHistory({
                       {version.id === document.id ? 'Current Version' : `Version ${versions.length - index}`}
                     </p>
                     {version.id === document.id && (
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-interactive">
+                      <span className="rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-medium text-interactive">
                         Active
                       </span>
                     )}

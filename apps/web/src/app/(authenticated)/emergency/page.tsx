@@ -32,8 +32,8 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
   if (!context.communityId) {
     return (
       <div className="mx-auto max-w-4xl">
-        <h1 className="text-2xl font-semibold text-gray-900">Emergency Alerts</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-2xl font-semibold text-content">Emergency Alerts</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           Add a valid <code>communityId</code> query parameter.
         </p>
       </div>
@@ -76,11 +76,11 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Emergency Alerts</h1>
+        <h1 className="text-2xl font-semibold text-content">Emergency Alerts</h1>
         {canWrite && (
           <Link
             href={`/emergency/new?communityId=${context.communityId}`}
-            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-danger/90"
           >
             Send Emergency Alert
           </Link>

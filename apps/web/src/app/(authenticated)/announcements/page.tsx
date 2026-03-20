@@ -33,8 +33,8 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   if (!context.communityId) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-gray-900">Announcements</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-2xl font-semibold text-content">Announcements</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           Add a valid <code>communityId</code> query parameter to view announcements.
         </p>
       </div>

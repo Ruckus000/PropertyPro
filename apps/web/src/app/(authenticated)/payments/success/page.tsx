@@ -20,8 +20,8 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
   if (!paymentIntentId) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-gray-900">Invalid return URL</h1>
-        <p className="mt-2 text-sm text-gray-600">No payment intent ID found.</p>
+        <h1 className="text-xl font-semibold text-content">Invalid return URL</h1>
+        <p className="mt-2 text-sm text-content-secondary">No payment intent ID found.</p>
         <BackLink />
       </main>
     );
@@ -35,8 +35,8 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
   } catch {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-gray-900">Something went wrong</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-xl font-semibold text-content">Something went wrong</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           We could not retrieve your payment status. Please check your payment history or contact
           your association.
         </p>
@@ -48,13 +48,13 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
   if (status === 'succeeded') {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-          <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-success-bg">
+          <svg className="h-6 w-6 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="mt-4 text-2xl font-semibold text-gray-900">Payment received</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="mt-4 text-2xl font-semibold text-content">Payment received</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           Your payment has been processed successfully. You&apos;ll see it reflected in your account
           shortly.
         </p>
@@ -66,13 +66,13 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
   if (status === 'processing') {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-          <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-interactive-subtle">
+          <svg className="h-6 w-6 text-interactive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h1 className="mt-4 text-2xl font-semibold text-gray-900">Payment processing</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="mt-4 text-2xl font-semibold text-content">Payment processing</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           Your bank payment is being processed. This can take 1–3 business days. You&apos;ll receive
           a confirmation when complete.
         </p>
@@ -83,8 +83,8 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
 
   return (
     <main className="mx-auto max-w-lg px-6 py-16 text-center">
-      <h1 className="text-xl font-semibold text-gray-900">Payment not completed</h1>
-      <p className="mt-2 text-sm text-gray-600">
+      <h1 className="text-xl font-semibold text-content">Payment not completed</h1>
+      <p className="mt-2 text-sm text-content-secondary">
         Your payment was not processed. Please go back and try again.
       </p>
       <BackLink />
@@ -96,7 +96,7 @@ function BackLink() {
   return (
     <Link
       href="/dashboard"
-      className="mt-6 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+      className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
     >
       Return to dashboard
     </Link>

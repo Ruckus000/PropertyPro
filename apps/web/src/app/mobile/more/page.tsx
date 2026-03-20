@@ -47,16 +47,16 @@ export default async function MobileMorePage() {
 
   return (
     <div>
-      <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+      <ul className="divide-y divide-edge-subtle dark:divide-edge">
         {links.map((link) => {
           const Icon = link.icon;
           return (
             <li key={link.label}>
               <Link
                 href={link.href}
-                className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-gray-900 active:bg-gray-50 dark:text-gray-100 dark:active:bg-gray-800"
+                className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-content active:bg-surface-hover dark:text-content dark:active:bg-surface-hover"
               >
-                <Icon size={20} className="text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                <Icon size={20} className="text-content-disabled dark:text-content-secondary" aria-hidden="true" />
                 {link.label}
               </Link>
             </li>
@@ -65,7 +65,7 @@ export default async function MobileMorePage() {
         <li>
           <Link
             href="/auth/login"
-            className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-red-600 active:bg-gray-50 dark:text-red-400 dark:active:bg-gray-800"
+            className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-status-danger active:bg-surface-hover dark:text-status-danger dark:active:bg-surface-hover"
           >
             <LogOut size={20} aria-hidden="true" />
             Sign Out

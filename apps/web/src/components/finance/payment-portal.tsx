@@ -214,10 +214,10 @@ function SummaryCard({
     blue: 'border-status-info-border bg-interactive-subtle',
   };
   const textColors: Record<string, string> = {
-    red: 'text-red-900',
-    green: 'text-green-900',
-    yellow: 'text-yellow-900',
-    blue: 'text-blue-900',
+    red: 'text-status-danger',
+    green: 'text-status-success',
+    yellow: 'text-status-warning',
+    blue: 'text-interactive',
   };
 
   return (
@@ -244,7 +244,7 @@ function TabButton({
       onClick={onClick}
       className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
         active
-          ? 'border-indigo-600 text-indigo-600'
+          ? 'border-interactive text-interactive'
           : 'border-transparent text-content-tertiary hover:border-edge-strong hover:text-content-secondary'
       }`}
     >
@@ -252,7 +252,7 @@ function TabButton({
       {count > 0 && (
         <span
           className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            active ? 'bg-indigo-100 text-indigo-700' : 'bg-surface-muted text-content-secondary'
+            active ? 'bg-interactive-subtle text-interactive' : 'bg-surface-muted text-content-secondary'
           }`}
         >
           {count}
@@ -277,7 +277,7 @@ function UpcomingAssessments({
     return (
       <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
         <svg
-          className="mx-auto h-10 w-10 text-green-400"
+          className="mx-auto h-10 w-10 text-status-success"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -324,7 +324,7 @@ function UpcomingAssessments({
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button
                       onClick={() => onPay(item)}
-                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-content-inverse hover:bg-indigo-700"
+                      className="rounded-md bg-interactive px-3 py-1.5 text-xs font-medium text-content-inverse hover:bg-interactive-hover"
                     >
                       Pay Now
                     </button>

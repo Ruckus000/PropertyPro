@@ -22,12 +22,12 @@ export default async function CommunityUnavailablePage({
   const { subdomain } = await params;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-6">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-surface-page px-6">
       <div className="mx-auto max-w-md text-center">
         <div className="mb-6 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-status-warning-bg">
             <svg
-              className="h-8 w-8 text-amber-600"
+              className="h-8 w-8 text-status-warning"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth={1.5}
@@ -43,21 +43,21 @@ export default async function CommunityUnavailablePage({
           </div>
         </div>
 
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-content">
           Service Temporarily Unavailable
         </h1>
 
-        <p className="mt-4 text-sm text-gray-600">
+        <p className="mt-4 text-sm text-content-secondary">
           The community portal for <strong>{subdomain}</strong> is currently
           unavailable due to an account issue.
         </p>
 
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 text-sm text-content-secondary">
           If you are a board member or property manager, please contact your
           billing administrator to restore access.
         </p>
 
-        <p className="mt-6 text-xs text-gray-400">
+        <p className="mt-6 text-xs text-content-disabled">
           Community data is retained for 90 days. Residents may contact their
           association directly for assistance.
         </p>

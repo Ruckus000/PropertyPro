@@ -68,13 +68,15 @@ describe('CommunityCard', () => {
       expect(screen.getByText('5')).toBeInTheDocument();
     });
 
-    it('shows zero compliance count in green when satisfied', () => {
+    it('shows zero compliance count with success status when satisfied', () => {
       getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true, hasLeaseTracking: false });
 
       render(<CommunityCard community={makeCondoCommunity({ unsatisfiedComplianceItems: 0 })} />);
 
-      const zeroEl = screen.getByText('0');
-      expect(zeroEl).toHaveClass('text-green-700');
+      const el = screen.getByText('0');
+      expect(el).toBeInTheDocument();
+      // StatusBadge wraps label in inner span; outer span has semantic class
+      expect(el.parentElement).toHaveClass('text-status-success');
     });
 
     it('does NOT show occupancy section for condo', () => {
@@ -147,21 +149,25 @@ describe('CommunityCard', () => {
       expect(screen.getByText('30')).toBeInTheDocument();
     });
 
-    it('shows open maintenance count in amber when non-zero', () => {
+    it('shows open maintenance count with warning status when non-zero', () => {
       getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true, hasLeaseTracking: false });
 
       render(<CommunityCard community={makeCondoCommunity({ openMaintenanceRequests: 3 })} />);
 
-      const countEl = screen.getByText('3');
-      expect(countEl).toHaveClass('text-amber-700');
+      const el = screen.getByText('3');
+      expect(el).toBeInTheDocument();
+      // StatusBadge wraps label in inner span; outer span has semantic class
+      expect(el.parentElement).toHaveClass('text-status-warning');
     });
 
-    it('shows None in green when no open maintenance requests', () => {
+    it('shows None with success status when no open maintenance requests', () => {
       getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true, hasLeaseTracking: false });
 
       render(<CommunityCard community={makeCondoCommunity({ openMaintenanceRequests: 0 })} />);
 
-      expect(screen.getByText('None')).toHaveClass('text-green-700');
+      const el = screen.getByText('None');
+      expect(el).toBeInTheDocument();
+      expect(el.parentElement).toHaveClass('text-status-success');
     });
   });
 });

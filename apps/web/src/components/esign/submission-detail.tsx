@@ -128,7 +128,7 @@ export function SubmissionDetail({
   if (error || !data) {
     return (
       <Card className="p-8 text-center">
-        <AlertTriangle className="h-8 w-8 mx-auto text-amber-500 mb-2" />
+        <AlertTriangle className="h-8 w-8 mx-auto text-status-warning mb-2" />
         <p className="text-sm text-content-secondary">
           {error
             ? (error as Error).message
@@ -286,7 +286,7 @@ export function SubmissionDetail({
             <div className="flex gap-2">
               <Button
                 variant="ghost"
-                className="text-status-danger hover:text-red-700 hover:bg-status-danger-bg"
+                className="text-status-danger hover:text-status-danger hover:bg-status-danger-bg"
                 onClick={handleCancel}
                 disabled={cancelMutation.isPending}
               >

@@ -301,7 +301,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                     <button
                       type="button"
                       onClick={() => removeSigner(idx)}
-                      className="p-2 text-content-disabled hover:text-red-500 transition-colors duration-quick"
+                      className="p-2 text-content-disabled hover:text-status-danger transition-colors duration-quick"
                       title="Remove signer"
                     >
                       <Trash2 className="h-4 w-4" />

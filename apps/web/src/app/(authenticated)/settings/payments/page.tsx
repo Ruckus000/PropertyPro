@@ -18,7 +18,7 @@ export default function PaymentSettingsPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Payment Settings</h1>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-content-secondary">
           Provide a communityId to manage payment settings.
         </p>
       </div>
@@ -29,7 +29,7 @@ export default function PaymentSettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="mb-2 text-xl font-semibold">Payment Settings</h1>
-        <p className="mb-6 text-sm text-gray-600">
+        <p className="mb-6 text-sm text-content-secondary">
           Connect your association&apos;s bank account to collect dues and assessments from unit owners.
         </p>
       </div>
@@ -38,9 +38,9 @@ export default function PaymentSettingsPage() {
 
       <FeePolicySettings communityId={communityId} />
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-        <h3 className="text-sm font-medium text-blue-900">Florida Trust Fund Compliance</h3>
-        <p className="mt-1 text-sm text-blue-700">
+      <div className="rounded-md border border-edge bg-interactive-subtle p-4">
+        <h3 className="text-sm font-medium text-interactive">Florida Trust Fund Compliance</h3>
+        <p className="mt-1 text-sm text-interactive">
           Per &sect;718.111(14), each association&apos;s funds must be segregated.
           Your Stripe account is unique to this association &mdash; funds are never commingled
           with other communities or with PropertyPro.

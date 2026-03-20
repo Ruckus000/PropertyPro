@@ -57,15 +57,15 @@ function getMimeIcon(mimeType: string): string {
 const EXTRACTION_BADGE_CONFIG: Record<string, { label: string; className: string } | null> = {
   completed: {
     label: 'Searchable',
-    className: 'bg-green-100 text-status-success',
+    className: 'bg-status-success-bg text-status-success',
   },
   pending: {
     label: 'Processing',
-    className: 'bg-yellow-100 text-yellow-700',
+    className: 'bg-status-warning-bg text-status-warning',
   },
   failed: {
     label: 'Search unavailable',
-    className: 'bg-red-100 text-status-danger',
+    className: 'bg-status-danger-bg text-status-danger',
   },
   skipped: {
     label: 'Not searchable',

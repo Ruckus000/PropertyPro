@@ -47,10 +47,10 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
   return (
     <>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-content">
           {isStaff ? 'Visitor Management' : 'My Visitors'}
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-content-secondary">
           {isStaff
             ? 'Register visitors, manage check-ins and check-outs.'
             : 'Register guests and view your active visitor passes.'}

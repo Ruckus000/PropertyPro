@@ -30,7 +30,7 @@ const ENTRY_TYPE_BADGE_CLASSES: Record<string, string> = {
   payment: 'bg-status-success-bg text-status-success border-status-success-border',
   refund: 'bg-status-warning-bg text-status-warning border-status-warning-border',
   fine: 'bg-status-danger-bg text-status-danger border-status-danger-border',
-  fee: 'bg-orange-100 text-orange-800 border-orange-200',
+  fee: 'bg-status-warning-bg text-status-warning border-status-warning-border',
   adjustment: 'bg-surface-muted text-content border-edge',
 };
 

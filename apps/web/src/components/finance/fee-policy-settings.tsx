@@ -84,7 +84,7 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
         <label
           className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 ${
             displayPolicy === 'owner_pays'
-              ? 'border-indigo-300 bg-indigo-50'
+              ? 'border-interactive bg-interactive-subtle'
               : 'border-edge hover:bg-surface-hover'
           }`}
         >
@@ -94,12 +94,12 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
             value="owner_pays"
             checked={displayPolicy === 'owner_pays'}
             onChange={() => setSelectedPolicy('owner_pays')}
-            className="mt-0.5 h-4 w-4 text-indigo-600"
+            className="mt-0.5 h-4 w-4 text-interactive"
           />
           <div>
             <p className="text-sm font-medium text-content">
               Pass fees to unit owners
-              <span className="ml-2 text-xs font-normal text-indigo-600">(recommended)</span>
+              <span className="ml-2 text-xs font-normal text-interactive">(recommended)</span>
             </p>
             <p className="mt-1 text-xs text-content-secondary">
               Owners pay a small convenience fee when paying online. The association receives
@@ -116,7 +116,7 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
         <label
           className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 ${
             displayPolicy === 'association_absorbs'
-              ? 'border-indigo-300 bg-indigo-50'
+              ? 'border-interactive bg-interactive-subtle'
               : 'border-edge hover:bg-surface-hover'
           }`}
         >
@@ -126,7 +126,7 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
             value="association_absorbs"
             checked={displayPolicy === 'association_absorbs'}
             onChange={() => setSelectedPolicy('association_absorbs')}
-            className="mt-0.5 h-4 w-4 text-indigo-600"
+            className="mt-0.5 h-4 w-4 text-interactive"
           />
           <div>
             <p className="text-sm font-medium text-content">Association absorbs fees</p>
@@ -154,7 +154,7 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
           <button
             onClick={() => selectedPolicy && mutation.mutate(selectedPolicy)}
             disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>

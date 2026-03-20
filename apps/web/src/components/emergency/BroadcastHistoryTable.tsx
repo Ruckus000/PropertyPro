@@ -21,14 +21,14 @@ interface Props {
 
 const SEVERITY_BADGE: Record<string, string> = {
   emergency: 'bg-status-danger-bg text-status-danger',
-  urgent: 'bg-orange-100 text-orange-800',
+  urgent: 'bg-status-warning-bg text-status-warning',
   info: 'bg-interactive-muted text-content-link',
 };
 
 function getStatusLabel(broadcast: Broadcast): { label: string; className: string } {
   if (broadcast.canceledAt) return { label: 'Canceled', className: 'text-content-tertiary' };
   if (broadcast.completedAt) return { label: 'Sent', className: 'text-status-success' };
-  return { label: 'Draft', className: 'text-yellow-600' };
+  return { label: 'Draft', className: 'text-status-warning' };
 }
 
 export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {

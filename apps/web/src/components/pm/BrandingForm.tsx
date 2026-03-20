@@ -352,7 +352,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:opacity-50"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
         >
           {isSubmitting ? 'Saving...' : 'Save Branding'}
         </button>

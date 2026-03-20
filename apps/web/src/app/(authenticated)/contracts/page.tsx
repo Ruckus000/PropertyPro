@@ -49,8 +49,8 @@ export default async function ContractsPage({ searchParams }: PageProps) {
   return (
     <>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Contracts & Vendors</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-content">Contracts & Vendors</h1>
+        <p className="mt-1 text-sm text-content-secondary">
           Track vendor contracts, manage bids, and monitor expiration dates.
         </p>
       </div>

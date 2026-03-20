@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const SEVERITY_STYLES: Record<string, string> = {
   minor: 'bg-status-warning-bg text-status-warning',
-  moderate: 'bg-orange-100 text-orange-800',
+  moderate: 'bg-status-warning-bg text-status-warning',
   major: 'bg-status-danger-bg text-status-danger',
 };
 

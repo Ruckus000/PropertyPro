@@ -124,7 +124,7 @@ export function ComplianceUrgencySection() {
             <div className="shrink-0 md:text-right">
               <a
                 href="/signup"
-                className="inline-flex items-center rounded-md bg-red-700 px-5 py-2.5 text-sm font-semibold text-content-inverse transition-colors hover:bg-red-800"
+                className="inline-flex items-center rounded-md bg-status-danger px-5 py-2.5 text-sm font-semibold text-content-inverse transition-colors hover:bg-status-danger/90"
               >
                 Get Compliant Now
               </a>
@@ -172,12 +172,12 @@ interface TimelineItemProps {
 function TimelineItem({ title, description, status }: TimelineItemProps) {
   const statusConfig = {
     active: {
-      dotColor: 'bg-red-500',
+      dotColor: 'bg-status-danger',
       label: 'Required Now',
       labelColor: 'text-status-danger bg-status-danger-bg border-status-danger-border',
     },
     upcoming: {
-      dotColor: 'bg-amber-500',
+      dotColor: 'bg-status-warning',
       label: 'Jan 2026',
       labelColor: 'text-status-warning bg-status-warning-bg border-status-warning-border',
     },

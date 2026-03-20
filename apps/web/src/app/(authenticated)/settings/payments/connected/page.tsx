@@ -75,11 +75,11 @@ export default function StripeConnectCallbackPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-indigo-600" />
-          <h2 className="text-lg font-semibold text-gray-900">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-edge border-t-interactive" />
+          <h2 className="text-lg font-semibold text-content">
             Connecting your Stripe account&hellip;
           </h2>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-content-secondary">
             Please wait while we finalize your account setup.
           </p>
         </div>
@@ -91,13 +91,13 @@ export default function StripeConnectCallbackPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-            <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-success-bg">
+            <svg className="h-6 w-6 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">Stripe Connected!</h2>
-          <p className="mt-1 text-sm text-gray-600">
+          <h2 className="text-lg font-semibold text-content">Stripe Connected!</h2>
+          <p className="mt-1 text-sm text-content-secondary">
             Your account has been linked. Redirecting to payment settings&hellip;
           </p>
         </div>
@@ -108,16 +108,16 @@ export default function StripeConnectCallbackPage() {
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
       <div className="max-w-md text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-          <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-danger-bg">
+          <svg className="h-6 w-6 text-status-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </div>
-        <h2 className="text-lg font-semibold text-gray-900">Connection Failed</h2>
-        <p className="mt-1 text-sm text-red-600">{errorMsg}</p>
+        <h2 className="text-lg font-semibold text-content">Connection Failed</h2>
+        <p className="mt-1 text-sm text-status-danger">{errorMsg}</p>
         <button
           onClick={() => router.back()}
-          className="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="mt-4 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
         >
           Go Back
         </button>

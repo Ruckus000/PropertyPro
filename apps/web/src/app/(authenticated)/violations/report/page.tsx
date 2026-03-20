@@ -59,8 +59,8 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Report a Violation</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-content">Report a Violation</h1>
+        <p className="mt-1 text-sm text-content-secondary">
           Report a community concern such as noise, parking, or property violations.
         </p>
       </div>
@@ -74,7 +74,7 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
 
       {ownViolations.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">Your Reports</h2>
+          <h2 className="mb-4 text-lg font-medium text-content">Your Reports</h2>
           <div className="space-y-3">
             {ownViolations.map((v) => (
               <ViolationCard

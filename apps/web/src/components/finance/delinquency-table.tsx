@@ -118,7 +118,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
     return (
       <div className="rounded-md border border-status-success-border bg-status-success-bg p-8 text-center">
         <svg
-          className="mx-auto h-10 w-10 text-green-400"
+          className="mx-auto h-10 w-10 text-status-success"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -130,7 +130,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
             d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <p className="mt-2 text-sm font-medium text-green-900">No delinquent units</p>
+        <p className="mt-2 text-sm font-medium text-status-success">No delinquent units</p>
         <p className="text-sm text-status-success">
           All units are current on their assessments.
         </p>

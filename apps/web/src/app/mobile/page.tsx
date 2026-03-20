@@ -41,7 +41,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       redirect('/auth/login');
     }
   } else if (!Number.isInteger(communityId) || communityId <= 0) {
-    return <div className="p-4 text-gray-500">Community not found.</div>;
+    return <div className="p-4 text-content-secondary">Community not found.</div>;
   }
 
   // If a custom mobile template has been published, render it with branding
@@ -85,7 +85,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
   if (isPreview) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-500">No mobile template published yet. Use the edit drawer to create one.</p>
+        <p className="text-content-secondary">No mobile template published yet. Use the edit drawer to create one.</p>
       </div>
     );
   }
@@ -96,7 +96,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     <div>
       {/* Recent announcements */}
       <div className="mt-1">
-        <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
           Announcements
         </div>
         {data.announcements.length === 0 ? (
@@ -117,7 +117,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       {/* Upcoming meetings */}
       {data.meetings.length > 0 && (
         <div className="mt-2">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
             Upcoming Meetings
           </div>
           {data.meetings.map((m) => (

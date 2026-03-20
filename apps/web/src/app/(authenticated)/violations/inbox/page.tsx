@@ -47,8 +47,8 @@ export default async function ViolationsInboxPage({ searchParams }: PageProps) {
   return (
     <>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Violations Inbox</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-content">Violations Inbox</h1>
+        <p className="mt-1 text-sm text-content-secondary">
           Review, track, and manage violation cases for the community.
         </p>
       </div>

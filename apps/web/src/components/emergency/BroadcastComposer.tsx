@@ -379,7 +379,7 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
               type="button"
               onClick={handleConfirmSend}
               disabled={!confirmed}
-              className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-red-700 disabled:opacity-50"
+              className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-danger hover:opacity-90 disabled:opacity-50"
             >
               Send Emergency Alert
             </button>

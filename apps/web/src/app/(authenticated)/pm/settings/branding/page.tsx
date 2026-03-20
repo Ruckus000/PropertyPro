@@ -60,8 +60,8 @@ export default async function BrandingSettingsPage({ searchParams }: PageProps) 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Branding Settings</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-content">Branding Settings</h1>
+        <p className="mt-1 text-sm text-content-secondary">
           Manage branding across all your communities or customize a specific community below.
         </p>
       </div>
@@ -69,7 +69,7 @@ export default async function BrandingSettingsPage({ searchParams }: PageProps) 
       {/* Multi-community branding overview */}
       {communitiesWithBranding.length > 1 && (
         <div className="mb-10">
-          <h2 className="mb-3 text-lg font-medium text-gray-800">All Communities</h2>
+          <h2 className="mb-3 text-lg font-medium text-content">All Communities</h2>
           <BrandingTable
             currentCommunityId={communityId}
             communities={communitiesWithBranding}
@@ -79,7 +79,7 @@ export default async function BrandingSettingsPage({ searchParams }: PageProps) 
 
       {/* Single-community branding form */}
       <div>
-        <h2 className="mb-3 text-lg font-medium text-gray-800">
+        <h2 className="mb-3 text-lg font-medium text-content">
           Edit Branding
         </h2>
         <BrandingForm communityId={communityId} initialBranding={branding ?? {}} />

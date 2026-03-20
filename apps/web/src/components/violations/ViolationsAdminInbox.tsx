@@ -38,7 +38,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const SEVERITY_STYLES: Record<string, string> = {
   minor: 'bg-status-warning-bg text-status-warning',
-  moderate: 'bg-orange-100 text-orange-800',
+  moderate: 'bg-status-warning-bg text-status-warning',
   major: 'bg-status-danger-bg text-status-danger',
 };
 
@@ -201,7 +201,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
                 aria-label={`Violation #${v.id} — ${CATEGORY_LABELS[v.category] ?? v.category}, Unit ${v.unitId}`}
                 className={`w-full rounded-md border px-4 py-3 text-left transition-colors duration-quick ${
                   expandedId === v.id
-                    ? 'border-blue-300 bg-interactive-subtle'
+                    ? 'border-interactive bg-interactive-subtle'
                     : 'border-edge bg-surface-card hover:border-edge-strong hover:bg-surface-hover'
                 }`}
               >

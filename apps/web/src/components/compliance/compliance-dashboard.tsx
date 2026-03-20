@@ -105,6 +105,7 @@ function CategoryGroup({
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className={`
           group flex items-center gap-3 w-full px-4 py-3
           text-left transition-colors duration-quick cursor-pointer

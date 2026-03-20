@@ -8,7 +8,7 @@ import { getRequest } from '@/lib/api/maintenance-requests';
 const STATUS_COLORS: Record<string, string> = {
   submitted: 'bg-status-warning-bg text-status-warning',
   acknowledged: 'bg-interactive-subtle text-content-link',
-  in_progress: 'bg-purple-100 text-purple-800',
+  in_progress: 'bg-status-info-bg text-status-info',
   resolved: 'bg-status-success-bg text-status-success',
   closed: 'bg-surface-muted text-content-secondary',
   open: 'bg-status-warning-bg text-status-warning',
@@ -18,7 +18,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-surface-muted text-content-secondary',
   normal: 'bg-interactive-subtle text-content-link',
   medium: 'bg-interactive-subtle text-content-link',
-  high: 'bg-orange-100 text-orange-800',
+  high: 'bg-status-warning-bg text-status-warning',
   urgent: 'bg-status-danger-bg text-status-danger',
 };
 

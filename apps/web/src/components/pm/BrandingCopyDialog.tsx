@@ -180,8 +180,8 @@ export function BrandingCopyDialog({
             <p
               className={`rounded border px-3 py-2 text-sm ${
                 resultMessage.startsWith('Error')
-                  ? 'border-red-200 bg-red-50 text-red-700'
-                  : 'border-green-200 bg-green-50 text-green-700'
+                  ? 'border-status-danger-border bg-status-danger-bg text-status-danger'
+                  : 'border-status-success-border bg-status-success-bg text-status-success'
               }`}
             >
               {resultMessage}
@@ -194,7 +194,7 @@ export function BrandingCopyDialog({
           </div>
         ) : showConfirm ? (
           <div className="space-y-4">
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-content-secondary">
               Copy {selectedProperties.size} branding{' '}
               {selectedProperties.size === 1 ? 'property' : 'properties'} to{' '}
               <strong>{selectedCommunityIds.size}</strong>{' '}
@@ -217,7 +217,7 @@ export function BrandingCopyDialog({
           <div className="space-y-5">
             {/* Properties to copy */}
             <div>
-              <p className="mb-2 text-sm font-medium text-gray-700">Properties to copy</p>
+              <p className="mb-2 text-sm font-medium text-content-secondary">Properties to copy</p>
               <div className="grid grid-cols-2 gap-2">
                 {BRANDING_PROPERTIES.map((prop) => {
                   const hasValue = sourceCommunity.branding[prop.key] !== undefined;
@@ -231,7 +231,7 @@ export function BrandingCopyDialog({
                       />
                       <label
                         htmlFor={`prop-${prop.key}`}
-                        className={`text-sm ${hasValue ? 'text-gray-700' : 'text-gray-400'}`}
+                        className={`text-sm ${hasValue ? 'text-content-secondary' : 'text-content-disabled'}`}
                       >
                         {prop.label}
                         {!hasValue && ' (not set)'}
@@ -245,7 +245,7 @@ export function BrandingCopyDialog({
             {/* Target communities */}
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">Target communities</p>
+                <p className="text-sm font-medium text-content-secondary">Target communities</p>
                 {targetCommunities.length > 0 && (
                   <button
                     type="button"
@@ -256,7 +256,7 @@ export function BrandingCopyDialog({
                         setSelectedCommunityIds(new Set(targetCommunities.map((c) => c.id)));
                       }
                     }}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-interactive hover:underline"
                   >
                     {selectedCommunityIds.size === targetCommunities.length
                       ? 'Deselect all'
@@ -264,9 +264,9 @@ export function BrandingCopyDialog({
                   </button>
                 )}
               </div>
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-gray-200 p-2">
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-edge p-2">
                 {targetCommunities.length === 0 ? (
-                  <p className="py-2 text-center text-xs text-gray-400">
+                  <p className="py-2 text-center text-xs text-content-disabled">
                     No other communities available
                   </p>
                 ) : (
@@ -277,7 +277,7 @@ export function BrandingCopyDialog({
                         checked={selectedCommunityIds.has(c.id)}
                         onCheckedChange={() => toggleCommunity(c.id)}
                       />
-                      <label htmlFor={`community-${c.id}`} className="text-sm text-gray-700">
+                      <label htmlFor={`community-${c.id}`} className="text-sm text-content-secondary">
                         {c.name}
                       </label>
                     </div>

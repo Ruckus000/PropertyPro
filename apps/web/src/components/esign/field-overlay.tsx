@@ -172,7 +172,7 @@ function DraggableField({
             e.stopPropagation();
             onRemove();
           }}
-          className="absolute -right-2 -top-2 z-20 flex size-4 items-center justify-center rounded-full bg-[var(--status-danger)] text-white hover:bg-red-600"
+          className="absolute -right-2 -top-2 z-20 flex size-4 items-center justify-center rounded-full bg-[var(--status-danger)] text-content-inverse hover:opacity-80"
           aria-label="Remove field"
         >
           <X className="size-3" />

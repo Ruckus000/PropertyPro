@@ -73,7 +73,7 @@ const outlinedClasses: Record<StatusVariant, string> = {
 
 // ── Props ──
 
-interface AlertBannerProps extends React.HTMLAttributes<HTMLDivElement> {
+interface AlertBannerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   /** Status determines colors and icon */
   status: StatusVariant;
   /** Primary message */

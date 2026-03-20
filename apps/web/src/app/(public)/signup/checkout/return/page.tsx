@@ -18,8 +18,8 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   if (!sessionId) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-gray-900">Invalid return URL</h1>
-        <p className="mt-2 text-sm text-gray-600">No session ID found in the URL.</p>
+        <h1 className="text-xl font-semibold text-content">Invalid return URL</h1>
+        <p className="mt-2 text-sm text-content-secondary">No session ID found in the URL.</p>
       </main>
     );
   }
@@ -31,8 +31,8 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   } catch {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-gray-900">Something went wrong</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-xl font-semibold text-content">Something went wrong</h1>
+        <p className="mt-2 text-sm text-content-secondary">
           We could not retrieve your checkout session. Please contact support.
         </p>
       </main>
@@ -42,8 +42,8 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   if (status === 'complete') {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Payment successful!</h1>
-        <p className="mt-3 text-sm text-gray-600">
+        <h1 className="text-2xl font-semibold text-content">Payment successful!</h1>
+        <p className="mt-3 text-sm text-content-secondary">
           We&apos;re setting up your community portal. You&apos;ll receive a welcome email shortly
           with login instructions.
         </p>
@@ -55,13 +55,13 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   // status === 'expired' means the session expired
   return (
     <main className="mx-auto max-w-lg px-6 py-16 text-center">
-      <h1 className="text-xl font-semibold text-gray-900">Checkout not completed</h1>
-      <p className="mt-2 text-sm text-gray-600">
+      <h1 className="text-xl font-semibold text-content">Checkout not completed</h1>
+      <p className="mt-2 text-sm text-content-secondary">
         Your payment was not processed. Please go back and try again.
       </p>
       <a
         href="/signup"
-        className="mt-6 inline-block rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
       >
         Return to signup
       </a>

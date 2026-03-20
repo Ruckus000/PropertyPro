@@ -16,7 +16,7 @@ export default async function ResetPasswordPage() {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <main
-        className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12"
+        className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-12"
         style={branding.cssVars as React.CSSProperties}
       >
         <div className="w-full max-w-sm space-y-6">
@@ -29,8 +29,8 @@ export default async function ResetPasswordPage() {
                 className="mx-auto mb-4 h-16 w-16 rounded-lg object-contain"
               />
             )}
-            <h1 className="text-2xl font-bold text-gray-900">Set new password</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-2xl font-bold text-content">Set new password</h1>
+            <p className="mt-2 text-sm text-content-secondary">
               Enter your new password below.
             </p>
           </div>

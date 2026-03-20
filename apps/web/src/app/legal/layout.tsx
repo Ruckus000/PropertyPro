@@ -12,17 +12,17 @@ export const metadata: Metadata = {
 
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-white">
-      <header className="border-b border-gray-200 bg-white">
+    <div className="min-h-screen bg-surface-card">
+      <header className="border-b border-edge bg-surface-card">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <Link href="/" className="text-lg font-semibold text-gray-900 hover:text-blue-600">
+          <Link href="/" className="text-lg font-semibold text-content hover:text-content-link">
             PropertyPro Florida
           </Link>
           <nav className="flex gap-6 text-sm">
-            <Link href="/legal/terms" className="text-gray-600 hover:text-gray-900">
+            <Link href="/legal/terms" className="text-content-secondary hover:text-content">
               Terms of Service
             </Link>
-            <Link href="/legal/privacy" className="text-gray-600 hover:text-gray-900">
+            <Link href="/legal/privacy" className="text-content-secondary hover:text-content">
               Privacy Policy
             </Link>
           </nav>
@@ -31,9 +31,9 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
 
       <main className="mx-auto max-w-3xl px-6 py-12">{children}</main>
 
-      <footer className="border-t border-gray-200 bg-gray-50">
+      <footer className="border-t border-edge bg-surface-page">
         <div className="mx-auto max-w-3xl px-6 py-6">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-content-secondary">
             &copy; {new Date().getFullYear()} PropertyPro Florida. All rights reserved.
           </p>
         </div>

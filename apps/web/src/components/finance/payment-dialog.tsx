@@ -156,7 +156,7 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
           {/* Fee Estimate — only shown for owner_pays before method selection */}
           {feePolicy === 'owner_pays' && (
             <div className="mb-4 rounded-md border border-edge-subtle bg-interactive-subtle p-3">
-              <p className="text-xs font-medium text-blue-900">Convenience Fee</p>
+              <p className="text-xs font-medium text-interactive">Convenience Fee</p>
               <div className="mt-1 flex gap-4 text-xs text-content-link">
                 <span>Card: ~{formatCents(calculateConvenienceFee(totalCents, 'card'))}</span>
                 <span>ACH: ~{formatCents(calculateConvenienceFee(totalCents, 'us_bank_account'))}</span>
@@ -171,7 +171,7 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
           {/* Stripe Payment Element */}
           {intentMutation.isPending && (
             <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-muted border-t-indigo-600" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-muted border-t-interactive" />
               <span className="ml-2 text-sm text-content-secondary">Preparing payment form...</span>
             </div>
           )}
@@ -185,7 +185,7 @@ export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: Pay
               </p>
               <button
                 onClick={() => intentMutation.mutate()}
-                className="mt-2 text-sm font-medium text-status-danger underline hover:text-red-900"
+                className="mt-2 text-sm font-medium text-status-danger underline hover:text-status-danger"
               >
                 Try Again
               </button>
@@ -343,7 +343,7 @@ function CheckoutForm({
           <button
             type="button"
             onClick={() => updateMutation.mutate(currentMethod)}
-            className="font-medium underline hover:text-red-800"
+            className="font-medium underline hover:text-status-danger"
           >
             Retry
           </button>
@@ -361,7 +361,7 @@ function CheckoutForm({
         <button
           type="submit"
           disabled={!stripe || submitting || updateMutation.isPending || updateMutation.isError}
-          className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
         >
           {submitting
             ? 'Processing...'

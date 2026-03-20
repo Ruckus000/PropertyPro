@@ -325,7 +325,7 @@ export function ViolationReportForm({
                 <button
                   type="button"
                   onClick={() => removePhoto(idx)}
-                  className="ml-2 shrink-0 text-red-500 hover:text-red-700"
+                  className="ml-2 shrink-0 text-status-danger hover:text-status-danger"
                 >
                   Remove
                 </button>

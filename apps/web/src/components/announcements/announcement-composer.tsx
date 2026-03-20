@@ -163,7 +163,7 @@ export function AnnouncementComposer({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 disabled:opacity-50 dark:bg-interactive dark:hover:bg-interactive-subtle0"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 disabled:opacity-50 dark:bg-interactive dark:hover:bg-interactive-subtle0"
         >
           {isSubmitting ? 'Publishing...' : 'Publish'}
         </button>

@@ -106,7 +106,7 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
       {/* Error */}
       {error && (
         <Card className="p-6 text-center">
-          <AlertTriangle className="h-8 w-8 mx-auto text-amber-500 mb-2" />
+          <AlertTriangle className="h-8 w-8 mx-auto text-status-warning mb-2" />
           <p className="text-sm text-content-secondary">
             Failed to load submissions.{' '}
             {(error as Error).message}

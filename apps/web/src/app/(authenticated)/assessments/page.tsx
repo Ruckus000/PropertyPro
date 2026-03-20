@@ -27,9 +27,9 @@ export default async function AssessmentsRedirectPage({ searchParams }: PageProp
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Assessments</h1>
-      <p className="mt-2 text-sm text-gray-600">
-        Add a valid <code className="rounded bg-gray-100 px-1">communityId</code> query parameter to manage assessments.
+      <h1 className="text-2xl font-semibold text-content">Assessments</h1>
+      <p className="mt-2 text-sm text-content-secondary">
+        Add a valid <code className="rounded bg-surface-muted px-1">communityId</code> query parameter to manage assessments.
       </p>
     </div>
   );

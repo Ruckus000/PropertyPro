@@ -23,7 +23,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const SEVERITY_STYLES: Record<string, string> = {
   minor: 'bg-status-warning-bg text-status-warning',
-  moderate: 'bg-orange-100 text-orange-800',
+  moderate: 'bg-status-warning-bg text-status-warning',
   major: 'bg-status-danger-bg text-status-danger',
 };
 
@@ -74,8 +74,8 @@ function getAvailableActions(status: string): { label: string; action: ActionTyp
 
 const VARIANT_STYLES: Record<string, string> = {
   primary: 'bg-interactive text-content-inverse hover:bg-interactive-hover',
-  danger: 'bg-red-600 text-content-inverse hover:bg-red-700',
-  success: 'bg-green-600 text-content-inverse hover:bg-green-700',
+  danger: 'bg-status-danger text-content-inverse hover:bg-status-danger-hover',
+  success: 'bg-status-success text-content-inverse hover:bg-status-success-hover',
   secondary: 'border border-edge-strong bg-surface-card text-content-secondary hover:bg-surface-hover',
 };
 

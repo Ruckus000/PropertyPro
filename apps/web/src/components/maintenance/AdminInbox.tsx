@@ -40,7 +40,7 @@ const PRIORITY_OPTIONS = [
 const STATUS_COLORS: Record<string, string> = {
   submitted: 'bg-status-warning-bg text-status-warning',
   acknowledged: 'bg-interactive-subtle text-content-link',
-  in_progress: 'bg-purple-100 text-purple-800',
+  in_progress: 'bg-status-info-bg text-status-info',
   resolved: 'bg-status-success-bg text-status-success',
   closed: 'bg-surface-muted text-content-secondary',
   open: 'bg-status-warning-bg text-status-warning',

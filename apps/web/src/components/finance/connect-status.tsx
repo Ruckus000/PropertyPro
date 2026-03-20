@@ -127,7 +127,7 @@ export function ConnectStatus({ communityId }: { communityId: number }) {
         <button
           onClick={handleConnect}
           disabled={onboardMutation.isPending}
-          className="mt-4 rounded-md bg-yellow-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-yellow-700 disabled:opacity-50"
+          className="mt-4 rounded-md bg-status-warning px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-warning-hover disabled:opacity-50"
         >
           {onboardMutation.isPending ? 'Redirecting...' : 'Resume Setup'}
         </button>
@@ -158,7 +158,7 @@ export function ConnectStatus({ communityId }: { communityId: number }) {
       <button
         onClick={handleConnect}
         disabled={onboardMutation.isPending}
-        className="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-indigo-700 disabled:opacity-50"
+        className="mt-4 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
       >
         {onboardMutation.isPending ? 'Redirecting to Stripe...' : 'Connect with Stripe'}
       </button>
@@ -171,7 +171,7 @@ export function ConnectStatus({ communityId }: { communityId: number }) {
 function StatusBadge({ label, ok }: { label: string; ok: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <div className={`h-2 w-2 rounded-full ${ok ? 'bg-green-500' : 'bg-yellow-500'}`} />
+      <div className={`h-2 w-2 rounded-full ${ok ? 'bg-status-success' : 'bg-status-warning'}`} />
       <span className="text-xs text-content-secondary">{label}: {ok ? 'Active' : 'Pending'}</span>
     </div>
   );

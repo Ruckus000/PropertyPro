@@ -5,7 +5,7 @@ import React from 'react';
  */
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-edge bg-gray-900 px-6 py-12">
+    <footer className="border-t border-edge bg-surface-inverse px-6 py-12">
       <div className="mx-auto max-w-6xl">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Company info */}

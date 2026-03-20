@@ -28,7 +28,7 @@ export default async function TransparencySettingsPage({ searchParams }: Props) 
     return (
       <>
         <h1 className="mb-2 text-xl font-semibold">Transparency Settings</h1>
-        <p className="text-sm text-gray-600">Provide a communityId to edit transparency settings.</p>
+        <p className="text-sm text-content-secondary">Provide a communityId to edit transparency settings.</p>
       </>
     );
   }
@@ -53,8 +53,8 @@ export default async function TransparencySettingsPage({ searchParams }: Props) 
 
   return (
     <div className="space-y-2">
-      <h1 className="text-xl font-semibold text-gray-900">Transparency Settings</h1>
-      <p className="text-sm text-gray-600">
+      <h1 className="text-xl font-semibold text-content">Transparency Settings</h1>
+      <p className="text-sm text-content-secondary">
         Enable or disable your public compliance transparency page.
       </p>
       <TransparencyToggle communityId={context.communityId} subdomain={slug} />

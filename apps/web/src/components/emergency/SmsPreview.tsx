@@ -13,7 +13,7 @@ export function SmsPreview({ body, maxLength = 160 }: Props) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-content-tertiary">SMS Preview</span>
-        <span className={`text-xs ${charCount > maxLength ? 'text-orange-600' : 'text-content-disabled'}`}>
+        <span className={`text-xs ${charCount > maxLength ? 'text-status-warning' : 'text-content-disabled'}`}>
           {charCount}/{maxLength} chars
           {parts > 1 && ` (${parts} parts)`}
         </span>

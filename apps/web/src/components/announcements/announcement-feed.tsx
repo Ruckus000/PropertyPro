@@ -100,7 +100,7 @@ export function AnnouncementFeed({
                   </span>
                 ) : null}
                 {announcement.audience === 'tenants_only' ? (
-                  <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                  <span className="inline-flex items-center rounded-full bg-status-info-bg px-2 py-0.5 text-xs font-medium text-status-info dark:bg-purple-900/30 dark:text-purple-300">
                     Tenants Only
                   </span>
                 ) : null}

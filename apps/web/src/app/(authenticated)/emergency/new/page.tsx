@@ -45,7 +45,7 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Send Emergency Alert</h1>
+      <h1 className="text-2xl font-semibold text-content">Send Emergency Alert</h1>
       <BroadcastComposer
         communityId={context.communityId}
         communityName={communityName}

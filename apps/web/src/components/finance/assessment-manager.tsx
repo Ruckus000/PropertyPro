@@ -146,7 +146,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-content-inverse hover:bg-indigo-700"
+          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
         >
           Create Assessment
         </button>
@@ -158,7 +158,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           <p className="text-sm text-content-tertiary">No assessments created yet.</p>
           <button
             onClick={() => setShowCreate(true)}
-            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+            className="mt-3 text-sm font-medium text-interactive hover:text-interactive-hover"
           >
             Create your first assessment
           </button>
@@ -214,8 +214,8 @@ function AssessmentCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-md border bg-surface-card p-4 text-left transition-colors duration-quick hover:border-indigo-300 ${
-        isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-edge'
+      className={`w-full rounded-md border bg-surface-card p-4 text-left transition-colors duration-quick hover:border-interactive ${
+        isSelected ? 'border-interactive ring-1 ring-interactive' : 'border-edge'
       }`}
     >
       <div className="flex items-start justify-between">
@@ -521,7 +521,7 @@ function CreateAssessmentDialog({
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-indigo-700 disabled:opacity-50"
+              className="flex-1 rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
             >
               {mutation.isPending ? 'Creating...' : 'Create Assessment'}
             </button>

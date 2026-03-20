@@ -217,7 +217,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<AlertTriangle className="h-12 w-12 text-amber-500" />}
+          icon={<AlertTriangle className="h-12 w-12 text-status-warning" />}
           title="Unable to load signing request"
           description={message}
         />
@@ -229,7 +229,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<AlertTriangle className="h-12 w-12 text-amber-500" />}
+          icon={<AlertTriangle className="h-12 w-12 text-status-warning" />}
           title="Signing request not found"
           description="This link may be invalid or expired."
         />
@@ -242,7 +242,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
+          icon={<CheckCircle2 className="h-12 w-12 text-status-success" />}
           title="Signing complete"
           description="You have already signed this document. You can close this page."
         />
@@ -255,7 +255,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<XCircle className="h-12 w-12 text-red-500" />}
+          icon={<XCircle className="h-12 w-12 text-status-danger" />}
           title="Signing declined"
           description="You have declined to sign this document."
         />
@@ -268,7 +268,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<XCircle className="h-12 w-12 text-gray-400" />}
+          icon={<XCircle className="h-12 w-12 text-content-disabled" />}
           title="Request cancelled"
           description="This signing request has been cancelled by the sender."
         />
@@ -281,7 +281,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<Clock className="h-12 w-12 text-amber-500" />}
+          icon={<Clock className="h-12 w-12 text-status-warning" />}
           title="Request expired"
           description="This signing request has expired. Please contact the sender for a new link."
         />
@@ -294,7 +294,7 @@ export default function SigningPage() {
     return (
       <SigningShell>
         <StateCard
-          icon={<Clock className="h-12 w-12 text-blue-500" />}
+          icon={<Clock className="h-12 w-12 text-interactive" />}
           title="Waiting for another signer"
           description={`Waiting for ${data.waitingFor ?? 'the previous signer'} to sign first.`}
         />
@@ -306,21 +306,21 @@ export default function SigningPage() {
   return (
     <SigningShell>
       {/* Header */}
-      <div className="border-b bg-white sticky top-0 z-20">
+      <div className="border-b bg-surface-card sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-green-700">
+          <div className="flex items-center gap-2 text-sm text-status-success">
             <Lock className="h-4 w-4" />
             <span className="font-medium">Secured</span>
           </div>
-          <span className="text-xs text-gray-500 truncate max-w-[200px]">
+          <span className="text-xs text-content-secondary truncate max-w-[200px]">
             {data.template.name}
           </span>
         </div>
       </div>
 
       {/* Identity bar */}
-      <div className="bg-blue-50 border-b border-blue-100">
-        <div className="max-w-4xl mx-auto px-4 py-2 text-sm text-blue-800">
+      <div className="bg-interactive-subtle border-b border-edge-subtle">
+        <div className="max-w-4xl mx-auto px-4 py-2 text-sm text-interactive">
           Signing as:{' '}
           <span className="font-medium">{data.signer.name ?? 'Signer'}</span>
           {' \u00B7 '}
@@ -334,7 +334,7 @@ export default function SigningPage() {
           <button
             type="button"
             onClick={() => setMessageExpanded((p) => !p)}
-            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
+            className="flex items-center gap-1 text-sm text-content-secondary hover:text-content"
           >
             <span className="font-medium">Message from sender</span>
             {messageExpanded ? (
@@ -344,7 +344,7 @@ export default function SigningPage() {
             )}
           </button>
           {messageExpanded && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">
+            <div className="mt-2 p-3 bg-surface-hover rounded-md text-sm text-content-secondary whitespace-pre-wrap">
               {data.submission.messageBody}
             </div>
           )}
@@ -353,10 +353,10 @@ export default function SigningPage() {
 
       {/* PDF + Fields */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-surface-card border rounded-md shadow-sm overflow-hidden">
           {/* PDF Viewer placeholder — rendered by PdfViewer + FieldOverlay */}
-          <div className="relative min-h-[600px] bg-gray-100 flex items-center justify-center">
-            <p className="text-gray-400 text-sm">
+          <div className="relative min-h-[600px] bg-surface-muted flex items-center justify-center">
+            <p className="text-content-disabled text-sm">
               PDF Document Preview
             </p>
 
@@ -373,8 +373,8 @@ export default function SigningPage() {
                   }}
                   className={`absolute border-2 rounded transition-colors cursor-pointer ${
                     value
-                      ? 'border-green-400 bg-green-50/80'
-                      : 'border-blue-400 bg-blue-50/60 hover:bg-blue-100/80'
+                      ? 'border-status-success bg-status-success-bg/80'
+                      : 'border-interactive bg-interactive-subtle/60 hover:bg-interactive-subtle/80'
                   }`}
                   style={{
                     left: `${field.x}%`,
@@ -392,10 +392,10 @@ export default function SigningPage() {
                     />
                   )}
                   {value && field.type === 'date' && (
-                    <span className="text-xs text-gray-700">{value.value}</span>
+                    <span className="text-xs text-content-secondary">{value.value}</span>
                   )}
                   {value && field.type === 'checkbox' && (
-                    <span className="text-green-600 text-lg">
+                    <span className="text-status-success text-lg">
                       {value.value === 'true' ? '\u2713' : ''}
                     </span>
                   )}
@@ -413,7 +413,7 @@ export default function SigningPage() {
                   )}
                   {!value &&
                     field.type !== 'text' && (
-                      <span className="text-xs text-blue-600 font-medium">
+                      <span className="text-xs text-interactive font-medium">
                         {field.label ?? field.type}
                       </span>
                     )}
@@ -425,17 +425,17 @@ export default function SigningPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="sticky bottom-[72px] z-20 bg-white/95 backdrop-blur border-t">
+      <div className="sticky bottom-[72px] z-20 bg-surface-card/95 backdrop-blur border-t">
         <div className="max-w-4xl mx-auto px-4 py-2">
-          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+          <div className="flex items-center justify-between text-sm text-content-secondary mb-1">
             <span>
               {completedCount} of {fields.length} fields completed
             </span>
             <span>{Math.round((completedCount / Math.max(fields.length, 1)) * 100)}%</span>
           </div>
-          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-surface-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-300"
+              className="h-full bg-interactive rounded-full transition-all duration-300"
               style={{
                 width: `${(completedCount / Math.max(fields.length, 1)) * 100}%`,
               }}
@@ -445,7 +445,7 @@ export default function SigningPage() {
       </div>
 
       {/* Bottom bar: consent + actions */}
-      <div className="sticky bottom-0 z-20 bg-white border-t shadow-lg">
+      <div className="sticky bottom-0 z-20 bg-surface-card border-t shadow-lg">
         <div className="max-w-4xl mx-auto px-4 py-3 space-y-3">
           {/* Consent */}
           <label className="flex items-start gap-2 cursor-pointer">
@@ -453,9 +453,9 @@ export default function SigningPage() {
               type="checkbox"
               checked={consentChecked}
               onChange={(e) => setConsentChecked(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="mt-1 h-4 w-4 rounded border-edge-strong text-interactive focus:ring-interactive"
             />
-            <span className="text-xs text-gray-600 leading-relaxed">
+            <span className="text-xs text-content-secondary leading-relaxed">
               {ESIGN_CONSENT_TEXT}
             </span>
           </label>
@@ -466,7 +466,7 @@ export default function SigningPage() {
               <>
                 <Button
                   variant="ghost"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-status-danger hover:text-status-danger hover:bg-status-danger-bg"
                   onClick={() => setShowDecline(true)}
                 >
                   Decline
@@ -492,14 +492,14 @@ export default function SigningPage() {
               </>
             ) : (
               <div className="flex-1 space-y-2">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-content">
                   Are you sure you want to decline?
                 </p>
                 <textarea
                   value={declineReason}
                   onChange={(e) => setDeclineReason(e.target.value)}
                   placeholder="Reason (optional)"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none h-16 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-edge-strong rounded-md px-3 py-2 text-sm resize-none h-16 focus:outline-none focus:ring-2 focus:ring-interactive"
                 />
                 <div className="flex gap-2">
                   <Button
@@ -530,12 +530,12 @@ export default function SigningPage() {
 
           {/* Error messages */}
           {submitMutation.isError && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-status-danger">
               {(submitMutation.error as Error).message ?? 'Failed to submit signature.'}
             </p>
           )}
           {declineMutation.isError && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-status-danger">
               {(declineMutation.error as Error).message ?? 'Failed to decline.'}
             </p>
           )}
@@ -567,7 +567,7 @@ export default function SigningPage() {
 
 function SigningShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">{children}</div>
+    <div className="min-h-screen bg-surface-page flex flex-col">{children}</div>
   );
 }
 
@@ -584,8 +584,8 @@ function StateCard({
     <div className="flex-1 flex items-center justify-center p-8">
       <div className="text-center max-w-md">
         <div className="flex justify-center mb-4">{icon}</div>
-        <h1 className="text-xl font-semibold text-gray-900 mb-2">{title}</h1>
-        <p className="text-sm text-gray-600">{description}</p>
+        <h1 className="text-xl font-semibold text-content mb-2">{title}</h1>
+        <p className="text-sm text-content-secondary">{description}</p>
       </div>
     </div>
   );
@@ -594,10 +594,10 @@ function StateCard({
 function LoadingSkeleton() {
   return (
     <div className="flex-1 flex flex-col">
-      <div className="h-12 bg-gray-200 animate-pulse" />
-      <div className="h-8 bg-gray-100 animate-pulse" />
+      <div className="h-12 bg-surface-muted animate-pulse" />
+      <div className="h-8 bg-surface-muted animate-pulse" />
       <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
-        <div className="bg-gray-200 rounded-lg animate-pulse h-[600px]" />
+        <div className="bg-surface-muted rounded-md animate-pulse h-[600px]" />
       </div>
     </div>
   );
