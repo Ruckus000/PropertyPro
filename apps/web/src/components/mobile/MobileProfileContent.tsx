@@ -98,10 +98,12 @@ export function MobileProfileContent({
             <SettingsRow
               icon={User}
               label="Edit Profile"
+              href={`/mobile/settings?communityId=${communityId}`}
             />
             <SettingsRow
               icon={Lock}
               label="Security"
+              href={`/mobile/settings/security?communityId=${communityId}`}
               isLast
             />
           </div>
@@ -118,10 +120,12 @@ export function MobileProfileContent({
             <SettingsRow
               icon={HelpCircle}
               label="Help Center"
+              href={`/mobile/help?communityId=${communityId}`}
             />
             <SettingsRow
               icon={MessageSquare}
               label="Contact Management"
+              href={`/mobile/help/contact?communityId=${communityId}`}
               isLast
             />
           </div>

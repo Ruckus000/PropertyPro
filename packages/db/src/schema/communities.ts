@@ -57,6 +57,10 @@ export const communities = pgTable('communities', {
   customDomain: text('custom_domain'),
   /** Phase 3: When the community's public site was last published. */
   sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
+  /** Mobile help: management contact info. */
+  contactName: text('contact_name'),
+  contactEmail: text('contact_email'),
+  contactPhone: text('contact_phone'),
   /** Public compliance transparency page opt-in toggle. */
   transparencyEnabled: boolean('transparency_enabled').notNull().default(false),
   /** Timestamp when transparency scope disclosure was acknowledged by an authorized user. */

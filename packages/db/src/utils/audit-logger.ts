@@ -31,7 +31,10 @@ export type AuditAction =
   | 'election_certified' | 'election_canceled'                   // Election finalization
   | 'ballot_cast'                                                // Vote recorded
   | 'proxy_designated' | 'proxy_approved'                        // Proxy workflow
-  | 'proxy_rejected' | 'proxy_revoked';                          // Proxy denial/revocation
+  | 'proxy_rejected' | 'proxy_revoked'                           // Proxy denial/revocation
+  // FAQ & profile audit actions (Mobile Settings & Help)
+  | 'faq.created' | 'faq.updated' | 'faq.deleted' | 'faq.reordered'
+  | 'community.contact_updated' | 'profile.updated';
 
 export interface AuditEventParams {
   userId: string;

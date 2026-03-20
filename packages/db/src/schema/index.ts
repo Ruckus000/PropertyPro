@@ -56,6 +56,7 @@ export * from './esign';
 export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
 export * from './elections';
+export * from './faqs';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -350,3 +351,8 @@ export type ElectionProxy = typeof electionProxies.$inferSelect;
 export type NewElectionProxy = typeof electionProxies.$inferInsert;
 export type ElectionEligibilitySnapshot = typeof electionEligibilitySnapshots.$inferSelect;
 export type NewElectionEligibilitySnapshot = typeof electionEligibilitySnapshots.$inferInsert;
+
+// FAQs
+import type { faqs } from './faqs';
+export type Faq = typeof faqs.$inferSelect;
+export type NewFaq = typeof faqs.$inferInsert;
