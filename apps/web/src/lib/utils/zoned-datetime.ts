@@ -69,7 +69,7 @@ function partsToUtcMillis(parts: DateParts): number {
 function getZonedParts(date: Date, timeZone: string): DateParts {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
-    hour12: false,
+    hourCycle: 'h23',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

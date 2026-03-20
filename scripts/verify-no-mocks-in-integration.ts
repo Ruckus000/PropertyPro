@@ -77,6 +77,8 @@ const LEGACY_ALLOWLIST = new Map<string, string>([
     'LEGACY: mocks auth, announcement delivery, notifications'],
   ['apps/web/__tests__/integration/meeting-deadlines.integration.test.ts',
     'LEGACY: mocks auth, notifications, PDF'],
+  ['apps/web/__tests__/integration/calendar-phase2a.integration.test.ts',
+    'LEGACY: mocks auth, notifications — Phase 2A calendar stack'],
   ['apps/web/__tests__/integration/onboarding-flow.integration.test.ts',
     'LEGACY: mocks auth, email'],
   ['apps/web/__tests__/integration/onboarding-flow-condo.integration.test.ts',
