@@ -15,7 +15,7 @@ import { getPublishedTemplate } from '@/lib/api/site-template';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityType } from '@propertypro/shared';
-import { CompactCard } from '@/components/mobile/CompactCard';
+import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -93,44 +93,15 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
   const data = await loadDashboardData(communityId, userId!);
 
   return (
-    <div>
-      {/* Recent announcements */}
-      <div className="mt-1">
-        <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-          Announcements
-        </div>
-        {data.announcements.length === 0 ? (
-          <p className="mobile-empty">No recent announcements</p>
-        ) : (
-          data.announcements.map((a) => (
-            <CompactCard
-              key={a.id}
-              title={a.title}
-              subtitle={a.isPinned ? 'Pinned' : undefined}
-              meta={new Date(a.publishedAt).toLocaleDateString('en-US', { timeZone: data.timezone })}
-              href={`/mobile/announcements/${a.id}?communityId=${communityId}`}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Upcoming meetings */}
-      {data.meetings.length > 0 && (
-        <div className="mt-2">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-            Upcoming Meetings
-          </div>
-          {data.meetings.map((m) => (
-            <CompactCard
-              key={m.id}
-              title={m.title}
-              subtitle={m.meetingType}
-              meta={new Date(m.startsAt).toLocaleDateString('en-US', { timeZone: data.timezone })}
-              href={`/mobile/meetings?communityId=${communityId}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    <MobileHomeContent
+      firstName={data.firstName}
+      communityName={data.communityName}
+      communityId={communityId}
+      timezone={data.timezone}
+      announcements={data.announcements}
+      meetings={data.meetings}
+      announcementCount={data.announcements.length}
+      pendingSignerCount={data.pendingSigners.length}
+    />
   );
 }

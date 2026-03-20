@@ -10,6 +10,9 @@ import { getRequest } from '@/lib/api/maintenance-requests';
 import { StatusUpdateForm } from './StatusUpdateForm';
 import { AssignmentModal } from './AssignmentModal';
 import { CommentThread } from './CommentThread';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -124,11 +127,31 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
         </select>
       </div>
 
-      {loading && <p className="text-sm text-content-tertiary">Loading...</p>}
-      {error && <p className="text-sm text-status-danger">{error}</p>}
+      {loading && (
+        <div className="space-y-2" aria-busy="true" aria-label="Loading maintenance requests">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-md bg-surface-muted" />
+          ))}
+        </div>
+      )}
+      {error && (
+        <AlertBanner
+          status="danger"
+          title={error}
+          action={
+            <button
+              type="button"
+              onClick={() => void fetchRequests()}
+              className="shrink-0 rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-1.5 text-xs font-medium text-status-danger hover:opacity-90"
+            >
+              Retry
+            </button>
+          }
+        />
+      )}
 
-      {!loading && requests.length === 0 && (
-        <p className="text-sm text-content-tertiary">No requests found.</p>
+      {!loading && !error && requests.length === 0 && (
+        <EmptyState preset="no_maintenance_requests" />
       )}
 
       {/* Request list */}
@@ -145,7 +168,7 @@ export function AdminInbox({ communityId }: AdminInboxProps) {
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-medium text-content">{r.title}</p>
                   <p className="text-xs text-content-tertiary mt-0.5">
-                    {r.category} &middot; {new Date(r.createdAt).toLocaleDateString()}
+                    {r.category} &middot; {formatShortDate(r.createdAt)}
                   </p>
                 </div>
                 <span

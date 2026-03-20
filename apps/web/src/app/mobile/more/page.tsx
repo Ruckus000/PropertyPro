@@ -3,21 +3,13 @@ export const dynamic = 'force-dynamic';
 /**
  * Mobile "More" page — overflow menu for sections not in the bottom tab bar.
  *
- * Shows links to: Maintenance, Settings, and Sign Out.
+ * Shows profile card, grouped navigation links, and sign-out action.
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import Link from 'next/link';
-import { Wrench, Settings, LogOut } from 'lucide-react';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-
-
-interface MoreLink {
-  label: string;
-  href: string;
-  icon: React.ElementType;
-}
+import { MobileMoreContent } from '@/components/mobile/MobileMoreContent';
 
 export default async function MobileMorePage() {
   const requestHeaders = await headers();
@@ -28,50 +20,33 @@ export default async function MobileMorePage() {
   }
 
   let userId: string;
+  let userName: string | null = null;
+
   try {
-    userId = await requireAuthenticatedUserId();
+    const user = await requireAuthenticatedUser();
+    userId = user.id;
+    userName = (user.user_metadata?.full_name as string) ?? null;
   } catch {
     redirect('/auth/login');
   }
 
+  let communityName = '';
+  let displayTitle = '';
+
   try {
-    await requireCommunityMembership(communityId, userId!);
+    const membership = await requireCommunityMembership(communityId, userId!);
+    communityName = membership.communityName;
+    displayTitle = membership.displayTitle;
   } catch {
     redirect('/auth/login');
   }
-
-  const links: MoreLink[] = [
-    { label: 'Maintenance', href: `/mobile/maintenance?communityId=${communityId}`, icon: Wrench },
-    { label: 'Settings', href: `/settings?communityId=${communityId}`, icon: Settings },
-  ];
 
   return (
-    <div>
-      <ul className="divide-y divide-edge-subtle dark:divide-edge">
-        {links.map((link) => {
-          const Icon = link.icon;
-          return (
-            <li key={link.label}>
-              <Link
-                href={link.href}
-                className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-content active:bg-surface-hover dark:text-content dark:active:bg-surface-hover"
-              >
-                <Icon size={20} className="text-content-disabled dark:text-content-secondary" aria-hidden="true" />
-                {link.label}
-              </Link>
-            </li>
-          );
-        })}
-        <li>
-          <Link
-            href="/auth/login"
-            className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-status-danger active:bg-surface-hover dark:text-status-danger dark:active:bg-surface-hover"
-          >
-            <LogOut size={20} aria-hidden="true" />
-            Sign Out
-          </Link>
-        </li>
-      </ul>
-    </div>
+    <MobileMoreContent
+      userName={userName}
+      userRole={displayTitle}
+      communityName={communityName}
+      communityId={communityId}
+    />
   );
 }

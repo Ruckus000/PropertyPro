@@ -46,7 +46,7 @@
   height: 32px;
   border-radius: 8px;
   background: var(--theme-primary, #2563EB);
-  color: #ffffff;
+  color: var(--text-inverse, #ffffff);
 }
 
 .mobile-top-bar-context {
@@ -83,7 +83,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--theme-primary, #2563EB);
-  color: #ffffff;
+  color: var(--text-inverse, #ffffff);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;

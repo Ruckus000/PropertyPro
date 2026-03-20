@@ -65,18 +65,18 @@ export function DocumentLibrary({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-content">Documents</h1>
           <p className="mt-1 text-sm text-content-secondary">
             Manage and view community documents
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={() => setSearchMode(!searchMode)}
-            className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+            className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
               searchMode
                 ? 'border-interactive bg-interactive-subtle text-interactive'
                 : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
@@ -88,7 +88,7 @@ export function DocumentLibrary({
             <button
               type="button"
               onClick={() => setShowEsignBanner(!showEsignBanner)}
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 showEsignBanner
                   ? 'border-interactive bg-interactive-subtle text-interactive'
                   : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
@@ -102,7 +102,7 @@ export function DocumentLibrary({
             <button
               type="button"
               onClick={() => setShowUpload(!showUpload)}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 showUpload
                   ? 'bg-surface-muted text-content'
                   : 'bg-interactive text-white hover:bg-interactive-hover'
@@ -157,7 +157,7 @@ export function DocumentLibrary({
         </div>
       )}
 
-      <div className="rounded-md border border-edge bg-surface-card">
+      <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
         <div className="border-b border-edge px-6 py-4">
           <DocumentCategoryFilter
             communityId={communityId}
@@ -167,18 +167,33 @@ export function DocumentLibrary({
         </div>
 
         <div className="grid min-h-[500px] lg:grid-cols-2">
-          <div className="border-r border-edge p-6">
+          {/* Document list — hidden on mobile when viewing a document */}
+          <div className={`min-w-0 border-r border-edge p-6 ${viewMode !== 'list' ? 'hidden lg:block' : ''}`}>
             <DocumentList
               communityId={communityId}
               categoryId={selectedCategoryId}
               onSelectDocument={handleSelectDocument}
               onDeleteDocument={handleDeleteDocument}
+              onUploadRequest={() => setShowUpload(true)}
               refreshKey={refreshKey}
               canManage={canUpload}
             />
           </div>
 
-          <div className="p-6">
+          {/* Viewer pane — hidden on mobile when in list mode */}
+          <div className={`min-w-0 p-6 ${viewMode === 'list' && !selectedDocument ? 'hidden lg:block' : ''}`}>
+            {viewMode !== 'list' && (
+              <button
+                type="button"
+                onClick={handleCloseViewer}
+                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content lg:hidden"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to list
+              </button>
+            )}
             {viewMode === 'viewer' && (
               <DocumentViewer
                 communityId={communityId}

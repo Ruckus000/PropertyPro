@@ -20,6 +20,7 @@ import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { BottomTabBar } from '@/components/mobile/BottomTabBar';
 import { MobileTopBar } from '@/components/mobile/MobileTopBar';
+import { MotionProvider } from '@/components/providers/motion-provider';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -79,7 +80,9 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
       ))}
       <div className="mobile-shell" style={cssVars as React.CSSProperties}>
         <MobileTopBar communityName={communityName} userName={userName} communityId={communityId} />
-        <main id="main-content" className="mobile-content">{children}</main>
+        <MotionProvider>
+          <main id="main-content" className="mobile-content">{children}</main>
+        </MotionProvider>
         <BottomTabBar features={features} communityId={communityId} />
       </div>
     </>

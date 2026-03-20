@@ -28,6 +28,7 @@ interface DocumentListProps {
   categoryId?: number | null;
   onSelectDocument?: (document: DocumentListItem) => void;
   onDeleteDocument?: (document: DocumentListItem) => void;
+  onUploadRequest?: () => void;
   refreshKey?: number;
   canManage?: boolean;
 }
@@ -97,6 +98,7 @@ export function DocumentList({
   categoryId,
   onSelectDocument,
   onDeleteDocument,
+  onUploadRequest,
   refreshKey = 0,
   canManage = false,
 }: DocumentListProps) {
@@ -185,7 +187,20 @@ export function DocumentList({
 
   if (documents.length === 0) {
     return (
-      <EmptyState preset="no_documents" />
+      <EmptyState
+        preset="no_documents"
+        action={
+          canManage && onUploadRequest ? (
+            <button
+              type="button"
+              onClick={onUploadRequest}
+              className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+            >
+              Upload Document
+            </button>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -208,7 +223,7 @@ export function DocumentList({
                 <p className="truncate font-medium text-content">{doc.title}</p>
                 <ExtractionStatusBadge status={doc.extractionStatus} />
               </div>
-              <p className="text-sm text-content-tertiary">
+              <p className="truncate text-sm text-content-tertiary">
                 {doc.fileName} &middot; {formatFileSize(doc.fileSize)} &middot;{' '}
                 {formatDate(doc.createdAt)}
               </p>

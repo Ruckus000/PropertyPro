@@ -10,6 +10,8 @@ import { UploadDocumentModal } from "./upload-document-modal";
 import { DeadlineRibbon } from "./deadline-ribbon";
 import { ComplianceOnboarding } from "./compliance-onboarding";
 import { ComplianceActivityFeed } from "./compliance-activity-feed";
+import { ComplianceScoreRing, getScoreTier } from "./compliance-score-ring";
+import { FadeIn } from "@/components/motion";
 import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
 import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
 import { useComplianceMutations } from "@/hooks/useComplianceMutations";
@@ -21,6 +23,8 @@ import {
   Shield,
   XCircle,
   CheckCircle2,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────
@@ -84,6 +88,24 @@ function groupByCategory(items: ChecklistItemData[]): Map<string, ChecklistItemD
 
 // ── Category Header ─────────────────────────────────
 
+/** Determine the escalation tier for a category based on its item statuses. */
+function getCategoryTier(items: ChecklistItemData[]) {
+  const hasOverdue = items.some((i) => i.status === "overdue");
+  if (hasOverdue) return "critical" as const;
+  const satisfiedCount = items.filter((i) => i.status === "satisfied" || i.status === "not_applicable").length;
+  const pct = items.length === 0 ? 100 : Math.round((satisfiedCount / items.length) * 100);
+  if (pct >= 100) return "calm" as const;
+  if (pct >= 70) return "aware" as const;
+  return "urgent" as const;
+}
+
+const categoryTierIndicator: Record<string, string> = {
+  calm: "bg-[var(--status-success)]",
+  aware: "bg-[var(--interactive-primary)]",
+  urgent: "bg-[var(--status-warning)]",
+  critical: "bg-[var(--status-danger)]",
+};
+
 function CategoryGroup({
   category,
   items,
@@ -98,6 +120,7 @@ function CategoryGroup({
   const [open, setOpen] = useState(defaultOpen);
   const satisfiedCount = items.filter((i) => i.status === "satisfied" || i.status === "not_applicable").length;
   const allSatisfied = satisfiedCount === items.length;
+  const tier = getCategoryTier(items);
 
   return (
     <div className="flex flex-col">
@@ -115,6 +138,9 @@ function CategoryGroup({
           ${allSatisfied ? "bg-status-success-bg/30" : ""}
         `}
       >
+        {/* Tier indicator dot */}
+        <span className={`h-2 w-2 shrink-0 rounded-full ${categoryTierIndicator[tier]}`} />
+
         {/* Category label */}
         <span className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
           {formatCategoryLabel(category)}
@@ -122,22 +148,16 @@ function CategoryGroup({
 
         {/* Count */}
         <span className="text-xs text-content-tertiary tabular-nums">
-          {satisfiedCount} of {items.length}
+          {satisfiedCount}/{items.length}
         </span>
 
-        {/* Progress dots (max 10) */}
-        {items.length <= 10 && (
-          <span className="flex items-center gap-1 ml-1">
-            {items.map((item) => (
-              <span
-                key={item.id}
-                className={`h-1.5 w-1.5 rounded-full ${
-                  item.status === "satisfied" || item.status === "not_applicable"
-                    ? "bg-[var(--status-success)]"
-                    : "bg-[var(--border-default)]"
-                }`}
-              />
-            ))}
+        {/* Progress bar (compact) */}
+        {items.length > 0 && (
+          <span className="hidden sm:flex h-1.5 w-16 overflow-hidden rounded-full bg-surface-muted ml-1">
+            <span
+              className={`rounded-full transition-all duration-500 ${categoryTierIndicator[tier]}`}
+              style={{ width: `${(satisfiedCount / items.length) * 100}%` }}
+            />
           </span>
         )}
 
@@ -235,68 +255,53 @@ function HeroMetric({
   primaryStatute: string | null;
 }) {
   const pct = applicableTotal === 0 ? 0 : Math.round((statusCounts.satisfied / applicableTotal) * 100);
-  const allSatisfied = statusCounts.overdue === 0 && statusCounts.unsatisfied === 0 && applicableTotal > 0;
   const hasOverdue = statusCounts.overdue > 0;
+  const tier = getScoreTier(pct, hasOverdue);
 
   return (
-    <div
-      className={`
-        flex items-center justify-between py-4 border-b border-edge-subtle
-        sticky top-0 z-10 bg-surface-page sm:static sm:z-auto
-        ${allSatisfied ? "sm:bg-status-success-bg/30 -mx-4 px-4 rounded-[var(--radius-md)]" : ""}
-      `}
-    >
-      <div className="flex items-center gap-3">
-        {allSatisfied ? (
-          <CheckCircle2 size={24} className="text-status-success shrink-0" />
-        ) : hasOverdue ? (
-          <span className="flex h-6 w-6 items-center justify-center text-status-danger shrink-0 text-lg leading-none">&#9650;</span>
-        ) : (
-          <span className="flex h-6 w-6 items-center justify-center text-status-warning shrink-0 text-lg leading-none">&#9684;</span>
-        )}
-        <div className="flex flex-col">
-          <span className={`text-lg font-semibold ${hasOverdue ? "text-status-danger" : "text-content"}`}>
-            {allSatisfied
-              ? "All requirements satisfied"
-              : hasOverdue
-              ? `${statusCounts.overdue} item${statusCounts.overdue !== 1 ? "s" : ""} overdue`
-              : `${statusCounts.unsatisfied} item${statusCounts.unsatisfied !== 1 ? "s" : ""} need attention`
-            }
-          </span>
-          <span className="text-sm text-content-tertiary">
-            {statusCounts.satisfied} of {applicableTotal} items
-            {primaryStatute ? ` \u00b7 Florida Statute ${primaryStatute}` : ""}
-          </span>
-        </div>
-      </div>
+    <FadeIn>
+      <div className="flex flex-col sm:flex-row items-center gap-6 rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-6">
+        {/* Score Ring */}
+        <ComplianceScoreRing percentage={pct} tier={tier} />
 
-      {/* Mini progress */}
-      {!allSatisfied && (
-        <div className="hidden sm:flex flex-col items-end gap-1">
-          <span className="text-sm font-semibold text-content tabular-nums">{pct}%</span>
-          <div className="flex h-1 w-24 overflow-hidden rounded-full bg-surface-muted">
-            {statusCounts.satisfied > 0 && (
-              <div
-                className="bg-[var(--status-success)] transition-all duration-500"
-                style={{ width: `${(statusCounts.satisfied / applicableTotal) * 100}%` }}
-              />
-            )}
+        {/* Status breakdown */}
+        <div className="flex flex-1 flex-col gap-3 text-center sm:text-left">
+          <div>
+            <h2 className="text-lg font-semibold text-content">
+              {pct === 100
+                ? "All requirements satisfied"
+                : hasOverdue
+                ? `${statusCounts.overdue} item${statusCounts.overdue !== 1 ? "s" : ""} overdue`
+                : `${statusCounts.unsatisfied} item${statusCounts.unsatisfied !== 1 ? "s" : ""} need attention`}
+            </h2>
+            <p className="text-sm text-content-tertiary">
+              {statusCounts.satisfied} of {applicableTotal} items
+              {primaryStatute ? ` \u00b7 Florida Statute ${primaryStatute}` : ""}
+            </p>
+          </div>
+
+          {/* Stat pills */}
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-[var(--radius-full)] bg-status-success-bg px-3 py-1 text-xs font-medium text-status-success">
+              <CheckCircle2 size={12} aria-hidden="true" />
+              {statusCounts.satisfied} satisfied
+            </span>
             {statusCounts.unsatisfied > 0 && (
-              <div
-                className="bg-[var(--status-warning)] transition-all duration-500"
-                style={{ width: `${(statusCounts.unsatisfied / applicableTotal) * 100}%` }}
-              />
+              <span className="inline-flex items-center gap-1.5 rounded-[var(--radius-full)] bg-status-warning-bg px-3 py-1 text-xs font-medium text-status-warning">
+                <Clock size={12} aria-hidden="true" />
+                {statusCounts.unsatisfied} pending
+              </span>
             )}
             {statusCounts.overdue > 0 && (
-              <div
-                className="bg-[var(--status-danger)] transition-all duration-500"
-                style={{ width: `${(statusCounts.overdue / applicableTotal) * 100}%` }}
-              />
+              <span className="inline-flex items-center gap-1.5 rounded-[var(--radius-full)] bg-status-danger-bg px-3 py-1 text-xs font-medium text-status-danger">
+                <AlertTriangle size={12} aria-hidden="true" />
+                {statusCounts.overdue} overdue
+              </span>
             )}
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </FadeIn>
   );
 }
 

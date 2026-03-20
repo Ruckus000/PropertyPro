@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { MaintenanceRequestItem } from '@/lib/api/maintenance-requests';
 import { CommentThread } from './CommentThread';
 import { getRequest } from '@/lib/api/maintenance-requests';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: 'bg-status-warning-bg text-status-warning',
@@ -52,7 +53,7 @@ export function RequestCard({ request, communityId }: RequestCardProps) {
         <div className="flex-1 min-w-0">
           <h3 className="truncate text-sm font-medium text-content">{request.title}</h3>
           <p className="mt-0.5 text-xs text-content-tertiary">
-            {request.category} &middot; {new Date(request.createdAt).toLocaleDateString()}
+            {request.category} &middot; {formatShortDate(request.createdAt)}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span
