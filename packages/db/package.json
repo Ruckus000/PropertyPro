@@ -29,6 +29,11 @@
       "import": "./src/supabase/middleware.ts",
       "default": "./src/supabase/middleware.ts"
     },
+    "./constants": {
+      "types": "./src/constants/index.ts",
+      "import": "./src/constants/index.ts",
+      "default": "./src/constants/index.ts"
+    },
     "./filters": {
       "types": "./src/filters.ts",
       "import": "./src/filters.ts",

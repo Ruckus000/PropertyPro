@@ -23,6 +23,7 @@ CREATE UNIQUE INDEX idx_move_checklists_lease_type ON move_checklists(lease_id, 
 
 -- RLS
 ALTER TABLE move_checklists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE move_checklists FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY move_checklists_service_bypass ON move_checklists
   FOR ALL

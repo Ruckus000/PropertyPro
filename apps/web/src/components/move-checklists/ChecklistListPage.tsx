@@ -6,7 +6,7 @@ import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ChecklistDetailView } from './ChecklistDetailView';
-import { STEP_LABELS, MOVE_IN_STEPS, MOVE_OUT_STEPS } from '@propertypro/db';
+import { STEP_LABELS, MOVE_IN_STEPS, MOVE_OUT_STEPS } from '@propertypro/db/constants';
 
 interface Props {
   communityId: number;

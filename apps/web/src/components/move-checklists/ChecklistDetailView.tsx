@@ -14,7 +14,7 @@ import {
   MOVE_OUT_STEPS,
   STEP_LABELS,
   ACTIONABLE_STEPS,
-} from '@propertypro/db';
+} from '@propertypro/db/constants';
 
 interface Props {
   communityId: number;

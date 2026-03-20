@@ -35,6 +35,6 @@ describe('db export boundaries', () => {
 
   it('exposes only approved runtime filter helpers', () => {
     const exportedNames = Object.keys(filtersExports).sort();
-    expect(exportedNames).toEqual(['and', 'asc', 'desc', 'eq', 'gt', 'gte', 'inArray', 'isNull', 'lt', 'lte', 'ne', 'notInArray', 'or', 'sql']);
+    expect(exportedNames).toEqual(['and', 'asc', 'desc', 'eq', 'gt', 'gte', 'inArray', 'isNotNull', 'isNull', 'lt', 'lte', 'ne', 'notInArray', 'or', 'sql']);
   });
 });
