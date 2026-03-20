@@ -5,6 +5,9 @@ import { leases } from './leases';
 import { units } from './units';
 import { users } from './users';
 
+// Import types for use in table definition
+import type { MoveChecklistType, ChecklistData } from '../constants/move-checklists';
+
 // Re-export constants from client-safe module for backwards compatibility
 export {
   MOVE_IN_STEPS,

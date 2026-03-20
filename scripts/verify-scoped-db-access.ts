@@ -29,6 +29,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/supabase/server',
   '@propertypro/db/supabase/admin',
   '@propertypro/db/supabase/middleware',
+  '@propertypro/db/constants',
   '@propertypro/db/filters',
   '@propertypro/db/unsafe',
   '@propertypro/db/seed/seed-community',
