@@ -1,5 +1,6 @@
 import React from 'react';
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -40,7 +41,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   }
 
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(context.communityId, userId);
+  const membership = await requireCommunityMembership(context.communityId, userId);
 
   return (
     <div className="space-y-8">
@@ -52,6 +53,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <NotificationPreferencesForm communityId={context.communityId} />
       </div>
       <AccessibilitySettings />
+      {membership.isAdmin && (
+        <div>
+          <h2 className="mb-2 text-xl font-semibold">Community Settings</h2>
+          <p className="mb-4 text-sm text-gray-600">
+            Manage community-level configuration.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Link
+              href={`/settings/payments?communityId=${context.communityId}`}
+              className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+            >
+              <h3 className="font-medium text-gray-900">Payment Configuration</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Connect Stripe, manage payment processing fees, and configure payment settings.
+              </p>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { addDays, differenceInCalendarDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import {
   assessmentLineItems,
@@ -11,6 +12,7 @@ import {
   postLedgerEntry,
   stripeConnectedAccounts,
   units,
+  users,
   userRoles,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
@@ -22,12 +24,13 @@ import {
   calculateStripeFeeEstimate,
 } from '@propertypro/shared';
 import type Stripe from 'stripe';
+import { AssessmentPaymentReceivedEmail, sendEmail } from '@propertypro/email';
 import { generateCSV } from '@/lib/services/csv-export';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import { markMatchingViolationFinePaid } from '@/lib/services/violations-service';
 import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { signPayload, verifySignature } from '@/lib/services/calendar-sync-service';
-import { parseDateOnly } from '@/lib/finance/common';
+import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import { generateFinanceStatementPdf } from '@/lib/utils/finance-pdf';
 
@@ -131,6 +134,12 @@ const STRIPE_FINANCE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'charge.refunded',
   'charge.dispute.created',
 ]);
+
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return 'http://localhost:3000';
+}
 
 const FINANCE_EXPORT_HEADERS = [
   { key: 'id', label: 'Entry ID' },
@@ -1089,6 +1098,72 @@ async function recordFinanceStripeEvent(
   }
 }
 
+/**
+ * Fire-and-forget payment confirmation email to the payer.
+ * Failures are logged but never block webhook processing.
+ */
+async function sendPaymentConfirmationEmail(
+  communityId: number,
+  payerUserId: string,
+  amountCents: number,
+  lineItem: AssessmentLineItemRecord,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+
+  // Look up payer email/name (users table has no community_id — scoped client
+  // applies only deletedAt IS NULL, which is correct)
+  const userRows = await scoped.selectFrom<{ email: string; fullName: string | null }>(
+    users,
+    { email: users.email, fullName: users.fullName },
+    eq(users.id, payerUserId),
+  );
+  const payer = userRows[0];
+  if (!payer?.email) return;
+
+  // Look up community name
+  const communityRows = await scoped.selectFrom<{ name: string }>(
+    communities,
+    { name: communities.name },
+  );
+  const communityName = communityRows[0]?.name ?? 'Your Community';
+
+  // Look up assessment title (if linked)
+  let assessmentTitle = 'Assessment';
+  if (lineItem.assessmentId) {
+    const assessmentRows = await scoped.selectFrom<{ title: string }>(
+      assessments,
+      { title: assessments.title },
+      eq(assessments.id, lineItem.assessmentId),
+    );
+    assessmentTitle = assessmentRows[0]?.title ?? 'Assessment';
+  }
+
+  // Compute remaining balance
+  const balanceCents = await getUnitLedgerBalance(scoped, lineItem.unitId);
+
+  const portalUrl = `${getBaseUrl()}/payments?communityId=${communityId}`;
+  const paymentDate = format(new Date(), 'MMM d, yyyy');
+  const dueDate = lineItem.dueDate
+    ? format(new Date(lineItem.dueDate), 'MMM d, yyyy')
+    : 'N/A';
+
+  await sendEmail({
+    to: payer.email,
+    subject: `Payment of $${centsToDollars(amountCents)} received — ${communityName}`,
+    category: 'transactional',
+    react: createElement(AssessmentPaymentReceivedEmail, {
+      branding: { communityName },
+      recipientName: payer.fullName ?? payer.email,
+      amountPaid: `$${centsToDollars(amountCents)}`,
+      assessmentTitle,
+      dueDate,
+      paymentDate,
+      remainingBalance: `$${centsToDollars(Math.abs(balanceCents))}`,
+      portalUrl,
+    }),
+  });
+}
+
 async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const stripe = getStripeClient();
   const stripePaymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -1193,6 +1268,11 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   }
 
   await markMatchingViolationFinePaid(communityId, unitId, paymentAmount, payerUserId);
+
+  // Fire-and-forget payment confirmation email — never block webhook processing
+  sendPaymentConfirmationEmail(communityId, payerUserId, paymentAmount, lineItem).catch(() => {
+    // Swallowed intentionally — email failure must not block webhook
+  });
 }
 
 async function handleChargeRefunded(event: Stripe.Event): Promise<void> {

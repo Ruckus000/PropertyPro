@@ -113,6 +113,7 @@ async function createAssessment(
 export function AssessmentManager({ communityId, userId, userRole }: AssessmentManagerProps) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
 
   const { data: assessments, isLoading, isError } = useQuery({
@@ -170,6 +171,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
               key={assessment.id}
               assessment={assessment}
               onClick={() => setSelectedAssessment(assessment)}
+              onEdit={() => setEditingAssessment(assessment)}
               isSelected={selectedAssessment?.id === assessment.id}
             />
           ))}
@@ -196,6 +198,20 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           }}
         />
       )}
+
+      {/* Edit Dialog */}
+      {editingAssessment && (
+        <EditAssessmentDialog
+          communityId={communityId}
+          assessment={editingAssessment}
+          onClose={() => setEditingAssessment(null)}
+          onUpdated={() => {
+            setEditingAssessment(null);
+            setSelectedAssessment(null);
+            queryClient.invalidateQueries({ queryKey: ['assessments', communityId] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -205,16 +221,21 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
 function AssessmentCard({
   assessment,
   onClick,
+  onEdit,
   isSelected,
 }: {
   assessment: Assessment;
   onClick: () => void;
+  onEdit: () => void;
   isSelected: boolean;
 }) {
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full rounded-md border bg-surface-card p-4 text-left transition-colors duration-quick hover:border-interactive ${
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      className={`w-full cursor-pointer rounded-md border bg-surface-card p-4 text-left transition-colors duration-quick hover:border-interactive ${
         isSelected ? 'border-interactive ring-1 ring-interactive' : 'border-edge'
       }`}
     >
@@ -238,8 +259,14 @@ function AssessmentCard({
         {assessment.lateFeeAmountCents > 0 && (
           <span>Late fee: {formatCents(assessment.lateFeeAmountCents)} after {assessment.lateFeeDaysGrace}d</span>
         )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          className="ml-auto rounded px-2 py-0.5 text-xs font-medium text-interactive hover:bg-interactive-subtle hover:text-interactive-hover"
+        >
+          Edit
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -525,6 +552,260 @@ function CreateAssessmentDialog({
             >
               {mutation.isPending ? 'Creating...' : 'Create Assessment'}
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─────── Edit Assessment Dialog ─────── */
+
+function EditAssessmentDialog({
+  communityId,
+  assessment,
+  onClose,
+  onUpdated,
+}: {
+  communityId: number;
+  assessment: Assessment;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    title: assessment.title,
+    description: assessment.description ?? '',
+    amountDollars: (assessment.amountCents / 100).toFixed(2),
+    frequency: assessment.frequency,
+    dueDay: assessment.dueDay ? String(assessment.dueDay) : '1',
+    lateFeeDollars: assessment.lateFeeAmountCents > 0 ? (assessment.lateFeeAmountCents / 100).toFixed(2) : '',
+    lateFeeDaysGrace: String(assessment.lateFeeDaysGrace),
+    isActive: assessment.isActive,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/v1/assessments/${assessment.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          communityId,
+          title: formData.title,
+          description: formData.description || null,
+          amountCents: Math.round(parseFloat(formData.amountDollars) * 100),
+          frequency: formData.frequency,
+          dueDay: formData.dueDay ? parseInt(formData.dueDay, 10) : null,
+          lateFeeAmountCents: formData.lateFeeDollars
+            ? Math.round(parseFloat(formData.lateFeeDollars) * 100)
+            : 0,
+          lateFeeDaysGrace: parseInt(formData.lateFeeDaysGrace, 10) || 0,
+          isActive: formData.isActive,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error?.message || 'Failed to update assessment');
+      }
+    },
+    onSuccess: () => onUpdated(),
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : 'Failed to update');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/v1/assessments/${assessment.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId }),
+      });
+      if (!res.ok) throw new Error('Failed to delete assessment');
+    },
+    onSuccess: () => onUpdated(),
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!formData.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    const amount = parseFloat(formData.amountDollars);
+    if (isNaN(amount) || amount <= 0) {
+      setError('Amount must be a positive number');
+      return;
+    }
+
+    updateMutation.mutate();
+  };
+
+  const updateField = (field: string, value: string | boolean) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg rounded-xl bg-surface-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-edge px-6 py-4">
+          <h2 className="text-lg font-semibold text-content">Edit Assessment</h2>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-content-disabled hover:bg-surface-muted hover:text-content-secondary"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
+          <div>
+            <label className="block text-sm font-medium text-content-secondary">Title</label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => updateField('title', e.target.value)}
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-content-secondary">Description (optional)</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => updateField('description', e.target.value)}
+              rows={2}
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-content-secondary">Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={formData.amountDollars}
+                onChange={(e) => updateField('amountDollars', e.target.value)}
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-content-secondary">Frequency</label>
+              <select
+                value={formData.frequency}
+                onChange={(e) => updateField('frequency', e.target.value)}
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              >
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
+                <option value="one_time">One-Time</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-content-secondary">Due Day</label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={formData.dueDay}
+                onChange={(e) => updateField('dueDay', e.target.value)}
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-content-secondary">Late Fee ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.lateFeeDollars}
+                onChange={(e) => updateField('lateFeeDollars', e.target.value)}
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-content-secondary">Grace Days</label>
+              <input
+                type="number"
+                min="0"
+                value={formData.lateFeeDaysGrace}
+                onChange={(e) => updateField('lateFeeDaysGrace', e.target.value)}
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={formData.isActive}
+              onChange={(e) => updateField('isActive', e.target.checked)}
+              className="h-4 w-4 rounded border-edge-strong text-interactive focus:ring-focus"
+            />
+            <span className="text-sm text-content-secondary">Active</span>
+          </label>
+
+          {error && <p className="text-sm text-status-danger">{error}</p>}
+
+          <div className="flex items-center gap-3 pt-2">
+            {confirmDelete ? (
+              <>
+                <span className="text-xs text-status-danger">Delete this assessment?</span>
+                <button
+                  type="button"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                  className="rounded-md bg-status-danger px-3 py-1.5 text-xs font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-content-tertiary hover:text-content-secondary"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-md border border-status-danger-border px-3 py-1.5 text-xs font-medium text-status-danger hover:bg-status-danger-bg"
+              >
+                Delete
+              </button>
+            )}
+            <div className="ml-auto flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-edge-strong bg-surface-card px-4 py-2.5 text-sm font-medium text-content-secondary hover:bg-surface-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={updateMutation.isPending}
+                className="rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
+              >
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

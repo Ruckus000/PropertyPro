@@ -1,5 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import {
+  assessmentLineItems,
+  assessments,
   communities,
   complianceChecklistItems,
   documents,
@@ -839,7 +841,126 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   await seedEsignData(apartmentCommunityId, resolveUserId(userIdsByEmail, 'site.manager@sunsetridge.local'));
   debugSeed('esign seed complete');
 
+  // Seed assessment + line item data for Sunset Condos
+  await seedAssessmentData(sunsetCommunityId, boardPresidentId);
+  debugSeed('assessment seed complete');
+
   debugSeed('runDemoSeed complete');
+}
+
+/**
+ * Seeds assessment and line item data for a demo community.
+ * Creates two assessments (monthly maintenance + one-time special) with
+ * line items for all units in the community.
+ */
+async function seedAssessmentData(communityId: number, createdByUserId: string): Promise<void> {
+  // Check if assessments already exist for this community
+  const existing = await db
+    .select({ id: assessments.id })
+    .from(assessments)
+    .where(and(eq(assessments.communityId, communityId), isNull(assessments.deletedAt)));
+  if (existing.length > 0) {
+    debugSeed(`assessments already seeded for community ${communityId}, skipping`);
+    return;
+  }
+
+  // Get all units for this community
+  const communityUnits = await db
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.communityId, communityId), isNull(units.deletedAt)));
+
+  if (communityUnits.length === 0) {
+    debugSeed(`no units found for community ${communityId}, skipping assessment seed`);
+    return;
+  }
+
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+
+  // 1. Monthly maintenance assessment
+  const [monthlyAssessment] = await db
+    .insert(assessments)
+    .values({
+      communityId,
+      title: 'Monthly Maintenance Assessment',
+      description: 'Regular monthly assessment for common area maintenance, insurance, and reserves.',
+      amountCents: 35000, // $350.00
+      frequency: 'monthly',
+      dueDay: 1,
+      lateFeeAmountCents: 2500, // $25.00
+      lateFeeDaysGrace: 15,
+      startDate: `${lastMonthStr}-01`,
+      isActive: true,
+      createdByUserId,
+    })
+    .returning({ id: assessments.id });
+
+  // 2. One-time special assessment
+  const [specialAssessment] = await db
+    .insert(assessments)
+    .values({
+      communityId,
+      title: 'Special Assessment — Roof Repair',
+      description: 'One-time special assessment for emergency roof repairs approved at March board meeting.',
+      amountCents: 150000, // $1,500.00
+      frequency: 'one_time',
+      dueDay: 15,
+      lateFeeAmountCents: 5000, // $50.00
+      lateFeeDaysGrace: 30,
+      startDate: `${thisMonth}-15`,
+      isActive: true,
+      createdByUserId,
+    })
+    .returning({ id: assessments.id });
+
+  // Generate line items for monthly assessment — last month (overdue) + this month (pending)
+  const lastMonthDue = `${lastMonthStr}-01`;
+  const thisMonthDue = `${thisMonth}-01`;
+  const specialDue = `${thisMonth}-15`;
+
+  const lineItemValues = [];
+
+  for (const unit of communityUnits) {
+    // Last month's assessment — overdue (due date has passed)
+    lineItemValues.push({
+      assessmentId: monthlyAssessment.id,
+      communityId,
+      unitId: unit.id,
+      amountCents: 35000,
+      dueDate: lastMonthDue,
+      status: 'overdue' as const,
+      lateFeeCents: 2500, // grace period elapsed
+    });
+
+    // This month's assessment — pending
+    lineItemValues.push({
+      assessmentId: monthlyAssessment.id,
+      communityId,
+      unitId: unit.id,
+      amountCents: 35000,
+      dueDate: thisMonthDue,
+      status: 'pending' as const,
+      lateFeeCents: 0,
+    });
+
+    // Special assessment — pending
+    lineItemValues.push({
+      assessmentId: specialAssessment.id,
+      communityId,
+      unitId: unit.id,
+      amountCents: 150000,
+      dueDate: specialDue,
+      status: 'pending' as const,
+      lateFeeCents: 0,
+    });
+  }
+
+  await db.insert(assessmentLineItems).values(lineItemValues);
+
+  debugSeed(`seeded 2 assessments with ${lineItemValues.length} line items for community ${communityId}`);
 }
 
 async function main(): Promise<void> {
