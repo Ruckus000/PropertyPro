@@ -208,7 +208,9 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     expect(lineItemsResponse.status).toBe(200);
     const lineItemsJson = await parseJson<{ data: Array<Record<string, unknown>> }>(lineItemsResponse);
     expect(lineItemsJson.data.length).toBeGreaterThan(0);
-    const lineItemId = readNumberField(lineItemsJson.data[0]!, 'id');
+    // Pick the line item belonging to unitAId so the waive test later targets the correct unit
+    const unitALineItem = lineItemsJson.data.find((row) => row['unitId'] === unitAId) ?? lineItemsJson.data[0]!;
+    const lineItemId = readNumberField(unitALineItem, 'id');
 
     const ledgerResponse = await routeModules.ledger.GET(
       new NextRequest(apiUrl(`/api/v1/ledger?communityId=${communityA.id}&entryType=assessment`)),
