@@ -28,9 +28,15 @@ const {
 }));
 
 function makeSelectResult<T>(rows: T[]) {
-  return Object.assign(Promise.resolve(rows), {
-    orderBy: vi.fn().mockResolvedValue(rows),
-  });
+  const chainable = {
+    orderBy: vi.fn().mockReturnValue({
+      ...Promise.resolve(rows),
+      then: (r: (v: T[]) => unknown) => Promise.resolve(rows).then(r),
+      limit: vi.fn().mockResolvedValue(rows),
+    }),
+    then: (r: (v: T[]) => unknown) => Promise.resolve(rows).then(r),
+  };
+  return Object.assign(Promise.resolve(rows), chainable);
 }
 
 vi.mock('next/navigation', () => ({
@@ -55,8 +61,30 @@ vi.mock('@/components/meetings/meetings-page-shell', () => ({
   MeetingsPageShell: meetingsPageShellMock,
 }));
 
-vi.mock('@/components/mobile/CompactCard', () => ({
-  CompactCard: compactCardMock,
+vi.mock('@/components/mobile/MobileMeetingsContent', () => ({
+  MobileMeetingsContent: compactCardMock,
+}));
+
+vi.mock('@propertypro/shared', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getFeaturesForCommunity: () => ({ hasCompliance: true, hasMeetings: true }),
+  };
+});
+
+vi.mock('@propertypro/db/filters', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual };
+});
+
+vi.mock('@/lib/utils/timezone', () => ({
+  resolveTimezone: (tz: string) => tz || 'America/New_York',
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: vi.fn(),
+  checkPermissionV2: vi.fn(() => true),
 }));
 
 import MeetingsPage from '../../src/app/(authenticated)/communities/[id]/meetings/page';
@@ -109,6 +137,8 @@ describe('meetings pages', () => {
       displayTitle: 'Tenant',
       communityType: 'apartment',
       timezone: 'America/New_York',
+      city: 'Tampa',
+      state: 'FL',
     });
 
     createScopedClientMock.mockReturnValue({

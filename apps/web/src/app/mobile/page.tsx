@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * P3-48/49: Mobile home/dashboard page.
+ * Mobile home/dashboard page — hub-and-spoke navigation center.
  *
- * Renders recent announcements and upcoming meetings in compact card layout.
- * Data reuses the same loadDashboardData helper as the desktop portal.
+ * Renders community header, role-based feature card, and navigation list.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
@@ -14,7 +13,7 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getPublishedTemplate } from '@/lib/api/site-template';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
-import type { CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
 
 interface PageProps {
@@ -28,6 +27,8 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
 
   // Auth — skip in preview mode (demo iframe from admin app on different origin)
   let userId: string | undefined;
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>> | undefined;
+
   if (!isPreview) {
     try {
       userId = await requireAuthenticatedUserId();
@@ -36,7 +37,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     }
 
     try {
-      await requireCommunityMembership(communityId, userId!);
+      membership = await requireCommunityMembership(communityId, userId!);
     } catch {
       redirect('/auth/login');
     }
@@ -58,7 +59,6 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     );
     const cssVars = toCssVars(theme);
     const fontLinks = toFontLinks(theme);
-    // Template JSX uses --pp-* aliases alongside --theme-* vars
     const templateVars: Record<string, string> = {
       ...cssVars,
       '--pp-primary': theme.primaryColor,
@@ -91,17 +91,24 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
   }
 
   const data = await loadDashboardData(communityId, userId!);
+  const features = getFeaturesForCommunity(membership!.communityType);
+  const nextMeeting = data.meetings[0] ?? null;
 
   return (
     <MobileHomeContent
-      firstName={data.firstName}
+      userName={data.firstName}
       communityName={data.communityName}
       communityId={communityId}
+      city={membership!.city}
+      state={membership!.state}
       timezone={data.timezone}
-      announcements={data.announcements}
-      meetings={data.meetings}
+      role={membership!.role}
+      presetKey={membership!.presetKey}
+      hasCompliance={features.hasCompliance}
+      hasMeetings={features.hasMeetings}
       announcementCount={data.announcements.length}
-      pendingSignerCount={data.pendingSigners.length}
+      openMaintenanceCount={data.openMaintenanceCount}
+      nextMeetingDate={nextMeeting?.startsAt ?? null}
     />
   );
 }

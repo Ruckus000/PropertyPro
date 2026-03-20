@@ -1,8 +1,5 @@
 export const dynamic = 'force-dynamic';
 
-/**
- * P3-48/49: Mobile announcements list page.
- */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -11,8 +8,7 @@ import { and, desc, isNull, sql } from '@propertypro/db/filters';
 import { createScopedClient, announcements } from '@propertypro/db';
 import type { Announcement } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
-import { CompactCard } from '@/components/mobile/CompactCard';
-
+import { MobileAnnouncementsContent } from '@/components/mobile/MobileAnnouncementsContent';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -46,20 +42,13 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
     )
     .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
 
-  return (
-    <div>
-      {active.length === 0 ? (
-        <p className="mobile-empty">No announcements</p>
-      ) : (
-        active.map((a) => (
-          <CompactCard
-            key={a.id}
-            title={a.title}
-            subtitle={a.isPinned ? 'Pinned' : undefined}
-            meta={new Date(a.publishedAt).toLocaleDateString('en-US', { timeZone: timezone })}
-          />
-        ))
-      )}
-    </div>
-  );
+  const serialized = active.map((a) => ({
+    id: a.id,
+    title: a.title,
+    isPinned: a.isPinned,
+    publishedAt: a.publishedAt.toISOString(),
+    source: 'Board',
+  }));
+
+  return <MobileAnnouncementsContent announcements={serialized} timezone={timezone} />;
 }

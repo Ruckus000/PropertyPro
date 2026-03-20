@@ -1,15 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Mobile "More" page — overflow menu for sections not in the bottom tab bar.
- *
- * Shows profile card, grouped navigation links, and sign-out action.
+ * Mobile Profile page (URL stays at /mobile/more for bookmark compatibility).
+ * Shows profile card, grouped settings, and sign-out.
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { MobileMoreContent } from '@/components/mobile/MobileMoreContent';
+import { MobileProfileContent } from '@/components/mobile/MobileProfileContent';
 
 export default async function MobileMorePage() {
   const requestHeaders = await headers();
@@ -42,7 +41,7 @@ export default async function MobileMorePage() {
   }
 
   return (
-    <MobileMoreContent
+    <MobileProfileContent
       userName={userName}
       userRole={displayTitle}
       communityName={communityName}

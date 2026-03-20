@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * P3-48/49: Mobile maintenance requests list page (resident view).
+ * Mobile maintenance requests page — Warm Editorial stone palette redesign.
  *
  * Residents see only their own submitted requests.
  */
@@ -12,21 +12,11 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { desc, eq } from '@propertypro/db/filters';
 import { createScopedClient, maintenanceRequests } from '@propertypro/db';
 import { resolveTimezone } from '@/lib/utils/timezone';
-import { CompactCard } from '@/components/mobile/CompactCard';
-
+import { MobileMaintenanceContent } from '@/components/mobile/MobileMaintenanceContent';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Open',
-  submitted: 'Submitted',
-  in_progress: 'In Progress',
-  acknowledged: 'Acknowledged',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
 
 export default async function MobileMaintenancePage({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -48,25 +38,22 @@ export default async function MobileMaintenancePage({ searchParams }: PageProps)
 
   const timezone = resolveTimezone(membership!.timezone);
   const scoped = createScopedClient(communityId);
-  // Filter by submittedById at the DB level; communityId + deletedAt IS NULL are injected automatically
   const active = await scoped
     .selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.submittedById, userId!))
     .orderBy(desc(maintenanceRequests.createdAt));
 
+  const serialized = active.map((r) => ({
+    id: r['id'] as number,
+    title: r['title'] as string,
+    status: r['status'] as string,
+    createdAt: (r['createdAt'] as Date).toISOString(),
+  }));
+
   return (
-    <div>
-      {active.length === 0 ? (
-        <p className="mobile-empty">No maintenance requests</p>
-      ) : (
-        active.map((r) => (
-          <CompactCard
-            key={r['id'] as number}
-            title={r['title'] as string}
-            subtitle={STATUS_LABEL[r['status'] as string] ?? (r['status'] as string)}
-            meta={new Date(r['createdAt'] as string).toLocaleDateString('en-US', { timeZone: timezone })}
-          />
-        ))
-      )}
-    </div>
+    <MobileMaintenanceContent
+      requests={serialized}
+      timezone={timezone}
+      communityId={communityId}
+    />
   );
 }

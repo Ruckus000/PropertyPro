@@ -2,253 +2,149 @@
 
 import Link from "next/link";
 import {
-  Megaphone,
   FileText,
+  Bell,
+  Calendar,
   Wrench,
-  CalendarDays,
-  ChevronRight,
-  DollarSign,
-  Pin,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { toInitials } from "@propertypro/shared";
 import {
   SlideUp,
   StaggerChildren,
-  StaggerItem,
-  PressScale,
   PageTransition,
 } from "@/components/motion";
-import { formatShortDate } from "@/lib/utils/format-date";
-import { formatMeetingTitle } from "@/lib/utils/format-meeting-title";
+import { ComplianceCard, SummaryCard } from "@/components/mobile/FeatureCard";
+import { MobileNavRow } from "@/components/mobile/MobileNavRow";
 
 // ── Types ───────────────────────────────────────────
 
-interface Announcement {
-  id: number;
-  title: string;
-  isPinned: boolean;
-  publishedAt: string;
-}
-
-interface Meeting {
-  id: number;
-  title: string;
-  meetingType: string;
-  startsAt: string;
-}
-
 interface MobileHomeContentProps {
-  firstName: string;
+  userName: string | null;
   communityName: string;
   communityId: number;
+  city: string | null;
+  state: string | null;
   timezone: string;
-  announcements: Announcement[];
-  meetings: Meeting[];
+  role: string;
+  presetKey?: string;
+  hasCompliance: boolean;
+  hasMeetings: boolean;
   announcementCount: number;
-  pendingSignerCount: number;
+  openMaintenanceCount: number;
+  nextMeetingDate: string | null;
 }
 
-// ── Quick Actions ───────────────────────────────────
-
-const quickActions = [
-  {
-    label: "Submit Request",
-    icon: Wrench,
-    color: "bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
-    hrefKey: "maintenance" as const,
-  },
-  {
-    label: "Documents",
-    icon: FileText,
-    color: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
-    hrefKey: "documents" as const,
-  },
-  {
-    label: "Payments",
-    icon: DollarSign,
-    color: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
-    hrefKey: "payments" as const,
-  },
-  {
-    label: "Meetings",
-    icon: CalendarDays,
-    color: "bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-400",
-    hrefKey: "meetings" as const,
-  },
-] as const;
-
-function getHref(key: (typeof quickActions)[number]["hrefKey"], communityId: number) {
-  const map = {
-    maintenance: `/mobile/maintenance?communityId=${communityId}`,
-    documents: `/mobile/documents?communityId=${communityId}`,
-    payments: `/mobile/payments?communityId=${communityId}`,
-    meetings: `/mobile/meetings?communityId=${communityId}`,
-  };
-  return map[key];
-}
+const ADMIN_PRESETS = new Set([
+  "board_member",
+  "board_president",
+  "cam",
+  "site_manager",
+  "property_manager_admin",
+]);
 
 // ── Component ───────────────────────────────────────
 
 export function MobileHomeContent({
-  firstName,
+  userName,
   communityName,
   communityId,
+  city,
+  state,
   timezone,
-  announcements,
-  meetings,
+  role,
+  presetKey,
+  hasCompliance,
+  hasMeetings,
   announcementCount,
-  pendingSignerCount,
+  openMaintenanceCount,
+  nextMeetingDate,
 }: MobileHomeContentProps) {
+  const initials = toInitials(userName);
+  const location = [city, state].filter(Boolean).join(", ");
+  const isAdminRole =
+    role === "manager" || role === "pm_admin"
+      ? ADMIN_PRESETS.has(presetKey ?? "")
+      : false;
+  const showCompliance = isAdminRole && hasCompliance;
+
   return (
     <PageTransition>
-      <div className="flex flex-col gap-6 pb-6">
-        {/* ── Hero Card ── */}
+      <div className="flex flex-col pb-6">
+        {/* ── Header ── */}
         <SlideUp>
-          <div className="mx-4 mt-4 rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-5">
-            <p className="text-lg font-semibold text-content">
-              Welcome back, {firstName}
-            </p>
-            <p className="mt-1 text-sm text-content-secondary">{communityName}</p>
-
-            {/* Key stats */}
-            <div className="mt-4 flex items-center gap-6">
-              <div className="flex flex-col">
-                <span className="text-2xl font-bold tabular-nums text-content">
-                  {announcementCount}
-                </span>
-                <span className="text-xs text-content-secondary">Announcements</span>
-              </div>
-              <div className="h-8 w-px bg-edge-subtle" />
-              <div className="flex flex-col">
-                <span className="text-2xl font-bold tabular-nums text-content">
-                  {meetings.length}
-                </span>
-                <span className="text-xs text-content-secondary">Upcoming</span>
-              </div>
-              {pendingSignerCount > 0 && (
-                <>
-                  <div className="h-8 w-px bg-edge-subtle" />
-                  <div className="flex flex-col">
-                    <span className="text-2xl font-bold tabular-nums text-status-warning">
-                      {pendingSignerCount}
-                    </span>
-                    <span className="text-xs text-content-secondary">To Sign</span>
-                  </div>
-                </>
+          <div className="flex items-start justify-between px-5 pt-5">
+            <div>
+              <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.5px] text-stone-900">
+                {communityName}
+              </h1>
+              {location && (
+                <p className="mt-1.5 text-xs font-medium text-stone-400">
+                  {location}
+                </p>
               )}
             </div>
+            <Link
+              href={`/mobile/more?communityId=${communityId}`}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-stone-200 bg-stone-100 text-sm font-semibold text-stone-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
+              aria-label="Profile"
+            >
+              {initials}
+            </Link>
           </div>
         </SlideUp>
 
-        {/* ── Quick Actions Grid ── */}
+        {/* ── Feature Card ── */}
         <SlideUp delay={0.05}>
-          <div className="grid grid-cols-4 gap-3 px-4">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <Link
-                  key={action.hrefKey}
-                  href={getHref(action.hrefKey, communityId)}
-                  className="flex flex-col items-center gap-2 rounded-[var(--radius-md)] py-3 transition-colors active:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-strong)]"
-                >
-                  <div
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-full",
-                      action.color,
-                    )}
-                  >
-                    <Icon size={20} />
-                  </div>
-                  <span className="text-xs font-medium text-content">{action.label}</span>
-                </Link>
-              );
-            })}
-          </div>
+          {showCompliance ? (
+            <ComplianceCard
+              communityId={communityId}
+              announcementCount={announcementCount}
+              openMaintenanceCount={openMaintenanceCount}
+              nextMeetingDate={nextMeetingDate}
+              timezone={timezone}
+            />
+          ) : (
+            <SummaryCard
+              announcementCount={announcementCount}
+              openMaintenanceCount={openMaintenanceCount}
+              nextMeetingDate={nextMeetingDate}
+              timezone={timezone}
+            />
+          )}
         </SlideUp>
 
-        {/* ── Announcements ── */}
-        <section>
-          <h2 className="px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-            Announcements
-          </h2>
-          {announcements.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-10 text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-surface-muted">
-                <Megaphone size={24} className="text-content-secondary" aria-hidden="true" />
-              </div>
-              <p className="text-sm font-medium text-content">No announcements yet</p>
-              <p className="mt-1 text-xs text-content-secondary">
-                Check back when your community posts news.
-              </p>
-            </div>
-          ) : (
-            <StaggerChildren>
-              {announcements.map((a) => (
-                <StaggerItem key={a.id}>
-                  <PressScale>
-                    <Link
-                      href={`/mobile/announcements/${a.id}?communityId=${communityId}`}
-                      className="mobile-card"
-                    >
-                      <span className="mobile-card-title">
-                        {a.isPinned && (
-                          <Pin
-                            size={12}
-                            className="mr-1.5 inline-block text-content-secondary"
-                            aria-label="Pinned"
-                          />
-                        )}
-                        {a.title}
-                      </span>
-                      <span className="mobile-card-meta">
-                        {formatShortDate(a.publishedAt, timezone)}
-                      </span>
-                      <ChevronRight
-                        size={16}
-                        className="ml-auto shrink-0 text-content-disabled"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  </PressScale>
-                </StaggerItem>
-              ))}
-            </StaggerChildren>
-          )}
-        </section>
-
-        {/* ── Upcoming Meetings ── */}
-        {meetings.length > 0 && (
-          <section>
-            <h2 className="px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-              Upcoming Meetings
-            </h2>
-            <StaggerChildren>
-              {meetings.map((m) => (
-                <StaggerItem key={m.id}>
-                  <PressScale>
-                    <Link
-                      href={`/mobile/meetings?communityId=${communityId}`}
-                      className="mobile-card"
-                    >
-                      <span className="mobile-card-title">
-                        {formatMeetingTitle(m.title)}
-                      </span>
-                      <span className="mobile-card-subtitle">{m.meetingType}</span>
-                      <span className="mobile-card-meta">
-                        {formatShortDate(m.startsAt, timezone)}
-                      </span>
-                      <ChevronRight
-                        size={16}
-                        className="ml-auto shrink-0 text-content-disabled"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  </PressScale>
-                </StaggerItem>
-              ))}
-            </StaggerChildren>
-          </section>
-        )}
+        {/* ── Navigation ── */}
+        <div className="mt-6">
+          <StaggerChildren>
+            <MobileNavRow
+              icon={FileText}
+              title="Documents"
+              description="Budgets, minutes, bylaws"
+              href={`/mobile/documents?communityId=${communityId}`}
+            />
+            <MobileNavRow
+              icon={Bell}
+              title="Announcements"
+              description="Community updates"
+              href={`/mobile/announcements?communityId=${communityId}`}
+              badge={announcementCount > 0 ? announcementCount : undefined}
+            />
+            {hasMeetings && (
+              <MobileNavRow
+                icon={Calendar}
+                title="Meetings"
+                description="Upcoming schedule"
+                href={`/mobile/meetings?communityId=${communityId}`}
+              />
+            )}
+            <MobileNavRow
+              icon={Wrench}
+              title="Maintenance"
+              description="Submit a request"
+              href={`/mobile/maintenance?communityId=${communityId}`}
+            />
+          </StaggerChildren>
+        </div>
       </div>
     </PageTransition>
   );
