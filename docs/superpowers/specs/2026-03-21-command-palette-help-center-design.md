@@ -278,7 +278,6 @@ FROM user_roles ur
 JOIN public.user_search_index usi ON usi.user_id = ur.user_id
 LEFT JOIN units un ON un.id = ur.unit_id
 WHERE ur.community_id = $2
-  AND ur.deleted_at IS NULL
   AND (
     usi.full_name %> $1
     OR usi.email %> $1
@@ -522,18 +521,22 @@ ALTER TABLE help_articles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE help_articles FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY help_articles_read ON help_articles
-  FOR SELECT USING (
+  FOR SELECT TO authenticated USING (
     community_id IS NULL  -- platform articles visible to all authenticated users
-    OR community_id = current_setting('app.community_id')::bigint  -- community articles scoped
+    OR community_id = current_setting('app.community_id', true)::bigint  -- community articles scoped
   );
 
 -- Write: platform articles are seed-script only (no RLS write for source='platform').
 -- Community articles: admin roles can insert/update/delete for their own community.
 CREATE POLICY help_articles_community_write ON help_articles
-  FOR ALL USING (
+  FOR ALL TO authenticated USING (
     source = 'community'
-    AND community_id = current_setting('app.community_id')::bigint
+    AND community_id = current_setting('app.community_id', true)::bigint
   );
+
+-- Service role bypass (consistent with existing table patterns)
+CREATE POLICY help_articles_service_role ON help_articles
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
 
 **Query approach:** `createScopedClient(communityId)` sets `app.community_id`. The RLS policy's `OR community_id IS NULL` clause automatically includes platform articles. No custom query helper needed — the standard scoped client works.
