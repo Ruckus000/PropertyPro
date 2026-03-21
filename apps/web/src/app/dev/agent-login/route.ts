@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 
 /** Hard-coded demo emails — deterministic seed data, not secrets. */
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
     [];
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: getCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();
