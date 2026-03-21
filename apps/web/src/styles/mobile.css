@@ -37,6 +37,38 @@
   outline-offset: 2px;
 }
 
+/* ── Page transition (CSS-driven for hidden-tab resilience) ── */
+
+@keyframes page-transition-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-page-transition {
+  animation: page-transition-in 0.25s cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+.motion-slide-up {
+  animation: slide-up-in 0.25s cubic-bezier(0, 0, 0.2, 1) both;
+}
+
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .mobile-shell *,

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { primitiveMotion, semanticMotion } from "@propertypro/ui/tokens";
+import { semanticMotion } from "@propertypro/ui/tokens";
 import type { ReactNode } from "react";
 
 // ── Shared token-driven values ──────────────────────
@@ -46,12 +46,7 @@ export function FadeIn({
   );
 }
 
-// ── SlideUp ─────────────────────────────────────────
-
-const slideUpVariants: Variants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0 },
-};
+// ── SlideUp — CSS-driven for hidden-tab resilience ──
 
 export function SlideUp({
   children,
@@ -62,40 +57,17 @@ export function SlideUp({
   className?: string;
   delay?: number;
 }) {
-  const reduced = useReducedMotion();
   return (
-    <motion.div
-      variants={reduced ? fadeInVariants : slideUpVariants}
-      initial="hidden"
-      animate="visible"
-      transition={reduced ? { duration: 0 } : { ...orientation, delay }}
-      className={className}
+    <div
+      className={`motion-slide-up ${className ?? ""}`}
+      style={delay > 0 ? { animationDelay: `${delay}s` } : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-// ── StaggerChildren ─────────────────────────────────
-
-const staggerContainerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: primitiveMotion.duration.micro / 1000,
-    },
-  },
-};
-
-const staggerItemVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: orientation },
-};
-
-const staggerItemReducedVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0 } },
-};
+// ── StaggerChildren — CSS-driven for hidden-tab resilience ──
 
 export function StaggerChildren({
   children,
@@ -104,16 +76,10 @@ export function StaggerChildren({
   children: ReactNode;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
   return (
-    <motion.div
-      variants={staggerContainerVariants}
-      initial="hidden"
-      animate="visible"
-      className={className}
-    >
+    <div className={className}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -125,14 +91,12 @@ export function StaggerItem({
   children: ReactNode;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
   return (
-    <motion.div
-      variants={reduced ? staggerItemReducedVariants : staggerItemVariants}
-      className={className}
+    <div
+      className={`motion-slide-up ${className ?? ""}`}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -157,19 +121,12 @@ export function PressScale({
   );
 }
 
-// ── PageTransition — for mobile route content ───────
-
-const pageTransitionVariants: Variants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-};
-
-const pageTransitionReducedVariants: Variants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1 },
-  exit: { opacity: 0 },
-};
+// ── PageTransition — CSS-driven mount, Framer exit ──
+//
+// Mount animations use CSS @keyframes so they complete even when
+// the browser tab is hidden (JS rAF is throttled in hidden tabs,
+// which causes Framer Motion mount animations to freeze).
+// Exit animations still use Framer Motion via AnimatePresence.
 
 export function PageTransition({
   children,
@@ -178,17 +135,11 @@ export function PageTransition({
   children: ReactNode;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
   return (
-    <motion.div
-      variants={reduced ? pageTransitionReducedVariants : pageTransitionVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={orientation}
-      className={className}
+    <div
+      className={`motion-page-transition ${className ?? ""}`}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
