@@ -1,4 +1,5 @@
 import type { CommunityType } from '@propertypro/shared';
+import { PLAN_IDS, type PlanId } from '@propertypro/shared';
 import { z } from 'zod';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
@@ -10,68 +11,50 @@ export interface SignupPlanOption {
   description: string;
 }
 
-export const SIGNUP_PLAN_IDS = [
-  'compliance_basic',
-  'compliance_plus_mobile',
-  'full_platform',
-  'apartment_operations',
-] as const;
+/**
+ * @deprecated Use PLAN_IDS from @propertypro/shared instead.
+ * Kept for backward compatibility with existing signup form references.
+ */
+export const SIGNUP_PLAN_IDS = PLAN_IDS;
 
-export type SignupPlanId = (typeof SIGNUP_PLAN_IDS)[number];
+/** Alias of PlanId — kept for backward compatibility. */
+export type SignupPlanId = PlanId;
 
 export const SIGNUP_PLAN_OPTIONS: Record<CommunityType, readonly SignupPlanOption[]> = {
   condo_718: [
     {
-      id: 'compliance_basic',
-      label: 'Compliance Basic',
-      monthlyPriceUsd: 99,
-      description: 'Website, statutory document posting, and owner portal.',
-    },
-    {
-      id: 'compliance_plus_mobile',
-      label: 'Compliance + Mobile',
+      id: 'essentials',
+      label: 'Essentials',
       monthlyPriceUsd: 199,
-      description: 'Adds resident mobile app and push announcements.',
+      description: 'Website, statutory document posting, owner portal, and announcements.',
     },
     {
-      id: 'full_platform',
-      label: 'Full Platform',
+      id: 'professional',
+      label: 'Professional',
       monthlyPriceUsd: 349,
-      description: 'Includes advanced operations and reporting workflows.',
+      description: 'Full platform with e-sign, violations, ARC, finance, and more.',
     },
   ],
   hoa_720: [
     {
-      id: 'compliance_basic',
-      label: 'Compliance Basic',
-      monthlyPriceUsd: 99,
-      description: 'Website, statutory document posting, and owner portal.',
-    },
-    {
-      id: 'compliance_plus_mobile',
-      label: 'Compliance + Mobile',
+      id: 'essentials',
+      label: 'Essentials',
       monthlyPriceUsd: 199,
-      description: 'Adds resident mobile app and push announcements.',
+      description: 'Website, statutory document posting, owner portal, and announcements.',
     },
     {
-      id: 'full_platform',
-      label: 'Full Platform',
+      id: 'professional',
+      label: 'Professional',
       monthlyPriceUsd: 349,
-      description: 'Includes advanced operations and reporting workflows.',
+      description: 'Full platform with e-sign, violations, ARC, finance, and more.',
     },
   ],
   apartment: [
     {
-      id: 'full_platform',
-      label: 'Full Platform',
-      monthlyPriceUsd: 349,
-      description: 'Core apartment operations with compliance-ready records.',
-    },
-    {
-      id: 'apartment_operations',
-      label: 'Apartment Operations',
+      id: 'operations_plus',
+      label: 'Operations Plus',
       monthlyPriceUsd: 499,
-      description: 'Adds lease workflows, bulk resident import, and analytics.',
+      description: 'Full apartment operations with lease tracking, packages, and visitors.',
     },
   ],
 };
@@ -150,7 +133,7 @@ export const signupSchema = z
       .min(1, 'Unit count must be at least 1')
       .max(20000, 'Unit count is too large'),
     communityType: z.enum(['condo_718', 'hoa_720', 'apartment']),
-    planKey: z.enum(SIGNUP_PLAN_IDS),
+    planKey: z.enum(PLAN_IDS),
     candidateSlug: z
       .string()
       .trim()
