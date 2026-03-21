@@ -71,6 +71,25 @@ export type {
   LedgerEntryRow,
 } from './queries/ledger';
 
+// Trigram search (command palette data search)
+export {
+  searchDocumentsByTrigram,
+  searchAnnouncementsByTrigram,
+  searchMeetingsByTrigram,
+  searchMaintenanceByTrigram,
+  searchViolationsByTrigram,
+  searchResidentsByTrigram,
+} from './queries/trigram-search';
+export type {
+  TrigramSearchResult,
+  DocumentSearchHit,
+  AnnouncementSearchHit,
+  MeetingSearchHit,
+  MaintenanceSearchHit,
+  ViolationSearchHit,
+  ResidentSearchHit,
+} from './queries/trigram-search';
+
 // Document access control
 export {
   buildDocumentAccessFilter,

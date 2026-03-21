@@ -4,10 +4,12 @@ import { DocumentLibrary } from '@/components/documents/document-library';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ q?: string }>;
 }
 
-export default async function DocumentsPage({ params }: PageProps) {
+export default async function DocumentsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { q } = await searchParams;
   const communityId = Number(id);
 
   if (!Number.isFinite(communityId) || communityId <= 0) {
@@ -29,6 +31,7 @@ export default async function DocumentsPage({ params }: PageProps) {
       userRole={membership.role}
       isUnitOwner={membership.isUnitOwner}
       permissions={membership.permissions}
+      initialSearchQuery={q}
     />
   );
 }

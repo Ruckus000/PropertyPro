@@ -16,6 +16,8 @@ interface DocumentLibraryProps {
   userRole: CommunityRole | NewCommunityRole;
   isUnitOwner?: boolean;
   permissions?: ManagerPermissions;
+  /** Pre-populate search from command palette "View all" link */
+  initialSearchQuery?: string;
 }
 
 type ViewMode = 'list' | 'viewer' | 'versions';
@@ -26,13 +28,14 @@ export function DocumentLibrary({
   userRole,
   isUnitOwner,
   permissions,
+  initialSearchQuery,
 }: DocumentLibraryProps) {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DocumentListItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [refreshKey, setRefreshKey] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
-  const [searchMode, setSearchMode] = useState(false);
+  const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
   const [showEsignBanner, setShowEsignBanner] = useState(false);
 
   const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
@@ -153,7 +156,7 @@ export function DocumentLibrary({
 
       {searchMode && (
         <div className="rounded-md border border-edge bg-surface-card p-6">
-          <DocumentSearch communityId={communityId} />
+          <DocumentSearch communityId={communityId} initialQuery={initialSearchQuery} />
         </div>
       )}
 

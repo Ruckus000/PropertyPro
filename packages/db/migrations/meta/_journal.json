@@ -484,6 +484,34 @@
       "when": 1773210000000,
       "tag": "0108_add_faqs_and_community_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1773220000000,
+      "tag": "0109_add_pg_trgm_and_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1773230000000,
+      "tag": "0110_add_user_search_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1773240000000,
+      "tag": "0111_add_help_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1773250000000,
+      "tag": "0112_add_units_number_index",
+      "breakpoints": true
     }
   ]
 }

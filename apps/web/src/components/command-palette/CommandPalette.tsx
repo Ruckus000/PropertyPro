@@ -3,13 +3,23 @@
 /**
  * Command Palette V2 — Custom implementation using Radix Dialog + custom listbox.
  *
- * Replaces the cmdk-based palette with full keyboard navigation,
- * ARIA combobox pattern, and role-aware empty/suggested states.
+ * Phase 1: Feature registry search + keyboard navigation + role-aware empty states
+ * Phase 2: Progressive data search across 6 entity endpoints + "View all" links
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Clock } from 'lucide-react';
+import {
+  ArrowRight,
+  Clock,
+  FileText,
+  Megaphone,
+  Calendar,
+  Wrench,
+  AlertTriangle,
+  Users,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
@@ -19,10 +29,13 @@ import { CommandInput } from './CommandInput';
 import { CommandGroup } from './CommandGroup';
 import { CommandItem } from './CommandItem';
 import { CommandEmpty } from './CommandEmpty';
+import { CommandLoading } from './CommandLoading';
+import { useDataSearch, type DataSearchResult } from './useDataSearch';
 
 // ---------------------------------------------------------------------------
-// Suggested / Getting Started item IDs
+// Constants
 // ---------------------------------------------------------------------------
+
 const RESIDENT_SUGGESTIONS = [
   'page-documents',
   'action-submit-maintenance',
@@ -47,15 +60,35 @@ const GETTING_STARTED_ADMIN = [
   'action-schedule-meeting',
 ] as const;
 
-// Minimum recent pages before showing "Recent + Suggested" vs "Getting Started"
 const RECENT_THRESHOLD = 3;
+const DEBOUNCE_MS = 300;
+const RESULTS_ID = 'command-palette-results';
+
+/** Entity type → icon mapping for data search results */
+const ENTITY_ICONS: Record<string, LucideIcon> = {
+  document: FileText,
+  announcement: Megaphone,
+  meeting: Calendar,
+  maintenance: Wrench,
+  violation: AlertTriangle,
+  resident: Users,
+};
+
+/** Entity type → list page path for "View all" links */
+const ENTITY_LIST_PATHS: Record<string, string> = {
+  documents: '/documents',
+  announcements: '/announcements',
+  meetings: '/meetings',
+  maintenance: '/maintenance',
+  violations: '/violations',
+  residents: '/residents',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const RESULTS_ID = 'command-palette-results';
 
-function isAdmin(role: AnyCommunityRole | null): boolean {
+function isAdminRole(role: AnyCommunityRole | null): boolean {
   if (!role) return false;
   return (ADMIN_ROLES as readonly string[]).includes(role);
 }
@@ -81,12 +114,13 @@ function pickItems(
 }
 
 // ---------------------------------------------------------------------------
-// Flattened item for keyboard navigation
+// Navigable item union for keyboard nav
 // ---------------------------------------------------------------------------
-interface FlatItem {
-  registryItem: ResolvedRegistryItem;
-  domId: string;
-}
+type NavItem =
+  | { type: 'registry'; item: ResolvedRegistryItem; domId: string }
+  | { type: 'data'; result: DataSearchResult; domId: string }
+  | { type: 'viewAll'; groupKey: string; href: string; domId: string }
+  | { type: 'recent'; path: string; label: string; domId: string };
 
 // ---------------------------------------------------------------------------
 // Component
@@ -113,9 +147,42 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const admin = isAdminRole(role);
+  const { groups: dataGroups, search: fireDataSearch, reset: resetDataSearch, isSearching } = useDataSearch(admin, communityId);
 
   // -----------------------------------------------------------------------
-  // Filtered + grouped items
+  // Debounced data search trigger
+  // -----------------------------------------------------------------------
+  const handleQueryChange = useCallback(
+    (value: string) => {
+      setQuery(value);
+      clearTimeout(debounceRef.current);
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        resetDataSearch();
+        return;
+      }
+
+      // Check minimum query length for API calls
+      const isNumeric = /^\d+$/.test(trimmed);
+      const minLen = isNumeric ? 1 : 2;
+      if (trimmed.length < minLen) {
+        resetDataSearch();
+        return;
+      }
+
+      debounceRef.current = setTimeout(() => {
+        fireDataSearch(trimmed);
+      }, DEBOUNCE_MS);
+    },
+    [fireDataSearch, resetDataSearch],
+  );
+
+  // -----------------------------------------------------------------------
+  // Filtered registry items (instant, client-side)
   // -----------------------------------------------------------------------
   const filtered = useMemo(() => {
     if (!query.trim()) return [];
@@ -138,7 +205,6 @@ export function CommandPalette({
   // -----------------------------------------------------------------------
   // Empty-query state sections
   // -----------------------------------------------------------------------
-  const admin = isAdmin(role);
   const hasEnoughRecent = recentPages.length >= RECENT_THRESHOLD;
 
   const suggestedItems = useMemo(
@@ -152,54 +218,77 @@ export function CommandPalette({
   );
 
   // -----------------------------------------------------------------------
-  // Flat list for keyboard navigation
+  // Flat nav list (registry + data results + "View all" links)
   // -----------------------------------------------------------------------
-  const flatItems = useMemo<FlatItem[]>(() => {
-    if (query.trim()) {
-      // Active search results
-      const items: FlatItem[] = [];
+  const navItems = useMemo<NavItem[]>(() => {
+    const hasQuery_ = query.trim().length > 0;
+
+    if (hasQuery_) {
+      const items: NavItem[] = [];
+
+      // 1. Registry results first (instant)
       for (const [, groupItems] of grouped) {
         for (const item of groupItems) {
           items.push({
-            registryItem: item,
+            type: 'registry',
+            item,
             domId: `cmd-item-${item.id}`,
           });
         }
       }
+
+      // 2. Data results (progressive)
+      for (const group of dataGroups) {
+        if (group.status !== 'loaded' || group.results.length === 0) continue;
+        for (const result of group.results) {
+          items.push({
+            type: 'data',
+            result,
+            domId: `cmd-data-${group.key}-${result.id}`,
+          });
+        }
+        // "View all" link for each data group with results
+        const listPath = ENTITY_LIST_PATHS[group.key];
+        if (listPath) {
+          items.push({
+            type: 'viewAll',
+            groupKey: group.key,
+            href: `${listPath}?q=${encodeURIComponent(query.trim())}`,
+            domId: `cmd-viewall-${group.key}`,
+          });
+        }
+      }
+
       return items;
     }
 
-    // Empty-query state
-    const items: FlatItem[] = [];
-
-    // Recent pages are not registry items, so they're handled separately
-    // in the rendering, but we skip them for flatItems because they use
-    // a different data shape. We'll prepend placeholders for them.
+    // Empty-query: recent pages + suggested/getting started
+    const items: NavItem[] = [];
 
     if (hasEnoughRecent) {
-      // Suggested items
-      for (const item of suggestedItems) {
+      for (let i = 0; i < recentPages.length; i++) {
+        const page = recentPages[i];
+        if (!page) continue;
         items.push({
-          registryItem: item,
-          domId: `cmd-item-${item.id}`,
+          type: 'recent',
+          path: page.path,
+          label: page.label,
+          domId: `cmd-recent-${i}`,
         });
       }
+      for (const item of suggestedItems) {
+        items.push({ type: 'registry', item, domId: `cmd-item-${item.id}` });
+      }
     } else {
-      // Getting started items
       for (const item of gettingStartedItems) {
-        items.push({
-          registryItem: item,
-          domId: `cmd-item-${item.id}`,
-        });
+        items.push({ type: 'registry', item, domId: `cmd-item-${item.id}` });
       }
     }
 
     return items;
-  }, [query, grouped, hasEnoughRecent, suggestedItems, gettingStartedItems]);
+  }, [query, grouped, dataGroups, hasEnoughRecent, recentPages, suggestedItems, gettingStartedItems]);
 
-  // Total navigable items = recent pages (when no query) + flatItems
-  const recentCount = !query.trim() && hasEnoughRecent ? recentPages.length : 0;
-  const totalItems = recentCount + flatItems.length;
+  const totalItems = navItems.length;
 
   // -----------------------------------------------------------------------
   // Reset state on open/close and query changes
@@ -208,8 +297,10 @@ export function CommandPalette({
     if (!open) {
       setQuery('');
       setActiveIndex(-1);
+      resetDataSearch();
+      clearTimeout(debounceRef.current);
     }
-  }, [open]);
+  }, [open, resetDataSearch]);
 
   useEffect(() => {
     setActiveIndex(-1);
@@ -234,44 +325,41 @@ export function CommandPalette({
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (activeIndex < 0) return;
-    const activeId = getActiveDomId(activeIndex);
-    if (!activeId) return;
-    const el = document.getElementById(activeId);
+    const navItem = navItems[activeIndex];
+    if (!navItem) return;
+    const el = document.getElementById(navItem.domId);
     el?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeIndex, navItems]);
 
   // -----------------------------------------------------------------------
-  // Navigation helpers
+  // Navigation
   // -----------------------------------------------------------------------
-  function getActiveDomId(index: number): string | undefined {
-    if (index < 0 || totalItems === 0) return undefined;
-    if (index < recentCount) {
-      return `cmd-recent-${index}`;
-    }
-    const flatIdx = index - recentCount;
-    return flatItems[flatIdx]?.domId;
-  }
-
   const handleSelect = useCallback(
     (href: string, label: string) => {
       addPage(href, label);
       onOpenChange(false);
       setQuery('');
       setActiveIndex(-1);
+      resetDataSearch();
       router.push(href);
     },
-    [router, onOpenChange, addPage],
+    [router, onOpenChange, addPage, resetDataSearch],
   );
 
-  function selectAtIndex(index: number) {
-    if (index < 0 || index >= totalItems) return;
-    if (index < recentCount) {
-      const page = recentPages[index];
-      if (page) handleSelect(page.path, page.label);
-    } else {
-      const flatIdx = index - recentCount;
-      const item = flatItems[flatIdx];
-      if (item) handleSelect(item.registryItem.resolvedHref, item.registryItem.label);
+  function selectNavItem(item: NavItem) {
+    switch (item.type) {
+      case 'registry':
+        handleSelect(item.item.resolvedHref, item.item.label);
+        break;
+      case 'data':
+        handleSelect(item.result.href, item.result.title);
+        break;
+      case 'viewAll':
+        handleSelect(item.href, `View all ${item.groupKey}`);
+        break;
+      case 'recent':
+        handleSelect(item.path, item.label);
+        break;
     }
   }
 
@@ -285,24 +373,19 @@ export function CommandPalette({
       switch (e.key) {
         case 'ArrowDown': {
           e.preventDefault();
-          setActiveIndex((prev) => {
-            if (prev < totalItems - 1) return prev + 1;
-            return 0; // wrap
-          });
+          setActiveIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
           break;
         }
         case 'ArrowUp': {
           e.preventDefault();
-          setActiveIndex((prev) => {
-            if (prev > 0) return prev - 1;
-            return totalItems - 1; // wrap
-          });
+          setActiveIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
           break;
         }
         case 'Enter': {
           e.preventDefault();
-          if (activeIndex >= 0) {
-            selectAtIndex(activeIndex);
+          const target = activeIndex >= 0 ? navItems[activeIndex] : undefined;
+          if (target) {
+            selectNavItem(target);
           }
           break;
         }
@@ -320,18 +403,26 @@ export function CommandPalette({
           break;
       }
     },
-    [totalItems, activeIndex], // eslint-disable-line react-hooks/exhaustive-deps
+    [totalItems, activeIndex, navItems], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // -----------------------------------------------------------------------
-  // Rendering
+  // Rendering helpers
   // -----------------------------------------------------------------------
-  const activeDescendant = getActiveDomId(activeIndex);
-  const hasQuery = query.trim().length > 0;
-  const noResults = hasQuery && filtered.length === 0;
-  const showRecent = !hasQuery && hasEnoughRecent;
-  const showSuggested = !hasQuery && hasEnoughRecent && suggestedItems.length > 0;
-  const showGettingStarted = !hasQuery && !hasEnoughRecent && gettingStartedItems.length > 0;
+  const activeDescendant = activeIndex >= 0 ? navItems[activeIndex]?.domId : undefined;
+  const hasQuery_ = query.trim().length > 0;
+  const noRegistryResults = hasQuery_ && filtered.length === 0;
+  const hasDataResults = dataGroups.some((g) => g.results.length > 0);
+  const allDoneNoResults = hasQuery_ && noRegistryResults && !isSearching && !hasDataResults;
+
+  const showRecent = !hasQuery_ && hasEnoughRecent;
+  const showSuggested = !hasQuery_ && hasEnoughRecent && suggestedItems.length > 0;
+  const showGettingStarted = !hasQuery_ && !hasEnoughRecent && gettingStartedItems.length > 0;
+
+  // Helper to get the navItem index for a given domId
+  function navIndexOf(domId: string): number {
+    return navItems.findIndex((n) => n.domId === domId);
+  }
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -344,7 +435,6 @@ export function CommandPalette({
             'outline-none',
           )}
           onOpenAutoFocus={(e) => {
-            // Let our input handle focus
             e.preventDefault();
             inputRef.current?.focus();
           }}
@@ -356,7 +446,7 @@ export function CommandPalette({
             <CommandInput
               ref={inputRef}
               value={query}
-              onChange={setQuery}
+              onChange={handleQueryChange}
               onKeyDown={handleKeyDown}
               activeDescendant={activeDescendant}
               resultsId={RESULTS_ID}
@@ -370,56 +460,132 @@ export function CommandPalette({
               aria-label="Search results"
               className="max-h-[360px] overflow-y-auto p-2"
             >
-              {/* Search results */}
-              {hasQuery && !noResults && (
+              {/* ============ Active search mode ============ */}
+              {hasQuery_ && (
                 <>
-                  {Array.from(grouped.entries()).map(([groupLabel, items]) => (
-                    <CommandGroup key={groupLabel} label={groupLabel}>
-                      {items.map((item) => {
-                        const idx = recentCount + flatItems.findIndex((f) => f.registryItem.id === item.id);
-                        return (
-                          <CommandItem
-                            key={item.id}
-                            id={`cmd-item-${item.id}`}
-                            icon={item.icon}
-                            label={item.label}
-                            description={item.description}
-                            badge={categoryToBadge(item.category)}
-                            isActive={activeIndex === idx}
-                            onSelect={() => handleSelect(item.resolvedHref, item.label)}
-                            onMouseEnter={() => setActiveIndex(idx)}
-                          />
-                        );
-                      })}
-                    </CommandGroup>
-                  ))}
+                  {/* Registry results (instant) */}
+                  {filtered.length > 0 && (
+                    <>
+                      {Array.from(grouped.entries()).map(([groupLabel, items]) => (
+                        <CommandGroup key={groupLabel} label={groupLabel}>
+                          {items.map((item) => {
+                            const idx = navIndexOf(`cmd-item-${item.id}`);
+                            return (
+                              <CommandItem
+                                key={item.id}
+                                id={`cmd-item-${item.id}`}
+                                icon={item.icon}
+                                label={item.label}
+                                description={item.description}
+                                badge={categoryToBadge(item.category)}
+                                isActive={activeIndex === idx}
+                                onSelect={() => handleSelect(item.resolvedHref, item.label)}
+                                onMouseEnter={() => setActiveIndex(idx)}
+                              />
+                            );
+                          })}
+                        </CommandGroup>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Data search groups (progressive) */}
+                  {dataGroups.map((group) => {
+                    // Loading skeleton
+                    if (group.status === 'loading') {
+                      return <CommandLoading key={group.key} groupLabel={group.label} />;
+                    }
+
+                    // Loaded with results
+                    if (group.status === 'loaded' && group.results.length > 0) {
+                      const entityType = group.results[0]?.entityType ?? 'document';
+                      const Icon = ENTITY_ICONS[entityType] ?? FileText;
+                      const listPath = ENTITY_LIST_PATHS[group.key];
+                      const viewAllDomId = `cmd-viewall-${group.key}`;
+                      const viewAllIdx = navIndexOf(viewAllDomId);
+
+                      return (
+                        <CommandGroup key={group.key} label={group.label}>
+                          {group.results.map((result) => {
+                            const domId = `cmd-data-${group.key}-${result.id}`;
+                            const idx = navIndexOf(domId);
+                            return (
+                              <CommandItem
+                                key={domId}
+                                id={domId}
+                                icon={Icon}
+                                label={result.title}
+                                description={result.subtitle}
+                                isActive={activeIndex === idx}
+                                onSelect={() => handleSelect(result.href, result.title)}
+                                onMouseEnter={() => setActiveIndex(idx)}
+                              />
+                            );
+                          })}
+
+                          {/* "View all →" link */}
+                          {listPath && (
+                            <div
+                              id={viewAllDomId}
+                              role="option"
+                              aria-selected={activeIndex === viewAllIdx}
+                              onClick={() =>
+                                handleSelect(
+                                  `${listPath}?q=${encodeURIComponent(query.trim())}`,
+                                  `View all ${group.label}`,
+                                )
+                              }
+                              onMouseEnter={() => setActiveIndex(viewAllIdx)}
+                              className={cn(
+                                'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs',
+                                'font-medium text-interactive-primary transition-colors',
+                                activeIndex === viewAllIdx && 'bg-surface-muted',
+                              )}
+                            >
+                              <span>View all</span>
+                              <ArrowRight size={12} aria-hidden="true" />
+                            </div>
+                          )}
+                        </CommandGroup>
+                      );
+                    }
+
+                    // Error or empty — hide
+                    return null;
+                  })}
+
+                  {/* No results anywhere */}
+                  {allDoneNoResults && <CommandEmpty />}
                 </>
               )}
 
-              {/* No results */}
-              {noResults && <CommandEmpty />}
+              {/* ============ Empty query mode ============ */}
 
               {/* Recent pages */}
               {showRecent && (
                 <CommandGroup label="Recent">
-                  {recentPages.map((page, i) => (
-                    <div
-                      key={`recent-${page.path}`}
-                      id={`cmd-recent-${i}`}
-                      role="option"
-                      aria-selected={activeIndex === i}
-                      onClick={() => handleSelect(page.path, page.label)}
-                      onMouseEnter={() => setActiveIndex(i)}
-                      className={cn(
-                        'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm',
-                        'text-content-secondary transition-colors',
-                        activeIndex === i && 'bg-surface-muted',
-                      )}
-                    >
-                      <Clock size={16} className="shrink-0 text-content-disabled" aria-hidden="true" />
-                      <span className="truncate">{page.label}</span>
-                    </div>
-                  ))}
+                  {recentPages.map((page, i) => {
+                    const domId = `cmd-recent-${i}`;
+                    const idx = navIndexOf(domId);
+                    return (
+                      <div
+                        key={`recent-${page.path}`}
+                        id={domId}
+                        role="option"
+                        aria-selected={activeIndex === idx}
+                        onClick={() => handleSelect(page.path, page.label)}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={cn(
+                          'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm',
+                          'text-content-secondary transition-colors',
+                          activeIndex === idx && 'bg-surface-muted',
+                        )}
+                      >
+                        <Clock size={16} className="shrink-0 text-content-disabled" aria-hidden="true" />
+                        <span className="truncate">{page.label}</span>
+                      </div>
+                    );
+                  })}
                 </CommandGroup>
               )}
 
@@ -427,7 +593,7 @@ export function CommandPalette({
               {showSuggested && (
                 <CommandGroup label="Suggested">
                   {suggestedItems.map((item) => {
-                    const idx = recentCount + flatItems.findIndex((f) => f.registryItem.id === item.id);
+                    const idx = navIndexOf(`cmd-item-${item.id}`);
                     return (
                       <CommandItem
                         key={item.id}
@@ -449,7 +615,7 @@ export function CommandPalette({
               {showGettingStarted && (
                 <CommandGroup label="Getting Started">
                   {gettingStartedItems.map((item) => {
-                    const idx = flatItems.findIndex((f) => f.registryItem.id === item.id);
+                    const idx = navIndexOf(`cmd-item-${item.id}`);
                     return (
                       <CommandItem
                         key={item.id}
@@ -468,7 +634,7 @@ export function CommandPalette({
               )}
 
               {/* Completely empty — no items at all */}
-              {!hasQuery && !showRecent && !showSuggested && !showGettingStarted && (
+              {!hasQuery_ && !showRecent && !showSuggested && !showGettingStarted && (
                 <div className="px-4 py-8 text-center text-sm text-content-tertiary">
                   Start typing to search pages, actions, and settings.
                 </div>
