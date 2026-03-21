@@ -11,19 +11,34 @@
  * blocking checkout (which guards on `status === 'email_verified'`).
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { pendingSignups } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, eq } from '@propertypro/db/filters';
+
+const confirmVerificationSchema = z.object({
+  signupRequestId: z.string().min(1).max(128).trim(),
+});
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body = (await req.json()) as { signupRequestId?: string };
-
-  if (!body.signupRequestId || typeof body.signupRequestId !== 'string') {
-    throw new ValidationError('signupRequestId is required');
+  let rawBody: unknown;
+  try {
+    rawBody = await req.json();
+  } catch {
+    throw new ValidationError('Invalid JSON in request body');
   }
+
+  const parsed = confirmVerificationSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.issues.map((i) => i.message).join('; ') || 'signupRequestId is required',
+    );
+  }
+
+  const body = parsed.data;
 
   const db = createUnscopedClient();
 
@@ -91,14 +106,41 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  // Transition to email_verified
-  await db
+  // Transition to email_verified with status guard to prevent TOCTOU race
+  const updatedRows = await db
     .update(pendingSignups)
     .set({
       status: 'email_verified',
       updatedAt: new Date(),
     })
-    .where(eq(pendingSignups.signupRequestId, body.signupRequestId));
+    .where(
+      and(
+        eq(pendingSignups.signupRequestId, body.signupRequestId),
+        eq(pendingSignups.status, 'pending_verification'),
+      ),
+    )
+    .returning({ id: pendingSignups.id });
+
+  // If 0 rows updated, another request may have raced us
+  if (updatedRows.length === 0) {
+    // Re-read to check if it was already verified (idempotent success)
+    const recheck = await db
+      .select({ status: pendingSignups.status })
+      .from(pendingSignups)
+      .where(eq(pendingSignups.signupRequestId, body.signupRequestId))
+      .limit(1);
+
+    const currentStatus = recheck[0]?.status;
+    if (currentStatus === 'email_verified' || currentStatus === 'checkout_started') {
+      return NextResponse.json({
+        data: { success: true, signupRequestId: signup.signupRequestId },
+      });
+    }
+
+    throw new ValidationError(
+      `Status transition failed — current status is "${currentStatus ?? 'unknown'}"`,
+    );
+  }
 
   console.info(JSON.stringify({
     event: 'signup.email_verified',
