@@ -48,10 +48,17 @@ export async function requirePlanFeature(
     return;
   }
 
+  // Find the cheapest plan that includes this feature
+  const upgradeTo = (Object.values(PLAN_FEATURES) as Array<typeof planConfig>)
+    .filter((p) => p.features[featureKey])
+    .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+
+  const upgradeDisplayName = upgradeTo?.displayName ?? 'a higher';
+
   throw new AppError(
-    `This feature requires the ${planConfig.displayName} plan or higher.`,
+    `This feature requires the ${upgradeDisplayName} plan or higher.`,
     403,
     'PLAN_UPGRADE_REQUIRED',
-    { featureKey, currentPlan: planId, requiredPlanDisplayName: planConfig.displayName },
+    { featureKey, currentPlan: planId, requiredPlanDisplayName: upgradeDisplayName },
   );
 }

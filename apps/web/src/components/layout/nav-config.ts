@@ -94,6 +94,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Maintenance',
     icon: Wrench,
     href: (cid) => `/maintenance/submit?communityId=${cid}`,
+    featureKey: 'hasMaintenanceRequests',
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
