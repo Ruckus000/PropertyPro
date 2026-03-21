@@ -94,10 +94,59 @@ export function parseWizardRow(row: Record<string, unknown>): WizardRow {
     };
 }
 
+/**
+ * Build a partial ProfileStepData from existing community data.
+ * Used to pre-populate the wizard's Profile step on first creation,
+ * so users don't have to re-enter data collected during signup.
+ */
+export function buildProfileFromCommunity(
+    communityRow: Record<string, unknown>,
+): Partial<ProfileStepData> {
+    const profile: Partial<ProfileStepData> = {};
+
+    const name = communityRow['name'];
+    if (typeof name === 'string' && name.length > 0) {
+        profile.name = name;
+    }
+
+    const addressLine1 = communityRow['addressLine1'];
+    if (typeof addressLine1 === 'string' && addressLine1.length > 0) {
+        profile.addressLine1 = addressLine1;
+    }
+
+    const addressLine2 = communityRow['addressLine2'];
+    if (typeof addressLine2 === 'string' && addressLine2.length > 0) {
+        profile.addressLine2 = addressLine2;
+    }
+
+    const city = communityRow['city'];
+    if (typeof city === 'string' && city.length > 0) {
+        profile.city = city;
+    }
+
+    const state = communityRow['state'];
+    if (typeof state === 'string' && state.length > 0) {
+        profile.state = state;
+    }
+
+    const zipCode = communityRow['zipCode'];
+    if (typeof zipCode === 'string' && zipCode.length > 0) {
+        profile.zipCode = zipCode;
+    }
+
+    const timezone = communityRow['timezone'];
+    if (typeof timezone === 'string' && timezone.length > 0) {
+        profile.timezone = timezone;
+    }
+
+    return profile;
+}
+
 export async function getOrCreateWizardState(
     scoped: ScopedClient,
     communityId: number,
     wizardType: string,
+    initialStepData?: Record<string, unknown>,
 ): Promise<WizardRow> {
     const rows = await scoped.query(onboardingWizardState);
     const existing = rows.find((row) => row['wizardType'] === wizardType);
@@ -112,7 +161,7 @@ export async function getOrCreateWizardState(
             wizardType,
             status: 'in_progress',
             lastCompletedStep: null,
-            stepData: {},
+            stepData: initialStepData ?? {},
         });
 
         if (inserted[0]) {
