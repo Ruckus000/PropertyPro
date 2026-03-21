@@ -27,7 +27,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const { communityId } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
 
   const feePolicy = await getCommunityFeePolicy(communityId);
 
@@ -52,7 +52,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const { communityId, feePolicy } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceAdminWrite(membership);
 
   const scoped = createScopedClient(communityId);

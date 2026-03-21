@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Clock } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { AnyCommunityRole, CommunityFeatures, CommunityType, PlanId } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
@@ -97,6 +97,8 @@ export interface CommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  communityType: CommunityType | null;
+  planId: PlanId | null;
 }
 
 export function CommandPalette({
@@ -105,8 +107,10 @@ export function CommandPalette({
   communityId,
   role,
   features,
+  communityType,
+  planId,
 }: CommandPaletteProps) {
-  const registryItems = useFilteredRegistry(role, features, communityId);
+  const registryItems = useFilteredRegistry(role, features, communityId, communityType, planId);
   const router = useRouter();
   const { recentPages, addPage } = useRecentPages();
   const [query, setQuery] = useState('');

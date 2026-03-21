@@ -31,7 +31,7 @@ export const POST = withErrorHandler(
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
-    requireArcEnabled(membership);
+    await requireArcEnabled(membership);
     requireArcWritePermission(membership);
     requireArcSubmitterRole(membership);
 

@@ -44,7 +44,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireViolationsEnabled(membership);
+  await requireViolationsEnabled(membership);
   requireViolationsReadPermission(membership);
 
   const { searchParams } = new URL(req.url);
@@ -100,7 +100,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireViolationsEnabled(membership);
+  await requireViolationsEnabled(membership);
   requireViolationsWritePermission(membership);
 
   const scoped = createScopedClient(communityId);

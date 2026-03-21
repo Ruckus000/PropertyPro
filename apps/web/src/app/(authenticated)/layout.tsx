@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity, COMMUNITY_TYPES, isAnyCommunityRole } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId, COMMUNITY_TYPES, isAnyCommunityRole } from '@propertypro/shared';
 import type { AnyCommunityRole, CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { createServerClient } from '@/lib/supabase/server';
@@ -70,6 +70,7 @@ async function resolveCommunity(
         id: match.communityId,
         name: match.communityName,
         type: communityType as CommunityType,
+        plan: match.subscriptionPlan ?? null,
       },
       role: role as AnyCommunityRole,
       subscriptionStatus: match.subscriptionStatus ?? null,
@@ -103,7 +104,7 @@ export default async function AuthenticatedLayout({
   const community = communityData?.community ?? null;
   const role = communityData?.role ?? null;
   const subscriptionStatus = communityData?.subscriptionStatus ?? null;
-  const features = community ? getFeaturesForCommunity(community.type) : null;
+  const features = community ? getEffectiveFeatures(community.type, resolvePlanId(community.plan)) : null;
 
   const branding = community ? await getBrandingForCommunity(community.id) : null;
   const theme = community

@@ -80,6 +80,7 @@ export * from './compliance/templates';
 export * from './access-policies';
 export * from './rbac-matrix';
 export * from './features';
+export * from './plans';
 export * from './ledger';
 export * from './payment-fees';
 export * from './middleware/reserved-subdomains';

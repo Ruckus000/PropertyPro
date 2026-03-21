@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Search } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { AnyCommunityRole, CommunityFeatures, CommunityType, PlanId } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
@@ -54,12 +54,14 @@ interface MobileSearchContentProps {
   communityId: number;
   role: AnyCommunityRole;
   features: CommunityFeatures;
+  communityType: CommunityType;
+  planId: PlanId | null;
 }
 
-export function MobileSearchContent({ communityId, role, features }: MobileSearchContentProps) {
+export function MobileSearchContent({ communityId, role, features, communityType, planId }: MobileSearchContentProps) {
   const router = useRouter();
   const { recentPages, addPage } = useRecentPages();
-  const registryItems = useFilteredRegistry(role, features, communityId);
+  const registryItems = useFilteredRegistry(role, features, communityId, communityType, planId);
   const [query, setQuery] = useState('');
 
   // Filtered results

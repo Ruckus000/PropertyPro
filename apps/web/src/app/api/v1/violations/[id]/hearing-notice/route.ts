@@ -27,7 +27,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireViolationsEnabled(membership);
+    await requireViolationsEnabled(membership);
     requireViolationAdminWrite(membership);
 
     const violation = await getViolationForCommunity(communityId, id);

@@ -11,7 +11,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireEsignReadPermission(membership);
+  await requireEsignReadPermission(membership);
 
   const data = await getConsentStatus(communityId, actorUserId);
   return NextResponse.json({ data });
@@ -22,7 +22,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireEsignWritePermission(membership);
+  await requireEsignWritePermission(membership);
 
   const requestId = req.headers.get('x-request-id');
   await revokeConsent(communityId, actorUserId, requestId);

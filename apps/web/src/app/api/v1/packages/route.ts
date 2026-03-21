@@ -37,7 +37,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requirePackageLoggingEnabled(membership);
+  await requirePackageLoggingEnabled(membership);
   requirePackagesReadPermission(membership);
 
   const { searchParams } = new URL(req.url);
@@ -92,7 +92,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requirePackageLoggingEnabled(membership);
+  await requirePackageLoggingEnabled(membership);
   requirePackagesWritePermission(membership);
   requireStaffOperator(membership);
 

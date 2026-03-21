@@ -26,7 +26,19 @@ import {
   ClipboardCheck,
   FileSignature,
 } from 'lucide-react';
-import { ADMIN_ROLES, isAdminRole, isCommunityRole, type AnyCommunityRole, type CommunityRole, type CommunityFeatures } from '@propertypro/shared';
+import {
+  ADMIN_ROLES,
+  isAdminRole,
+  isCommunityRole,
+  getFeaturesForCommunity,
+  PLAN_FEATURES,
+  findCheapestPlanForFeature,
+  type AnyCommunityRole,
+  type CommunityRole,
+  type CommunityFeatures,
+  type CommunityType,
+  type PlanId,
+} from '@propertypro/shared';
 
 export interface NavItemConfig {
   id: string;
@@ -83,6 +95,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Maintenance',
     icon: Wrench,
     href: (cid) => `/maintenance/submit?communityId=${cid}`,
+    featureKey: 'hasMaintenanceRequests',
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
@@ -158,6 +171,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: ClipboardList,
     href: (cid) => `/maintenance/inbox?communityId=${cid}`,
     roles: ADMIN_ROLES,
+    featureKey: 'hasMaintenanceRequests',
     group: 'admin',
     matchPrefixes: ['/maintenance/inbox'],
   },
@@ -280,6 +294,67 @@ export function getVisibleItems(
     if (item.featureKey && features && !features[item.featureKey]) return false;
     return true;
   });
+}
+
+/**
+ * A nav item augmented with plan-gate status.
+ *
+ * `planLocked` is true when the community TYPE supports the feature
+ * but the current PLAN does not — the item should be shown but locked.
+ */
+export interface NavItemWithGateStatus extends NavItemConfig {
+  planLocked: boolean;
+  upgradePlanName: string | null;
+}
+
+/**
+ * Filter nav items by role/features and annotate plan-locked status.
+ *
+ * Items gated by community TYPE are hidden entirely. Items gated by
+ * subscription PLAN are kept visible but marked as locked so the UI
+ * can show an upgrade prompt.
+ */
+export function getVisibleItemsWithPlanGate(
+  items: readonly NavItemConfig[],
+  role: AnyCommunityRole | null,
+  features: CommunityFeatures | null,
+  communityType: CommunityType | null,
+  planId: PlanId | null,
+): NavItemWithGateStatus[] {
+  // Raw type-level features (before plan intersection)
+  const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
+
+  return items
+    .filter((item) => {
+      // Role gate — same logic as getVisibleItems
+      if (item.roles && role) {
+        if (isCommunityRole(role)) {
+          if (!item.roles.includes(role)) return false;
+        } else {
+          if (!isAdminRole(role)) return false;
+        }
+      }
+      // Community-type gate: if the TYPE doesn't support it, hide entirely
+      if (item.featureKey && typeFeatures && !typeFeatures[item.featureKey]) return false;
+      return true;
+    })
+    .map((item) => {
+      let planLocked = false;
+      let upgradePlanName: string | null = null;
+
+      // Plan gate: type allows but composed features don't → plan-locked
+      if (item.featureKey && features && !features[item.featureKey] && planId) {
+        const planConfig = PLAN_FEATURES[planId];
+        if (planConfig && !planConfig.features[item.featureKey]) {
+          planLocked = true;
+          // Find cheapest plan that includes this feature
+          const upgrade = findCheapestPlanForFeature(item.featureKey!);
+          upgradePlanName = upgrade?.displayName ?? null;
+        }
+      }
+
+      return { ...item, planLocked, upgradePlanName };
+    });
 }
 
 /**

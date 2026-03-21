@@ -21,7 +21,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireArcEnabled(membership);
+    await requireArcEnabled(membership);
     requireArcReadPermission(membership);
 
     const scoped = createScopedClient(communityId);

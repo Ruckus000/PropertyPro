@@ -369,7 +369,7 @@ const validSignupPayload = {
   county: 'Collier',
   unitCount: 140,
   communityType: 'condo_718' as const,
-  planKey: 'compliance_basic' as const,
+  planKey: 'essentials' as const,
   candidateSlug: 'seaside-villas',
   termsAccepted: true,
 };

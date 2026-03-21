@@ -35,7 +35,7 @@ export const POST = withErrorHandler(
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
-    requireViolationsEnabled(membership);
+    await requireViolationsEnabled(membership);
     requireViolationsWritePermission(membership);
     requireViolationAdminWrite(membership);
 

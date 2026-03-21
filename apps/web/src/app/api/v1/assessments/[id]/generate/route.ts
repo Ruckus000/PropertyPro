@@ -47,7 +47,7 @@ export const POST = withErrorHandler(async (
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);

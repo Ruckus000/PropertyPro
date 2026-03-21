@@ -39,7 +39,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   validateConnectOAuthState(state, communityId, userId);
 
   const membership = await requireCommunityMembership(communityId, userId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);

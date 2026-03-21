@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import { ADMIN_ROLES, resolvePlanId } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
 import { CommandPalette as CommandPaletteLegacy } from './command-palette';
@@ -41,6 +41,7 @@ export interface AppShellCommunity {
   id: number;
   name: string;
   type: CommunityType;
+  plan: string | null;
 }
 
 interface AppShellProps {
@@ -84,6 +85,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           role={role}
           features={features}
           userName={user?.fullName ?? null}
+          plan={community?.plan ?? null}
         />
       </div>
 
@@ -110,6 +112,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
               role={role}
               features={features}
               userName={user?.fullName ?? null}
+              plan={community?.plan ?? null}
             />
             <button
               type="button"
@@ -179,6 +182,8 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
         communityId={community?.id ?? null}
         role={role}
         features={features}
+        communityType={community?.type ?? null}
+        planId={community?.plan ? resolvePlanId(community.plan) : null}
       />
     </div>
   );

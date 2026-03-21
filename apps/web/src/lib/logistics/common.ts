@@ -3,6 +3,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds } from '@/lib/units/actor-units';
@@ -17,18 +18,20 @@ export function requireStaffOperator(membership: CommunityMembership): void {
   }
 }
 
-export function requirePackageLoggingEnabled(membership: CommunityMembership): void {
+export async function requirePackageLoggingEnabled(membership: CommunityMembership): Promise<void> {
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasPackageLogging) {
     throw new ForbiddenError('Package logging is not enabled for this community type');
   }
+  await requirePlanFeature(membership.communityId, 'hasPackageLogging');
 }
 
-export function requireVisitorLoggingEnabled(membership: CommunityMembership): void {
+export async function requireVisitorLoggingEnabled(membership: CommunityMembership): Promise<void> {
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasVisitorLogging) {
     throw new ForbiddenError('Visitor logging is not enabled for this community type');
   }
+  await requirePlanFeature(membership.communityId, 'hasVisitorLogging');
 }
 
 export function requirePackagesReadPermission(membership: CommunityMembership): void {

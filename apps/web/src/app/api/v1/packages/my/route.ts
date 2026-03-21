@@ -18,7 +18,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requirePackageLoggingEnabled(membership);
+  await requirePackageLoggingEnabled(membership);
   requirePackagesReadPermission(membership);
 
   if (!isResidentRole(membership.role)) {

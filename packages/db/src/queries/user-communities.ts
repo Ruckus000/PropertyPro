@@ -15,6 +15,7 @@ export interface UserCommunityRow {
   isUnitOwner: boolean;
   displayTitle: string | null;
   subscriptionStatus: string | null;
+  subscriptionPlan: string | null;
 }
 
 /**
@@ -38,6 +39,7 @@ export async function findUserCommunitiesUnscoped(
       isUnitOwner: userRoles.isUnitOwner,
       displayTitle: userRoles.displayTitle,
       subscriptionStatus: communities.subscriptionStatus,
+      subscriptionPlan: communities.subscriptionPlan,
     })
     .from(userRoles)
     .innerJoin(communities, eq(communities.id, userRoles.communityId))

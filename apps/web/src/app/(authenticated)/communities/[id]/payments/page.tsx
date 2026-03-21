@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { PaymentPortal } from '@/components/finance/payment-portal';
 
 interface PageProps {
@@ -29,6 +31,11 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
+
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
+  if (!features.hasFinance) {
+    redirect('/dashboard?reason=feature-not-available');
+  }
 
   const resolved = await searchParams;
   const rawUnitId = typeof resolved['unitId'] === 'string' ? resolved['unitId'] : undefined;

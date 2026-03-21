@@ -2,15 +2,17 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
 
-export function requireFinanceEnabled(membership: CommunityMembership): void {
+export async function requireFinanceEnabled(membership: CommunityMembership): Promise<void> {
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasFinance) {
     throw new ForbiddenError('Finance features are not enabled for this community type');
   }
+  await requirePlanFeature(membership.communityId, 'hasFinance');
 }
 
 export function requireFinanceReadPermission(membership: CommunityMembership): void {

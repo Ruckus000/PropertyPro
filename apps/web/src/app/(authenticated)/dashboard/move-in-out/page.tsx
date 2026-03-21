@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ChecklistListPage } from '@/components/move-checklists/ChecklistListPage';
 
 interface PageProps {
@@ -28,7 +29,7 @@ export default async function MoveInOutPage({ searchParams }: PageProps) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasLeaseTracking) {
     redirect('/dashboard?reason=feature-unavailable');
   }

@@ -33,7 +33,7 @@ export const GET = withErrorHandler(async (
   const assessmentId = await parseAssessmentId(context);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceReadPermission(membership);
 
   const searchParams = new URL(req.url).searchParams;

@@ -13,7 +13,7 @@ const validPayload = {
   county: 'Palm Beach',
   unitCount: 120,
   communityType: 'hoa_720' as const,
-  planKey: 'compliance_basic' as const,
+  planKey: 'essentials' as const,
   candidateSlug: 'ocean-breeze-hoa',
   termsAccepted: true,
 };

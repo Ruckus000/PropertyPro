@@ -35,6 +35,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { queueNotification } from '@/lib/services/notification-service';
 import { formatRequest } from '../_formatRequest';
 
@@ -108,6 +109,7 @@ export const GET = withErrorHandler(async (req: NextRequest, context?: { params:
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isAdmin = ADMIN_ROLES.has(membership.role);
   const isResident = RESIDENT_ROLES.has(membership.role);
 
@@ -159,6 +161,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
   const { communityId: rawCommunityId, ...fields } = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
   if (!ADMIN_ROLES.has(membership.role)) {
     throw new ForbiddenError('Only community administrators can update maintenance requests');
@@ -307,6 +310,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: { para
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
   if (!ADMIN_ROLES.has(membership.role)) {
     throw new ForbiddenError('Only community administrators can delete maintenance requests');

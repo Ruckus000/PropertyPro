@@ -1,0 +1,651 @@
+{
+  "testedWorktreePath": "/Users/jphilistin/Documents/Coding/PropertyPro/.claude/worktrees/b01-plan-gating",
+  "testedBranch": "feature/b01-plan-to-feature-gating",
+  "testedCommit": "4bec1d9decf842a06c6fcc81908f7db63871def5",
+  "testedAt": "2026-03-21T18:58:29.023Z",
+  "artifactsDir": "/Users/jphilistin/Documents/Coding/PropertyPro/.claude/worktrees/b01-plan-gating/.claude/artifacts/b01-plan-gating",
+  "states": {
+    "nullPlan": {
+      "navEntries": [
+        {
+          "label": "Dashboard",
+          "tag": "a",
+          "href": "/dashboard?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": "page"
+        },
+        {
+          "label": "Documents",
+          "tag": "a",
+          "href": "/communities/1/documents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Meetings",
+          "tag": "a",
+          "href": "/communities/1/meetings?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Announcements",
+          "tag": "a",
+          "href": "/announcements?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Maintenance",
+          "tag": "a",
+          "href": "/maintenance/submit?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Packages",
+          "tag": "a",
+          "href": "/dashboard/packages?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Visitors",
+          "tag": "a",
+          "href": "/dashboard/visitors?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Payments",
+          "tag": "a",
+          "href": "/payments?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Report Violation",
+          "tag": "a",
+          "href": "/violations/report?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Compliance",
+          "tag": "a",
+          "href": "/communities/1/compliance?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Residents",
+          "tag": "a",
+          "href": "/dashboard/residents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Inbox",
+          "tag": "a",
+          "href": "/maintenance/inbox?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Contracts",
+          "tag": "a",
+          "href": "/contracts?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "E-Sign",
+          "tag": "a",
+          "href": "/esign?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Violations Inbox",
+          "tag": "a",
+          "href": "/violations/inbox?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Audit Trail",
+          "tag": "a",
+          "href": "/audit-trail?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Assessments",
+          "tag": "a",
+          "href": "/assessments?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Finance",
+          "tag": "a",
+          "href": "/finance?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        }
+      ]
+    },
+    "essentials": {
+      "navEntries": [
+        {
+          "label": "Dashboard",
+          "tag": "a",
+          "href": "/dashboard?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": "page"
+        },
+        {
+          "label": "Documents",
+          "tag": "a",
+          "href": "/communities/1/documents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Meetings",
+          "tag": "a",
+          "href": "/communities/1/meetings?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Announcements",
+          "tag": "a",
+          "href": "/announcements?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Maintenance",
+          "tag": "a",
+          "href": "/maintenance/submit?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Packages (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Visitors (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Payments (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Report Violation (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Compliance",
+          "tag": "a",
+          "href": "/communities/1/compliance?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Residents",
+          "tag": "a",
+          "href": "/dashboard/residents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Inbox",
+          "tag": "a",
+          "href": "/maintenance/inbox?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Contracts",
+          "tag": "a",
+          "href": "/contracts?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "E-Sign (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Violations Inbox (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Audit Trail",
+          "tag": "a",
+          "href": "/audit-trail?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Assessments (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Finance (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        }
+      ],
+      "unexpectedAccessible": [
+        "Maintenance",
+        "Inbox",
+        "Contracts",
+        "Audit Trail"
+      ]
+    },
+    "professional": {
+      "navEntries": [
+        {
+          "label": "Dashboard",
+          "tag": "a",
+          "href": "/dashboard?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": "page"
+        },
+        {
+          "label": "Documents",
+          "tag": "a",
+          "href": "/communities/1/documents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Meetings",
+          "tag": "a",
+          "href": "/communities/1/meetings?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Announcements",
+          "tag": "a",
+          "href": "/announcements?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Maintenance",
+          "tag": "a",
+          "href": "/maintenance/submit?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Packages (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Visitors (Upgrade)",
+          "tag": "button",
+          "href": null,
+          "hasLockIcon": true,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Payments",
+          "tag": "a",
+          "href": "/payments?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Report Violation",
+          "tag": "a",
+          "href": "/violations/report?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Compliance",
+          "tag": "a",
+          "href": "/communities/1/compliance?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Residents",
+          "tag": "a",
+          "href": "/dashboard/residents?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Inbox",
+          "tag": "a",
+          "href": "/maintenance/inbox?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Contracts",
+          "tag": "a",
+          "href": "/contracts?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "E-Sign",
+          "tag": "a",
+          "href": "/esign?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Violations Inbox",
+          "tag": "a",
+          "href": "/violations/inbox?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Audit Trail",
+          "tag": "a",
+          "href": "/audit-trail?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Assessments",
+          "tag": "a",
+          "href": "/assessments?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        },
+        {
+          "label": "Finance",
+          "tag": "a",
+          "href": "/finance?communityId=1",
+          "hasLockIcon": false,
+          "ariaCurrent": null
+        }
+      ]
+    }
+  },
+  "prompts": {
+    "essentialsEsign": {
+      "promptText": "Upgrade requiredThis feature is available on the Professional plan.View Plans",
+      "href": "/settings/billing"
+    },
+    "professionalPackages": {
+      "promptText": "Upgrade requiredThis feature is available on the Operations Plus plan.View Plans",
+      "href": "/settings/billing"
+    }
+  },
+  "routes": {
+    "maintenance": {
+      "name": "maintenance",
+      "route": "/maintenance/submit?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/maintenance/submit?communityId=1",
+      "heading": "Maintenance",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "packages": {
+      "name": "packages",
+      "route": "/dashboard/packages?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/dashboard/packages?communityId=1",
+      "heading": "Packages",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "visitors": {
+      "name": "visitors",
+      "route": "/dashboard/visitors?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/dashboard/visitors?communityId=1",
+      "heading": "Visitors",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "payments": {
+      "name": "payments",
+      "route": "/payments?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/communities/1/payments",
+      "heading": "Payments",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProDashboardDocumentsMeetingsAnnouncementsMaintenanceLeasesPackagesVisitorsPaymentsReport ViolationAdminComplianceResidentsInboxContractsE-SignViolations InboxMove In/OutAudit T"
+    },
+    "reportViolation": {
+      "name": "reportViolation",
+      "route": "/violations/report?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/violations/report?communityId=1",
+      "heading": "Report Violation",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "esign": {
+      "name": "esign",
+      "route": "/esign?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/esign?communityId=1",
+      "heading": "E-Sign",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "violationsInbox": {
+      "name": "violationsInbox",
+      "route": "/violations/inbox?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/violations/inbox?communityId=1",
+      "heading": "Violations Inbox",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProSunset CondosDashboardDocumentsMeetingsAnnouncementsMaintenancePackages (Upgrade)Visitors (Upgrade)Payments (Upgrade)Report Violation (Upgrade)AdminComplianceResidentsInboxCo"
+    },
+    "assessments": {
+      "name": "assessments",
+      "route": "/assessments?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/communities/1/assessments",
+      "heading": "Assessments",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProDashboardDocumentsMeetingsAnnouncementsMaintenanceLeasesPackagesVisitorsPaymentsReport ViolationAdminComplianceResidentsInboxContractsE-SignViolations InboxMove In/OutAudit T"
+    },
+    "finance": {
+      "name": "finance",
+      "route": "/finance?communityId=1",
+      "finalUrl": "http://127.0.0.1:3000/communities/1/finance",
+      "heading": "Finance",
+      "bodySnippet": "Skip to main contentSkip to contentPropertyProDashboardDocumentsMeetingsAnnouncementsMaintenanceLeasesPackagesVisitorsPaymentsReport ViolationAdminComplianceResidentsInboxContractsE-SignViolations InboxMove In/OutAudit T"
+    }
+  },
+  "api": {
+    "requestedPayload": {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "Invalid template payload",
+          "details": {
+            "fields": [
+              {
+                "field": "communityId",
+                "message": "Invalid input: expected number, received undefined"
+              },
+              {
+                "field": "templateType",
+                "message": "Invalid option: expected one of \"proxy\"|\"consent\"|\"lease_addendum\"|\"maintenance_auth\"|\"violation_ack\"|\"assessment_agreement\"|\"custom\""
+              },
+              {
+                "field": "sourceDocumentPath",
+                "message": "Invalid input: expected string, received undefined"
+              },
+              {
+                "field": "fieldsSchema",
+                "message": "Invalid input: expected object, received undefined"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "validPayload": {
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "PLAN_UPGRADE_REQUIRED",
+          "message": "This feature requires the Essentials plan or higher.",
+          "details": {
+            "featureKey": "hasEsign",
+            "currentPlan": "essentials",
+            "requiredPlanDisplayName": "Essentials"
+          }
+        }
+      }
+    },
+    "listTemplates": {
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    }
+  },
+  "checks": [
+    {
+      "name": "Null plan fail-open: no upgrade labels in sidebar",
+      "pass": true
+    },
+    {
+      "name": "Essentials: requested accessible items are accessible",
+      "pass": true,
+      "missing": []
+    },
+    {
+      "name": "Essentials: requested locked items are locked buttons",
+      "pass": false,
+      "missing": [
+        "Maintenance (Upgrade)"
+      ]
+    },
+    {
+      "name": "Essentials: locked E-Sign prompt points to Professional billing upsell",
+      "pass": true,
+      "promptText": "Upgrade requiredThis feature is available on the Professional plan.View Plans",
+      "href": "/settings/billing"
+    },
+    {
+      "name": "Professional: core gated items are unlocked",
+      "pass": true,
+      "missing": []
+    },
+    {
+      "name": "Professional: only Packages and Visitors remain locked from requested set",
+      "pass": true,
+      "missing": []
+    },
+    {
+      "name": "Professional: locked Packages prompt points to Operations Plus billing upsell",
+      "pass": true,
+      "promptText": "Upgrade requiredThis feature is available on the Operations Plus plan.View Plans",
+      "href": "/settings/billing"
+    },
+    {
+      "name": "API: requested bare payload returns 403 PLAN_UPGRADE_REQUIRED",
+      "pass": false,
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "Invalid template payload",
+          "details": {
+            "fields": [
+              {
+                "field": "communityId",
+                "message": "Invalid input: expected number, received undefined"
+              },
+              {
+                "field": "templateType",
+                "message": "Invalid option: expected one of \"proxy\"|\"consent\"|\"lease_addendum\"|\"maintenance_auth\"|\"violation_ack\"|\"assessment_agreement\"|\"custom\""
+              },
+              {
+                "field": "sourceDocumentPath",
+                "message": "Invalid input: expected string, received undefined"
+              },
+              {
+                "field": "fieldsSchema",
+                "message": "Invalid input: expected object, received undefined"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "API: valid E-Sign create payload returns 403 PLAN_UPGRADE_REQUIRED",
+      "pass": true,
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "PLAN_UPGRADE_REQUIRED",
+          "message": "This feature requires the Essentials plan or higher.",
+          "details": {
+            "featureKey": "hasEsign",
+            "currentPlan": "essentials",
+            "requiredPlanDisplayName": "Essentials"
+          }
+        }
+      }
+    },
+    {
+      "name": "API: valid E-Sign create payload error mentions Professional",
+      "pass": false,
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "PLAN_UPGRADE_REQUIRED",
+          "message": "This feature requires the Essentials plan or higher.",
+          "details": {
+            "featureKey": "hasEsign",
+            "currentPlan": "essentials",
+            "requiredPlanDisplayName": "Essentials"
+          }
+        }
+      }
+    },
+    {
+      "name": "API: E-Sign template list is blocked on Essentials",
+      "pass": false,
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    }
+  ],
+  "consoleErrors": [
+    "Loading the script 'https://js.stripe.com/clover/stripe.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' 'unsafe-eval'\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+  ],
+  "pageErrors": [
+    "Error: Failed to load Stripe.js"
+  ]
+}

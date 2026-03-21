@@ -40,7 +40,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireArcEnabled(membership);
+  await requireArcEnabled(membership);
   requireArcReadPermission(membership);
 
   const { searchParams } = new URL(req.url);
@@ -96,7 +96,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireArcEnabled(membership);
+  await requireArcEnabled(membership);
   requireArcWritePermission(membership);
   requireArcSubmitterRole(membership);
 

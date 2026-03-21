@@ -49,6 +49,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // P2-34a: Payment reminders + subscription guard — cross-community cron + mutation guard
   resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
   resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
+  // B-01: Plan-to-feature gating — cross-community plan lookup for feature guard
+  resolve(repoRoot, 'apps/web/src/lib/middleware/plan-guard.ts'),
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
   // P3-PRE-03: PM portfolio cross-community read boundary
   resolve(repoRoot, 'apps/web/src/lib/api/pm-communities.ts'),

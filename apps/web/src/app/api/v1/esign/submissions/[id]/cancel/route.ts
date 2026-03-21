@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignWritePermission } from '@/lib/esign/esign-route-helpers';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { cancelSubmission } from '@/lib/services/esign-service';
 
 export const POST = withErrorHandler(
@@ -17,7 +18,8 @@ export const POST = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignWritePermission(membership);
+    await requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');
     await cancelSubmission(communityId, actorUserId, id, requestId);
