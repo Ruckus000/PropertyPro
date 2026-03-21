@@ -38,8 +38,8 @@ import {
   Landmark,
   ClipboardCheck,
 } from 'lucide-react';
-import type { CommunityRole, AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import type { CommunityRole, AnyCommunityRole, CommunityFeatures, CommunityType, PlanId } from '@propertypro/shared';
+import { ADMIN_ROLES, PLAN_FEATURES, getFeaturesForCommunity } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +65,8 @@ export interface FeatureRegistryItem {
 export interface ResolvedRegistryItem extends Omit<FeatureRegistryItem, 'href'> {
   href: string;
   resolvedHref: string;
+  planLocked: boolean;
+  upgradePlanName: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -736,13 +738,22 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
 /**
  * Returns the feature registry filtered by role and enabled feature flags,
  * with all `href` functions resolved to concrete strings.
+ *
+ * Items gated by community TYPE are hidden entirely. Items gated by
+ * subscription PLAN are kept visible but marked as `planLocked: true`
+ * so the UI can show an upgrade prompt.
  */
 export function useFilteredRegistry(
   role: AnyCommunityRole | null,
   features: CommunityFeatures | null,
   communityId: number | null,
+  communityType: CommunityType | null,
+  planId: PlanId | null,
 ): ResolvedRegistryItem[] {
   return useMemo(() => {
+    // Raw type-level features (before plan intersection)
+    const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
+
     return (FEATURE_REGISTRY as readonly FeatureRegistryItem[])
       .filter((item) => {
         // Role check
@@ -750,10 +761,8 @@ export function useFilteredRegistry(
           if (!role) return false;
           if (!(item.roles as readonly string[]).includes(role)) return false;
         }
-        // Feature flag check
-        if (item.featureFlag && features) {
-          if (!features[item.featureFlag]) return false;
-        }
+        // Community-type gate: if the TYPE doesn't support it, hide entirely
+        if (item.featureFlag && typeFeatures && !typeFeatures[item.featureFlag]) return false;
         return true;
       })
       .map((item) => {
@@ -764,11 +773,29 @@ export function useFilteredRegistry(
               ? item.href
               : '#';
 
+        let planLocked = false;
+        let upgradePlanName: string | null = null;
+
+        // Plan gate: type allows but composed features don't → plan-locked
+        if (item.featureFlag && features && !features[item.featureFlag] && planId) {
+          const planConfig = PLAN_FEATURES[planId];
+          if (planConfig && !planConfig.features[item.featureFlag]) {
+            planLocked = true;
+            // Find cheapest plan that includes this feature
+            const upgrade = (Object.values(PLAN_FEATURES) as Array<typeof planConfig>)
+              .filter((p) => p.features[item.featureFlag!])
+              .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+            upgradePlanName = upgrade?.displayName ?? null;
+          }
+        }
+
         return {
           ...item,
           href: resolvedHref,
           resolvedHref,
+          planLocked,
+          upgradePlanName,
         };
       });
-  }, [role, features, communityId]);
+  }, [role, features, communityId, communityType, planId]);
 }
