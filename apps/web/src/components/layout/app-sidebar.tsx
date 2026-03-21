@@ -27,6 +27,7 @@ interface AppSidebarProps {
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
   userName: string | null;
+  plan: string | null;
 }
 
 export function AppSidebar({

@@ -41,6 +41,7 @@ export interface AppShellCommunity {
   id: number;
   name: string;
   type: CommunityType;
+  plan: string | null;
 }
 
 interface AppShellProps {
@@ -84,6 +85,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           role={role}
           features={features}
           userName={user?.fullName ?? null}
+          plan={community?.plan ?? null}
         />
       </div>
 
@@ -110,6 +112,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
               role={role}
               features={features}
               userName={user?.fullName ?? null}
+              plan={community?.plan ?? null}
             />
             <button
               type="button"
