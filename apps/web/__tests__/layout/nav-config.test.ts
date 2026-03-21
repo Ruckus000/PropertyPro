@@ -10,16 +10,56 @@ import type { CommunityFeatures } from '@propertypro/shared';
 
 const ALL_FEATURES: CommunityFeatures = {
   hasCompliance: true,
+  hasStatutoryCategories: true,
   hasMeetings: true,
   hasLeaseTracking: false,
-  hasInsuranceTracking: false,
+  hasPublicNoticesPage: true,
+  hasTransparencyPage: true,
+  hasOwnerRole: true,
+  hasVoting: true,
+  requiresPublicWebsite: true,
+  hasMaintenanceRequests: true,
+  hasAnnouncements: true,
+  hasFinance: true,
+  hasViolations: true,
+  hasARC: true,
+  hasPolls: true,
+  hasCommunityBoard: true,
+  hasWorkOrders: true,
+  hasAmenities: true,
+  hasPackageLogging: true,
+  hasVisitorLogging: true,
+  hasCalendarSync: true,
+  hasAccountingConnectors: true,
+  hasEsign: true,
+  hasEmergencyNotifications: true,
 };
 
 const APARTMENT_FEATURES: CommunityFeatures = {
   hasCompliance: false,
-  hasMeetings: false,
+  hasStatutoryCategories: false,
+  hasMeetings: true,
   hasLeaseTracking: true,
-  hasInsuranceTracking: false,
+  hasPublicNoticesPage: false,
+  hasTransparencyPage: false,
+  hasOwnerRole: false,
+  hasVoting: false,
+  requiresPublicWebsite: false,
+  hasMaintenanceRequests: true,
+  hasAnnouncements: true,
+  hasFinance: true,
+  hasViolations: false,
+  hasARC: false,
+  hasPolls: true,
+  hasCommunityBoard: true,
+  hasWorkOrders: true,
+  hasAmenities: true,
+  hasPackageLogging: true,
+  hasVisitorLogging: true,
+  hasCalendarSync: true,
+  hasAccountingConnectors: true,
+  hasEsign: true,
+  hasEmergencyNotifications: true,
 };
 
 describe('getVisibleItems', () => {
@@ -54,9 +94,13 @@ describe('getVisibleItems', () => {
   it('hides feature-gated items when feature is disabled', () => {
     const items = getVisibleItems(NAV_ITEMS, 'board_member', APARTMENT_FEATURES);
     const ids = items.map((i) => i.id);
-    expect(ids).not.toContain('meetings');
+    // Apartments have meetings, so it should be visible
+    expect(ids).toContain('meetings');
+    // Apartments don't have compliance or violations
     expect(ids).not.toContain('compliance');
     expect(ids).not.toContain('contracts');
+    expect(ids).not.toContain('report-violation');
+    expect(ids).not.toContain('violations-inbox');
   });
 
   it('shows all items when role/features are null', () => {
