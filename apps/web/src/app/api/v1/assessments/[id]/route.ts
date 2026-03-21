@@ -6,7 +6,6 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { BadRequestError, ValidationError } from '@/lib/api/errors';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
-import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { parsePositiveInt, requireFinanceAdminWrite, requireFinanceEnabled, requireFinanceWritePermission } from '@/lib/finance/common';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { deleteAssessmentForCommunity, updateAssessmentForCommunity } from '@/lib/services/finance-service';
@@ -61,7 +60,6 @@ export const PATCH = withErrorHandler(async (
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);
-  await requirePlanFeature(communityId, 'hasFinance');
 
   const requestId = req.headers.get('x-request-id');
   const assessment = await updateAssessmentForCommunity(
@@ -88,7 +86,6 @@ export const DELETE = withErrorHandler(async (
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);
-  await requirePlanFeature(communityId, 'hasFinance');
 
   const requestId = req.headers.get('x-request-id');
   await deleteAssessmentForCommunity(communityId, assessmentId, actorUserId, requestId);

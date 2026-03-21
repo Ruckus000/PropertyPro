@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PLAN_FEATURES, type PlanId } from '@propertypro/shared';
+import { PLAN_FEATURES, findCheapestPlanForFeature, type PlanId } from '@propertypro/shared';
 import type { CommunityFeatures } from '@propertypro/shared';
 
 export interface PlanGateResult {
@@ -23,9 +23,7 @@ export function usePlanGate(
     }
 
     // Find the cheapest plan that includes this feature
-    const upgradeTo = Object.values(PLAN_FEATURES)
-      .filter((p) => p.features[featureKey])
-      .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+    const upgradeTo = findCheapestPlanForFeature(featureKey);
 
     return {
       allowed: false,

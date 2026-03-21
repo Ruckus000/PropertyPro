@@ -25,7 +25,7 @@ import {
   units,
 } from '@propertypro/db';
 import { eq, and, inArray } from '@propertypro/db/filters';
-import { ADMIN_ROLES as ADMIN_ROLES_LIST, RESIDENT_ROLES as RESIDENT_ROLES_LIST } from '@propertypro/shared';
+import { ADMIN_ROLES as ADMIN_ROLES_LIST, RESIDENT_ROLES as RESIDENT_ROLES_LIST, getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -102,6 +102,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasMaintenanceRequests) {
+    throw new ForbiddenError('Maintenance requests are not enabled for this community type');
+  }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isAdmin = ADMIN_ROLES.has(membership.role);
   const isResident = RESIDENT_ROLES.has(membership.role);
@@ -207,7 +211,11 @@ async function handleCreateRequest(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
-  await requireCommunityMembership(communityId, actorUserId);
+  const createMembership = await requireCommunityMembership(communityId, actorUserId);
+  const createTypeFeatures = getFeaturesForCommunity(createMembership.communityType);
+  if (!createTypeFeatures.hasMaintenanceRequests) {
+    throw new ForbiddenError('Maintenance requests are not enabled for this community type');
+  }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
   const scoped = createScopedClient(communityId);
@@ -302,6 +310,10 @@ async function handleAddComment(
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  const commentTypeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!commentTypeFeatures.hasMaintenanceRequests) {
+    throw new ForbiddenError('Maintenance requests are not enabled for this community type');
+  }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isAdmin = ADMIN_ROLES.has(membership.role);
   const isResident = RESIDENT_ROLES.has(membership.role);
@@ -369,6 +381,10 @@ async function handleRequestUploadUrl(
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  const uploadTypeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!uploadTypeFeatures.hasMaintenanceRequests) {
+    throw new ForbiddenError('Maintenance requests are not enabled for this community type');
+  }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isResident = RESIDENT_ROLES.has(membership.role);
 

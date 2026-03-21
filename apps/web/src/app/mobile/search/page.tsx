@@ -12,7 +12,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createScopedClient } from '@propertypro/db';
-import { getFeaturesForCommunity, resolvePlanId } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { MobileSearchContent } from '@/components/mobile/MobileSearchContent';
 
 interface PageProps {
@@ -47,7 +47,7 @@ export default async function MobileSearchPage({ searchParams }: PageProps) {
   const rawPlan = (communityRows[0] as Record<string, unknown> | undefined)?.['subscriptionPlan'];
   const planId = typeof rawPlan === 'string' ? resolvePlanId(rawPlan) : null;
 
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = getEffectiveFeatures(membership.communityType, planId);
 
   return (
     <MobileSearchContent

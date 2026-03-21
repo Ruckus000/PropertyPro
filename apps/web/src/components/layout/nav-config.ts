@@ -32,6 +32,7 @@ import {
   isCommunityRole,
   getFeaturesForCommunity,
   PLAN_FEATURES,
+  findCheapestPlanForFeature,
   type AnyCommunityRole,
   type CommunityRole,
   type CommunityFeatures,
@@ -170,6 +171,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: ClipboardList,
     href: (cid) => `/maintenance/inbox?communityId=${cid}`,
     roles: ADMIN_ROLES,
+    featureKey: 'hasMaintenanceRequests',
     group: 'admin',
     matchPrefixes: ['/maintenance/inbox'],
   },
@@ -346,9 +348,7 @@ export function getVisibleItemsWithPlanGate(
         if (planConfig && !planConfig.features[item.featureKey]) {
           planLocked = true;
           // Find cheapest plan that includes this feature
-          const upgrade = (Object.values(PLAN_FEATURES) as Array<typeof planConfig>)
-            .filter((p) => p.features[item.featureKey!])
-            .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+          const upgrade = findCheapestPlanForFeature(item.featureKey!);
           upgradePlanName = upgrade?.displayName ?? null;
         }
       }

@@ -39,7 +39,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import type { CommunityRole, AnyCommunityRole, CommunityFeatures, CommunityType, PlanId } from '@propertypro/shared';
-import { ADMIN_ROLES, PLAN_FEATURES, getFeaturesForCommunity } from '@propertypro/shared';
+import { ADMIN_ROLES, PLAN_FEATURES, getFeaturesForCommunity, findCheapestPlanForFeature } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,6 +137,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'all',
     category: 'page',
     group: 'General',
+    featureFlag: 'hasMaintenanceRequests',
   },
   {
     id: 'page-payments',
@@ -242,6 +243,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'admin',
     category: 'page',
     group: 'Operations',
+    featureFlag: 'hasMaintenanceRequests',
   },
   {
     id: 'page-esign',
@@ -463,6 +465,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'all',
     category: 'action',
     group: 'Quick Actions',
+    featureFlag: 'hasMaintenanceRequests',
   },
   {
     id: 'action-report-violation',
@@ -782,9 +785,7 @@ export function useFilteredRegistry(
           if (planConfig && !planConfig.features[item.featureFlag]) {
             planLocked = true;
             // Find cheapest plan that includes this feature
-            const upgrade = (Object.values(PLAN_FEATURES) as Array<typeof planConfig>)
-              .filter((p) => p.features[item.featureFlag!])
-              .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+            const upgrade = findCheapestPlanForFeature(item.featureFlag!);
             upgradePlanName = upgrade?.displayName ?? null;
           }
         }

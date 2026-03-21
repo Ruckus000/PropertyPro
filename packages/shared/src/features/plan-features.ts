@@ -102,6 +102,18 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
 };
 
 /**
+ * Finds the cheapest plan that includes a specific feature.
+ * Returns null if no plan includes the feature.
+ */
+export function findCheapestPlanForFeature(
+  featureKey: keyof CommunityFeatures,
+): PlanFeatureConfig | null {
+  return (Object.values(PLAN_FEATURES) as PlanFeatureConfig[])
+    .filter((p) => p.features[featureKey])
+    .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0] ?? null;
+}
+
+/**
  * Resolves a raw plan string (which may be a legacy alias) to a canonical PlanId.
  *
  * Returns `null` if the input is `null` or unrecognized.

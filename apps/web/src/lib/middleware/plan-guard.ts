@@ -13,7 +13,7 @@
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { PLAN_FEATURES, resolvePlanId, getEffectiveFeatures } from '@propertypro/shared';
+import { PLAN_FEATURES, resolvePlanId, getEffectiveFeatures, findCheapestPlanForFeature } from '@propertypro/shared';
 import type { CommunityType, CommunityFeatures } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
 
@@ -49,9 +49,7 @@ export async function requirePlanFeature(
   }
 
   // Find the cheapest plan that includes this feature
-  const upgradeTo = (Object.values(PLAN_FEATURES) as Array<typeof planConfig>)
-    .filter((p) => p.features[featureKey])
-    .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+  const upgradeTo = findCheapestPlanForFeature(featureKey);
 
   const upgradeDisplayName = upgradeTo?.displayName ?? 'a higher';
 
