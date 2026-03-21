@@ -18,7 +18,6 @@ import { z } from 'zod';
 import {
   createAdminClient,
   users,
-  logAuditEvent,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -71,16 +70,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  // Audit log — use communityId 0 as a sentinel for user-scoped operations
-  // since the audit logger requires a communityId
-  await logAuditEvent({
-    userId,
-    action: 'profile.updated',
-    resourceType: 'user',
-    resourceId: userId,
-    communityId: 0,
-    newValues: updateValues,
-  });
+  // Note: profile updates are user-scoped, not community-scoped.
+  // The compliance_audit_log table requires a community FK, so we skip
+  // audit logging here. Profile changes are tracked in Supabase user_metadata.
 
   return NextResponse.json({
     data: { userId, ...updateValues },
