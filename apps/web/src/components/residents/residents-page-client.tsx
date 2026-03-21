@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Upload } from 'lucide-react';
+import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
 import { ResidentList } from '@/components/residents/resident-list';
 import { ResidentForm, type ResidentFormSubmitValues } from '@/components/residents/resident-form';
@@ -43,11 +44,18 @@ async function fetchResidents(communityId: number): Promise<ResidentRecord[]> {
   return json.data;
 }
 
-async function createResident(
+interface CreateResidentResult {
+  userId: string;
+  isNewUser: boolean;
+  invitationFailed: boolean;
+}
+
+async function createAndInviteResident(
   communityId: number,
   values: ResidentFormSubmitValues,
-): Promise<void> {
-  const response = await fetch('/api/v1/residents', {
+  sendInvitation: boolean,
+): Promise<CreateResidentResult> {
+  const response = await fetch('/api/v1/residents/invite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -59,6 +67,7 @@ async function createResident(
       unitId: values.unitId,
       isUnitOwner: values.isUnitOwner,
       presetKey: values.presetKey,
+      sendInvitation,
     }),
   });
 
@@ -66,6 +75,9 @@ async function createResident(
     const errorBody = await response.json().catch(() => null) as { message?: string } | null;
     throw new Error(errorBody?.message ?? 'Failed to add resident');
   }
+
+  const json = await response.json() as { data: CreateResidentResult };
+  return json.data;
 }
 
 /* ─────── Component ─────── */
@@ -74,6 +86,8 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [sendInvitation, setSendInvitation] = useState(true);
+  const [invitationWarning, setInvitationWarning] = useState<string | null>(null);
 
   const {
     data: residents,
@@ -87,15 +101,24 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   });
 
   const mutation = useMutation({
-    mutationFn: (values: ResidentFormSubmitValues) => createResident(communityId, values),
-    onSuccess: () => {
+    mutationFn: (values: ResidentFormSubmitValues) =>
+      createAndInviteResident(communityId, values, sendInvitation),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['residents', communityId] });
+      if (result.invitationFailed) {
+        setInvitationWarning(
+          'Resident added, but the invitation email failed to send. You can resend it from the resident list.',
+        );
+      } else {
+        setInvitationWarning(null);
+      }
       setDialogOpen(false);
     },
   });
 
   const handleFormSubmit = useCallback(
     async (values: ResidentFormSubmitValues) => {
+      setInvitationWarning(null);
       await mutation.mutateAsync(values);
     },
     [mutation],
@@ -181,6 +204,8 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
           submitting={mutation.isPending}
           onSubmit={handleFormSubmit}
           error={mutation.error instanceof Error ? mutation.error.message : null}
+          sendInvitation={sendInvitation}
+          onSendInvitationChange={setSendInvitation}
         />
       </div>
     );
@@ -191,15 +216,32 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-content">Residents</h1>
-        <button
-          type="button"
-          onClick={() => setDialogOpen(true)}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
-        >
-          <UserPlus size={16} aria-hidden="true" />
-          Add Resident
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/dashboard/import-residents?communityId=${communityId}`}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+          >
+            <Upload size={16} aria-hidden="true" />
+            Import CSV
+          </Link>
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
+          >
+            <UserPlus size={16} aria-hidden="true" />
+            Add Resident
+          </button>
+        </div>
       </div>
+
+      {invitationWarning && (
+        <AlertBanner
+          status="warning"
+          title="Invitation not sent"
+          description={invitationWarning}
+        />
+      )}
 
       <ResidentList
         residents={filteredResidents}
@@ -218,6 +260,8 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         submitting={mutation.isPending}
         onSubmit={handleFormSubmit}
         error={mutation.error instanceof Error ? mutation.error.message : null}
+        sendInvitation={sendInvitation}
+        onSendInvitationChange={setSendInvitation}
       />
     </div>
   );
@@ -232,6 +276,8 @@ interface AddResidentDialogProps {
   submitting: boolean;
   onSubmit: (values: ResidentFormSubmitValues) => Promise<void>;
   error: string | null;
+  sendInvitation: boolean;
+  onSendInvitationChange: (value: boolean) => void;
 }
 
 function AddResidentDialog({
@@ -241,6 +287,8 @@ function AddResidentDialog({
   submitting,
   onSubmit,
   error,
+  sendInvitation,
+  onSendInvitationChange,
 }: AddResidentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -265,6 +313,18 @@ function AddResidentDialog({
           submitting={submitting}
           onSubmit={onSubmit}
         />
+
+        <label className="flex items-center gap-2 pt-2">
+          <input
+            type="checkbox"
+            checked={sendInvitation}
+            onChange={(e) => onSendInvitationChange(e.target.checked)}
+            className="h-4 w-4 rounded border-edge-strong"
+          />
+          <span className="text-sm text-content-secondary">
+            Send invitation email
+          </span>
+        </label>
       </DialogContent>
     </Dialog>
   );
