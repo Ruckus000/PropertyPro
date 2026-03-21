@@ -69,6 +69,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 Connect Stripe, manage payment processing fees, and configure payment settings.
               </p>
             </Link>
+            <Link
+              href={`/settings/billing?communityId=${context.communityId}`}
+              className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+            >
+              <h3 className="font-medium text-gray-900">Billing &amp; Subscription</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                View your current plan, manage your subscription, and access invoices.
+              </p>
+            </Link>
           </div>
         </div>
       )}
