@@ -9,10 +9,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { eq } from '@propertypro/db/filters';
-import { communities } from '@propertypro/db';
-import { createScopedClient } from '@propertypro/db';
-import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
+import { getEffectiveFeaturesAndPlanForPage } from '@/lib/middleware/plan-guard';
 import { MobileSearchContent } from '@/components/mobile/MobileSearchContent';
 
 interface PageProps {
@@ -37,17 +34,10 @@ export default async function MobileSearchPage({ searchParams }: PageProps) {
     redirect('/auth/login');
   }
 
-  // Fetch subscription plan for plan-gating
-  const scoped = createScopedClient(communityId);
-  const communityRows = await scoped.selectFrom(
-    communities,
-    {},
-    eq(communities.id, communityId),
+  const { features, planId } = await getEffectiveFeaturesAndPlanForPage(
+    communityId,
+    membership.communityType,
   );
-  const rawPlan = (communityRows[0] as Record<string, unknown> | undefined)?.['subscriptionPlan'];
-  const planId = typeof rawPlan === 'string' ? resolvePlanId(rawPlan) : null;
-
-  const features = getEffectiveFeatures(membership.communityType, planId);
 
   return (
     <MobileSearchContent

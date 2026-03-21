@@ -13,22 +13,28 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
+import { PLAN_FEATURES, LEGACY_PLAN_ALIASES } from '@propertypro/shared';
 
 // ── Plan display mapping (derived from PLAN_FEATURES + legacy aliases) ──
 
 const PLAN_DISPLAY: Record<string, { name: string; price: string }> = {
+  // Current plan IDs
   ...Object.fromEntries(
     Object.entries(PLAN_FEATURES).map(([id, config]) => [
       id,
       { name: config.displayName, price: `$${config.monthlyPriceUsd}/mo` },
     ]),
   ),
-  // Legacy plan IDs for existing Stripe subscriptions
-  compliance_basic: { name: 'Essentials', price: '$199/mo' },
-  compliance_plus_mobile: { name: 'Essentials', price: '$199/mo' },
-  full_platform: { name: 'Professional', price: '$349/mo' },
-  apartment_operations: { name: 'Operations Plus', price: '$499/mo' },
+  // Legacy plan IDs → resolve to their new plan's display info
+  ...Object.fromEntries(
+    Object.entries(LEGACY_PLAN_ALIASES).map(([legacyId, newId]) => [
+      legacyId,
+      {
+        name: PLAN_FEATURES[newId].displayName,
+        price: `$${PLAN_FEATURES[newId].monthlyPriceUsd}/mo`,
+      },
+    ]),
+  ),
 };
 
 // ── Subscription status display config ──

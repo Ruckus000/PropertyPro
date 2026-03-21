@@ -14,7 +14,7 @@ import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_FEATURES, resolvePlanId, getEffectiveFeatures, findCheapestPlanForFeature } from '@propertypro/shared';
-import type { CommunityType, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityType, CommunityFeatures, PlanId } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
 
 /**
@@ -74,6 +74,19 @@ export async function getEffectiveFeaturesForPage(
   communityId: number,
   communityType: CommunityType,
 ): Promise<CommunityFeatures> {
+  const { features } = await getEffectiveFeaturesAndPlanForPage(communityId, communityType);
+  return features;
+}
+
+/**
+ * Like getEffectiveFeaturesForPage but also returns the resolved planId.
+ * Useful when the page needs both the composed features AND the raw plan
+ * (e.g., to pass planId to client components for upgrade prompts).
+ */
+export async function getEffectiveFeaturesAndPlanForPage(
+  communityId: number,
+  communityType: CommunityType,
+): Promise<{ features: CommunityFeatures; planId: PlanId | null }> {
   const db = createUnscopedClient();
   const rows = await db
     .select({ subscriptionPlan: communities.subscriptionPlan })
@@ -84,5 +97,5 @@ export async function getEffectiveFeaturesForPage(
   const rawPlan = rows[0]?.subscriptionPlan ?? null;
   const planId = resolvePlanId(rawPlan);
 
-  return getEffectiveFeatures(communityType, planId);
+  return { features: getEffectiveFeatures(communityType, planId), planId };
 }
