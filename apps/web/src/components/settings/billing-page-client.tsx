@@ -13,13 +13,22 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ── Plan display mapping (matches signup-schema.ts definitions) ──
+import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
+
+// ── Plan display mapping (derived from PLAN_FEATURES + legacy aliases) ──
 
 const PLAN_DISPLAY: Record<string, { name: string; price: string }> = {
-  compliance_basic: { name: 'Compliance Basic', price: '$99/mo' },
-  compliance_plus_mobile: { name: 'Compliance + Mobile', price: '$199/mo' },
-  full_platform: { name: 'Full Platform', price: '$349/mo' },
-  apartment_operations: { name: 'Apartment Operations', price: '$499/mo' },
+  ...Object.fromEntries(
+    Object.entries(PLAN_FEATURES).map(([id, config]) => [
+      id,
+      { name: config.displayName, price: `$${config.monthlyPriceUsd}/mo` },
+    ]),
+  ),
+  // Legacy plan IDs for existing Stripe subscriptions
+  compliance_basic: { name: 'Essentials', price: '$199/mo' },
+  compliance_plus_mobile: { name: 'Essentials', price: '$199/mo' },
+  full_platform: { name: 'Professional', price: '$349/mo' },
+  apartment_operations: { name: 'Operations Plus', price: '$499/mo' },
 };
 
 // ── Subscription status display config ──
