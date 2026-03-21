@@ -50,6 +50,19 @@ interface CreateResidentResult {
   invitationFailed: boolean;
 }
 
+async function resendInvitation(communityId: number, userId: string): Promise<void> {
+  const response = await fetch('/api/v1/invitations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ communityId, userId }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(errorBody?.message ?? 'Failed to send invitation');
+  }
+}
+
 async function createAndInviteResident(
   communityId: number,
   values: ResidentFormSubmitValues,
@@ -122,6 +135,13 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
       await mutation.mutateAsync(values);
     },
     [mutation],
+  );
+
+  const handleResendInvite = useCallback(
+    async (userId: string) => {
+      await resendInvitation(communityId, userId);
+    },
+    [communityId],
   );
 
   // Filter residents by search query
@@ -247,6 +267,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         residents={filteredResidents}
         query={searchQuery}
         onQueryChange={setSearchQuery}
+        onResendInvite={handleResendInvite}
       />
 
       {searchQuery && filteredResidents.length === 0 && (
