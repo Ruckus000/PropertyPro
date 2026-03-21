@@ -57,7 +57,7 @@ export const PATCH = withErrorHandler(async (
 
   const communityId = parseCommunityIdFromBody(req, rawCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);
@@ -84,7 +84,7 @@ export const DELETE = withErrorHandler(async (
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);

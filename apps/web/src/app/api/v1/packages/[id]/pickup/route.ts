@@ -37,7 +37,7 @@ export const PATCH = withErrorHandler(
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requirePackageLoggingEnabled(membership);
+    await requirePackageLoggingEnabled(membership);
     requirePackagesWritePermission(membership);
     requireStaffOperator(membership);
 

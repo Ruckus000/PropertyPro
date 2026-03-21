@@ -18,7 +18,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireEsignReadPermission(membership);
+  await requireEsignReadPermission(membership);
 
   // Look up the user's email (needed to match signers by email as well as userId)
   const scoped = createScopedClient(communityId);

@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { AssessmentManager } from '@/components/finance/assessment-manager';
 
 interface PageProps {
@@ -27,6 +29,11 @@ export default async function AssessmentsPage({ params }: PageProps) {
 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
+
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
+  if (!features.hasFinance) {
+    redirect('/dashboard?reason=feature-not-available');
+  }
 
   return (
     <AssessmentManager

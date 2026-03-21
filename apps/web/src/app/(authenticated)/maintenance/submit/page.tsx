@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { createScopedClient, maintenanceRequests, maintenanceComments } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';
 import { SubmitForm } from '@/components/maintenance/SubmitForm';
@@ -34,7 +35,13 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
     redirect('/auth/login');
   }
 
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
+
+  // Feature gate — redirect if maintenance requests are not enabled for this community type/plan
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
+  if (!features.hasMaintenanceRequests) {
+    redirect('/dashboard?reason=feature-not-available');
+  }
 
   // Fetch the user's own requests server-side for initial render
   const scoped = createScopedClient(communityId);

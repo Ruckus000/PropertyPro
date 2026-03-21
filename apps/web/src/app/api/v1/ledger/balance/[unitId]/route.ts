@@ -25,7 +25,7 @@ export const GET = withErrorHandler(async (
   const communityId = parseCommunityIdFromQuery(req);
   const requestedUnitId = await parseUnitId(context);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
 
   let unitId = requestedUnitId;
   if (membership.role === 'resident' && membership.isUnitOwner) {

@@ -20,7 +20,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
 
   const searchParams = new URL(req.url).searchParams;
   const rawUnitId = searchParams.get('unitId');

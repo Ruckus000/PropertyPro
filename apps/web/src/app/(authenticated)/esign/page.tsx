@@ -12,7 +12,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { EsignPageShell } from '@/components/esign/esign-page-shell';
 
 interface PageProps {
@@ -38,7 +39,7 @@ export default async function EsignPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasEsign) {
     redirect('/dashboard?reason=feature-not-available');
   }

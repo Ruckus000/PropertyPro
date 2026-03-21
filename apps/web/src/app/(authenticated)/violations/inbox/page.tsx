@@ -9,7 +9,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ViolationsInboxTabs } from '@/components/violations/ViolationsInboxTabs';
 
 interface PageProps {
@@ -39,7 +40,7 @@ export default async function ViolationsInboxPage({ searchParams }: PageProps) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasViolations) {
     redirect('/dashboard?reason=feature-unavailable');
   }

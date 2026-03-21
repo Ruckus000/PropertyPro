@@ -13,8 +13,8 @@
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
-import type { CommunityFeatures } from '@propertypro/shared';
+import { PLAN_FEATURES, resolvePlanId, getEffectiveFeatures } from '@propertypro/shared';
+import type { CommunityType, CommunityFeatures } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
 
 /**
@@ -61,4 +61,30 @@ export async function requirePlanFeature(
     'PLAN_UPGRADE_REQUIRED',
     { featureKey, currentPlan: planId, requiredPlanDisplayName: upgradeDisplayName },
   );
+}
+
+/**
+ * Returns the effective feature flags for a community, composing both
+ * community-type features AND plan-level features.
+ *
+ * Use in page components (server components) that need to redirect on
+ * missing features. For API route handlers, prefer requirePlanFeature().
+ *
+ * Degradation rules match requirePlanFeature: null/unknown plan → fail-open.
+ */
+export async function getEffectiveFeaturesForPage(
+  communityId: number,
+  communityType: CommunityType,
+): Promise<CommunityFeatures> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ subscriptionPlan: communities.subscriptionPlan })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+
+  const rawPlan = rows[0]?.subscriptionPlan ?? null;
+  const planId = resolvePlanId(rawPlan);
+
+  return getEffectiveFeatures(communityType, planId);
 }

@@ -102,6 +102,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isAdmin = ADMIN_ROLES.has(membership.role);
   const isResident = RESIDENT_ROLES.has(membership.role);
 

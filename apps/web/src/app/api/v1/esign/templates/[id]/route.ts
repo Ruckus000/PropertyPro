@@ -53,7 +53,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignReadPermission(membership);
+    await requireEsignReadPermission(membership);
 
     const data = await getTemplate(communityId, id);
     return NextResponse.json({ data });
@@ -79,7 +79,7 @@ export const PATCH = withErrorHandler(
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignWritePermission(membership);
+    await requireEsignWritePermission(membership);
     await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');
@@ -109,7 +109,7 @@ export const DELETE = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignWritePermission(membership);
+    await requireEsignWritePermission(membership);
     await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');

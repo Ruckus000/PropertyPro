@@ -38,7 +38,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireViolationsEnabled(membership);
+    await requireViolationsEnabled(membership);
     requireViolationsReadPermission(membership);
 
     const scoped = createScopedClient(communityId);
@@ -68,7 +68,7 @@ export const PATCH = withErrorHandler(
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireViolationsEnabled(membership);
+    await requireViolationsEnabled(membership);
     requireViolationsWritePermission(membership);
     requireViolationAdminWrite(membership);
 

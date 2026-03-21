@@ -18,7 +18,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireVisitorLoggingEnabled(membership);
+  await requireVisitorLoggingEnabled(membership);
   requireVisitorsReadPermission(membership);
 
   if (!isResidentRole(membership.role)) {

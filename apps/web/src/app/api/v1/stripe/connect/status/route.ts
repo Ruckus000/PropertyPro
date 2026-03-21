@@ -13,7 +13,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceReadPermission(membership);
 
   if (!CONNECT_STATUS_ROLES.has(membership.role)) {

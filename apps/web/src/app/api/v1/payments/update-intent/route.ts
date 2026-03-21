@@ -28,7 +28,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
 
   // Owners can only update PIs they created; admins can update any PI in their community

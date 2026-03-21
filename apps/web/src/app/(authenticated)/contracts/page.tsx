@@ -10,7 +10,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ContractTable } from '@/components/contracts/ContractTable';
 
 interface PageProps {
@@ -37,7 +38,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
   const membership = await requireCommunityMembership(communityId, userId);
 
   // Feature gate: compliance communities only
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasCompliance) {
     redirect('/dashboard?reason=feature-not-available');
   }

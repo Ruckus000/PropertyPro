@@ -38,7 +38,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceReadPermission(membership);
 
   const assessments = await listAssessmentsForCommunity(communityId);
@@ -59,7 +59,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireFinanceEnabled(membership);
+  await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
   requireFinanceAdminWrite(membership);
   await requireActiveSubscriptionForMutation(communityId);

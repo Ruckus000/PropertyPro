@@ -18,7 +18,7 @@ export const POST = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignWritePermission(membership);
+    await requireEsignWritePermission(membership);
     await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');

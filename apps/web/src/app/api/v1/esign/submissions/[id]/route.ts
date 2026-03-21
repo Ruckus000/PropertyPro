@@ -17,7 +17,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireEsignReadPermission(membership);
+    await requireEsignReadPermission(membership);
 
     const data = await getSubmission(communityId, id);
     return NextResponse.json({ data });

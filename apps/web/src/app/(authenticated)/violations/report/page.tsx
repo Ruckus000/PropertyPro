@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { createScopedClient } from '@propertypro/db';
 import { getActorUnitIds } from '@/lib/violations/common';
 import { listViolationsForCommunity } from '@/lib/services/violations-service';
@@ -39,8 +39,8 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  // Feature gate — redirect if violations are not enabled for this community type
-  const features = getFeaturesForCommunity(membership.communityType);
+  // Feature gate — redirect if violations are not enabled for this community type/plan
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasViolations) {
     redirect('/dashboard?reason=feature-unavailable');
   }
