@@ -24,7 +24,8 @@ const NEXT_OUTPUT_ROOT = join(process.cwd(), 'apps', 'web', '.next');
  * CSS and font payloads are not measured. Recalibrate after Phase 3 routes ship.
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
-const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
+// Bumped from 700 KiB to 900 KiB to accommodate mobile redesign (hub-and-spoke + animations)
+const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 900 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
 
 const ROUTE_GROUP_CANDIDATES: Record<RouteGroup, readonly string[]> = {
