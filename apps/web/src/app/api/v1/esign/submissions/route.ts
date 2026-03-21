@@ -10,6 +10,7 @@ import {
   requireEsignReadPermission,
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   createSubmission,
   listSubmissions,
@@ -79,6 +80,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireEsignWritePermission(membership);
+  await requirePlanFeature(communityId, 'hasEsign');
 
   const requestId = req.headers.get('x-request-id');
   const data = await createSubmission(

@@ -32,6 +32,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
 import { formatRequest } from './_formatRequest';
 
@@ -206,6 +207,7 @@ async function handleCreateRequest(
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
   const scoped = createScopedClient(communityId);
 
@@ -299,6 +301,7 @@ async function handleAddComment(
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isAdmin = ADMIN_ROLES.has(membership.role);
   const isResident = RESIDENT_ROLES.has(membership.role);
 
@@ -365,6 +368,7 @@ async function handleRequestUploadUrl(
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
+  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
   const isResident = RESIDENT_ROLES.has(membership.role);
 
   if (payload.requestId != null) {

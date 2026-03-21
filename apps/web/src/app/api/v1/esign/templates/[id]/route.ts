@@ -10,6 +10,7 @@ import {
   requireEsignReadPermission,
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   getTemplate,
   updateTemplate,
@@ -79,6 +80,7 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');
     const data = await updateTemplate(
@@ -108,6 +110,7 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');
     await archiveTemplate(communityId, actorUserId, id, requestId);

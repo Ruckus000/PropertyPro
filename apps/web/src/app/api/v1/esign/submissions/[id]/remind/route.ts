@@ -7,6 +7,7 @@ import { BadRequestError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { requireEsignWritePermission } from '@/lib/esign/esign-route-helpers';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { sendReminder } from '@/lib/services/esign-service';
 
 const remindSchema = z.object({
@@ -34,6 +35,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
     const requestId = req.headers.get('x-request-id');
     await sendReminder(communityId, actorUserId, id, parseResult.data.signerId, requestId);
