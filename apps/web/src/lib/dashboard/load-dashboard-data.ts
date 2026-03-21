@@ -2,6 +2,7 @@ import {
   announcements,
   communities,
   createScopedClient,
+  maintenanceRequests,
   meetings,
   users,
   violations,
@@ -43,6 +44,7 @@ export interface DashboardData {
   meetings: DashboardMeeting[];
   violationSummary: DashboardViolationSummary | null;
   pendingSigners: DashboardPendingSigner[];
+  openMaintenanceCount: number;
 }
 
 export async function loadDashboardData(
@@ -50,12 +52,13 @@ export async function loadDashboardData(
   userId: string,
 ): Promise<DashboardData> {
   const scoped = createScopedClient(communityId);
-  const [announcementRows, meetingRows, communityRows, userRows, violationRows] = await Promise.all([
+  const [announcementRows, meetingRows, communityRows, userRows, violationRows, maintenanceRows] = await Promise.all([
     scoped.query(announcements),
     scoped.query(meetings),
     scoped.query(communities),
     scoped.query(users),
     scoped.query(violations),
+    scoped.query(maintenanceRequests),
   ]);
 
   const community = communityRows.find((row) => row['id'] === communityId);
@@ -66,6 +69,11 @@ export async function loadDashboardData(
   const user = userRows.find((row) => row['id'] === userId);
   const fullName = typeof user?.['fullName'] === 'string' ? (user['fullName'] as string) : null;
   const userEmail = typeof user?.['email'] === 'string' ? (user['email'] as string) : '';
+
+  const openStatuses = new Set(['open', 'submitted', 'in_progress', 'acknowledged']);
+  const openMaintenanceCount = maintenanceRows.filter(
+    (row) => typeof row['status'] === 'string' && openStatuses.has(row['status'] as string),
+  ).length;
 
   // Load pending e-sign signers if the feature is enabled
   let pendingSigners: DashboardPendingSigner[] = [];
@@ -94,5 +102,6 @@ export async function loadDashboardData(
     meetings: selectUpcomingMeetings(meetingRows as Meeting[]),
     violationSummary: selectViolationSummary(violationRows as unknown as Violation[]),
     pendingSigners,
+    openMaintenanceCount,
   };
 }

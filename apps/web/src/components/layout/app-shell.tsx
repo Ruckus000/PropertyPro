@@ -15,12 +15,21 @@
  * On mobile (<1024px): sidebar hidden, drawer overlay.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
+import { ADMIN_ROLES } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
-import { CommandPalette } from './command-palette';
+import { CommandPalette as CommandPaletteLegacy } from './command-palette';
+import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette';
 import { SidebarProvider, useSidebar } from './sidebar-context';
+import { AlertBanner } from '@/components/shared/alert-banner';
+
+// Feature flag: set to true to use the new command palette
+const USE_COMMAND_PALETTE_V2 = true;
+const CommandPalette = USE_COMMAND_PALETTE_V2 ? CommandPaletteV2 : CommandPaletteLegacy;
 
 export interface AppShellUser {
   id: string;
@@ -40,9 +49,10 @@ interface AppShellProps {
   community: AppShellCommunity | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  subscriptionStatus?: string | null;
 }
 
-function ShellInner({ children, user, community, role, features }: AppShellProps) {
+function ShellInner({ children, user, community, role, features, subscriptionStatus }: AppShellProps) {
   const { expanded, mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -121,6 +131,38 @@ function ShellInner({ children, user, community, role, features }: AppShellProps
           communityId={community?.id ?? null}
           onSearchOpen={() => setSearchOpen(true)}
         />
+        {(role === 'pm_admin' || role === 'property_manager_admin') && community && (
+          <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
+            <Link
+              href="/pm/dashboard/communities"
+              className="flex items-center gap-1 text-sm text-content-secondary transition-colors duration-quick hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              aria-label="Back to portfolio"
+            >
+              <ChevronLeft size={14} aria-hidden="true" />
+              <span>Portfolio</span>
+            </Link>
+            <span className="text-sm text-content-tertiary" aria-hidden="true">/</span>
+            <span className="text-sm font-medium text-content">{community.name}</span>
+          </div>
+        )}
+        {subscriptionStatus === 'past_due' && role && (ADMIN_ROLES as readonly string[]).includes(role) && (
+          <div className="px-6 pt-4 lg:px-8">
+            <AlertBanner
+              status="warning"
+              variant="filled"
+              title="Your subscription payment failed."
+              description="Please update your payment method to avoid service interruption."
+              action={
+                <a
+                  href={`/billing/portal${community ? `?communityId=${community.id}` : ''}`}
+                  className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  Update Payment Method
+                </a>
+              }
+            />
+          </div>
+        )}
         <main
           id="main-content"
           className="flex-1 overflow-y-auto"

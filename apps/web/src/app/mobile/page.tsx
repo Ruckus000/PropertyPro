@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * P3-48/49: Mobile home/dashboard page.
+ * Mobile home/dashboard page — hub-and-spoke navigation center.
  *
- * Renders recent announcements and upcoming meetings in compact card layout.
- * Data reuses the same loadDashboardData helper as the desktop portal.
+ * Renders community header, role-based feature card, and navigation list.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
@@ -14,8 +13,9 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getPublishedTemplate } from '@/lib/api/site-template';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
-import type { CommunityType } from '@propertypro/shared';
-import { CompactCard } from '@/components/mobile/CompactCard';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
+import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -28,6 +28,8 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
 
   // Auth — skip in preview mode (demo iframe from admin app on different origin)
   let userId: string | undefined;
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>> | undefined;
+
   if (!isPreview) {
     try {
       userId = await requireAuthenticatedUserId();
@@ -36,7 +38,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     }
 
     try {
-      await requireCommunityMembership(communityId, userId!);
+      membership = await requireCommunityMembership(communityId, userId!);
     } catch {
       redirect('/auth/login');
     }
@@ -58,7 +60,6 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     );
     const cssVars = toCssVars(theme);
     const fontLinks = toFontLinks(theme);
-    // Template JSX uses --pp-* aliases alongside --theme-* vars
     const templateVars: Record<string, string> = {
       ...cssVars,
       '--pp-primary': theme.primaryColor,
@@ -75,7 +76,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
         {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
         <script src="/assets/tailwind.min.js" async />
         <div style={templateVars} className="font-body">
-          <div dangerouslySetInnerHTML={{ __html: mobileHtml }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(mobileHtml) }} />
         </div>
       </>
     );
@@ -91,46 +92,24 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
   }
 
   const data = await loadDashboardData(communityId, userId!);
+  const features = getFeaturesForCommunity(membership!.communityType);
+  const nextMeeting = data.meetings[0] ?? null;
 
   return (
-    <div>
-      {/* Recent announcements */}
-      <div className="mt-1">
-        <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-          Announcements
-        </div>
-        {data.announcements.length === 0 ? (
-          <p className="mobile-empty">No recent announcements</p>
-        ) : (
-          data.announcements.map((a) => (
-            <CompactCard
-              key={a.id}
-              title={a.title}
-              subtitle={a.isPinned ? 'Pinned' : undefined}
-              meta={new Date(a.publishedAt).toLocaleDateString('en-US', { timeZone: data.timezone })}
-              href={`/mobile/announcements/${a.id}?communityId=${communityId}`}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Upcoming meetings */}
-      {data.meetings.length > 0 && (
-        <div className="mt-2">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-            Upcoming Meetings
-          </div>
-          {data.meetings.map((m) => (
-            <CompactCard
-              key={m.id}
-              title={m.title}
-              subtitle={m.meetingType}
-              meta={new Date(m.startsAt).toLocaleDateString('en-US', { timeZone: data.timezone })}
-              href={`/mobile/meetings?communityId=${communityId}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    <MobileHomeContent
+      userName={data.firstName}
+      communityName={data.communityName}
+      communityId={communityId}
+      city={membership!.city}
+      state={membership!.state}
+      timezone={data.timezone}
+      role={membership!.role}
+      presetKey={membership!.presetKey}
+      hasCompliance={features.hasCompliance}
+      hasMeetings={features.hasMeetings}
+      announcementCount={data.announcements.length}
+      openMaintenanceCount={data.openMaintenanceCount}
+      nextMeetingDate={nextMeeting?.startsAt ?? null}
+    />
   );
 }

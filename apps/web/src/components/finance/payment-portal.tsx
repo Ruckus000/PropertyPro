@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { formatDateOnly } from '@/lib/utils/format-date';
 
 /* ─────── Types ─────── */
 
@@ -53,13 +54,8 @@ function formatCents(cents: number): string {
   }).format(cents / 100);
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+/** @deprecated Use formatDateOnly from @/lib/utils/format-date */
+const formatDate = formatDateOnly;
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-status-warning-bg text-status-warning',
@@ -118,7 +114,20 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
 
   if (isError) {
     return (
-      <AlertBanner status="danger" title={error instanceof Error ? error.message : 'Failed to load payment data. Please try again later.'} />
+      <AlertBanner
+        status="danger"
+        title="We couldn't load your payment data."
+        description="Please try again or contact support if the issue persists."
+        action={
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="shrink-0 rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-1.5 text-xs font-medium text-status-danger hover:opacity-90"
+          >
+            Retry
+          </button>
+        }
+      />
     );
   }
 
@@ -151,7 +160,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
       </div>
 
       {/* Tab Navigation + Actions */}
-      <div className="flex items-end justify-between border-b border-edge">
+      <div className="flex flex-col gap-3 border-b border-edge sm:flex-row sm:items-end sm:justify-between">
         <nav className="-mb-px flex gap-6">
           <TabButton
             label="Upcoming"
@@ -172,12 +181,12 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
             if (unitId) params.set('unitId', String(unitId));
             window.open(`/api/v1/finance/export/statement?${params}`, '_blank');
           }}
-          className="mb-1 inline-flex items-center gap-1.5 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-hover"
+          className="mb-1 inline-flex items-center gap-1.5 self-start rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-hover sm:self-auto"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          Download Statement (PDF)
+          Download PDF
         </button>
       </div>
 
@@ -305,7 +314,7 @@ function UpcomingAssessments({
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+    <div className="overflow-x-auto rounded-md border border-edge bg-surface-card">
       <table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>
@@ -367,7 +376,7 @@ function PaymentHistory({ items }: { items: LineItem[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+    <div className="overflow-x-auto rounded-md border border-edge bg-surface-card">
       <table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>

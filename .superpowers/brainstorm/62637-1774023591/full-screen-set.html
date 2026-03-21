@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropertyPro Mobile — Full Screen Set</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #f5f5f4;
+    color: #1c1917;
+    padding: 24px;
+  }
+  h1 { font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .page-subtitle { font-size: 14px; color: #a8a29e; text-align: center; margin-bottom: 32px; }
+  .screen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, 320px);
+    gap: 32px;
+    justify-content: center;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .screen-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .screen-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #78716c;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 12px;
+  }
+  .phone {
+    width: 280px;
+    border: 2px solid #e7e5e4;
+    border-radius: 32px;
+    background: #fafaf9;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  }
+  .status-bar {
+    padding: 8px 20px 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #a8a29e;
+  }
+  .home-indicator {
+    padding: 14px 0 6px;
+    display: flex;
+    justify-content: center;
+  }
+  .home-indicator div {
+    width: 120px;
+    height: 4px;
+    background: #e7e5e4;
+    border-radius: 2px;
+  }
+  /* Shared component styles */
+  .nav-row {
+    padding: 18px 0;
+    border-bottom: 1px solid #f0eeec;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .nav-row:last-child { border-bottom: none; }
+  .nav-row svg.nav-icon { margin-right: 14px; flex-shrink: 0; }
+  .nav-row .nav-text { flex: 1; }
+  .nav-row .nav-title { font-size: 16px; font-weight: 500; color: #1c1917; }
+  .nav-row .nav-desc { font-size: 13px; color: #a8a29e; margin-top: 2px; }
+  .chevron { color: #d6d3d1; flex-shrink: 0; }
+  .badge-count {
+    background: #dc2626;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+  }
+  .back-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #f0eeec;
+  }
+  .back-header svg { color: #1c1917; }
+  .back-header .back-title { font-size: 16px; font-weight: 600; color: #1c1917; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #a8a29e;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+  }
+  .list-item {
+    padding: 16px 0;
+    border-bottom: 1px solid #f0eeec;
+  }
+  .list-item:last-child { border-bottom: none; }
+  .list-item-title { font-size: 15px; font-weight: 500; color: #1c1917; }
+  .list-item-meta { font-size: 12px; color: #a8a29e; margin-top: 3px; }
+  .pinned-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #d97706;
+    margin-top: 4px;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+  .tag-blue { background: #eff6ff; color: #2563eb; }
+  .tag-amber { background: #fffbeb; color: #d97706; }
+  .tag-green { background: #ecfdf5; color: #059669; }
+  .tag-gray { background: #f4f4f5; color: #71717a; }
+  .notes { font-size: 13px; color: #78716c; margin-top: 12px; line-height: 1.5; max-width: 280px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Warm Editorial — Full Screen Set</h1>
+<p class="page-subtitle">All mobile screens with consistent design language. Scroll to see each screen.</p>
+
+<div class="screen-grid">
+
+  <!-- ===== 1. HOME (Admin/Board view) ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Home — Admin View</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <!-- Header -->
+      <div style="padding: 20px 20px 0; display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="font-size: 28px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; line-height: 1.1;">Sunset<br>Condos</div>
+          <div style="font-size: 12px; color: #a8a29e; margin-top: 6px; font-weight: 500;">Miami, FL</div>
+        </div>
+        <div style="width: 42px; height: 42px; border-radius: 50%; background: #f5f5f4; border: 2px solid #e7e5e4; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #78716c;">JD</div>
+      </div>
+
+      <!-- Compliance card (admin only) -->
+      <div style="margin: 20px; padding: 20px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 11px; font-weight: 600; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.8px;">Compliance Score</div>
+            <div style="font-size: 36px; font-weight: 700; color: #1c1917; margin-top: 4px; letter-spacing: -1px;">94<span style="font-size: 20px; color: #a8a29e; font-weight: 500;">%</span></div>
+          </div>
+          <div style="width: 52px; height: 52px; border-radius: 50%; border: 3px solid #22c55e; background: #f0fdf4; display: flex; align-items: center; justify-content: center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          </div>
+        </div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f5f5f4; display: flex; gap: 16px;">
+          <div><div style="font-size: 18px; font-weight: 600; color: #1c1917;">3</div><div style="font-size: 11px; color: #a8a29e;">New updates</div></div>
+          <div style="width: 1px; background: #e7e5e4;"></div>
+          <div><div style="font-size: 18px; font-weight: 600; color: #1c1917;">1</div><div style="font-size: 11px; color: #a8a29e;">Open request</div></div>
+          <div style="width: 1px; background: #e7e5e4;"></div>
+          <div><div style="font-size: 18px; font-weight: 600; color: #1c1917;">Mar 25</div><div style="font-size: 11px; color: #a8a29e;">Next meeting</div></div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div style="padding: 0 20px;">
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div class="nav-text"><div class="nav-title">Documents</div><div class="nav-desc">Budgets, minutes, bylaws</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <div class="nav-text"><div class="nav-title">Announcements</div><div class="nav-desc">Community updates</div></div>
+          <div style="display: flex; align-items: center; gap: 8px;"><div class="badge-count">3</div><svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div class="nav-text"><div class="nav-title">Meetings</div><div class="nav-desc">Upcoming schedule</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="nav-row" style="border-bottom: none;">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          <div class="nav-text"><div class="nav-title">Maintenance</div><div class="nav-desc">Submit a request</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Board members, CAMs, and admins see the compliance score card.</p>
+  </div>
+
+  <!-- ===== 2. HOME (Tenant view) ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Home — Tenant View</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <!-- Header -->
+      <div style="padding: 20px 20px 0; display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="font-size: 28px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; line-height: 1.1;">Sunset<br>Condos</div>
+          <div style="font-size: 12px; color: #a8a29e; margin-top: 6px; font-weight: 500;">Miami, FL</div>
+        </div>
+        <div style="width: 42px; height: 42px; border-radius: 50%; background: #f5f5f4; border: 2px solid #e7e5e4; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #78716c;">MR</div>
+      </div>
+
+      <!-- Tenant feature card (no compliance) -->
+      <div style="margin: 20px; padding: 20px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; font-weight: 600; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Your Summary</div>
+        <div style="display: flex; gap: 16px;">
+          <div><div style="font-size: 22px; font-weight: 700; color: #1c1917;">3</div><div style="font-size: 11px; color: #a8a29e; margin-top: 2px;">Announcements</div></div>
+          <div style="width: 1px; background: #e7e5e4;"></div>
+          <div><div style="font-size: 22px; font-weight: 700; color: #1c1917;">1</div><div style="font-size: 11px; color: #a8a29e; margin-top: 2px;">Open request</div></div>
+          <div style="width: 1px; background: #e7e5e4;"></div>
+          <div><div style="font-size: 22px; font-weight: 700; color: #1c1917;">Mar 25</div><div style="font-size: 11px; color: #a8a29e; margin-top: 2px;">Next meeting</div></div>
+        </div>
+      </div>
+
+      <!-- Same navigation -->
+      <div style="padding: 0 20px;">
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div class="nav-text"><div class="nav-title">Documents</div><div class="nav-desc">Budgets, minutes, bylaws</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <div class="nav-text"><div class="nav-title">Announcements</div><div class="nav-desc">Community updates</div></div>
+          <div style="display: flex; align-items: center; gap: 8px;"><div class="badge-count">3</div><svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="nav-row">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div class="nav-text"><div class="nav-title">Meetings</div><div class="nav-desc">Upcoming schedule</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="nav-row" style="border-bottom: none;">
+          <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          <div class="nav-text"><div class="nav-title">Maintenance</div><div class="nav-desc">Submit a request</div></div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Tenants get a simple summary card — no compliance score. Same navigation below.</p>
+  </div>
+
+  <!-- ===== 3. DOCUMENTS ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Documents</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <!-- Back header -->
+      <div class="back-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1c1917" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="back-title">Documents</span>
+      </div>
+
+      <!-- Search -->
+      <div style="padding: 16px 20px 0;">
+        <div style="padding: 12px 14px; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a8a29e" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span style="font-size: 14px; color: #a8a29e;">Search documents...</span>
+        </div>
+      </div>
+
+      <!-- Category filters -->
+      <div style="padding: 14px 20px 0; display: flex; gap: 8px; overflow-x: auto;">
+        <div style="padding: 6px 14px; background: #1c1917; color: #fff; border-radius: 20px; font-size: 12px; font-weight: 500; white-space: nowrap;">All</div>
+        <div style="padding: 6px 14px; background: #f5f5f4; border: 1px solid #e7e5e4; color: #78716c; border-radius: 20px; font-size: 12px; font-weight: 500; white-space: nowrap;">Budgets</div>
+        <div style="padding: 6px 14px; background: #f5f5f4; border: 1px solid #e7e5e4; color: #78716c; border-radius: 20px; font-size: 12px; font-weight: 500; white-space: nowrap;">Minutes</div>
+        <div style="padding: 6px 14px; background: #f5f5f4; border: 1px solid #e7e5e4; color: #78716c; border-radius: 20px; font-size: 12px; font-weight: 500; white-space: nowrap;">Bylaws</div>
+      </div>
+
+      <!-- Document list -->
+      <div style="padding: 12px 20px 0;">
+        <div class="list-item">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div class="list-item-title">2024 Annual Budget</div>
+              <div class="list-item-meta">Budget  ·  PDF  ·  Posted Mar 1</div>
+              <span class="tag tag-blue">Requires Signature</span>
+            </div>
+          </div>
+        </div>
+        <div class="list-item">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: #f5f5f4; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div class="list-item-title">Board Meeting Minutes — Feb</div>
+              <div class="list-item-meta">Minutes  ·  PDF  ·  Posted Feb 28</div>
+            </div>
+          </div>
+        </div>
+        <div class="list-item">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: #f5f5f4; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div class="list-item-title">Community Bylaws (Amended)</div>
+              <div class="list-item-meta">Bylaws  ·  PDF  ·  Posted Jan 15</div>
+            </div>
+          </div>
+        </div>
+        <div class="list-item" style="border-bottom: none;">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: #f5f5f4; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div class="list-item-title">Insurance Certificate 2024</div>
+              <div class="list-item-meta">Insurance  ·  PDF  ·  Posted Jan 10</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Back arrow returns to Home. Search + pill filters for categories. Document icon + metadata + action tags.</p>
+  </div>
+
+  <!-- ===== 4. ANNOUNCEMENTS ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Announcements</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <div class="back-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1c1917" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="back-title">Announcements</span>
+      </div>
+
+      <div style="padding: 16px 20px 0;">
+        <!-- Pinned -->
+        <div class="section-title">Pinned</div>
+        <div class="list-item">
+          <div class="list-item-title">Pool Hours Update — Summer Schedule</div>
+          <div class="list-item-meta">Board  ·  Mar 15</div>
+          <div class="pinned-indicator">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+            Pinned
+          </div>
+        </div>
+
+        <!-- Recent -->
+        <div class="section-title" style="margin-top: 20px;">Recent</div>
+        <div class="list-item">
+          <div class="list-item-title">Lobby renovation — temporary entrance change</div>
+          <div class="list-item-meta">Management  ·  Mar 18</div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-title">Reminder: Annual meeting RSVP</div>
+          <div class="list-item-meta">Board  ·  Mar 12</div>
+          <span class="tag tag-amber">Action Needed</span>
+        </div>
+        <div class="list-item">
+          <div class="list-item-title">Pest control scheduled for Building B</div>
+          <div class="list-item-meta">Management  ·  Mar 8</div>
+        </div>
+        <div class="list-item" style="border-bottom: none;">
+          <div class="list-item-title">Parking lot resurfacing complete</div>
+          <div class="list-item-meta">Management  ·  Mar 2</div>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Pinned section at top. Tags for items needing action. Clean date + source metadata.</p>
+  </div>
+
+  <!-- ===== 5. MEETINGS ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Meetings</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <div class="back-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1c1917" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="back-title">Meetings</span>
+      </div>
+
+      <div style="padding: 16px 20px 0;">
+        <div class="section-title">Upcoming</div>
+
+        <!-- Meeting card -->
+        <div style="padding: 16px; background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #1c1917;">Board Meeting</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 4px;">March 25, 2024  ·  7:00 PM</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Clubhouse, 2nd Floor</div>
+            </div>
+            <div style="text-align: center; padding: 8px 12px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 10px;">
+              <div style="font-size: 11px; font-weight: 600; color: #a8a29e; text-transform: uppercase;">Mar</div>
+              <div style="font-size: 22px; font-weight: 700; color: #1c1917; line-height: 1;">25</div>
+            </div>
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0eeec;">
+            <span class="tag tag-blue">Agenda Available</span>
+          </div>
+        </div>
+
+        <div style="padding: 16px; background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #1c1917;">Annual Owner Meeting</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 4px;">April 10, 2024  ·  6:00 PM</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Community Room</div>
+            </div>
+            <div style="text-align: center; padding: 8px 12px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 10px;">
+              <div style="font-size: 11px; font-weight: 600; color: #a8a29e; text-transform: uppercase;">Apr</div>
+              <div style="font-size: 22px; font-weight: 700; color: #1c1917; line-height: 1;">10</div>
+            </div>
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0eeec;">
+            <span class="tag tag-amber">RSVP Requested</span>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 20px;">Past</div>
+        <div class="list-item">
+          <div class="list-item-title">Board Meeting — February</div>
+          <div class="list-item-meta">Feb 25  ·  Minutes available</div>
+          <span class="tag tag-green">Minutes Posted</span>
+        </div>
+        <div class="list-item" style="border-bottom: none;">
+          <div class="list-item-title">Budget Workshop</div>
+          <div class="list-item-meta">Feb 10  ·  Minutes available</div>
+          <span class="tag tag-green">Minutes Posted</span>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Upcoming meetings as cards with date badges. Past meetings as simple list items. Tags for available actions.</p>
+  </div>
+
+  <!-- ===== 6. MORE / PROFILE ===== -->
+  <div class="screen-wrapper">
+    <div class="screen-label">Profile &amp; Settings</div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span style="letter-spacing:1px">...</span></div>
+
+      <div class="back-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1c1917" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="back-title">Profile</span>
+      </div>
+
+      <!-- Profile card -->
+      <div style="padding: 24px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f5f5f4; border: 2px solid #e7e5e4; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: #78716c;">JD</div>
+        <div style="font-size: 20px; font-weight: 600; color: #1c1917; margin-top: 12px;">Jane Doe</div>
+        <div style="font-size: 13px; color: #a8a29e; margin-top: 4px;">Board President</div>
+        <div style="font-size: 13px; color: #a8a29e;">Sunset Condos</div>
+      </div>
+
+      <!-- Grouped settings -->
+      <div style="padding: 0 20px;">
+        <div class="section-title">Account</div>
+        <div style="background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; overflow: hidden;">
+          <div class="nav-row" style="padding: 14px 16px;">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <div class="nav-text"><div style="font-size: 15px; font-weight: 500; color: #1c1917;">Edit Profile</div></div>
+            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="nav-row" style="padding: 14px 16px; border-bottom: none;">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div class="nav-text"><div style="font-size: 15px; font-weight: 500; color: #1c1917;">Security</div></div>
+            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 20px;">Support</div>
+        <div style="background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; overflow: hidden;">
+          <div class="nav-row" style="padding: 14px 16px;">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="nav-text"><div style="font-size: 15px; font-weight: 500; color: #1c1917;">Help Center</div></div>
+            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="nav-row" style="padding: 14px 16px; border-bottom: none;">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <div class="nav-text"><div style="font-size: 15px; font-weight: 500; color: #1c1917;">Contact Management</div></div>
+            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Sign out -->
+        <div style="margin-top: 24px; padding: 14px 0; text-align: center;">
+          <span style="font-size: 15px; font-weight: 500; color: #dc2626; cursor: pointer;">Sign Out</span>
+        </div>
+      </div>
+
+      <div class="home-indicator"><div></div></div>
+    </div>
+    <p class="notes">Centered profile card. Grouped settings in iOS-style inset cards. Red sign-out at bottom.</p>
+  </div>
+
+</div>
+
+</body>
+</html>

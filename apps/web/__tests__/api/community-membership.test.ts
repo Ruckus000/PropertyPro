@@ -56,6 +56,8 @@ describe('requireCommunityMembership', () => {
       timezone: 'America/New_York',
       permissions: undefined,
       presetKey: undefined,
+      city: null,
+      state: null,
     });
   });
 

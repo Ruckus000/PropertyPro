@@ -44,6 +44,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "file-type": "^20.5.0",
+    "framer-motion": "^12.38.0",
     "isomorphic-dompurify": "^3.0.0",
     "lucide-react": "^0.575.0",
     "marked": "^17.0.3",

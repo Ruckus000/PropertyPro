@@ -477,6 +477,13 @@
       "when": 1773200000000,
       "tag": "0107_esign_native_template_support",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1773210000000,
+      "tag": "0108_add_faqs_and_community_contact",
+      "breakpoints": true
     }
   ]
 }

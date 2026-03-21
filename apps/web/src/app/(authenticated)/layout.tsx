@@ -10,6 +10,7 @@ import { getBrandingForCommunity } from '@/lib/api/branding';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { AppShell, type AppShellUser, type AppShellCommunity } from '@/components/layout/app-shell';
 import { AppQueryProvider } from '@/components/providers/query-provider';
+import { MotionProvider } from '@/components/providers/motion-provider';
 
 /**
  * Resolve authenticated user info from Supabase session.
@@ -43,7 +44,7 @@ async function resolveUser(): Promise<AppShellUser | null> {
 async function resolveCommunity(
   requestHeaders: Headers,
   userId: string,
-): Promise<{ community: AppShellCommunity; role: AnyCommunityRole } | null> {
+): Promise<{ community: AppShellCommunity; role: AnyCommunityRole; subscriptionStatus: string | null } | null> {
   const communityIdStr = requestHeaders.get('x-community-id');
   if (!communityIdStr) return null;
 
@@ -71,6 +72,7 @@ async function resolveCommunity(
         type: communityType as CommunityType,
       },
       role: role as AnyCommunityRole,
+      subscriptionStatus: match.subscriptionStatus ?? null,
     };
   } catch (error) {
     console.error('[AuthenticatedLayout] Failed to resolve community:', error);
@@ -100,6 +102,7 @@ export default async function AuthenticatedLayout({
 
   const community = communityData?.community ?? null;
   const role = communityData?.role ?? null;
+  const subscriptionStatus = communityData?.subscriptionStatus ?? null;
   const features = community ? getFeaturesForCommunity(community.type) : null;
 
   const branding = community ? await getBrandingForCommunity(community.id) : null;
@@ -117,9 +120,11 @@ export default async function AuthenticatedLayout({
       <div style={cssVars as React.CSSProperties}>
         <AuthSessionSync />
         <AppQueryProvider>
-          <AppShell user={user} community={community} role={role} features={features}>
-            {children}
-          </AppShell>
+          <MotionProvider>
+            <AppShell user={user} community={community} role={role} features={features} subscriptionStatus={subscriptionStatus}>
+              {children}
+            </AppShell>
+          </MotionProvider>
         </AppQueryProvider>
       </div>
     </>

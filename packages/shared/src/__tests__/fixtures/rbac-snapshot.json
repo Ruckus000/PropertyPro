@@ -84,6 +84,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": false
+      },
+      "units": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -169,6 +173,10 @@
       },
       "emergency_broadcasts": {
         "read": false,
+        "write": false
+      },
+      "units": {
+        "read": true,
         "write": false
       }
     },
@@ -256,6 +264,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": true
+      },
+      "units": {
+        "read": true,
+        "write": false
       }
     },
     "board_president": {
@@ -340,6 +352,10 @@
         "write": true
       },
       "emergency_broadcasts": {
+        "read": true,
+        "write": true
+      },
+      "units": {
         "read": true,
         "write": true
       }
@@ -428,6 +444,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": true
+      },
+      "units": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -514,6 +534,10 @@
       "emergency_broadcasts": {
         "read": false,
         "write": false
+      },
+      "units": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -598,6 +622,10 @@
         "write": true
       },
       "emergency_broadcasts": {
+        "read": true,
+        "write": true
+      },
+      "units": {
         "read": true,
         "write": true
       }
@@ -688,6 +716,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": false
+      },
+      "units": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -773,6 +805,10 @@
       },
       "emergency_broadcasts": {
         "read": false,
+        "write": false
+      },
+      "units": {
+        "read": true,
         "write": false
       }
     },
@@ -860,6 +896,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": true
+      },
+      "units": {
+        "read": true,
+        "write": false
       }
     },
     "board_president": {
@@ -944,6 +984,10 @@
         "write": true
       },
       "emergency_broadcasts": {
+        "read": true,
+        "write": true
+      },
+      "units": {
         "read": true,
         "write": true
       }
@@ -1032,6 +1076,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": true
+      },
+      "units": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -1118,6 +1166,10 @@
       "emergency_broadcasts": {
         "read": false,
         "write": false
+      },
+      "units": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -1202,6 +1254,10 @@
         "write": true
       },
       "emergency_broadcasts": {
+        "read": true,
+        "write": true
+      },
+      "units": {
         "read": true,
         "write": true
       }
@@ -1292,6 +1348,10 @@
       "emergency_broadcasts": {
         "read": false,
         "write": false
+      },
+      "units": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1378,6 +1438,10 @@
       "emergency_broadcasts": {
         "read": false,
         "write": false
+      },
+      "units": {
+        "read": true,
+        "write": false
       }
     },
     "board_member": {
@@ -1462,6 +1526,10 @@
         "write": false
       },
       "emergency_broadcasts": {
+        "read": false,
+        "write": false
+      },
+      "units": {
         "read": false,
         "write": false
       }
@@ -1550,6 +1618,10 @@
       "emergency_broadcasts": {
         "read": false,
         "write": false
+      },
+      "units": {
+        "read": false,
+        "write": false
       }
     },
     "cam": {
@@ -1634,6 +1706,10 @@
         "write": false
       },
       "emergency_broadcasts": {
+        "read": false,
+        "write": false
+      },
+      "units": {
         "read": false,
         "write": false
       }
@@ -1722,6 +1798,10 @@
       "emergency_broadcasts": {
         "read": true,
         "write": true
+      },
+      "units": {
+        "read": true,
+        "write": true
       }
     },
     "property_manager_admin": {
@@ -1806,6 +1886,10 @@
         "write": true
       },
       "emergency_broadcasts": {
+        "read": true,
+        "write": true
+      },
+      "units": {
         "read": true,
         "write": true
       }

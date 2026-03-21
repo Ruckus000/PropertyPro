@@ -1,0 +1,344 @@
+<h2>Mobile Design — Round 2</h2>
+<p class="subtitle">With personality, Lucide icons, no greetings, no emojis. Click to select.</p>
+
+<div class="cards">
+
+  <!-- Approach A: Architectural -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #f8f8f8; padding: 20px;">
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #ffffff; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span style="letter-spacing: 1px;">...</span>
+        </div>
+
+        <!-- Community header — branded accent band -->
+        <div style="margin: 8px 16px 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 20px; position: relative; overflow: hidden;">
+          <!-- Subtle geometric pattern overlay -->
+          <div style="position: absolute; top: -10px; right: -10px; width: 100px; height: 100px; border: 1px solid rgba(255,255,255,0.06); border-radius: 50%;"></div>
+          <div style="position: absolute; bottom: -20px; right: 20px; width: 60px; height: 60px; border: 1px solid rgba(255,255,255,0.04); border-radius: 50%;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div style="font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -0.3px;">Sunset Condos</div>
+              <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px; letter-spacing: 0.3px;">Miami, FL</div>
+            </div>
+            <div style="width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8);">JD</div>
+          </div>
+          <!-- Compliance inline -->
+          <div style="margin-top: 16px; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; border: 2.5px solid #4ade80; display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 600; color: #fff;">94% Compliant</div>
+              <div style="font-size: 11px; color: rgba(255,255,255,0.4);">All documents current</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spotlight: next action (not a greeting, a useful nudge) -->
+        <div style="margin: 14px 16px 0; padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #92400e;">Board Meeting in 5 days</div>
+            <div style="font-size: 12px; color: #b45309;">Mar 25 at 7 PM</div>
+          </div>
+        </div>
+
+        <!-- Navigation list with left accent bars -->
+        <div style="padding: 20px 16px 0;">
+          <div style="font-size: 11px; font-weight: 600; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;">Navigate</div>
+
+          <div style="display: flex; align-items: center; padding: 14px; background: #fafafa; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid #3b82f6; cursor: pointer;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #eff6ff; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #18181b;">Documents</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 1px;">Budgets, minutes, bylaws</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4d4d8" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 14px; background: #fafafa; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid #f59e0b; cursor: pointer;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #fffbeb; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #18181b;">Announcements</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 1px;">Community updates</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="background: #ef4444; color: white; font-size: 11px; font-weight: 600; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">3</div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4d4d8" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 14px; background: #fafafa; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid #8b5cf6; cursor: pointer;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #f5f3ff; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #18181b;">Meetings</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 1px;">Upcoming schedule</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4d4d8" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 14px; background: #fafafa; border-radius: 12px; margin-bottom: 8px; border-left: 3px solid #10b981; cursor: pointer;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #ecfdf5; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #18181b;">Maintenance</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 1px;">Submit a request</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4d4d8" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 14px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #e5e5e5; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Architectural</h3>
+      <p>Dark branded community header with subtle geometric pattern gives identity. Contextual alert banner (not a greeting) surfaces the next important thing. Navigation uses <strong>color-coded left accent bars</strong> per section with tinted icon backgrounds. Each section has its own color identity. Chevrons + descriptions make navigation obvious.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Personality from:</strong> branded header, section color coding, geometric accents<br>
+        <strong>Clarity from:</strong> large tap targets, descriptions, chevron affordances
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach B: Warm Editorial -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #f8f8f8; padding: 20px;">
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #fafaf9; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span style="letter-spacing: 1px;">...</span>
+        </div>
+
+        <!-- Header — large type, understated -->
+        <div style="padding: 20px 20px 0; display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-size: 28px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; line-height: 1.1;">Sunset<br>Condos</div>
+            <div style="font-size: 12px; color: #a8a29e; margin-top: 6px; font-weight: 500;">Miami, FL</div>
+          </div>
+          <div style="width: 42px; height: 42px; border-radius: 50%; background: #f5f5f4; border: 2px solid #e7e5e4; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #78716c;">JD</div>
+        </div>
+
+        <!-- Feature card — warm surface -->
+        <div style="margin: 20px; padding: 20px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 11px; font-weight: 600; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.8px;">Compliance Score</div>
+              <div style="font-size: 36px; font-weight: 700; color: #1c1917; margin-top: 4px; letter-spacing: -1px;">94<span style="font-size: 20px; color: #a8a29e; font-weight: 500;">%</span></div>
+            </div>
+            <div style="width: 52px; height: 52px; border-radius: 50%; border: 3px solid #22c55e; background: #f0fdf4; display: flex; align-items: center; justify-content: center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f5f5f4; display: flex; gap: 16px;">
+            <div>
+              <div style="font-size: 18px; font-weight: 600; color: #1c1917;">3</div>
+              <div style="font-size: 11px; color: #a8a29e;">New updates</div>
+            </div>
+            <div style="width: 1px; background: #e7e5e4;"></div>
+            <div>
+              <div style="font-size: 18px; font-weight: 600; color: #1c1917;">1</div>
+              <div style="font-size: 11px; color: #a8a29e;">Open request</div>
+            </div>
+            <div style="width: 1px; background: #e7e5e4;"></div>
+            <div>
+              <div style="font-size: 18px; font-weight: 600; color: #1c1917;">Mar 25</div>
+              <div style="font-size: 11px; color: #a8a29e;">Next meeting</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section nav — generous spacing, warm tones -->
+        <div style="padding: 0 20px;">
+          <div style="padding: 18px 0; border-bottom: 1px solid #f0eeec; display: flex; align-items: center; cursor: pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8" style="margin-right: 14px; flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 500; color: #1c1917;">Documents</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Budgets, minutes, bylaws</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div style="padding: 18px 0; border-bottom: 1px solid #f0eeec; display: flex; align-items: center; cursor: pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8" style="margin-right: 14px; flex-shrink: 0;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 500; color: #1c1917;">Announcements</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Community updates</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="background: #dc2626; color: white; font-size: 11px; font-weight: 600; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">3</div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+
+          <div style="padding: 18px 0; border-bottom: 1px solid #f0eeec; display: flex; align-items: center; cursor: pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8" style="margin-right: 14px; flex-shrink: 0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 500; color: #1c1917;">Meetings</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Upcoming schedule</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div style="padding: 18px 0; display: flex; align-items: center; cursor: pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#78716c" stroke-width="1.8" style="margin-right: 14px; flex-shrink: 0;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 500; color: #1c1917;">Maintenance</div>
+              <div style="font-size: 13px; color: #a8a29e; margin-top: 2px;">Submit a request</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d6d3d1" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 16px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #e5e5e5; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Warm Editorial</h3>
+      <p>Stone/warm-gray palette instead of cold zinc. Oversized community name as a <strong>typographic statement</strong> (stacked two lines). Large compliance card with stats dividers acts as a dashboard-in-miniature. Navigation is a clean list with monochrome Lucide icons, generous 18px vertical padding per row. Warm but restrained.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Personality from:</strong> warm stone tones, bold stacked typography, large feature card<br>
+        <strong>Clarity from:</strong> generous spacing, monochrome icons, simple list
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach C: Hybrid -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #f8f8f8; padding: 20px;">
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #ffffff; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span style="letter-spacing: 1px;">...</span>
+        </div>
+
+        <!-- Header — clean with profile -->
+        <div style="padding: 16px 20px 0; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 24px; font-weight: 700; color: #09090b; letter-spacing: -0.3px;">Sunset Condos</div>
+            <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">Miami, FL</div>
+          </div>
+          <div style="width: 40px; height: 40px; border-radius: 50%; background: #f4f4f5; border: 1.5px solid #e4e4e7; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #71717a;">JD</div>
+        </div>
+
+        <!-- Compliance + stats as horizontal scroll cards -->
+        <div style="padding: 16px 0 0; overflow-x: auto; display: flex; gap: 10px; padding-left: 20px; padding-right: 20px;">
+          <div style="flex-shrink: 0; width: 140px; padding: 16px; background: #09090b; border-radius: 14px;">
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px;">Compliance</div>
+            <div style="font-size: 28px; font-weight: 700; color: #fff; margin-top: 4px;">94%</div>
+            <div style="margin-top: 8px; height: 3px; background: #27272a; border-radius: 2px; overflow: hidden;">
+              <div style="width: 94%; height: 100%; background: #4ade80; border-radius: 2px;"></div>
+            </div>
+          </div>
+          <div style="flex-shrink: 0; width: 120px; padding: 16px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px;">
+            <div style="font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.5px;">Updates</div>
+            <div style="font-size: 28px; font-weight: 700; color: #09090b; margin-top: 4px;">3</div>
+            <div style="font-size: 12px; color: #a1a1aa; margin-top: 4px;">this week</div>
+          </div>
+          <div style="flex-shrink: 0; width: 120px; padding: 16px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px;">
+            <div style="font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.5px;">Next Meeting</div>
+            <div style="font-size: 20px; font-weight: 700; color: #09090b; margin-top: 4px;">Mar 25</div>
+            <div style="font-size: 12px; color: #a1a1aa; margin-top: 4px;">Board</div>
+          </div>
+        </div>
+
+        <!-- Navigation — cards with icon + color accent -->
+        <div style="padding: 20px 20px 0;">
+          <div style="font-size: 11px; font-weight: 600; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Sections</div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="padding: 18px 14px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px; cursor: pointer; position: relative; overflow: hidden;">
+              <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #3b82f6;"></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8" style="margin-bottom: 10px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div style="font-size: 14px; font-weight: 600; color: #18181b;">Documents</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">12 files</div>
+            </div>
+
+            <div style="padding: 18px 14px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px; cursor: pointer; position: relative; overflow: hidden;">
+              <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #f59e0b;"></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" style="margin-bottom: 10px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <div style="font-size: 14px; font-weight: 600; color: #18181b;">Announcements</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">3 new</div>
+            </div>
+
+            <div style="padding: 18px 14px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px; cursor: pointer; position: relative; overflow: hidden;">
+              <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #8b5cf6;"></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.8" style="margin-bottom: 10px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <div style="font-size: 14px; font-weight: 600; color: #18181b;">Meetings</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">Next: Mar 25</div>
+            </div>
+
+            <div style="padding: 18px 14px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px; cursor: pointer; position: relative; overflow: hidden;">
+              <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #10b981;"></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" style="margin-bottom: 10px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <div style="font-size: 14px; font-weight: 600; color: #18181b;">Maintenance</div>
+              <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">1 open</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent activity -->
+        <div style="padding: 20px 20px 0;">
+          <div style="font-size: 11px; font-weight: 600; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;">Recent Activity</div>
+          <div style="padding: 12px 0; border-bottom: 1px solid #f4f4f5;">
+            <div style="font-size: 14px; font-weight: 500; color: #18181b;">Board Meeting Minutes</div>
+            <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">Posted 2 hours ago</div>
+          </div>
+          <div style="padding: 12px 0;">
+            <div style="font-size: 14px; font-weight: 500; color: #18181b;">Pool maintenance notice</div>
+            <div style="font-size: 12px; color: #a1a1aa; margin-top: 2px;">Mar 18</div>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 14px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #e5e5e5; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C: Hybrid</h3>
+      <p>Best of both. Horizontal scrolling stat cards (dark compliance card as a hero), then a <strong>2x2 color-coded grid</strong> for main navigation with top accent bars, plus a recent activity feed below. Balances information density with clear visual hierarchy. The dark compliance card anchors the page.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Personality from:</strong> dark hero card, color-coded grid, horizontal scroll pattern<br>
+        <strong>Clarity from:</strong> large grid targets, labeled sections, activity feed
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top: 20px;">Click your preferred approach. You can also mix — e.g. "A's header with B's navigation list."</p>

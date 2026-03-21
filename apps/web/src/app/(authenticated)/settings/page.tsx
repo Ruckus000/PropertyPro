@@ -46,6 +46,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-8">
       <div>
+        <h2 className="mb-2 text-xl font-semibold">Personal Settings</h2>
+        <p className="mb-4 text-sm text-content-secondary">
+          Manage your account and personal preferences.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/settings/account"
+            className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+          >
+            <h3 className="font-medium text-gray-900">Account</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Update your name, phone number, and password.
+            </p>
+          </Link>
+        </div>
+      </div>
+      <div>
         <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
         <p className="mb-4 text-sm text-content-secondary">
           Choose which emails you receive and when they should be delivered.
@@ -67,6 +84,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <h3 className="font-medium text-gray-900">Payment Configuration</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Connect Stripe, manage payment processing fees, and configure payment settings.
+              </p>
+            </Link>
+            <Link
+              href={`/settings/billing?communityId=${context.communityId}`}
+              className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+            >
+              <h3 className="font-medium text-gray-900">Billing &amp; Subscription</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                View your current plan, manage your subscription, and access invoices.
               </p>
             </Link>
           </div>

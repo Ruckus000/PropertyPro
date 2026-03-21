@@ -1,12 +1,8 @@
 /**
- * P3-48/49: Mobile route group layout.
+ * Mobile route group layout — hub-and-spoke navigation.
  *
- * /mobile/* routes share this layout. Protected by middleware (already in
- * PROTECTED_PATH_PREFIXES). This layout performs a second server-side auth
- * + membership check to get the community type needed by BottomTabBar.
- *
- * Community ID is resolved from the ?communityId= search param on every
- * request. Unauthenticated or membership-denied requests redirect to login.
+ * /mobile/* routes share this layout. Protected by middleware.
+ * Community ID resolved from x-community-id header (set by middleware).
  */
 export const dynamic = 'force-dynamic';
 
@@ -16,10 +12,10 @@ import type { ReactNode } from 'react';
 import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { getBrandingForCommunity } from '@/lib/api/branding';
-import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
-import { BottomTabBar } from '@/components/mobile/BottomTabBar';
-import { MobileTopBar } from '@/components/mobile/MobileTopBar';
+import { MotionProvider } from '@/components/providers/motion-provider';
+import { AppQueryProvider } from '@/components/providers/query-provider';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -36,36 +32,23 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
 
   const communityId = rawId;
 
-  // Preview mode: skip auth, render minimal shell (no nav bars).
-  // The page handles its own branding/fonts when rendering templates.
+  // Preview mode: skip auth, render minimal shell
   const isPreview = requestHeaders.get('x-preview') === 'true';
   if (isPreview) {
     return <>{children}</>;
   }
 
-  let userId: string;
-  let userName: string | null = null;
+  let communityName = '';
+  let communityType: CommunityType = 'condo_718';
 
   try {
     const user = await requireAuthenticatedUser();
-    userId = user.id;
-    userName = (user.user_metadata?.full_name as string) ?? null;
-  } catch {
-    redirect('/auth/login');
-  }
-
-  let communityType: CommunityType = 'condo_718'; // fallback; overwritten below
-  let communityName = '';
-
-  try {
-    const membership = await requireCommunityMembership(communityId, userId!);
+    const membership = await requireCommunityMembership(communityId, user.id);
     communityType = membership.communityType;
     communityName = membership.communityName;
   } catch {
     redirect('/auth/login');
   }
-
-  const features = getFeaturesForCommunity(communityType);
 
   const branding = await getBrandingForCommunity(communityId);
   const theme = resolveTheme(branding, communityName, communityType);
@@ -78,9 +61,13 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div className="mobile-shell" style={cssVars as React.CSSProperties}>
-        <MobileTopBar communityName={communityName} userName={userName} communityId={communityId} />
-        <main id="main-content" className="mobile-content">{children}</main>
-        <BottomTabBar features={features} communityId={communityId} />
+        <AppQueryProvider>
+          <MotionProvider>
+            <main id="main-content" className="mobile-content">
+              {children}
+            </main>
+          </MotionProvider>
+        </AppQueryProvider>
       </div>
     </>
   );

@@ -33,11 +33,18 @@ vi.mock('@/lib/api/community-membership', () => ({
 vi.mock('@/lib/dashboard/load-dashboard-data', () => ({
   loadDashboardData: loadDashboardDataMock,
 }));
+class RedirectError extends Error {
+  constructor(url: string) { super(`NEXT_REDIRECT:${url}`); }
+}
+
 vi.mock('next/navigation', () => ({
-  redirect: redirectMock,
+  redirect: (...args: unknown[]) => { redirectMock(...args); throw new RedirectError(String(args[0])); },
 }));
-vi.mock('@/components/mobile/CompactCard', () => ({
-  CompactCard: () => null,
+vi.mock('@/components/mobile/MobileHomeContent', () => ({
+  MobileHomeContent: () => null,
+}));
+vi.mock('@propertypro/shared', () => ({
+  getFeaturesForCommunity: () => ({ hasCompliance: true, hasMeetings: true }),
 }));
 vi.mock('@/lib/api/site-template', () => ({
   getPublishedTemplate: getPublishedTemplateMock,
@@ -72,6 +79,9 @@ describe('MobileHomePage', () => {
       communityId: 1,
       userId: 'user-1',
       communityType: 'condo_718',
+      city: 'Miami',
+      state: 'FL',
+      presetKey: 'owner',
     });
     loadDashboardDataMock.mockResolvedValue({
       firstName: 'Jane',
@@ -79,6 +89,7 @@ describe('MobileHomePage', () => {
       timezone: 'America/New_York',
       announcements: [],
       meetings: [],
+      openMaintenanceCount: 0,
     });
     getPublishedTemplateMock.mockResolvedValue(null);
     getBrandingForCommunityMock.mockResolvedValue(null);
@@ -89,13 +100,13 @@ describe('MobileHomePage', () => {
 
   it('redirects to /auth/login when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new Error('Unauthorized'));
-    await MobileHomePage({ searchParams: SEARCH_PARAMS_1 });
+    await expect(MobileHomePage({ searchParams: SEARCH_PARAMS_1 })).rejects.toThrow('NEXT_REDIRECT');
     expect(redirectMock).toHaveBeenCalledWith('/auth/login');
   });
 
   it('redirects to /auth/login when membership denied', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new Error('Forbidden'));
-    await MobileHomePage({ searchParams: SEARCH_PARAMS_1 });
+    await expect(MobileHomePage({ searchParams: SEARCH_PARAMS_1 })).rejects.toThrow('NEXT_REDIRECT');
     expect(redirectMock).toHaveBeenCalledWith('/auth/login');
   });
 

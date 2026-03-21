@@ -22,6 +22,10 @@ export interface CommunityMembership {
   displayTitle: string;
   /** Preset key for managers (e.g. 'board_president', 'cam'). */
   presetKey?: string;
+  /** Community city for location display. */
+  city: string | null;
+  /** Community state abbreviation for location display. */
+  state: string | null;
 }
 
 /**
@@ -108,5 +112,7 @@ export async function requireCommunityMembership(
     permissions,
     displayTitle,
     presetKey,
+    city: typeof community['city'] === 'string' ? community['city'] : null,
+    state: typeof community['state'] === 'string' ? community['state'] : null,
   };
 }

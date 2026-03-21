@@ -77,6 +77,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
   // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
   { path: '/api/v1/webhooks/twilio', method: 'POST' },
+  // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
+  { path: '/api/v1/auth/confirm-verification', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

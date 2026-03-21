@@ -105,7 +105,7 @@ export function NotificationPreferencesForm({ communityId }: Props) {
       </div>
 
       <div className="space-y-2">
-        <label className="flex items-center gap-2">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
             type="checkbox"
             checked={values.emailAnnouncements}
@@ -113,23 +113,23 @@ export function NotificationPreferencesForm({ communityId }: Props) {
               setValues((v) => ({ ...v, emailAnnouncements: e.target.checked }))
             }
           />
-          <span>Announcements</span>
+          <span className="text-sm text-content">Announcements</span>
         </label>
-        <label className="flex items-center gap-2">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
             type="checkbox"
             checked={values.emailMeetings}
             onChange={(e) => setValues((v) => ({ ...v, emailMeetings: e.target.checked }))}
           />
-          <span>Meeting notices</span>
+          <span className="text-sm text-content">Meeting notices</span>
         </label>
-        <label className="flex items-center gap-2">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
             type="checkbox"
             checked={values.inAppEnabled}
             onChange={(e) => setValues((v) => ({ ...v, inAppEnabled: e.target.checked }))}
           />
-          <span>In-app notifications</span>
+          <span className="text-sm text-content">In-app notifications</span>
         </label>
       </div>
 

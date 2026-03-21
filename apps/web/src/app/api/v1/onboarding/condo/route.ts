@@ -8,6 +8,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
+    communities,
     complianceChecklistItems,
     createScopedClient,
     documentCategories,
@@ -46,6 +47,7 @@ import {
     mergeStepData,
     updateCommunityProfile,
     getOrCreateWizardState,
+    buildProfileFromCommunity,
 } from '@/lib/onboarding/wizard-common';
 
 const WIZARD_TYPE = 'condo';
@@ -310,7 +312,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     requireCondoCommunity(membership.communityType);
 
     const scoped = createScopedClient(communityId);
-    const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
+
+    // Pre-populate profile step from existing community data (collected during signup)
+    const communityRows = await scoped.query(communities);
+    const community = communityRows.find((row) => row['id'] === communityId);
+    const initialStepData = community
+        ? { profile: buildProfileFromCommunity(community) }
+        : undefined;
+
+    const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE, initialStepData);
 
     const stepData = normalizeCondoWizardStepData(wizard.stepData);
 

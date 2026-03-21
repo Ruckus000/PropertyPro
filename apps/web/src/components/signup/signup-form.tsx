@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
 import {
@@ -31,6 +31,12 @@ interface SignupApiSuccess {
   message: string;
 }
 
+type VerificationState =
+  | { status: 'idle' }
+  | { status: 'confirming' }
+  | { status: 'confirmed'; signupRequestId: string }
+  | { status: 'error'; message: string };
+
 export function SignupForm({
   initialCommunityType = 'condo_718',
   initialSignupRequestId,
@@ -49,6 +55,9 @@ export function SignupForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successResult, setSuccessResult] = useState<SignupApiSuccess | null>(null);
+  const [verificationState, setVerificationState] = useState<VerificationState>(
+    { status: 'idle' },
+  );
 
   const [primaryContactName, setPrimaryContactName] = useState('');
   const [email, setEmail] = useState('');
@@ -70,6 +79,47 @@ export function SignupForm({
       setPlanKey(plans[0]!.id);
     }
   }, [communityType, planKey, plans]);
+
+  // O-01 fix: confirm email verification status on return from Supabase redirect
+  const confirmVerification = useCallback(async (requestId: string) => {
+    setVerificationState({ status: 'confirming' });
+    try {
+      const response = await fetch('/api/v1/auth/confirm-verification', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ signupRequestId: requestId }),
+      });
+
+      const payload = (await response.json()) as {
+        data?: { success: boolean; signupRequestId: string };
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !payload.data?.success) {
+        setVerificationState({
+          status: 'error',
+          message: payload.error?.message ?? 'Unable to confirm email verification.',
+        });
+        return;
+      }
+
+      setVerificationState({
+        status: 'confirmed',
+        signupRequestId: payload.data.signupRequestId,
+      });
+    } catch {
+      setVerificationState({
+        status: 'error',
+        message: 'Unable to confirm email verification. Please try again.',
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (verificationReturn && initialSignupRequestId) {
+      confirmVerification(initialSignupRequestId);
+    }
+  }, [verificationReturn, initialSignupRequestId, confirmVerification]);
 
   function handleCommunityNameChange(value: string): void {
     setCommunityName(value);
@@ -135,13 +185,60 @@ export function SignupForm({
     }
   }
 
+  // O-02 fix: when verification is confirmed, show checkout navigation instead of form
+  if (verificationState.status === 'confirming') {
+    return (
+      <div className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0" role="status" aria-live="polite">
+        <div className="flex items-center gap-3 rounded-md border border-status-info-border bg-interactive/10 px-4 py-3">
+          <svg className="h-5 w-5 animate-spin text-interactive" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span className="text-sm text-content-secondary">Confirming your email verification...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationState.status === 'confirmed') {
+    return (
+      <div className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
+        <div className="rounded-md border border-status-success-border bg-status-success-bg px-4 py-3" role="status">
+          <p className="text-sm font-medium text-status-success">Email verified successfully.</p>
+          <p className="mt-1 text-sm text-content-secondary">Your email has been confirmed. Proceed to checkout to activate your community.</p>
+        </div>
+        <Link
+          href={`/signup/checkout?signupRequestId=${encodeURIComponent(verificationState.signupRequestId)}`}
+          className="block w-full rounded-md bg-interactive px-4 py-2.5 text-center text-sm font-semibold text-content-inverse hover:bg-interactive/90"
+        >
+          Proceed to Checkout
+        </Link>
+      </div>
+    );
+  }
+
+  if (verificationState.status === 'error') {
+    return (
+      <div className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
+        <div className="rounded-md border border-status-danger bg-status-danger-bg px-4 py-3" role="alert">
+          <p className="text-sm font-medium text-status-danger">Verification failed</p>
+          <p className="mt-1 text-sm text-content-secondary">{verificationState.message}</p>
+        </div>
+        {initialSignupRequestId ? (
+          <button
+            type="button"
+            onClick={() => confirmVerification(initialSignupRequestId)}
+            className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-semibold text-content-inverse hover:bg-interactive/90"
+          >
+            Retry Verification
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
-      {verificationReturn ? (
-        <div className="rounded-md border border-status-info-border bg-interactive/10 px-4 py-3 text-sm text-content-link">
-          Verification returned successfully. Complete signup with the same request details below.
-        </div>
-      ) : null}
 
       {errorMessage ? (
         <div className="rounded-md border border-status-danger bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert">
@@ -308,7 +405,7 @@ export function SignupForm({
       <button
         type="submit"
         disabled={isSubmitting || isSubdomainBlocked}
-        className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-semibold text-content-inverse hover:bg-interactive/100 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-semibold text-content-inverse hover:bg-interactive/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? 'Submitting...' : 'Create Account'}
       </button>

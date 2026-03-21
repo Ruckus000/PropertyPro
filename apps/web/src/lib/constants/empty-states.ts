@@ -79,6 +79,13 @@ export const EMPTY_STATE_CONFIGS = {
     description: "No violations have been reported. Great job!",
     icon: "shield-check",
   },
+  no_residents: {
+    title: "Add your first resident",
+    description:
+      "Add residents manually to enable portal access and community management.",
+    actionLabel: "Add Resident",
+    icon: "users",
+  },
   no_esign_pending: {
     title: "No documents awaiting signature",
     description: "All signature requests have been completed.",

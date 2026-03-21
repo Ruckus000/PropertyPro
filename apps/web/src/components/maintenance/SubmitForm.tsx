@@ -152,7 +152,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="mr-category" className="block text-sm font-medium text-content-secondary">
             Category
@@ -200,7 +200,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           accept="image/jpeg,image/png,image/webp,image/gif"
           multiple
           onChange={handlePhotoChange}
-          className="mt-1 block w-full text-sm text-content-tertiary file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1 file:text-sm file:font-medium file:text-interactive hover:file:bg-interactive-subtle"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content-tertiary shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-interactive hover:file:bg-interactive-subtle"
         />
         {photos.length > 0 && (
           <ul className="mt-2 space-y-1">
