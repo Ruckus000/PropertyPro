@@ -147,10 +147,10 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'residents',
     label: 'Residents',
     icon: Users,
-    href: (cid) => `/residents?communityId=${cid}`,
+    href: (cid) => `/dashboard/residents?communityId=${cid}`,
     roles: ADMIN_ROLES,
     group: 'admin',
-    matchPrefixes: ['/residents'],
+    matchPrefixes: ['/dashboard/residents'],
   },
   {
     id: 'maintenance-inbox',
