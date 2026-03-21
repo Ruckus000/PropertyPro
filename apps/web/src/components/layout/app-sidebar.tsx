@@ -5,20 +5,23 @@
  *
  * Renders the dark collapsible sidebar matching the PropertyProRedesign.jsx mockup.
  * Navigation items are filtered by role and community features.
+ * Plan-locked items are shown with a lock indicator and upgrade prompt.
  */
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building } from 'lucide-react';
+import { Building, Lock } from 'lucide-react';
 import { NavRail, type NavRailItem } from '@propertypro/ui';
-import { toInitials, type AnyCommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
+import { toInitials, resolvePlanId, type AnyCommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
 import {
   NAV_ITEMS,
   PM_NAV_ITEMS,
-  getVisibleItems,
+  getVisibleItemsWithPlanGate,
   getActiveItemId,
-  type NavItemConfig,
+  type NavItemWithGateStatus,
 } from './nav-config';
 import { useSidebar } from './sidebar-context';
+import { UpgradePrompt } from '../shared/upgrade-prompt';
 
 interface AppSidebarProps {
   communityId: number | null;
@@ -30,36 +33,52 @@ interface AppSidebarProps {
   plan: string | null;
 }
 
+/** Wraps an icon component with a small lock badge overlay for plan-locked items. */
+function LockedIcon({ Icon }: { Icon: React.ComponentType<{ size?: number }> }) {
+  return (
+    <span className="relative opacity-50">
+      <Icon size={20} />
+      <Lock size={10} className="absolute -bottom-0.5 -right-0.5 text-white/70" aria-hidden="true" />
+    </span>
+  );
+}
+
 export function AppSidebar({
   communityId,
   communityName,
+  communityType,
   role,
   features,
   userName,
+  plan,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { expanded, toggleExpanded } = useSidebar();
+  const [upgradePrompt, setUpgradePrompt] = useState<{ planName: string } | null>(null);
 
   const isPmContext = pathname.startsWith('/pm/');
-  const sourceItems: readonly NavItemConfig[] = isPmContext ? PM_NAV_ITEMS : NAV_ITEMS;
-  const visibleItems = isPmContext
-    ? [...PM_NAV_ITEMS]
-    : getVisibleItems(sourceItems, role, features);
+  const resolvedPlanId = plan ? resolvePlanId(plan) : null;
+
+  const allVisible: NavItemWithGateStatus[] = isPmContext
+    ? PM_NAV_ITEMS.map((i) => ({ ...i, planLocked: false, upgradePlanName: null }))
+    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId);
 
   // Find where main group ends and admin group starts
-  const mainItems = visibleItems.filter((i) => i.group === 'main');
-  const adminItems = visibleItems.filter((i) => i.group === 'admin');
+  const mainItems = allVisible.filter((i) => i.group === 'main');
+  const adminItems = allVisible.filter((i) => i.group === 'admin');
 
   // Map to NavRailItem format with hrefs
-  const allVisible = [...mainItems, ...adminItems];
-  const navRailItems: NavRailItem[] = allVisible.map((item) => ({
+  const orderedItems = [...mainItems, ...adminItems];
+  const navRailItems: NavRailItem[] = orderedItems.map((item) => ({
     id: item.id,
-    label: item.label,
-    icon: item.icon,
-    href: communityId ? item.href(communityId) : undefined,
+    label: item.planLocked ? `${item.label} (Upgrade)` : item.label,
+    icon: item.planLocked
+      ? (props: { size?: number }) => <LockedIcon Icon={item.icon} />
+      : item.icon,
+    href: item.planLocked ? undefined : (communityId ? item.href(communityId) : undefined),
   }));
 
-  const activeId = getActiveItemId(allVisible, pathname) ?? '';
+  const activeId = getActiveItemId(orderedItems, pathname) ?? '';
 
   // Group separator between main and admin sections
   const groupSeparatorIndex = mainItems.length;
@@ -115,23 +134,38 @@ export function AppSidebar({
   ) : null;
 
   return (
-    <NavRail
-      items={navRailItems}
-      activeView={activeId}
-      onViewChange={() => {
-        /* navigation handled by Link hrefs */
-      }}
-      expanded={expanded}
-      onToggle={toggleExpanded}
-      header={header}
-      footer={footer}
-      groupSeparator={groupSeparator}
-      groupSeparatorAfterIndex={groupSeparatorIndex}
-      renderLink={({ href, className, children, ...props }) => (
-        <Link key={href} href={href} className={className} {...props}>
-          {children}
-        </Link>
+    <>
+      <NavRail
+        items={navRailItems}
+        activeView={activeId}
+        onViewChange={(id) => {
+          const clickedItem = orderedItems.find((i) => i.id === id);
+          if (clickedItem?.planLocked && clickedItem.upgradePlanName) {
+            setUpgradePrompt({ planName: clickedItem.upgradePlanName });
+          }
+        }}
+        expanded={expanded}
+        onToggle={toggleExpanded}
+        header={header}
+        footer={footer}
+        groupSeparator={groupSeparator}
+        groupSeparatorAfterIndex={groupSeparatorIndex}
+        renderLink={({ href, className, children, ...props }) => (
+          <Link key={href} href={href} className={className} {...props}>
+            {children}
+          </Link>
+        )}
+      />
+      {upgradePrompt && (
+        <div className="fixed inset-0 z-50" onClick={() => setUpgradePrompt(null)}>
+          <div
+            className="absolute left-[var(--sidebar-width,64px)] top-1/3 ml-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <UpgradePrompt planName={upgradePrompt.planName} />
+          </div>
+        </div>
       )}
-    />
+    </>
   );
 }
