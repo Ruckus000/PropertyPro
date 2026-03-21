@@ -33,6 +33,7 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/filters',
   '@propertypro/db/unsafe',
   '@propertypro/db/seed/seed-community',
+  '@propertypro/db/supabase/cookie-config',
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
@@ -76,6 +77,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/agent-login/route.ts'),
+  // O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin
+  resolve(repoRoot, 'apps/web/src/app/api/v1/auth/confirm-verification/route.ts'),
   // E-02: Account profile — user-scoped update (no community_id on users table)
   resolve(repoRoot, 'apps/web/src/app/api/v1/account/profile/route.ts'),
   // E-02: Account settings page — reads user row (no community_id on users table)
