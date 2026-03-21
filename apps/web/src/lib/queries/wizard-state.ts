@@ -13,10 +13,10 @@ function deriveNextStep(lastCompletedStep: number | null, maxStepIndex: number):
 
 function getMaxStepIndex(wizardType: string): number {
   if (wizardType === 'condo') {
-    return 2;
+    return 3;
   }
 
-  return 3;
+  return 4;
 }
 
 function toIsoString(value: unknown): string | null {
