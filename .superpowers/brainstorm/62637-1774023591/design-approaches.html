@@ -1,0 +1,281 @@
+<h2>Mobile Design Direction</h2>
+<p class="subtitle">Three approaches blending shadcn + Apple aesthetics for a hub-and-spoke navigation model</p>
+
+<div class="cards">
+
+  <!-- Approach A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #fafafa; padding: 20px;">
+      <!-- iPhone frame mockup -->
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #ffffff; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span>●●● ▐█▌</span>
+        </div>
+
+        <!-- Large title header -->
+        <div style="padding: 24px 20px 8px;">
+          <div style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Good morning</div>
+          <div style="font-size: 28px; font-weight: 700; color: #0a0a0a; line-height: 1.15;">Sunset Condos</div>
+        </div>
+
+        <!-- Compliance card -->
+        <div style="margin: 16px 20px; padding: 20px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Compliance</div>
+              <div style="font-size: 32px; font-weight: 700; color: #0a0a0a;">94%</div>
+            </div>
+            <div style="width: 48px; height: 48px; border-radius: 50%; border: 3px solid #22c55e; display: flex; align-items: center; justify-content: center;">
+              <span style="color: #22c55e; font-size: 16px;">✓</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section cards -->
+        <div style="padding: 0 20px;">
+          <div style="font-size: 13px; font-weight: 600; color: #0a0a0a; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.3px;">Quick Access</div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div style="padding: 16px 14px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px;">
+              <div style="font-size: 20px; margin-bottom: 6px;">📄</div>
+              <div style="font-size: 13px; font-weight: 600; color: #0a0a0a;">Documents</div>
+              <div style="font-size: 11px; color: #999; margin-top: 2px;">12 files</div>
+            </div>
+            <div style="padding: 16px 14px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px;">
+              <div style="font-size: 20px; margin-bottom: 6px;">📢</div>
+              <div style="font-size: 13px; font-weight: 600; color: #0a0a0a;">Announcements</div>
+              <div style="font-size: 11px; color: #999; margin-top: 2px;">3 new</div>
+            </div>
+            <div style="padding: 16px 14px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px;">
+              <div style="font-size: 20px; margin-bottom: 6px;">📅</div>
+              <div style="font-size: 13px; font-weight: 600; color: #0a0a0a;">Meetings</div>
+              <div style="font-size: 11px; color: #999; margin-top: 2px;">Next: Mar 25</div>
+            </div>
+            <div style="padding: 16px 14px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px;">
+              <div style="font-size: 20px; margin-bottom: 6px;">🔧</div>
+              <div style="font-size: 13px; font-weight: 600; color: #0a0a0a;">Maintenance</div>
+              <div style="font-size: 11px; color: #999; margin-top: 2px;">1 open</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent activity -->
+        <div style="padding: 0 20px 20px;">
+          <div style="font-size: 13px; font-weight: 600; color: #0a0a0a; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.3px;">Recent</div>
+          <div style="padding: 12px 0; border-bottom: 1px solid #f0f0f0;">
+            <div style="font-size: 14px; font-weight: 500; color: #0a0a0a;">Board Meeting Minutes</div>
+            <div style="font-size: 12px; color: #999; margin-top: 2px;">Posted 2 hours ago</div>
+          </div>
+          <div style="padding: 12px 0; border-bottom: 1px solid #f0f0f0;">
+            <div style="font-size: 14px; font-weight: 500; color: #0a0a0a;">Pool maintenance scheduled</div>
+            <div style="font-size: 12px; color: #999; margin-top: 2px;">Mar 18 · Announcement</div>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 8px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #ccc; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Clean Minimal</h3>
+      <p>Closest to shadcn/Vercel. Flat surfaces with subtle borders, 2x2 grid navigation cards, large title typography. No bottom tab bar — pure scroll with sticky header. Neutral palette, content speaks for itself.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Vibe:</strong> Vercel dashboard on mobile<br>
+        <strong>Best for:</strong> Users who want a clean, no-nonsense tool
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #fafafa; padding: 20px;">
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #ffffff; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span>●●● ▐█▌</span>
+        </div>
+
+        <!-- Profile + greeting area -->
+        <div style="padding: 20px 20px 0; display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-size: 15px; color: #666;">Good morning, Jane</div>
+            <div style="font-size: 26px; font-weight: 700; color: #0a0a0a; margin-top: 2px; line-height: 1.15;">Sunset Condos</div>
+          </div>
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: #f4f4f5; border: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #666;">JD</div>
+        </div>
+
+        <!-- Spotlight card with gradient accent -->
+        <div style="margin: 20px 20px 0; padding: 20px; background: linear-gradient(135deg, #fafafa 0%, #f0f4ff 100%); border: 1px solid #e2e8f0; border-radius: 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></div>
+            <div style="font-size: 12px; font-weight: 500; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.5px;">Next up</div>
+          </div>
+          <div style="font-size: 16px; font-weight: 600; color: #0a0a0a;">Board Meeting</div>
+          <div style="font-size: 13px; color: #666; margin-top: 4px;">March 25 at 7:00 PM · Clubhouse</div>
+        </div>
+
+        <!-- Navigation list -->
+        <div style="padding: 24px 20px 0;">
+          <div style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid #f4f4f5; cursor: pointer;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 14px;">📄</div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #0a0a0a;">Documents</div>
+              <div style="font-size: 13px; color: #999;">Budgets, minutes, bylaws</div>
+            </div>
+            <div style="color: #ccc; font-size: 16px;">›</div>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid #f4f4f5; cursor: pointer;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 14px;">📢</div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #0a0a0a;">Announcements</div>
+              <div style="font-size: 13px; color: #999;">3 new this week</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="background: #ef4444; color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">3</div>
+              <div style="color: #ccc; font-size: 16px;">›</div>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid #f4f4f5; cursor: pointer;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 14px;">📅</div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #0a0a0a;">Meetings</div>
+              <div style="font-size: 13px; color: #999;">Next: Mar 25</div>
+            </div>
+            <div style="color: #ccc; font-size: 16px;">›</div>
+          </div>
+
+          <div style="display: flex; align-items: center; padding: 16px 0; cursor: pointer;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 14px;">🔧</div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 500; color: #0a0a0a;">Maintenance</div>
+              <div style="font-size: 13px; color: #999;">Submit a request</div>
+            </div>
+            <div style="color: #ccc; font-size: 16px;">›</div>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 12px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #ccc; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Editorial List</h3>
+      <p>iOS Settings meets Vercel. Large title with personal greeting, contextual spotlight card (next event/action), then a clean list-style navigation with icons, descriptions, and badges. Chevrons signal "tap to enter." Maximum clarity for older users.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Vibe:</strong> Apple Health / iOS Settings, elevated<br>
+        <strong>Best for:</strong> Older users who need obvious navigation affordances
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #fafafa; padding: 20px;">
+      <div style="
+        width: 280px; margin: 0 auto;
+        border: 2px solid #e5e5e5; border-radius: 32px;
+        background: #ffffff; overflow: hidden;
+        font-family: -apple-system, system-ui, sans-serif;
+      ">
+        <!-- Status bar -->
+        <div style="padding: 8px 20px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+          <span>9:41</span>
+          <span>●●● ▐█▌</span>
+        </div>
+
+        <!-- Header with avatar -->
+        <div style="padding: 20px 20px 0; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 26px; font-weight: 700; color: #0a0a0a; line-height: 1.15;">Home</div>
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #f4f4f5; border: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #666;">JD</div>
+        </div>
+        <div style="padding: 0 20px; font-size: 13px; color: #999; margin-top: 2px;">Sunset Condos</div>
+
+        <!-- Stats row -->
+        <div style="display: flex; gap: 10px; padding: 20px 20px 0;">
+          <div style="flex: 1; padding: 14px 12px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700; color: #0a0a0a;">94%</div>
+            <div style="font-size: 11px; color: #999; margin-top: 2px;">Compliant</div>
+          </div>
+          <div style="flex: 1; padding: 14px 12px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700; color: #0a0a0a;">3</div>
+            <div style="font-size: 11px; color: #999; margin-top: 2px;">New</div>
+          </div>
+          <div style="flex: 1; padding: 14px 12px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700; color: #0a0a0a;">1</div>
+            <div style="font-size: 11px; color: #999; margin-top: 2px;">Pending</div>
+          </div>
+        </div>
+
+        <!-- Large navigation cards -->
+        <div style="padding: 20px 20px 0;">
+          <div style="padding: 20px; background: #0a0a0a; border-radius: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #fff;">Documents</div>
+              <div style="font-size: 13px; color: #999; margin-top: 2px;">12 files · 2 require signature</div>
+            </div>
+            <div style="color: #666; font-size: 20px;">→</div>
+          </div>
+
+          <div style="padding: 20px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #0a0a0a;">Announcements</div>
+              <div style="font-size: 13px; color: #999; margin-top: 2px;">3 new this week</div>
+            </div>
+            <div style="color: #ccc; font-size: 20px;">→</div>
+          </div>
+
+          <div style="padding: 20px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #0a0a0a;">Meetings</div>
+              <div style="font-size: 13px; color: #999; margin-top: 2px;">Next: Board Meeting · Mar 25</div>
+            </div>
+            <div style="color: #ccc; font-size: 20px;">→</div>
+          </div>
+
+          <div style="padding: 20px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #0a0a0a;">Maintenance</div>
+              <div style="font-size: 13px; color: #999; margin-top: 2px;">1 open request</div>
+            </div>
+            <div style="color: #ccc; font-size: 20px;">→</div>
+          </div>
+        </div>
+
+        <!-- Home indicator -->
+        <div style="padding: 8px 0 6px; display: flex; justify-content: center;">
+          <div style="width: 120px; height: 4px; background: #ccc; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C: Bold Cards</h3>
+      <p>Bento-inspired with large touchable cards. Stats row at top, then full-width navigation cards with context. Primary section (Documents) gets an inverted dark card treatment. Bolder, more opinionated — less list, more magazine.</p>
+      <div style="margin-top: 8px; font-size: 13px; color: #666;">
+        <strong>Vibe:</strong> Apple Wallet meets Linear<br>
+        <strong>Best for:</strong> Making a strong visual impression
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top: 20px;">Click your preferred approach, or let me know if you want to mix elements from multiple options.</p>
