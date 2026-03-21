@@ -8,6 +8,7 @@ import {
 import { getPublishedTemplate } from '@/lib/api/site-template';
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
+import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 /**
  * Resolve community ID from middleware-injected headers.
@@ -75,7 +76,7 @@ export default async function PublicSitePage() {
         {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
         <script src="/assets/tailwind.min.js" async />
         <div style={templateVars} className="font-body">
-          <div dangerouslySetInnerHTML={{ __html: compiledHtml }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(compiledHtml) }} />
         </div>
       </>
     );

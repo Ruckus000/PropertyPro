@@ -15,6 +15,7 @@ import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/brand
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
+import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -75,7 +76,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
         {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
         <script src="/assets/tailwind.min.js" async />
         <div style={templateVars} className="font-body">
-          <div dangerouslySetInnerHTML={{ __html: mobileHtml }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(mobileHtml) }} />
         </div>
       </>
     );
