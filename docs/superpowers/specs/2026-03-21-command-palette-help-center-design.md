@@ -66,6 +66,12 @@ type RegistryItem = {
 }
 ```
 
+### Selection Behavior
+
+- Items with `href` only: navigate to the page and close the palette
+- Items with `action` only (no `href`): execute the action inline (e.g., open upload dialog) and close the palette
+- Items with both `href` and `action`: navigate (`href` takes precedence)
+
 ### Keyword Strategy
 
 Each item gets generous keyword arrays mapping natural language to formal feature names:
@@ -117,16 +123,26 @@ Residents fire 5 calls (no resident search — privacy). Admins fire 6.
 ### Response Shape (Per-Entity)
 
 ```typescript
+// Discriminated union for type-safe entity metadata
+type EntityMeta =
+  | { entityType: 'document'; category: string; fileType: string }
+  | { entityType: 'resident'; role: string; unitNumber: string | null }
+  | { entityType: 'announcement'; audience: string; publishedAt: string }
+  | { entityType: 'meeting'; meetingType: string; startsAt: string }
+  | { entityType: 'maintenance'; status: string; priority: string }
+  | { entityType: 'violation'; status: string; severity: string }
+
+type SearchResult = EntityMeta & {
+  id: string | number
+  title: string
+  subtitle: string
+  href: string
+  relevance: number
+}
+
+// Per-endpoint response
 {
-  results: Array<{
-    id: string | number
-    entityType: 'document' | 'resident' | 'announcement' | 'meeting' | 'maintenance' | 'violation'
-    title: string
-    subtitle: string
-    href: string
-    relevance: number
-    meta?: Record<string, any>
-  }>
+  results: SearchResult[]
   totalCount: number
   status: 'ok' | 'error'
   error?: string
@@ -138,12 +154,14 @@ Residents fire 5 calls (no resident search — privacy). Admins fire 6.
 All entities use `pg_trgm` with the `%>` operator for index-aware queries:
 
 ```sql
+-- Generic template (entity-specific WHERE clauses below)
 SET LOCAL pg_trgm.word_similarity_threshold = 0.3;
 
 SELECT id, title,
   word_similarity($1, title) AS relevance
 FROM documents
 WHERE community_id = $2
+  AND deleted_at IS NULL
   AND title %> $1
 ORDER BY relevance DESC
 LIMIT $3;
@@ -152,7 +170,24 @@ LIMIT $3;
 - `%>` triggers the GIN trigram index for candidate selection
 - B-tree on `community_id` combines via bitmap AND
 - `word_similarity()` in SELECT computes scores only on surviving rows
+- `deleted_at IS NULL` — every search query MUST exclude soft-deleted rows
 - Every query runs inside a transaction (`BEGIN...COMMIT`) for `SET LOCAL` to take effect with PgBouncer
+
+**Per-entity WHERE clauses (security-critical):**
+
+Each endpoint MUST apply the role-based filters from the Permission Scoping table below. The generic template above shows the base case. Entity-specific additions:
+
+```sql
+-- Announcements (residents): only published, audience-filtered
+AND archived_at IS NULL
+AND (audience = 'all' OR audience = $role_audience)  -- e.g., tenants don't see 'owners_only'
+
+-- Maintenance (residents): own requests only
+AND submitted_by_id = $user_id
+
+-- Violations (residents): own unit only
+AND unit_id IN (SELECT unit_id FROM user_roles WHERE user_id = $user_id AND community_id = $community_id)
+```
 
 **Why `word_similarity()` over `similarity()`:** Finds the best matching contiguous substring, so short queries ("pool") score well against long titles ("Pool Maintenance Request"). `strict_word_similarity()` is too restrictive for partial word matching.
 
@@ -178,9 +213,43 @@ CREATE INDEX idx_maintenance_title_trgm ON maintenance_requests USING gin (title
 CREATE INDEX idx_violations_desc_trgm ON violations USING gin (description gin_trgm_ops);
 
 -- Resident search indexes (admins only)
-CREATE INDEX idx_users_fullname_trgm ON auth.users
-  USING gin ((raw_user_meta_data->>'fullName') gin_trgm_ops);
-CREATE INDEX idx_users_email_trgm ON auth.users
+-- NOTE: auth.users is owned by supabase_auth_admin. These indexes cannot be
+-- created via a standard Drizzle migration. Options:
+-- (a) Create a public.user_profiles materialized view synced via trigger (recommended)
+-- (b) Apply via Supabase SQL Editor with elevated privileges (manual step)
+-- For launch, we use option (a): a public.user_search_index table that syncs
+-- fullName and email from auth.users via a trigger on auth.users changes.
+
+CREATE TABLE public.user_search_index (
+  user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name text,
+  email text NOT NULL
+);
+
+-- Populate from existing users
+INSERT INTO public.user_search_index (user_id, full_name, email)
+SELECT id, raw_user_meta_data->>'fullName', email FROM auth.users;
+
+-- Trigger to keep in sync
+CREATE OR REPLACE FUNCTION sync_user_search_index() RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.user_search_index (user_id, full_name, email)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'fullName', NEW.email)
+  ON CONFLICT (user_id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    email = EXCLUDED.email;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_sync_user_search_index
+  AFTER INSERT OR UPDATE ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION sync_user_search_index();
+
+-- Now index the public table (no auth schema permission issues)
+CREATE INDEX idx_user_search_fullname_trgm ON public.user_search_index
+  USING gin (full_name gin_trgm_ops);
+CREATE INDEX idx_user_search_email_trgm ON public.user_search_index
   USING gin (email gin_trgm_ops);
 CREATE INDEX idx_units_number_btree ON units (unit_number);
 ```
@@ -194,34 +263,43 @@ Admins only. Three different match strategies for three field types:
 ```sql
 SET LOCAL pg_trgm.word_similarity_threshold = 0.3;
 
-SELECT u.id, u.email,
-  u.raw_user_meta_data->>'fullName' AS full_name,
+SELECT usi.user_id AS id, usi.email,
+  usi.full_name,
   un.unit_number,
   ur.role,
   CASE
-    WHEN un.unit_number LIKE escape_like($1) || '%' THEN 0.9
+    WHEN un.unit_number LIKE $sanitized_input || '%' THEN 0.9
     ELSE GREATEST(
-      word_similarity($1, u.raw_user_meta_data->>'fullName'),
-      word_similarity($1, u.email)
+      word_similarity($1, usi.full_name),
+      word_similarity($1, usi.email)
     )
   END AS relevance
 FROM user_roles ur
-JOIN auth.users u ON u.id = ur.user_id
+JOIN public.user_search_index usi ON usi.user_id = ur.user_id
 LEFT JOIN units un ON un.id = ur.unit_id
 WHERE ur.community_id = $2
+  AND ur.deleted_at IS NULL
   AND (
-    u.raw_user_meta_data->>'fullName' %> $1
-    OR u.email %> $1
-    OR un.unit_number LIKE escape_like($1) || '%'
+    usi.full_name %> $1
+    OR usi.email %> $1
+    OR un.unit_number LIKE $sanitized_input || '%'
   )
 ORDER BY relevance DESC
 LIMIT $3;
 ```
 
+- Queries `public.user_search_index` (not `auth.users`) — GIN trigram indexes are on this table
 - `%>` on name/email uses GIN trigram indexes
 - `LIKE 'prefix%'` on unit_number uses B-tree — no trigram weirdness on short strings
 - Unit prefix match gets fixed 0.9 relevance (typing "308" means unit 308)
-- `escape_like()` utility escapes `%`, `_`, `\` in input to prevent LIKE injection
+- `$sanitized_input` is the query with LIKE special characters escaped via TypeScript utility:
+
+```typescript
+// apps/web/src/lib/utils/escape-like.ts
+export function escapeLikePattern(input: string): string {
+  return input.replace(/[%_\\]/g, '\\$&')
+}
+```
 
 ### Document Content Search: Title-First with Tsvector Fallback
 
@@ -254,7 +332,7 @@ The "View all" link on documents goes to the documents list page with `?q=` para
 |--------|----------------|--------------|
 | Documents | All community docs | All community docs |
 | Residents | Not searchable | All community residents |
-| Announcements | Published only | Published + drafts |
+| Announcements | `archived_at IS NULL` + audience filter (tenants don't see `owners_only`, non-board don't see `board_only`) | `archived_at IS NULL` (includes all audiences) |
 | Meetings | All community meetings | All community meetings |
 | Maintenance | Own requests only (`submitted_by_id = user.id`) | All community requests |
 | Violations | Own unit only (`unit_id IN user_units`) | All community violations |
@@ -413,7 +491,7 @@ CREATE TABLE help_articles (
   is_system boolean NOT NULL DEFAULT false,  -- true = not editable by community admins
   title text NOT NULL,
   summary text NOT NULL,
-  body text NOT NULL,
+  body text NOT NULL,                        -- Markdown format (rendered with react-markdown)
   keywords text[] NOT NULL DEFAULT '{}',
   audience text NOT NULL CHECK (audience IN ('resident', 'admin', 'all')),
   category text NOT NULL,
@@ -425,7 +503,48 @@ CREATE TABLE help_articles (
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz
 );
+
+-- Partial unique index: one help article per registry item for cross-referencing
+CREATE UNIQUE INDEX idx_help_articles_registry_item
+  ON help_articles (registry_item_id) WHERE registry_item_id IS NOT NULL AND deleted_at IS NULL;
 ```
+
+**Body format:** Markdown. Stored as Markdown in the database, rendered client-side with `react-markdown`. No raw HTML allowed — Markdown is sanitized by default via react-markdown's AST parser (no `dangerouslySetInnerHTML`).
+
+### Access Control (RLS)
+
+The `help_articles` table uses a **non-standard RLS pattern** because `community_id` is nullable for platform-wide articles:
+
+```sql
+-- Read: authenticated users can read platform articles (community_id IS NULL)
+-- and articles for their own community
+ALTER TABLE help_articles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE help_articles FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY help_articles_read ON help_articles
+  FOR SELECT USING (
+    community_id IS NULL  -- platform articles visible to all authenticated users
+    OR community_id = current_setting('app.community_id')::bigint  -- community articles scoped
+  );
+
+-- Write: platform articles are seed-script only (no RLS write for source='platform').
+-- Community articles: admin roles can insert/update/delete for their own community.
+CREATE POLICY help_articles_community_write ON help_articles
+  FOR ALL USING (
+    source = 'community'
+    AND community_id = current_setting('app.community_id')::bigint
+  );
+```
+
+**Query approach:** `createScopedClient(communityId)` sets `app.community_id`. The RLS policy's `OR community_id IS NULL` clause automatically includes platform articles. No custom query helper needed — the standard scoped client works.
+
+### API Endpoint
+
+```
+GET /api/v1/help/articles?audience=resident|admin
+```
+
+Returns all articles for the community (platform + community FAQs), filtered by audience and role. Articles are fetched once on page mount and cached client-side via TanStack Query with `staleTime: 5 * 60 * 1000` (5 minutes). Help center search is performed client-side on the cached array.
 
 **Seeding with version guard:**
 
@@ -542,15 +661,34 @@ Replaces the current `/mobile/help` implementation. The existing mobile FAQ admi
 
 ---
 
-## 9. Migration & Data Requirements
+## 9. Command Palette — Migration from cmdk
+
+The existing command palette uses the `cmdk` library. The upgraded palette requires custom behavior beyond cmdk's capabilities (progressive async result rendering, per-group skeletons, group-order locking, data result sections).
+
+**Approach:** Replace `cmdk` with a custom combobox built on Radix UI's `Dialog` + custom listbox. Radix provides the accessible dialog overlay, focus trap, and keyboard event handling. The result list, grouping, skeleton states, and progressive rendering are custom components.
+
+**Why not extend cmdk:** cmdk's `Command.List` expects synchronous items. The async progressive rendering with per-group loading states and order locking would require fighting cmdk's internals rather than working with them.
+
+---
+
+## 10. Migration & Data Requirements
+
+### Migration Range
+
+Migrations for this feature use range **0109-0112** (verify against all branches before creation):
+- `0109_add_pg_trgm_and_search_indexes.sql` — extension + entity GIN indexes
+- `0110_add_user_search_index.sql` — user_search_index table, trigger, GIN indexes
+- `0111_add_help_articles.sql` — help_articles table, RLS policies, partial unique index
+- `0112_add_units_number_index.sql` — B-tree on units.unit_number
 
 ### Database Migration
 
 1. `pg_trgm` extension + GIN trigram indexes on all searchable entity title fields
-2. Expression indexes on `auth.users` for fullName and email trigram search
-3. B-tree index on `units.unit_number`
-4. `help_articles` table with version, source, audience, keywords fields
-5. All indexes validated with `EXPLAIN ANALYZE` against seed data before shipping
+2. `public.user_search_index` table synced from `auth.users` via trigger (avoids auth schema permission issues)
+3. GIN trigram indexes on `user_search_index.full_name` and `email`
+4. B-tree index on `units.unit_number`
+5. `help_articles` table with version, source, audience, keywords fields, RLS policies
+6. All indexes validated with `EXPLAIN ANALYZE` against seed data before shipping
 
 ### Seed Data
 
@@ -566,7 +704,7 @@ Replaces the current `/mobile/help` implementation. The existing mobile FAQ admi
 
 ---
 
-## 10. Open Questions & Future Work
+## 11. Open Questions & Future Work
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -575,3 +713,5 @@ Replaces the current `/mobile/help` implementation. The existing mobile FAQ admi
 | Frequency-based suggested actions | Future | Interface supports it, v1 uses static defaults |
 | Feature tours / interactive onboarding | Future | Separate design needed |
 | Search analytics (track queries) | Future | Inform content gaps and keyword improvements |
+| Search result highlighting | Deferred | Bold matching substrings in results — improves scanability |
+| Search-specific rate limiting | Note | Existing middleware rate limiter covers search endpoints; monitor for abuse |
