@@ -29,6 +29,11 @@
       "import": "./src/supabase/middleware.ts",
       "default": "./src/supabase/middleware.ts"
     },
+    "./supabase/cookie-config": {
+      "types": "./src/supabase/cookie-config.ts",
+      "import": "./src/supabase/cookie-config.ts",
+      "default": "./src/supabase/cookie-config.ts"
+    },
     "./constants": {
       "types": "./src/constants/index.ts",
       "import": "./src/constants/index.ts",

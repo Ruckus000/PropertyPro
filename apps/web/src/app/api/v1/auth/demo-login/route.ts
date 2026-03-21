@@ -16,6 +16,7 @@ import {
   validateDemoToken,
 } from '@propertypro/shared/server';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 import { demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -246,6 +247,7 @@ export async function GET(request: Request) {
     [];
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: getCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -30,7 +30,7 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-import { getComplianceTemplate, getPresetPermissions, PRESET_METADATA, type CommunityType } from '@propertypro/shared';
+import { getComplianceTemplate } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 
 // ---------------------------------------------------------------------------
@@ -150,12 +150,10 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] user_linked: communityId not set');
 
-  const presetKey =
-    ctx.signup.communityType === 'condo_718' || ctx.signup.communityType === 'hoa_720'
-      ? 'board_president' as const
-      : 'site_manager' as const;
-  const permissions = getPresetPermissions(presetKey, ctx.signup.communityType as CommunityType);
-  const displayTitle = PRESET_METADATA[presetKey].displayTitle;
+  // The founding user who signs up and pays gets pm_admin — the highest community-scoped
+  // role — so they can access the PM portfolio dashboard and cross-community management
+  // from day one. pm_admin has blanket access and doesn't need presets or granular permissions.
+  const displayTitle = 'Administrator';
 
   let userId: string;
 
@@ -206,7 +204,7 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   // Insert role — onConflictDoNothing satisfies ADR-001 one-role-per-community on retry.
   await db
     .insert(userRoles)
-    .values({ userId, communityId, role: 'manager', presetKey, displayTitle, permissions })
+    .values({ userId, communityId, role: 'pm_admin', presetKey: null, displayTitle, permissions: null })
     .onConflictDoNothing();
 }
 

@@ -144,6 +144,15 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/compliance'],
   },
   {
+    id: 'residents',
+    label: 'Residents',
+    icon: Users,
+    href: (cid) => `/dashboard/residents?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    group: 'admin',
+    matchPrefixes: ['/dashboard/residents'],
+  },
+  {
     id: 'maintenance-inbox',
     label: 'Inbox',
     icon: ClipboardList,
@@ -319,6 +328,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
   assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
   finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
+  residents: { title: 'Residents', subtitle: 'Manage community members' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
   leases: { title: 'Leases', subtitle: 'Manage unit leases' },
