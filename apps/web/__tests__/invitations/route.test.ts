@@ -156,7 +156,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 55, token, password: 'strongpass123' }),
+      body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!' }),
     });
 
     const res = await PATCH(req);
@@ -183,7 +183,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 5, token, password: 'pass123456' }),
+      body: JSON.stringify({ communityId: 5, token, password: 'Pass123456!' }),
     });
 
     const res = await PATCH(req);
@@ -202,7 +202,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 9, token, password: 'pass123456' }),
+      body: JSON.stringify({ communityId: 9, token, password: 'Pass123456!' }),
     });
 
     const res = await PATCH(req);

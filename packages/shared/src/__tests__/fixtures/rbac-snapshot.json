@@ -536,8 +536,8 @@
         "write": false
       },
       "units": {
-        "read": true,
-        "write": true
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -1168,8 +1168,8 @@
         "write": false
       },
       "units": {
-        "read": true,
-        "write": true
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
