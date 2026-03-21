@@ -19,8 +19,13 @@ import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
-import { CommandPalette } from './command-palette';
+import { CommandPalette as CommandPaletteLegacy } from './command-palette';
+import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette';
 import { SidebarProvider, useSidebar } from './sidebar-context';
+
+// Feature flag: set to true to use the new command palette
+const USE_COMMAND_PALETTE_V2 = true;
+const CommandPalette = USE_COMMAND_PALETTE_V2 ? CommandPaletteV2 : CommandPaletteLegacy;
 
 export interface AppShellUser {
   id: string;
