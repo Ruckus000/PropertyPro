@@ -55,7 +55,21 @@ These are already in `TOKEN_AUTH_ROUTES` in middleware.ts. The CSRF check will s
 ### 2.4 Implementation
 
 - **File:** `apps/web/src/middleware.ts` — add ~15 lines after the OPTIONS preflight block (line ~310)
-- **Helper:** Reuse `isAllowedOrigin()` from `security-headers.ts`. Add `isAllowedReferer()` (extracts origin from Referer URL, delegates to `isAllowedOrigin()`)
+- **Helper:** Reuse `isAllowedOrigin()` from `security-headers.ts`. Add `isAllowedReferer()`:
+
+```typescript
+// security-headers.ts
+export function isAllowedReferer(referer: string): boolean {
+  try {
+    const url = new URL(referer);
+    return isAllowedOrigin(url.origin);
+  } catch {
+    return false;
+  }
+}
+```
+
+- **CSRF exemption:** Routes in `TOKEN_AUTH_ROUTES` (and routes matched by `isTokenAuthenticatedApiRoute()`) are exempt from the CSRF check. This includes webhooks, esign signing routes, and the new U-06 public access-request routes. These routes use token/signature auth rather than session cookies, so CSRF does not apply.
 - **Tests:** Add cases to existing middleware test suite
 - **No new dependencies, no DB changes, no env vars**
 
@@ -75,7 +89,7 @@ These are already in `TOKEN_AUTH_ROUTES` in middleware.ts. The CSRF check will s
 ```
 1. Resident visits [slug].propertyprofl.com/request-access
    (or follows a shareable link with ?ref=<tracking-code>)
-2. Fills form: full name, email, unit number, role (owner/tenant)
+2. Fills form: full name, email, unit number, owner/tenant toggle
 3. Receives 6-digit OTP code via email (Resend, not Supabase auth)
 4. Enters OTP on the same page to verify email ownership
 5. System creates access_requests row (status: pending)
@@ -107,8 +121,8 @@ CREATE TABLE IF NOT EXISTS "access_requests" (
   "phone" varchar(50),
   "unit_id" bigint REFERENCES "units"("id") ON DELETE SET NULL,
   "claimed_unit_number" varchar(100),
-  "role_requested" varchar(20) NOT NULL DEFAULT 'resident',
-  "is_unit_owner" boolean NOT NULL DEFAULT false,
+  "role_requested" varchar(20) NOT NULL DEFAULT 'resident',  -- always 'resident'; owner vs tenant determined by is_unit_owner
+  "is_unit_owner" boolean NOT NULL DEFAULT false,  -- true = owner, false = tenant
   "status" varchar(20) NOT NULL DEFAULT 'pending_verification',
   "otp_hash" varchar(255),
   "otp_expires_at" timestamp with time zone,
@@ -133,17 +147,19 @@ CREATE INDEX idx_access_requests_email
 ALTER TABLE access_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE access_requests FORCE ROW LEVEL SECURITY;
 
--- Public insert: anyone can create a request (rate-limited at API layer)
-CREATE POLICY "access_requests_public_insert"
+-- Tenant-scoped policies (all access goes through createScopedClient)
+-- Public routes call createScopedClient(communityId) where communityId is
+-- resolved from the request body. This sets app.community_id GUC, satisfying
+-- both the RLS policies and the write-scope trigger below.
+-- (Same pattern as invitation acceptance: see api/v1/invitations/route.ts)
+CREATE POLICY "access_requests_tenant_insert"
   ON access_requests FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (community_id = current_setting('app.community_id', true)::bigint);
 
--- Tenant-scoped read: only community members can see requests
 CREATE POLICY "access_requests_tenant_select"
   ON access_requests FOR SELECT
   USING (community_id = current_setting('app.community_id', true)::bigint);
 
--- Tenant-scoped update: only community admins can approve/deny
 CREATE POLICY "access_requests_tenant_update"
   ON access_requests FOR UPDATE
   USING (community_id = current_setting('app.community_id', true)::bigint);
@@ -152,9 +168,16 @@ CREATE POLICY "access_requests_tenant_update"
 CREATE TRIGGER enforce_community_scope
   BEFORE INSERT OR UPDATE ON access_requests
   FOR EACH ROW EXECUTE FUNCTION enforce_community_write_scope();
+
+-- Partial unique index: prevent duplicate pending requests per email per community
+CREATE UNIQUE INDEX idx_access_requests_unique_pending
+  ON access_requests(community_id, email)
+  WHERE status IN ('pending_verification', 'pending') AND deleted_at IS NULL;
 ```
 
 **Status values:** `pending_verification` → `pending` → `approved` / `denied` / `expired`
+
+**Role model clarification:** The V2 role model uses 3 roles: `resident`, `manager`, `pm_admin`. The old UI labels "owner"/"tenant" map to `resident` + `isUnitOwner: true/false`. Self-service signup only supports the `resident` role — requesting manager/admin roles requires admin invitation. The form shows an "I am a unit owner" toggle which sets `is_unit_owner`. On approval, the service creates a `user_roles` row with `role: 'resident'` and `isUnitOwner` from the request.
 
 ### 3.4 Drizzle Schema
 
@@ -188,10 +211,11 @@ export const accessRequests = pgTable('access_requests', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-}, (table) => [
-  index('idx_access_requests_community_status').on(table.communityId, table.status),
-  index('idx_access_requests_email').on(table.email),
-]);
+});
+// NOTE: Partial indexes (WHERE deleted_at IS NULL) and the unique partial index
+// are defined in the migration SQL only. Drizzle's index() builder does not
+// support WHERE clauses. The Drizzle schema omits these indexes — they are
+// migration-managed, which is the standard pattern in this codebase.
 ```
 
 ### 3.5 API Routes
@@ -206,7 +230,19 @@ All under `apps/web/src/app/api/v1/access-requests/`:
 | `POST` | `/api/v1/access-requests/[id]/deny` | Authenticated (admin) | Deny request with reason |
 | `GET` | `/api/v1/access-requests` | Authenticated (admin) | List pending requests for community |
 
-**Public route registration:** Add `/api/v1/access-requests` POST and `/api/v1/access-requests/verify` POST to `TOKEN_AUTH_ROUTES` in middleware.ts (no session required, community resolved from request body `communityId`).
+**Route authentication:**
+
+| Route | Auth | Registration |
+|-------|------|-------------|
+| `POST /api/v1/access-requests` | Public (rate-limited) | Add to `TOKEN_AUTH_ROUTES` |
+| `POST /api/v1/access-requests/verify` | Public (rate-limited) | Add to `TOKEN_AUTH_ROUTES` |
+| `GET /api/v1/access-requests` | Session (admin) | Standard protected route (no registration needed) |
+| `POST /api/v1/access-requests/[id]/approve` | Session (admin) | Standard protected route (no registration needed) |
+| `POST /api/v1/access-requests/[id]/deny` | Session (admin) | Standard protected route (no registration needed) |
+
+The two public POST routes go in `TOKEN_AUTH_ROUTES` as exact `{ path, method }` tuples. The admin routes (approve/deny/list) use standard session auth and do NOT need `TOKEN_AUTH_ROUTES` entries — they are under `/api/v1/` which is already a protected prefix. The dynamic `[id]` segments in approve/deny are handled by Next.js routing, not by middleware path matching.
+
+Both public routes are also exempt from CSRF Origin enforcement (see §2.4) since they are in `TOKEN_AUTH_ROUTES`.
 
 ### 3.6 OTP Verification Details
 
@@ -215,6 +251,7 @@ All under `apps/web/src/app/api/v1/access-requests/`:
 - **Attempts:** Max 5 per OTP. After 5 failures, must request new OTP.
 - **Rate limit:** Max 3 OTP sends per email per community per hour (prevents spam)
 - **Resend:** Same POST endpoint; if existing request has `pending_verification` status, regenerate OTP instead of creating duplicate
+- **Timing safety:** bcrypt comparison is inherently constant-time; no additional `timingSafeEqual` wrapper needed
 
 ### 3.7 Admin Review UI
 
@@ -257,7 +294,7 @@ The `ref` code is a short alphanumeric string (8 chars, generated per-admin). It
 
 **File:** `apps/web/src/app/(public)/[slug]/request-access/page.tsx`
 
-Public page (no auth required). Community resolved from `[slug]` param via existing tenant resolution.
+Public page (no auth required). Community resolved from the `[slug]` route param by the page component itself (NOT by middleware — `shouldResolveTenant` only runs for protected prefixes). The page uses `createScopedClient` after resolving the community by slug, same pattern as the transparency page at `apps/web/src/app/(public)/[subdomain]/transparency/page.tsx`.
 
 - Community branding (logo, colors) displayed at top
 - Form fields: full name, email, unit number (with autocomplete from public units list), owner/tenant toggle
@@ -303,7 +340,12 @@ Public page (no auth required). Community resolved from `[slug]` param via exist
 | `packages/email/src/templates/access-request-pending.tsx` | Admin notification |
 | `packages/email/src/templates/access-request-approved.tsx` | Welcome email |
 | `packages/email/src/templates/access-request-denied.tsx` | Denial email |
-| `scripts/verify-scoped-db-access.ts` | Add access-request routes to allowlist |
+| `scripts/verify-scoped-db-access.ts` | Add allowlist entries (see below) |
+
+**DB access guard allowlist additions** (`scripts/verify-scoped-db-access.ts`):
+
+- `WEB_UNSAFE_IMPORT_ALLOWLIST`: Add `src/lib/services/access-request-service.ts` (needs `@propertypro/db/supabase/admin` for Supabase auth account creation on approval, same pattern as `src/lib/services/onboarding-service.ts`)
+- `NO_RLS_ALLOWLIST`: Add `0114_access_requests.sql` (standard for all new migrations)
 | `apps/web/__tests__/access-requests/` | Unit tests for all routes + service |
 
 ---
