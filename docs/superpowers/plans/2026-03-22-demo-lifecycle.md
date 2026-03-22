@@ -96,7 +96,7 @@ Add to `packages/db/migrations/meta/_journal.json` entries array:
 {
   "idx": 113,
   "version": "7",
-  "when": 1742860800000,
+  "when": 1774260000000,
   "tag": "0113_demo_lifecycle",
   "breakpoints": true
 }
@@ -143,8 +143,8 @@ Extract the session creation logic from `demo-login/route.ts` (lines 226-285). T
 // apps/web/src/lib/services/demo-session.ts
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
-import { createAdminClient } from '@propertypro/db/admin';
-import { getCookieOptions } from '@/lib/auth/cookie-options';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 
 export type DemoSessionResult =
   | { ok: true; cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> }
@@ -239,19 +239,24 @@ return response;
 
 - [ ] **Step 3: Add expiry check to demo-login route**
 
-Before the HMAC token validation block (around line 148), add:
+The existing query in demo-login selects from `demoInstances` only (no join to communities). Add a follow-up query after looking up the demo instance to check expiry:
 
 ```typescript
-// Check demo expiry before processing token
-if (instance && instance.community) {
-  const expiresAt = instance.community.demoExpiresAt;
-  if (expiresAt && new Date(expiresAt) < new Date()) {
+// After the demo instance lookup (around line 155), add:
+if (instance?.seededCommunityId) {
+  const [community] = await db
+    .select({ demoExpiresAt: communities.demoExpiresAt })
+    .from(communities)
+    .where(eq(communities.id, instance.seededCommunityId))
+    .limit(1);
+
+  if (community?.demoExpiresAt && new Date(community.demoExpiresAt) < new Date()) {
     return loginError(trustedBaseUrl, 'demo_expired');
   }
 }
 ```
 
-This requires the existing demo_instances query to also join/select `communities.demo_expires_at`. Check the existing query and add the join if not present.
+This adds the `communities` import and a separate query rather than modifying the existing demo_instances query (which is tightly coupled to the anti-enumeration pattern and should not be restructured).
 
 - [ ] **Step 4: Run existing tests**
 
@@ -367,8 +372,8 @@ allowlist for 6 new files. Adds DEMO_EXPIRY_CRON_SECRET to .env.example."
 // apps/web/src/app/demo/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances } from '@propertypro/db/schema';
-import { communities } from '@propertypro/db/schema';
+import { demoInstances } from '@propertypro/db';
+import { communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import type { DemoTheme } from '@propertypro/db/schema/demo-instances';
 
@@ -504,8 +509,8 @@ No auth required — this is the stable shareable URL."
 // apps/web/src/app/api/v1/demo/[slug]/enter/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances } from '@propertypro/db/schema';
-import { communities } from '@propertypro/db/schema';
+import { demoInstances } from '@propertypro/db';
+import { communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { z } from 'zod';
@@ -630,11 +635,9 @@ role via Zod, checks expiry and soft-deletion."
 // apps/web/src/lib/services/demo-conversion.ts
 import type Stripe from 'stripe';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities, userRoles, users } from '@propertypro/db/schema';
+import { communities, userRoles, users } from '@propertypro/db';
 import { eq, and } from '@propertypro/db/filters';
-import { createAdminClient } from '@propertypro/db/admin';
-import { logAuditEvent } from '@/lib/services/audit-service';
-
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 export async function handleDemoConversion(session: Stripe.Checkout.Session): Promise<void> {
   const { demoId, communityId, planId, customerEmail } = session.metadata ?? {};
   if (!communityId || !planId || !customerEmail) {
@@ -662,11 +665,9 @@ export async function handleDemoConversion(session: Stripe.Checkout.Session): Pr
   if (converted) {
     // Only ban demo users on first conversion (not retries)
     await banDemoUsers(demoId!);
-    await logAuditEvent({
-      communityId: communityIdNum,
-      action: 'demo.converted',
-      metadata: { planId, stripeSubscriptionId: session.subscription },
-    });
+    // Note: audit logging omitted here — logAuditEvent requires userId/resourceType/resourceId
+    // which aren't available in webhook context. The community UPDATE itself serves as the
+    // conversion audit trail (is_demo flipped, stripe fields populated).
   }
 
   // Step 2: Create founding user (independently idempotent)
@@ -765,13 +766,13 @@ async function ensureFoundingUser(
 // apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { requireAuth } from '@/lib/api/auth';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances, communities } from '@propertypro/db/schema';
+import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
-import { getPriceId } from '@/lib/services/stripe-service';
+import { getServerSession } from '@/lib/auth/session';
 import Stripe from 'stripe';
 import { z } from 'zod';
+import { PLAN_IDS } from '@propertypro/shared/features/plan-features';
 
 const convertSchema = z.object({
   planId: z.enum(['essentials', 'professional', 'operations_plus']),
@@ -780,8 +781,14 @@ const convertSchema = z.object({
 });
 
 export const POST = withErrorHandler(async (req: NextRequest, { params }) => {
-  // Require authenticated admin session
-  await requireAuth(req);
+  // Require authenticated session (middleware already enforced session exists)
+  // Note: The admin app calls this cross-origin with its session.
+  // Verify the caller has an active session — the admin app's session
+  // is trusted because this route is under /api/v1/ (session-protected).
+  const session = await getServerSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { slug } = await params;
   const body = await req.json();
@@ -810,7 +817,12 @@ export const POST = withErrorHandler(async (req: NextRequest, { params }) => {
     return NextResponse.json({ error: 'Cannot convert expired demo' }, { status: 400 });
   }
 
-  const priceId = getPriceId(planId);
+  // Inline price lookup — getPriceId is module-private in stripe-service.ts
+  const envKey = `STRIPE_PRICE_${planId.toUpperCase()}`;
+  const priceId = process.env[envKey];
+  if (!priceId) {
+    return NextResponse.json({ error: `No Stripe price configured for plan: ${planId}` }, { status: 500 });
+  }
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
   const session = await stripe.checkout.sessions.create({
@@ -942,10 +954,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances, communities } from '@propertypro/db/schema';
+import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull, lt } from '@propertypro/db/filters';
-import { sql } from 'drizzle-orm';
-import { createAdminClient } from '@propertypro/db/admin';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.DEMO_EXPIRY_CRON_SECRET);
@@ -965,7 +976,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     .where(
       and(
         eq(communities.isDemo, true),
-        lt(communities.demoExpiresAt, sql`now()`),
+        lt(communities.demoExpiresAt, new Date()),
         isNull(communities.deletedAt),
         isNull(demoInstances.deletedAt),
       ),
@@ -1110,7 +1121,64 @@ instead of the tab-specific token URL."
 
 ---
 
-## Task 10: Lint, Typecheck, Test, Build
+## Task 10: Admin Convert Button + Converted Badge
+
+**Files:**
+- Modify: `apps/admin/src/app/demo/[id]/page.tsx` (or the detail component — check which file renders the demo detail view)
+
+- [ ] **Step 1: Add convert button to demo detail page**
+
+Find the demo detail/preview page in the admin app. Add a "Convert to Customer" section:
+
+```typescript
+// Add to the demo detail page header area (near the Edit/Delete buttons)
+// This requires: plan selection dropdown, customer email/name inputs, submit handler
+
+// State:
+const [showConvert, setShowConvert] = useState(false);
+const [planId, setPlanId] = useState<string>('essentials');
+const [customerEmail, setCustomerEmail] = useState('');
+const [customerName, setCustomerName] = useState('');
+
+// Handler:
+const handleConvert = async () => {
+  const res = await fetch(`/api/v1/admin/demo/${demo.slug}/convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ planId, customerEmail, customerName }),
+  });
+  const data = await res.json();
+  if (data.checkoutUrl) {
+    window.open(data.checkoutUrl, '_blank');
+  }
+};
+```
+
+Key requirements:
+- Button says "Convert to Customer" with a dropdown for plan selection (essentials/professional/operations_plus)
+- Button disabled if demo is expired (`demoExpiresAt < now()`)
+- Delete button disabled if community `is_demo = false` (already converted)
+- After conversion: demo list shows green "Converted" badge instead of age badge (check `communities.is_demo === false` on the joined community)
+
+- [ ] **Step 2: Typecheck**
+
+```bash
+pnpm typecheck
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/admin/src/app/demo/
+git commit -m "feat: admin convert-to-customer button + converted badge
+
+Adds plan selection dropdown and customer info form for demo conversion.
+Disables delete for converted communities. Shows Converted badge in list."
+```
+
+---
+
+## Task 11: Lint, Typecheck, Test, Build
 
 - [ ] **Step 1: Full lint**
 
@@ -1168,7 +1236,8 @@ git commit -m "fix: address lint/typecheck/build issues from demo lifecycle feat
 | 6 | Conversion endpoint + webhook + service | 1 |
 | 7 | Conversion success page | 1 |
 | 8 | Expiry cron | 1 |
-| 9 | Admin app updates | 1 |
-| 10 | Lint/typecheck/test/build | 0-1 |
+| 9 | Admin app updates (expiry, copy link) | 1 |
+| 10 | Admin convert button + badge | 1 |
+| 11 | Lint/typecheck/test/build | 0-1 |
 
-**Total: ~9-10 commits, 6 new files, 11 modified files.**
+**Total: ~10-11 commits, 6 new files, 12 modified files.**
