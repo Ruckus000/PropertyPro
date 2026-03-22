@@ -147,6 +147,8 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'contracts',
   'contract_bids',
   'maintenance_comments',
+  // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
+  'user_search_index',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {
