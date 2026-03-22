@@ -71,6 +71,18 @@ export type { EsignCompletedEmailProps } from "./templates/esign-completed-email
 export { EsignReminderEmail } from "./templates/esign-reminder-email";
 export type { EsignReminderEmailProps } from "./templates/esign-reminder-email";
 
+export { OtpVerificationEmail } from "./templates/otp-verification";
+export type { OtpVerificationEmailProps } from "./templates/otp-verification";
+
+export { AccessRequestPendingEmail } from "./templates/access-request-pending";
+export type { AccessRequestPendingEmailProps } from "./templates/access-request-pending";
+
+export { AccessRequestApprovedEmail } from "./templates/access-request-approved";
+export type { AccessRequestApprovedEmailProps } from "./templates/access-request-approved";
+
+export { AccessRequestDeniedEmail } from "./templates/access-request-denied";
+export type { AccessRequestDeniedEmailProps } from "./templates/access-request-denied";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";
