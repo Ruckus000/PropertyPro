@@ -512,6 +512,13 @@
       "when": 1773250000000,
       "tag": "0112_add_units_number_index",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1774260000000,
+      "tag": "0113_demo_lifecycle",
+      "breakpoints": true
     }
   ]
 }
