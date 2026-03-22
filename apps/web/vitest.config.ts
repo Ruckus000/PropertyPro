@@ -19,5 +19,21 @@ export default defineConfig({
     setupFiles: ['./__tests__/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', '__tests__/**/*.test.{ts,tsx}'],
     exclude: ['__tests__/**/*integration.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary', 'html'],
+      reportsDirectory: './coverage',
+      include: [
+        'src/lib/services/**',
+        'src/lib/utils/**',
+        'src/hooks/**',
+        'src/components/compliance/**',
+        'src/components/finance/**',
+      ],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        '**/__tests__/**',
+      ],
+    },
   },
 });

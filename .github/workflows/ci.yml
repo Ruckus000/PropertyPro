@@ -92,11 +92,31 @@ jobs:
       - name: Build workspace packages
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' build
 
-      - name: Run unit tests
-        run: pnpm test
+      - name: Run unit tests with coverage
+        run: pnpm exec vitest run --coverage --config apps/web/vitest.config.ts
+
+      - name: Run package unit tests
+        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' test
 
       - name: Run admin unit tests
         run: pnpm --filter '@propertypro/admin' test
+
+      - name: Report coverage summary
+        if: always()
+        run: |
+          if [ -f apps/web/coverage/coverage-summary.json ]; then
+            echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const c = require('./apps/web/coverage/coverage-summary.json').total;
+              const fmt = (v) => v.pct.toFixed(1) + '%';
+              console.log('| Metric | Coverage |');
+              console.log('|--------|----------|');
+              console.log('| Statements | ' + fmt(c.statements) + ' |');
+              console.log('| Branches | ' + fmt(c.branches) + ' |');
+              console.log('| Functions | ' + fmt(c.functions) + ' |');
+              console.log('| Lines | ' + fmt(c.lines) + ' |');
+            " >> $GITHUB_STEP_SUMMARY
+          fi
 
   no-mock-guard:
     name: no-mock-guard
