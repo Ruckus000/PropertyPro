@@ -51,6 +51,12 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       ? `http://localhost:3000`
       : `https://${demo.slug}.propertyprofl.com`;
 
+  // Public landing page URL for sharing
+  const landingPageUrl =
+    process.env.NODE_ENV === 'development'
+      ? `http://localhost:3000/demo/${demo.slug}`
+      : `https://propertyprofl.com/demo/${demo.slug}`;
+
   const demoLoginBase = `${webBaseUrl}/api/v1/auth/demo-login`;
 
   // 1. Public Website — no auth needed
@@ -101,6 +107,9 @@ export default async function DemoPreviewPage({ params }: PageProps) {
         demoId={demo.id}
         communityId={demo.seeded_community_id ?? 0}
         prospectName={demo.prospect_name}
+        landingPageUrl={landingPageUrl}
+        slug={demo.slug}
+        webAppBaseUrl={webBaseUrl}
       />
     </div>
   );

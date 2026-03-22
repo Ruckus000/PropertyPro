@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pencil, X, ExternalLink } from 'lucide-react';
 import { PhoneFrame } from '@propertypro/ui';
 import { DemoEditDrawer } from '@/components/demo/DemoEditDrawer';
+import { ConvertDemoDialog } from '@/components/demo/ConvertDemoDialog';
 
 type TabKey = 'public' | 'mobile' | 'admin';
 
@@ -20,6 +21,9 @@ interface TabbedPreviewClientProps {
   demoId: number;
   communityId: number;
   prospectName: string;
+  landingPageUrl: string;
+  slug: string;
+  webAppBaseUrl: string;
 }
 
 export function TabbedPreviewClient({
@@ -29,6 +33,9 @@ export function TabbedPreviewClient({
   demoId,
   communityId,
   prospectName,
+  landingPageUrl,
+  slug,
+  webAppBaseUrl,
 }: TabbedPreviewClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('public');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
@@ -64,8 +71,10 @@ export function TabbedPreviewClient({
     if (key === 'admin') setDrawerOpen(false);
   };
 
+  const [convertOpen, setConvertOpen] = useState(false);
+
   const handleCopyShareableLink = async () => {
-    const url = activeTabDef.url;
+    const url = landingPageUrl ?? activeTabDef.url;
     if (!url) return;
 
     try {
@@ -143,20 +152,29 @@ export function TabbedPreviewClient({
             );
           })}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void handleCopyShareableLink();
-          }}
-          disabled={!activeTabDef.url}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copyState === 'copied'
-            ? 'Copied!'
-            : copyState === 'error'
-              ? 'Copy failed'
-              : 'Copy link'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyShareableLink();
+            }}
+            disabled={!activeTabDef.url}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {copyState === 'copied'
+              ? 'Copied!'
+              : copyState === 'error'
+                ? 'Copy failed'
+                : 'Copy link'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConvertOpen(true)}
+            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+          >
+            Convert to Customer
+          </button>
+        </div>
       </div>
 
       {/* Tab panels — kept mounted to avoid iframe reloads */}
@@ -237,6 +255,15 @@ export function TabbedPreviewClient({
         prospectName={prospectName}
         onSaved={handleSaved}
         previewTab={activeTab}
+      />
+
+      {/* Convert to Customer Dialog */}
+      <ConvertDemoDialog
+        isOpen={convertOpen}
+        onClose={() => setConvertOpen(false)}
+        slug={slug}
+        prospectName={prospectName}
+        webAppBaseUrl={webAppBaseUrl}
       />
     </div>
   );

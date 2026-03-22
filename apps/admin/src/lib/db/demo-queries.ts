@@ -27,6 +27,8 @@ export interface DemoInstanceRow {
   prospect_notes: string | null;
   created_at: string;
   customized_at: string | null;
+  /** True when the community's is_demo flag has been cleared (converted to customer). */
+  is_converted?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,14 +44,27 @@ function from(table: string): any {
 // Queries
 // ---------------------------------------------------------------------------
 
-/** List all demo instances, ordered by created_at DESC. */
+/** List all demo instances with community conversion status, ordered by created_at DESC. */
 export async function listDemos(): Promise<{
   data: DemoInstanceRow[] | null;
   error: { message: string } | null;
 }> {
-  return from('demo_instances')
-    .select('*')
+  const { data, error } = await from('demo_instances')
+    .select('*, communities:seeded_community_id(is_demo)')
     .order('created_at', { ascending: false });
+
+  if (error || !data) return { data: null, error };
+
+  // Flatten the join: extract is_demo from the nested communities object
+  const rows = (data as (DemoInstanceRow & { communities: { is_demo: boolean } | null })[]).map(
+    (row) => ({
+      ...row,
+      is_converted: row.communities ? !row.communities.is_demo : false,
+      communities: undefined,
+    }),
+  );
+
+  return { data: rows as DemoInstanceRow[], error: null };
 }
 
 /** Fetch a single demo instance by ID. */

@@ -130,6 +130,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Set demo_expires_at (30 days from now) on the seeded community
+  if (seedResult.communityId) {
+    const { createAdminClient } = await import('@propertypro/db/supabase/admin');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any;
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase
+      .from('communities')
+      .update({ demo_expires_at: expiresAt })
+      .eq('id', seedResult.communityId);
+  }
+
   // Generate and encrypt HMAC secret — encryption key is mandatory (DB CHECK constraint
   // requires the 'enc:v1:' prefix produced by encryptDemoTokenSecret).
   const authTokenSecret = randomBytes(32).toString('hex');
