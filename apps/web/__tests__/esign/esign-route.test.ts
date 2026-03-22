@@ -59,6 +59,10 @@ vi.mock('@propertypro/db', () => ({
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
+}));
+
 // Mock finance request helpers
 vi.mock('@/lib/finance/request', () => ({
   parseCommunityIdFromQuery: parseCommunityIdFromQueryMock,
@@ -92,6 +96,10 @@ vi.mock('@/lib/api/zod/error-formatter', () => ({
 // Mock subscription guard
 vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/middleware/plan-guard', () => ({
+  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ---------------------------------------------------------------------------

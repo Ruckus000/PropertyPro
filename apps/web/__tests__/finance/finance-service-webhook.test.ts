@@ -92,6 +92,10 @@ vi.mock('@/lib/services/stripe-service', () => ({
   getStripeClient: getStripeClientMock,
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
+}));
+
 import { processFinanceStripeEvent } from '../../src/lib/services/finance-service';
 
 interface MockScopedClient {

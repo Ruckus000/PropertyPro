@@ -51,6 +51,10 @@ vi.mock('@/lib/services/notification-service', () => ({
   sendNotification: sendNotificationMock,
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
+}));
+
 import {
   imposeViolationFineForCommunity,
   updateViolationForCommunity,

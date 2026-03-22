@@ -80,8 +80,13 @@ jobs:
           AS $$ SELECT NULL::uuid; $$;
 
           CREATE TABLE IF NOT EXISTS auth.users (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            email text,
+            raw_user_meta_data jsonb DEFAULT '{}'::jsonb
           );
+
+          -- Extension required by migration 0110 (trigram indexes)
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
           SQL
 
       - name: Build packages

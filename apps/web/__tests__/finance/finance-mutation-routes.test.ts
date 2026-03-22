@@ -55,12 +55,20 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({
+  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@propertypro/db', () => ({
   userRoles: userRolesTableMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
+}));
+
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
 }));
 
 vi.mock('@/lib/services/finance-service', () => ({

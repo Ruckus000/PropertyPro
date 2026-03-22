@@ -42,6 +42,9 @@ vi.mock('@/lib/api/community-membership', () => ({
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(() => ({})),
 }));
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
+}));
 vi.mock('@/lib/services/package-visitor-service', () => ({
   createVisitorForCommunity: vi.fn(),
   listVisitorsForCommunity: listVisitorsForCommunityMock,
