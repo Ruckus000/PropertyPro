@@ -296,7 +296,7 @@ Without these entries, `pnpm guard:db-access` will fail in CI.
 
 ### Existing Infrastructure Reused
 
-- `decryptDemoTokenSecret` / `encryptDemoTokenSecret` — unchanged, used by enter endpoint
+- `decryptDemoTokenSecret` / `encryptDemoTokenSecret` — unchanged, used only by the existing `demo-login/route.ts` HMAC token validation path (NOT by the new enter endpoint, which bypasses token generation entirely)
 - `stripe-service.ts` (`getPriceId`, `createEmbeddedCheckoutSession` pattern) — referenced for checkout
 - `demo-login/route.ts` — session creation logic (magic link generation + OTP verification + cookie replay) must be **extracted to a shared helper** (e.g., `lib/services/demo-session.ts`) and called from both `demo-login` and the new `/demo/[slug]/enter` route. Do not duplicate the ~80 lines of session code.
 - Plan features config from B-01 (`PLAN_FEATURES`, `PLAN_IDS`) — used for conversion plan selection
