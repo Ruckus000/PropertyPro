@@ -118,7 +118,7 @@ WHERE id = :communityId;
 ```
 
 **Cleanup:**
-- Ban demo auth users via Supabase admin API (`updateUserById({ ban_duration: 'none', banned: true })`).
+- Ban demo auth users via Supabase admin API: `admin.auth.admin.updateUserById(userId, { ban_duration: '876600h' })`.
 - Log audit event: `demo.converted` with metadata `{ planId, stripeSubscriptionId }`.
 
 **Preserved:** slug, branding (`theme`), community name, `community_settings`, any documents/announcements.
@@ -153,7 +153,7 @@ A daily cron job that soft-deletes expired demos, plus runtime checks on the lan
 
 ### Cron Endpoint
 
-`GET /api/v1/internal/expire-demos`
+`POST /api/v1/internal/expire-demos`
 
 **Auth:** `requireCronSecret` from `@/lib/api/cron-auth` with `DEMO_EXPIRY_CRON_SECRET` env var, following the pattern in `/api/v1/internal/payment-reminders/route.ts`.
 
@@ -162,7 +162,7 @@ A daily cron job that soft-deletes expired demos, plus runtime checks on the lan
 2. For each expired demo:
    - Soft-delete community: `UPDATE communities SET deleted_at = now() WHERE id = :id`
    - Soft-delete demo instance: `UPDATE demo_instances SET deleted_at = now() WHERE id = :id`
-   - Ban demo auth users via Supabase admin API
+   - Ban demo auth users: `admin.auth.admin.updateUserById(userId, { ban_duration: '876600h' })`
    - Log audit event: `demo.expired`
 3. Return `{ expired: count }`.
 
@@ -241,18 +241,26 @@ Also update `packages/db/src/schema/demo-instances.ts` to add:
 |------|--------|
 | `apps/web/src/app/api/v1/webhooks/stripe/route.ts` | Handle conversion checkout completion |
 | `apps/web/src/app/api/v1/auth/demo-login/route.ts` | Add expiry check before token validation |
-| `apps/web/src/middleware.ts` | Add `/demo/[slug]` and `/api/v1/internal/expire-demos` to public/token-auth paths |
+| `apps/web/src/middleware.ts` | Add TOKEN_AUTH_ROUTES entries (see below) |
 | `packages/db/src/schema/demo-instances.ts` | Add `tokenTtlSeconds`, `deletedAt` columns; type `theme` JSONB |
 | `apps/admin/src/app/demo/[id]/preview/TabbedPreviewClient.tsx` | Copy landing page URL |
 | `apps/admin/src/app/demo/[id]/preview/page.tsx` | Pass landing page URL to client |
 | `vercel.json` | Add cron schedule |
+
+### Middleware Changes
+
+Add to `TOKEN_AUTH_ROUTES` in `apps/web/src/middleware.ts`:
+- `{ path: '/api/v1/demo/', method: 'POST' }` — covers both `/enter` and `/convert` under `/api/v1/demo/[slug]/`; the enter endpoint is public (no session), convert requires admin session (validated inside the handler, not by middleware)
+- `{ path: '/api/v1/internal/expire-demos', method: 'POST' }` — cron, Bearer-authenticated via `requireCronSecret`
+
+The `/demo/[slug]` landing page (Next.js page route, not API) does NOT live under `/api/v1/`, so it already passes through middleware without auth.
 
 ### Existing Infrastructure Reused
 
 - `generateDemoToken` / `validateDemoToken` — already supports custom TTL
 - `decryptDemoTokenSecret` / `encryptDemoTokenSecret` — unchanged
 - `stripe-service.ts` (`getPriceId`, `createEmbeddedCheckoutSession` pattern) — referenced for checkout
-- `demo-login/route.ts` — session creation logic reused by `/demo/[slug]/enter`
+- `demo-login/route.ts` — session creation logic (magic link generation + OTP verification + cookie replay) must be **extracted to a shared helper** (e.g., `lib/services/demo-session.ts`) and called from both `demo-login` and the new `/demo/[slug]/enter` route. Do not duplicate the ~80 lines of session code.
 - Plan features config from B-01 (`PLAN_FEATURES`, `PLAN_IDS`) — used for conversion plan selection
 
 ## Error Handling
