@@ -45,8 +45,8 @@ A public page at `/demo/[slug]` on the web app that serves as the stable, sharea
 **Rate limiting:** Apply a per-slug rate limit (e.g., 10 requests/minute) to prevent abuse of Supabase magic link generation, which is an expensive operation.
 
 **Process:**
-1. Look up demo instance by slug, join `communities` for `is_demo`, `demo_expires_at`, `deleted_at`. If not found, community soft-deleted, or expired → return 404 (constant-time; see anti-enumeration note below).
-2. **Anti-enumeration:** Must replicate the pattern from `demo-login/route.ts` (lines 162–183). If the instance is not found, proceed with a dummy user ID through the remaining steps so the response timing is constant. Do NOT return an early 404 before step 4.
+1. Look up demo instance by slug, join `communities` for `is_demo`, `demo_expires_at`, `deleted_at`. Also filter `demo_instances.deleted_at IS NULL`.
+2. If not found, community soft-deleted, or expired → return generic 404. Rate limiting (step above) is the primary defense against slug enumeration — constant-time responses are not achievable here because the next step is an external Supabase API call with inherently variable timing.
 3. Determine target user ID (`demoBoardUserId` or `demoResidentUserId`) based on `role`.
 4. Call the shared `createDemoSession()` helper (extracted from `demo-login/route.ts`) which:
    - Generates Supabase magic link for the target user via `admin.auth.admin.generateLink()`
@@ -56,19 +56,12 @@ A public page at `/demo/[slug]` on the web app that serves as the stable, sharea
 
 > **Note:** No HMAC token is generated in this flow. Unlike the old demo-login route (where a token traveled across an HTTP redirect), the enter endpoint has direct access to the demo instance and user IDs in-process. Token generation is unnecessary here — go straight to magic link creation.
 
-### Schema Changes
-
-Add to `demo_instances`:
-```sql
-ALTER TABLE demo_instances
-  ADD COLUMN token_ttl_seconds integer NOT NULL DEFAULT 604800; -- 7 days
-```
-
 ### Admin App Changes
 
 - **Copy link button** in `TabbedPreviewClient.tsx`: copy `https://propertyprofl.com/demo/[slug]` instead of the raw token URL.
-- **Edit drawer**: add TTL configuration field (dropdown: 1 hour, 1 day, 7 days, 30 days, custom).
 - Keep existing tab-specific token URLs for admin's own iframe previews (those still use 1-hour tokens for security within the admin panel).
+
+> **Note:** No `token_ttl_seconds` column is added. The new landing page bypasses HMAC tokens entirely (session created server-side via magic link). The admin preview iframes continue to use the hardcoded 1-hour TTL. There is no consumer for a configurable TTL column — adding one would be dead code.
 
 ## 2. Demo-to-Customer Conversion (C-01 / C-02 / C-03)
 
@@ -130,15 +123,21 @@ WHERE id = :communityId;
 
 ### Founding User Account Creation
 
-After conversion, the demo auth users are banned — there are zero active users on the community. The webhook must also create the founding admin user:
+After conversion, the demo auth users are banned — there are zero active users on the community. The webhook must create the founding admin user.
 
-1. **Read `prospectName` and billing email** from the Stripe checkout session (`session.customer_details.email`).
-2. **Create a new Supabase auth user** via `admin.auth.admin.createUser({ email, email_confirm: true })`.
-3. **Create a `users` row** linked to the new auth user ID.
-4. **Assign roles:** `board_president` + `property_manager_admin` (matching the provisioning service pattern for founding users, but fixing the PM-03 audit gap where `pm_admin` was missing).
-5. **Send a welcome email** with a password-set link via `admin.auth.admin.generateLink({ type: 'magiclink', email })`.
+**Critical: This step must have its own idempotency guard, separate from the conversion UPDATE.** The conversion UPDATE uses `WHERE is_demo = true RETURNING id` — if it returns nothing, the community was already converted. But if the first webhook delivery converted the community and then crashed before creating the user, the retry would skip the conversion (correct) AND skip the user creation (incorrect — no admin user exists).
 
-The founding user's email comes from the Stripe session (the person who paid), ensuring the paying customer gets admin access. This is passed as `metadata.customerEmail` in the checkout session creation for reliability.
+**Idempotency:** Before creating the founding user, check if a `user_roles` row with `role = 'board_president'` already exists for this `community_id`. If yes, skip. If no, proceed.
+
+**Process:**
+1. **Read billing email** from `session.metadata.customerEmail` (set at checkout creation for reliability; `session.customer_details.email` is also available but metadata is explicit).
+2. **Check idempotency:** query `user_roles` for `community_id + role = 'board_president'`. If exists, skip steps 3-6.
+3. **Create a new Supabase auth user** via `admin.auth.admin.createUser({ email, email_confirm: true })`.
+4. **Create a `users` row** linked to the new auth user ID.
+5. **Assign roles:** `board_president` + `property_manager_admin` (matching the provisioning service pattern for founding users, but fixing the PM-03 audit gap where `pm_admin` was missing).
+6. **Send a welcome email** with a password-set link via `admin.auth.admin.generateLink({ type: 'magiclink', email })`.
+
+This ensures founding user creation is independently idempotent — safe to retry regardless of which previous steps succeeded or failed.
 
 ### Conversion Success Page
 
@@ -177,7 +176,7 @@ A daily cron job that soft-deletes expired demos, plus runtime checks on the lan
 **Wrap in `withErrorHandler`** — this is the established pattern for all internal cron routes (unlike the Stripe webhook, which must NOT use it).
 
 **Process:**
-1. Query: `SELECT id, seeded_community_id, demo_resident_user_id, demo_board_user_id FROM demo_instances JOIN communities ON communities.id = demo_instances.seeded_community_id WHERE communities.is_demo = true AND communities.demo_expires_at < now() AND communities.deleted_at IS NULL`
+1. Query: `SELECT id, seeded_community_id, demo_resident_user_id, demo_board_user_id FROM demo_instances JOIN communities ON communities.id = demo_instances.seeded_community_id WHERE communities.is_demo = true AND communities.demo_expires_at < now() AND communities.deleted_at IS NULL AND demo_instances.deleted_at IS NULL`
 2. For each expired demo:
    - Soft-delete community: `UPDATE communities SET deleted_at = now() WHERE id = :id`
    - Soft-delete demo instance: `UPDATE demo_instances SET deleted_at = now() WHERE id = :id`
@@ -220,10 +219,6 @@ Add to `vercel.json`:
 One migration file: `0113_demo_lifecycle.sql` (journal idx 112 is current tail).
 
 ```sql
--- Add token TTL to demo_instances
-ALTER TABLE demo_instances
-  ADD COLUMN token_ttl_seconds integer NOT NULL DEFAULT 604800;
-
 -- Add soft-delete to demo_instances (schema convention: all tenant-scoped tables)
 ALTER TABLE demo_instances
   ADD COLUMN deleted_at timestamptz;
@@ -239,7 +234,6 @@ WHERE di.seeded_community_id = c.id
 
 Also update `packages/db/src/schema/demo-instances.ts` to add:
 - `deletedAt: timestamp('deleted_at', { withTimezone: true })` column
-- `tokenTtlSeconds: integer('token_ttl_seconds').notNull().default(604800)` column
 - `$type<DemoTheme>()` annotation on the `theme` column
 
 ## File Changes Summary
@@ -262,7 +256,7 @@ Also update `packages/db/src/schema/demo-instances.ts` to add:
 | `apps/web/src/app/api/v1/webhooks/stripe/route.ts` | Handle conversion checkout completion + founding user creation |
 | `apps/web/src/app/api/v1/auth/demo-login/route.ts` | Add expiry check; extract session creation logic to shared helper |
 | `apps/web/src/middleware.ts` | Add TOKEN_AUTH_ROUTES entries (see Middleware Changes below) |
-| `packages/db/src/schema/demo-instances.ts` | Add `tokenTtlSeconds`, `deletedAt` columns; type `theme` JSONB |
+| `packages/db/src/schema/demo-instances.ts` | Add `deletedAt` column; type `theme` JSONB |
 | `packages/db/migrations/meta/_journal.json` | Add entry at idx 113 for `0113_demo_lifecycle` |
 | `apps/admin/src/app/demo/[id]/preview/TabbedPreviewClient.tsx` | Copy landing page URL instead of token URL |
 | `apps/admin/src/app/demo/[id]/preview/page.tsx` | Pass landing page URL to client |
@@ -274,13 +268,27 @@ Also update `packages/db/src/schema/demo-instances.ts` to add:
 
 ### Middleware Changes
 
-Add to `TOKEN_AUTH_ROUTES` in `apps/web/src/middleware.ts`:
-- `{ path: '/api/v1/demo/', method: 'POST' }` — **enter endpoint only** (public, no session). This prefix matches `/api/v1/demo/[slug]/enter`.
+**Important context:** `TOKEN_AUTH_ROUTES` in middleware uses **exact path match** (`===`), not `startsWith`. The only `startsWith` exception is hardcoded for `/api/v1/esign/sign/` (dynamic segments). Since the enter endpoint uses dynamic `[slug]` segments, an exact-match entry cannot work.
+
+**Required change to `isTokenAuthenticatedApiRoute()` in middleware.ts:**
+
+Add a `startsWith` case for the demo enter route, matching the e-sign pattern:
+```typescript
+if (request.nextUrl.pathname.startsWith('/api/v1/demo/') &&
+    request.nextUrl.pathname.endsWith('/enter') &&
+    request.method === 'POST') {
+  return true;
+}
+```
+
+This is scoped tightly: only POST requests to paths starting with `/api/v1/demo/` AND ending with `/enter`. The `/convert` endpoint is NOT matched because it doesn't end with `/enter`.
+
+Also add to `TOKEN_AUTH_ROUTES` (exact match, these are static paths):
 - `{ path: '/api/v1/internal/expire-demos', method: 'POST' }` — cron, Bearer-authenticated via `requireCronSecret`
 
-> **Critical:** The `/convert` endpoint must NOT be exempted from session middleware. It requires an authenticated admin session. Since TOKEN_AUTH_ROUTES uses `startsWith` matching, the `/api/v1/demo/` prefix WILL match `/api/v1/demo/[slug]/convert`. To prevent this, add an explicit exclusion: the middleware match logic must check that the path does NOT end with `/convert` when matching the `/api/v1/demo/` prefix. Alternatively, restructure the route: move convert to `/api/v1/admin/demo/[slug]/convert` under a different prefix that requires session auth. **Recommended approach: move `/convert` to `/api/v1/admin/demo/[slug]/convert`** — this is cleaner since it's an admin-only operation and doesn't need to share a path prefix with the public enter endpoint.
-
 The `/demo/[slug]` landing page (Next.js page route, not API) does NOT live under `/api/v1/`, so it already passes through middleware without auth.
+
+The `/api/v1/admin/demo/[slug]/convert` endpoint lives under `/api/v1/` (a protected prefix) and is NOT in TOKEN_AUTH_ROUTES, so middleware will enforce session auth. The handler then checks for admin role.
 
 ### DB Access Guard
 
