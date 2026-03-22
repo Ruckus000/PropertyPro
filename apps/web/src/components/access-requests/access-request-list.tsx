@@ -25,8 +25,8 @@ export interface AccessRequest {
 
 /* ─────── API helper ─────── */
 
-async function fetchAccessRequests(): Promise<AccessRequest[]> {
-  const response = await fetch('/api/v1/access-requests');
+async function fetchAccessRequests(communityId: number): Promise<AccessRequest[]> {
+  const response = await fetch(`/api/v1/access-requests?communityId=${communityId}`);
   if (!response.ok) {
     throw new Error('Failed to load access requests');
   }
@@ -104,7 +104,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
     refetch,
   } = useQuery({
     queryKey: ['access-requests', communityId],
-    queryFn: fetchAccessRequests,
+    queryFn: () => fetchAccessRequests(communityId),
   });
 
   const handleActionSuccess = () => {

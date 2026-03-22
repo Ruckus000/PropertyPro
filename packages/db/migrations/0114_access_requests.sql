@@ -53,6 +53,12 @@ CREATE POLICY "access_requests_tenant_update"
   USING (community_id = current_setting('app.community_id', true)::bigint);
 
 -- Write-scope trigger (standard tenant isolation)
-CREATE TRIGGER enforce_community_scope
-  BEFORE INSERT OR UPDATE ON access_requests
-  FOR EACH ROW EXECUTE FUNCTION enforce_community_write_scope();
+-- Only create if the function exists (it's a Supabase-side function, not present in plain PostgreSQL)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'enforce_community_write_scope') THEN
+    CREATE TRIGGER enforce_community_scope
+      BEFORE INSERT OR UPDATE ON access_requests
+      FOR EACH ROW EXECUTE FUNCTION enforce_community_write_scope();
+  END IF;
+END $$;

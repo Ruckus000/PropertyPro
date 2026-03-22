@@ -54,7 +54,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
+  const rawCommunityId = req.nextUrl.searchParams.get('communityId');
+  const parsedCommunityId = rawCommunityId ? Number(rawCommunityId) : null;
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'residents', 'write');
 

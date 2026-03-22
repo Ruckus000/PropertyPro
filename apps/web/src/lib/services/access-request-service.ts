@@ -89,7 +89,8 @@ export async function submitAccessRequest(params: {
     const communityRows = await scoped.query(communities);
     const community = communityRows[0];
 
-    await sendEmail({
+    // Fire-and-forget: don't let email failure roll back the DB update
+    sendEmail({
       to: normalizedEmail,
       subject: `Your verification code for ${(community?.['name'] as string) ?? 'PropertyPro'}`,
       category: 'transactional',
@@ -99,7 +100,7 @@ export async function submitAccessRequest(params: {
         otpCode: otp,
         expiresInMinutes: 10,
       }),
-    });
+    }).catch((err) => console.error('[access-request] OTP email failed:', err));
 
     return { requestId: pendingVerification['id'] as number, resent: true };
   }
@@ -143,8 +144,8 @@ export async function submitAccessRequest(params: {
   const communityRows = await scoped.query(communities);
   const community = communityRows[0];
 
-  // Send OTP email
-  await sendEmail({
+  // Fire-and-forget: don't let email failure roll back the DB insert
+  sendEmail({
     to: normalizedEmail,
     subject: `Your verification code for ${(community?.['name'] as string) ?? 'PropertyPro'}`,
     category: 'transactional',
@@ -154,7 +155,7 @@ export async function submitAccessRequest(params: {
       otpCode: otp,
       expiresInMinutes: 10,
     }),
-  });
+  }).catch((err) => console.error('[access-request] OTP email failed:', err));
 
   return { requestId: row['id'] as number, resent: false };
 }
@@ -246,7 +247,7 @@ export async function verifyOtp(params: {
     const adminUser = userRows.find((u) => u['id'] === adminRole['userId']);
     if (!adminUser) continue;
 
-    await sendEmail({
+    sendEmail({
       to: adminUser['email'] as string,
       subject: `New resident access request for ${communityName}`,
       category: 'transactional',
@@ -258,7 +259,7 @@ export async function verifyOtp(params: {
         claimedUnit: (request['claimedUnitNumber'] as string) ?? undefined,
         dashboardUrl,
       }),
-    });
+    }).catch((err) => console.error('[access-request] Admin notification email failed:', err));
   }
 
   return { verified: true };
@@ -349,7 +350,7 @@ export async function approveAccessRequest(params: {
   const communityName = (community?.['name'] as string) ?? 'PropertyPro';
   const loginUrl = `${getBaseUrl()}/auth/login`;
 
-  await sendEmail({
+  sendEmail({
     to: requestEmail,
     subject: `Welcome to ${communityName} on PropertyPro`,
     category: 'transactional',
@@ -358,7 +359,7 @@ export async function approveAccessRequest(params: {
       recipientName: requestFullName,
       loginUrl,
     }),
-  });
+  }).catch((err) => console.error('[access-request] Welcome email failed:', err));
 
   // Audit log
   await logAuditEvent({
@@ -419,7 +420,7 @@ export async function denyAccessRequest(params: {
   const community = communityRows[0];
   const communityName = (community?.['name'] as string) ?? 'PropertyPro';
 
-  await sendEmail({
+  sendEmail({
     to: request['email'] as string,
     subject: `Update on your access request for ${communityName}`,
     category: 'transactional',
@@ -428,7 +429,7 @@ export async function denyAccessRequest(params: {
       recipientName: request['fullName'] as string,
       reason,
     }),
-  });
+  }).catch((err) => console.error('[access-request] Denial email failed:', err));
 
   // Audit log
   await logAuditEvent({
