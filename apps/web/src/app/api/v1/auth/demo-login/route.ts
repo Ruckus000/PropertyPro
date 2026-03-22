@@ -8,19 +8,16 @@
  * Token-authenticated (no session required) — listed in middleware allowlist.
  */
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
 import {
   decryptDemoTokenSecret,
   extractDemoIdFromToken,
   validateDemoToken,
 } from '@propertypro/shared/server';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
-import { demoInstances } from '@propertypro/db';
+import { communities, demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
+import { createDemoSession } from '@/lib/services/demo-session';
 
 const PRODUCTION_DOMAIN = 'propertyprofl.com';
 
@@ -182,6 +179,19 @@ export async function GET(request: Request) {
     return loginError(trustedBaseUrl, 'invalid_token');
   }
 
+  // 3b. Check if the demo's community has expired
+  if (instance.seededCommunityId) {
+    const [community] = await db
+      .select({ demoExpiresAt: communities.demoExpiresAt })
+      .from(communities)
+      .where(eq(communities.id, instance.seededCommunityId))
+      .limit(1);
+
+    if (community?.demoExpiresAt && new Date(community.demoExpiresAt) < new Date()) {
+      return loginError(trustedBaseUrl, 'demo_expired');
+    }
+  }
+
   // 4. Determine which demo user to authenticate as
   const email =
     payload.role === 'resident' ? instance.demoResidentEmail : instance.demoBoardEmail;
@@ -222,57 +232,10 @@ export async function GET(request: Request) {
   }
   const redirectTo = redirectToUrl.toString();
 
-  // 6. Generate a magic link and verify OTP server-side (same pattern as /dev/agent-login)
-  const admin = createAdminClient();
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-  });
-
-  if (linkError || !linkData?.properties?.hashed_token) {
-    console.error('[demo-login] Failed to generate magic link:', linkError?.message);
-    return loginError(trustedBaseUrl, 'session_error');
-  }
-
-  // Verify OTP server-side to establish session with cookies
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('[demo-login] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    return loginError(trustedBaseUrl, 'session_error');
-  }
-
-  const cookieStore = await cookies();
-  const pendingCookies: Array<{ name: string; value: string; options: Record<string, unknown> }> =
-    [];
-
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookieOptions: getCookieOptions(),
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        for (const cookie of cookiesToSet) {
-          pendingCookies.push(cookie);
-          try {
-            cookieStore.set(cookie.name, cookie.value, cookie.options);
-          } catch {
-            // May fail in some contexts; replayed onto response below
-          }
-        }
-      },
-    },
-  });
-
-  const { error: verifyError } = await supabase.auth.verifyOtp({
-    token_hash: linkData.properties.hashed_token,
-    type: 'magiclink',
-  });
-
-  if (verifyError) {
-    console.error('[demo-login] OTP verification failed:', verifyError.message);
-    return loginError(trustedBaseUrl, 'session_error');
+  // 6. Create authenticated session via shared helper
+  const sessionResult = await createDemoSession(email);
+  if (!sessionResult.ok) {
+    return loginError(trustedBaseUrl, sessionResult.error);
   }
 
   // 7. Redirect with session cookies attached
@@ -280,7 +243,7 @@ export async function GET(request: Request) {
   const response = isPreview
     ? createPreviewRedirectResponse(redirectTo)
     : createRedirectResponse(redirectTo);
-  for (const cookie of pendingCookies) {
+  for (const cookie of sessionResult.cookies) {
     response.cookies.set(cookie.name, cookie.value, cookie.options);
   }
   return response;

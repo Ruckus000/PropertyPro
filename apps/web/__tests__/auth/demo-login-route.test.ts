@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   state,
   demoInstancesTable,
+  communitiesTable,
   eqMock,
+  queryCounter,
   createUnscopedClientMock,
   createAdminClientMock,
   generateLinkMock,
@@ -24,10 +26,16 @@ const {
 
   const state = {
     rows: [] as DemoInstanceRow[],
+    communityRows: [{ demoExpiresAt: null }] as Array<{ demoExpiresAt: Date | string | null }>,
   };
 
+  const queryCounter = { count: 0 };
   const eqMock = vi.fn(() => Symbol('eq_predicate'));
-  const limitMock = vi.fn(async () => state.rows);
+  const limitMock = vi.fn(async () => {
+    // First select() call returns demo instance rows, second returns community rows
+    const callIndex = queryCounter.count++;
+    return callIndex === 0 ? state.rows : state.communityRows;
+  });
   const whereMock = vi.fn(() => ({ limit: limitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
@@ -63,6 +71,8 @@ const {
   return {
     state,
     demoInstancesTable: Symbol('demo_instances'),
+    communitiesTable: { demoExpiresAt: Symbol('demoExpiresAt'), id: Symbol('communities_id') },
+    queryCounter,
     eqMock,
     createUnscopedClientMock,
     createAdminClientMock,
@@ -78,6 +88,7 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   demoInstances: demoInstancesTable,
+  communities: communitiesTable,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -90,6 +101,10 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
+}));
+
+vi.mock('@propertypro/db/supabase/cookie-config', () => ({
+  getCookieOptions: vi.fn(() => ({})),
 }));
 
 vi.mock('@propertypro/shared/server', () => ({
@@ -129,6 +144,8 @@ describe('demo-login route hardening', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
     state.rows = [];
+    state.communityRows = [{ demoExpiresAt: null }];
+    queryCounter.count = 0;
 
     extractDemoIdFromTokenMock.mockReturnValue(101);
     decryptDemoTokenSecretMock.mockReturnValue('decrypted-secret');
@@ -275,7 +292,7 @@ describe('demo-login route hardening', () => {
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
     expect(errorSpy).toHaveBeenCalledWith(
-      '[demo-login] OTP verification failed:',
+      '[demo-session] OTP verification failed:',
       'Invalid OTP',
     );
   });
