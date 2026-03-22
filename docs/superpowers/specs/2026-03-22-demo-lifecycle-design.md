@@ -24,13 +24,15 @@ A public page at `/demo/[slug]` on the web app that serves as the stable, sharea
 
 ### Behavior
 
-1. Server component fetches `demo_instances` by slug, joins `communities` for branding.
-2. If demo not found → 404.
-3. If `demo_expires_at < now()` → render "Demo expired" page with contact info.
+1. Server component fetches `demo_instances` by slug, joins `communities` for branding. Query MUST check `communities.deleted_at IS NULL` alongside `demo_instances` lookup.
+2. If demo not found OR community soft-deleted → 404.
+3. If `communities.demo_expires_at < now()` → render "Demo expired" page with contact info.
 4. Renders branded landing page:
-   - Community logo (from `theme.logoPath` in Supabase Storage)
+   - Community logo (from `theme.logoPath` in Supabase Storage, guarded against missing keys)
    - Community name and type badge
-   - Primary/secondary colors from `theme`
+   - Primary/secondary colors from `theme` (with fallback defaults if absent)
+
+   > **Note:** `demo_instances.theme` is untyped `jsonb`. The implementation must add a `$type<DemoTheme>()` annotation to the schema column with `{ logoPath?: string; primaryColor?: string; secondaryColor?: string; fontFamily?: string }` and gracefully handle missing fields.
    - Two CTA buttons: "View as Board Member" / "View as Resident"
 5. Clicking a button triggers a server action or POST to `/api/v1/demo/[slug]/enter`.
 
@@ -41,8 +43,8 @@ A public page at `/demo/[slug]` on the web app that serves as the stable, sharea
 **Request body:** `{ role: 'board' | 'resident' }`
 
 **Process:**
-1. Look up demo instance by slug (validate exists, not expired, not soft-deleted).
-2. Decrypt `authTokenSecret` from `demo_instances`.
+1. Look up demo instance by slug (validate exists, not expired, community not soft-deleted).
+2. Decrypt `authTokenSecret` from `demo_instances`. **Must replicate the full anti-enumeration pattern from `demo-login/route.ts` (lines 162–183):** if the instance is not found or decryption fails, use a dummy secret and continue to token validation (which will fail), rather than returning an early 404. This prevents timing-based enumeration of valid slugs.
 3. Generate token via `generateDemoToken()` with the demo's `tokenTtlSeconds`.
 4. Determine target user ID (`demoBoardUserId` or `demoResidentUserId`).
 5. Generate Supabase magic link for that user via `admin.auth.admin.generateLink()`.
@@ -75,9 +77,9 @@ A dedicated conversion endpoint that creates a Stripe checkout session tied to t
 
 ### Conversion Endpoint
 
-`POST /api/v1/demos/[slug]/convert`
+`POST /api/v1/demo/[slug]/convert`
 
-**Auth:** Platform admin (admin app session) or a signed conversion token.
+**Auth:** Platform admin (admin app session only). No alternative auth path — conversion is an admin-only operation.
 
 **Request body:** `{ planId: 'essentials' | 'professional' | 'operations_plus' }`
 
@@ -95,7 +97,13 @@ A dedicated conversion endpoint that creates a Stripe checkout session tied to t
 
 Extend `POST /api/v1/webhooks/stripe` (`checkout.session.completed`):
 
+> **Critical:** The webhook handler MUST NOT use `withErrorHandler`. Stripe requires 200 on all responses. The existing handler already enforces this — do not change it.
+
+**Rewrite the early guard:** The existing handler gates on `signupRequestId` and returns early if absent (line 65). This must be refactored to a conditional: check for `demoId` first (conversion path), then `signupRequestId` (new signup path), then warn-and-return if neither.
+
 **Detection:** `session.metadata.demoId` is present → conversion flow (not new signup).
+
+**Idempotency:** Use `WHERE is_demo = true AND id = :communityId RETURNING id` on the UPDATE. If no row is returned (already converted), skip all side effects. This matches the existing `RETURNING`-based idempotency pattern used for subscription cancellations (lines 156–173).
 
 **In-place upgrade:**
 ```sql
@@ -124,6 +132,8 @@ Shows: "Welcome! Your community is now live." with next steps:
 - Invite your first residents
 - Configure community settings
 
+> **Note:** This page is best-effort — if the user's browser tab closes before the Stripe redirect completes, the community is still converted (webhook is the source of truth). The admin app's "Converted" badge provides a fallback entry point. No special recovery flow needed.
+
 ### Admin App Changes
 
 - "Convert to Customer" button on demo detail page with plan selection dropdown.
@@ -143,14 +153,15 @@ A daily cron job that soft-deletes expired demos, plus runtime checks on the lan
 
 ### Cron Endpoint
 
-`GET /api/v1/cron/expire-demos`
+`GET /api/v1/internal/expire-demos`
 
-**Auth:** `Authorization: Bearer <CRON_SECRET>` header (standard Vercel cron pattern).
+**Auth:** `requireCronSecret` from `@/lib/api/cron-auth` with `DEMO_EXPIRY_CRON_SECRET` env var, following the pattern in `/api/v1/internal/payment-reminders/route.ts`.
 
 **Process:**
 1. Query: `SELECT id, seeded_community_id, demo_resident_user_id, demo_board_user_id FROM demo_instances JOIN communities ON communities.id = demo_instances.seeded_community_id WHERE communities.is_demo = true AND communities.demo_expires_at < now() AND communities.deleted_at IS NULL`
 2. For each expired demo:
    - Soft-delete community: `UPDATE communities SET deleted_at = now() WHERE id = :id`
+   - Soft-delete demo instance: `UPDATE demo_instances SET deleted_at = now() WHERE id = :id`
    - Ban demo auth users via Supabase admin API
    - Log audit event: `demo.expired`
 3. Return `{ expired: count }`.
@@ -162,7 +173,7 @@ Add to `vercel.json`:
 {
   "crons": [
     {
-      "path": "/api/v1/cron/expire-demos",
+      "path": "/api/v1/internal/expire-demos",
       "schedule": "0 3 * * *"
     }
   ]
@@ -187,12 +198,16 @@ Add to `vercel.json`:
 
 ## Migration Plan
 
-One migration file covering all schema changes:
+One migration file: `0113_demo_lifecycle.sql` (journal idx 112 is current tail).
 
 ```sql
 -- Add token TTL to demo_instances
 ALTER TABLE demo_instances
   ADD COLUMN token_ttl_seconds integer NOT NULL DEFAULT 604800;
+
+-- Add soft-delete to demo_instances (schema convention: all tenant-scoped tables)
+ALTER TABLE demo_instances
+  ADD COLUMN deleted_at timestamptz;
 
 -- Ensure demo_expires_at is populated for existing demos
 UPDATE communities c
@@ -203,7 +218,10 @@ WHERE di.seeded_community_id = c.id
   AND c.demo_expires_at IS NULL;
 ```
 
-Migration number: Check highest existing file in `packages/db/migrations/` before creating.
+Also update `packages/db/src/schema/demo-instances.ts` to add:
+- `deletedAt: timestamp('deleted_at', { withTimezone: true })` column
+- `tokenTtlSeconds: integer('token_ttl_seconds').notNull().default(604800)` column
+- `$type<DemoTheme>()` annotation on the `theme` column
 
 ## File Changes Summary
 
@@ -215,7 +233,7 @@ Migration number: Check highest existing file in `packages/db/migrations/` befor
 | `apps/web/src/app/demo/[slug]/converted/page.tsx` | Post-conversion success page |
 | `apps/web/src/app/api/v1/demo/[slug]/enter/route.ts` | Demo entry (token generation + login) |
 | `apps/web/src/app/api/v1/demo/[slug]/convert/route.ts` | Demo-to-customer conversion |
-| `apps/web/src/app/api/v1/cron/expire-demos/route.ts` | Cron: expire stale demos |
+| `apps/web/src/app/api/v1/internal/expire-demos/route.ts` | Cron: expire stale demos |
 
 ### Modified Files
 
@@ -223,8 +241,8 @@ Migration number: Check highest existing file in `packages/db/migrations/` befor
 |------|--------|
 | `apps/web/src/app/api/v1/webhooks/stripe/route.ts` | Handle conversion checkout completion |
 | `apps/web/src/app/api/v1/auth/demo-login/route.ts` | Add expiry check before token validation |
-| `apps/web/src/middleware.ts` | Add `/demo/[slug]` and cron route to public/token-auth paths |
-| `packages/db/src/schema/demo-instances.ts` | Add `tokenTtlSeconds` column |
+| `apps/web/src/middleware.ts` | Add `/demo/[slug]` and `/api/v1/internal/expire-demos` to public/token-auth paths |
+| `packages/db/src/schema/demo-instances.ts` | Add `tokenTtlSeconds`, `deletedAt` columns; type `theme` JSONB |
 | `apps/admin/src/app/demo/[id]/preview/TabbedPreviewClient.tsx` | Copy landing page URL |
 | `apps/admin/src/app/demo/[id]/preview/page.tsx` | Pass landing page URL to client |
 | `vercel.json` | Add cron schedule |
@@ -247,7 +265,7 @@ Migration number: Check highest existing file in `packages/db/migrations/` befor
 | Expired demo (conversion) | 400: "Cannot convert expired demo" |
 | Already converted (conversion) | 400: "Community is not a demo" |
 | Stripe checkout fails | User returns to cancel URL, no state change |
-| Webhook idempotency | Check `is_demo` before update; skip if already false |
+| Webhook idempotency | `UPDATE ... WHERE is_demo = true RETURNING id`; skip side effects if no row returned |
 
 ## Testing Strategy
 
