@@ -105,6 +105,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/expire-demos/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-session.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
+  // U-06: Access request service — pre-tenant OTP verification before communityId is scoped
+  resolve(repoRoot, 'apps/web/src/lib/services/access-request-service.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
