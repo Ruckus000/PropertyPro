@@ -16,6 +16,8 @@ import { type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { MotionProvider } from '@/components/providers/motion-provider';
 import { AppQueryProvider } from '@/components/providers/query-provider';
+import { DemoBanner } from '@/components/demo/DemoBanner';
+import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -40,15 +42,21 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
 
   let communityName = '';
   let communityType: CommunityType = 'condo_718';
+  let isDemo = false;
+  let userEmail: string | null = null;
 
   try {
     const user = await requireAuthenticatedUser();
+    userEmail = user.email ?? null;
     const membership = await requireCommunityMembership(communityId, user.id);
     communityType = membership.communityType;
     communityName = membership.communityName;
+    isDemo = membership.isDemo;
   } catch {
     redirect('/auth/login');
   }
+
+  const demoInfo = detectDemoInfo(isDemo, userEmail);
 
   const branding = await getBrandingForCommunity(communityId);
   const theme = resolveTheme(branding, communityName, communityType);
@@ -66,6 +74,13 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
             <main id="main-content" className="mobile-content">
               {children}
             </main>
+            {demoInfo && (
+              <DemoBanner
+                isDemoMode={demoInfo.isDemoMode}
+                currentRole={demoInfo.currentRole}
+                slug={demoInfo.slug}
+              />
+            )}
           </MotionProvider>
         </AppQueryProvider>
       </div>
