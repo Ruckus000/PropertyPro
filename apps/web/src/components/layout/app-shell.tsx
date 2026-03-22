@@ -26,6 +26,8 @@ import { CommandPalette as CommandPaletteLegacy } from './command-palette';
 import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { DemoBanner } from '@/components/demo/DemoBanner';
+import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 
 // Feature flag: set to true to use the new command palette
 const USE_COMMAND_PALETTE_V2 = true;
@@ -51,9 +53,10 @@ interface AppShellProps {
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
   subscriptionStatus?: string | null;
+  demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, features, subscriptionStatus }: AppShellProps) {
+function ShellInner({ children, user, community, role, features, subscriptionStatus, demoInfo }: AppShellProps) {
   const { expanded, mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -183,6 +186,14 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
         role={role}
         features={features}
       />
+
+      {demoInfo && (
+        <DemoBanner
+          isDemoMode={demoInfo.isDemoMode}
+          currentRole={demoInfo.currentRole}
+          slug={demoInfo.slug}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ interface DemoRow {
   external_crm_url: string | null;
   prospect_notes: string | null;
   created_at: string;
+  is_converted?: boolean;
 }
 
 function getAgeDays(createdAt: string): number {
@@ -137,6 +138,9 @@ export default function DemoListPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Age
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     Actions
                   </th>
@@ -163,6 +167,17 @@ export default function DemoListPage() {
                     </td>
                     <td className="px-4 py-3">
                       <AgeBadge createdAt={demo.created_at} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {demo.is_converted ? (
+                        <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Converted
+                        </span>
+                      ) : (
+                        <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                          Demo
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">

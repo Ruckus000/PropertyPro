@@ -15,6 +15,7 @@ import {
   encryptDemoTokenSecret,
 } from '@propertypro/shared/server';
 import { seedCommunity } from '@propertypro/db/seed/seed-community';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { listDemos, insertDemo } from '@/lib/db/demo-queries';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
@@ -128,6 +129,21 @@ export async function POST(request: NextRequest) {
       { error: { code: 'SEED_ERROR', message } },
       { status: 500 },
     );
+  }
+
+  // Set demo_expires_at (30 days from now) on the seeded community.
+  // Note: demo_expires_at is not in the auto-generated Supabase types yet,
+  // so we use the untyped from() helper pattern (same as demo-queries.ts).
+  if (seedResult.communityId) {
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updateError } = await (createAdminClient() as any)
+      .from('communities')
+      .update({ demo_expires_at: expiresAt })
+      .eq('id', seedResult.communityId);
+    if (updateError) {
+      console.error('[demos/POST] Failed to set demo_expires_at:', updateError.message);
+    }
   }
 
   // Generate and encrypt HMAC secret — encryption key is mandatory (DB CHECK constraint

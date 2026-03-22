@@ -79,6 +79,7 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/webhooks/twilio', method: 'POST' },
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
   { path: '/api/v1/auth/confirm-verification', method: 'POST' },
+  { path: '/api/v1/internal/expire-demos', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
@@ -121,6 +122,14 @@ function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
   // E-sign signing routes use dynamic segments (e.g. /api/v1/esign/sign/:token)
   // so they can't use exact-path matching via TOKEN_AUTH_ROUTES.
   if (request.nextUrl.pathname.startsWith('/api/v1/esign/sign/')) {
+    return true;
+  }
+  // Demo entry route uses dynamic [slug] segment
+  if (
+    request.nextUrl.pathname.startsWith('/api/v1/demo/') &&
+    request.nextUrl.pathname.endsWith('/enter') &&
+    request.method.toUpperCase() === 'POST'
+  ) {
     return true;
   }
   return TOKEN_AUTH_ROUTES.some(

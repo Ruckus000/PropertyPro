@@ -26,6 +26,8 @@ export interface CommunityMembership {
   city: string | null;
   /** Community state abbreviation for location display. */
   state: string | null;
+  /** Whether this community is a demo instance. */
+  isDemo: boolean;
 }
 
 /**
@@ -114,5 +116,6 @@ export async function requireCommunityMembership(
     presetKey,
     city: typeof community['city'] === 'string' ? community['city'] : null,
     state: typeof community['state'] === 'string' ? community['state'] : null,
+    isDemo: community['isDemo'] === true,
   };
 }

@@ -98,6 +98,13 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/documents/route.ts'),
   // Phase 2C: Branding settings — communities is root tenant table
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/pm/settings/branding/page.tsx'),
+  // Demo lifecycle: landing page, entry, conversion, expiry cron, session helper
+  resolve(repoRoot, 'apps/web/src/app/demo/[slug]/page.tsx'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/expire-demos/route.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/demo-session.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
@@ -140,6 +147,8 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'contracts',
   'contract_bids',
   'maintenance_comments',
+  // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
+  'user_search_index',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

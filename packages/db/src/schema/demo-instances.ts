@@ -2,6 +2,13 @@ import { bigint, bigserial, jsonb, pgTable, text, timestamp, unique, uuid } from
 import { communities } from './communities';
 import { communityTypeEnum } from './enums';
 
+export type DemoTheme = {
+  logoPath?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  fontFamily?: string;
+};
+
 export const demoInstances = pgTable(
   'demo_instances',
   {
@@ -9,7 +16,7 @@ export const demoInstances = pgTable(
     templateType: communityTypeEnum('template_type').notNull(),
     prospectName: text('prospect_name').notNull(),
     slug: text('slug').notNull(),
-    theme: jsonb('theme').notNull(),
+    theme: jsonb('theme').notNull().$type<DemoTheme>(),
     seededCommunityId: bigint('seeded_community_id', { mode: 'number' }).references(
       () => communities.id,
       { onDelete: 'set null' },
@@ -23,6 +30,7 @@ export const demoInstances = pgTable(
     prospectNotes: text('prospect_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     customizedAt: timestamp('customized_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     unique('demo_instances_slug_unique').on(table.slug),
