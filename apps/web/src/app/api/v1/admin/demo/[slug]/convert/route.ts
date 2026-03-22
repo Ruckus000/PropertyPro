@@ -5,18 +5,46 @@
  * into a paid subscription. The Stripe webhook handler will complete
  * the conversion when checkout succeeds.
  *
- * Auth: session-based (under /api/v1/ protected prefix).
+ * Auth: session-based (under /api/v1/ protected prefix) + pm_admin role check.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { eq, and, isNull } from '@propertypro/db/filters';
-import { demoInstances, communities } from '@propertypro/db';
+import { demoInstances, communities, userRoles } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
+import { ForbiddenError } from '@/lib/api/errors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+
+// ---------------------------------------------------------------------------
+// CORS — admin app runs on a different origin
+// ---------------------------------------------------------------------------
+
+const ADMIN_ORIGINS = [
+  'http://localhost:3001',
+  process.env.ADMIN_APP_URL,
+].filter(Boolean) as string[];
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = origin && ADMIN_ORIGINS.includes(origin);
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin : '',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(req.headers.get('origin')),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Request validation
@@ -38,6 +66,19 @@ export const POST = withErrorHandler(
     context: { params: Promise<{ slug: string }> },
   ): Promise<NextResponse> => {
     const { slug } = await context.params;
+    const origin = req.headers.get('origin');
+
+    // 0. Verify the caller has pm_admin role (platform-level operation)
+    const userId = await requireAuthenticatedUserId();
+    const db = createUnscopedClient();
+    const adminCheck = await db
+      .select({ id: userRoles.id })
+      .from(userRoles)
+      .where(and(eq(userRoles.userId, userId), eq(userRoles.role, 'pm_admin')))
+      .limit(1);
+    if (!adminCheck.length) {
+      throw new ForbiddenError();
+    }
 
     // 1. Validate request body
     const body = await req.json();
@@ -53,8 +94,7 @@ export const POST = withErrorHandler(
 
     const { planId, customerEmail, customerName } = parsed.data;
 
-    // 2. Look up demo by slug
-    const db = createUnscopedClient();
+    // 2. Look up demo by slug (exclude soft-deleted communities)
     const [demo] = await db
       .select({
         id: demoInstances.id,
@@ -69,6 +109,7 @@ export const POST = withErrorHandler(
         and(
           eq(demoInstances.slug, slug),
           isNull(demoInstances.deletedAt),
+          isNull(communities.deletedAt),
         ),
       )
       .limit(1);
@@ -117,6 +158,9 @@ export const POST = withErrorHandler(
       },
     });
 
-    return NextResponse.json({ checkoutUrl: session.url });
+    return NextResponse.json(
+      { checkoutUrl: session.url },
+      { headers: corsHeaders(origin) },
+    );
   },
 );

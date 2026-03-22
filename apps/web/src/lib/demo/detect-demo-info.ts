@@ -20,14 +20,14 @@ export function detectDemoInfo(
   if (!isDemo || !userEmail) return null;
 
   const boardMatch = userEmail.match(
-    /^demo-board@([^.]+)\.propertyprofl\.com$/,
+    /^demo-board@(.+)\.propertyprofl\.com$/,
   );
   if (boardMatch?.[1]) {
     return { isDemoMode: true, currentRole: 'board', slug: boardMatch[1] };
   }
 
   const residentMatch = userEmail.match(
-    /^demo-resident@([^.]+)\.propertyprofl\.com$/,
+    /^demo-resident@(.+)\.propertyprofl\.com$/,
   );
   if (residentMatch?.[1]) {
     return { isDemoMode: true, currentRole: 'resident', slug: residentMatch[1] };
