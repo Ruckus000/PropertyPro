@@ -61,9 +61,17 @@ async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
   eventId: string,
 ): Promise<void> {
+  const demoId = session.metadata?.demoId;
   const signupRequestId = session.metadata?.signupRequestId;
+
+  if (demoId) {
+    const { handleDemoConversion } = await import('@/lib/services/demo-conversion');
+    await handleDemoConversion(session);
+    return;
+  }
+
   if (!signupRequestId) {
-    console.warn('[stripe-webhook] checkout.session.completed missing signupRequestId in metadata');
+    console.warn('[stripe-webhook] checkout.session.completed: no demoId or signupRequestId in metadata');
     return;
   }
 
