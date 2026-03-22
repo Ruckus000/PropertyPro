@@ -169,11 +169,11 @@ async function banDemoUsers(demoId: number): Promise<void> {
 
 /**
  * Creates the founding user for a converted community.
- * Assigns pm_admin role (full platform access).
+ * Assigns board_president + pm_admin roles (community + platform access).
  *
- * Idempotency: checks if a pm_admin role row already exists for this community
- * before creating anything. If the auth user already exists (e.g., from a
- * previous partial run), reuses it.
+ * Idempotency: checks if a board_president role row already exists for this
+ * community before creating anything. If the auth user already exists (e.g.,
+ * from a previous partial run), reuses it.
  */
 async function ensureFoundingUser(
   communityId: number,
@@ -182,14 +182,15 @@ async function ensureFoundingUser(
 ): Promise<void> {
   const db = createUnscopedClient();
 
-  // Check if a pm_admin role already exists for this community
+  // Check if a board_president (manager) role already exists for this community
   const [existingRole] = await db
     .select({ id: userRoles.id })
     .from(userRoles)
     .where(
       and(
         eq(userRoles.communityId, communityId),
-        eq(userRoles.role, 'pm_admin'),
+        eq(userRoles.role, 'manager'),
+        eq(userRoles.presetKey, 'board_president'),
       ),
     )
     .limit(1);
@@ -242,16 +243,28 @@ async function ensureFoundingUser(
       .onConflictDoNothing();
   }
 
-  // Create pm_admin role (full platform access, includes board president authority)
+  // Create board_president (manager) + pm_admin roles for the founding user.
+  // manager+board_president: community management authority (V2 role model)
+  // pm_admin: PM portfolio dashboard access (fixes PM-03 audit gap)
   await db
     .insert(userRoles)
-    .values({
-      userId,
-      communityId,
-      role: 'pm_admin',
-      displayTitle: 'Board President',
-      isUnitOwner: false,
-    })
+    .values([
+      {
+        userId,
+        communityId,
+        role: 'manager',
+        presetKey: 'board_president',
+        displayTitle: 'Board President',
+        isUnitOwner: false,
+      },
+      {
+        userId,
+        communityId,
+        role: 'pm_admin',
+        displayTitle: 'Administrator',
+        isUnitOwner: false,
+      },
+    ])
     .onConflictDoNothing();
 
   // Send magic link so the founding user can set their password

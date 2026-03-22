@@ -39,7 +39,8 @@ async function parseRole(request: Request): Promise<{ role: 'board' | 'resident'
       const body = await request.json();
       const result = RoleSchema.safeParse(body);
       return result.success ? result.data : null;
-    } catch {
+    } catch (err) {
+      console.warn('[demo/enter] malformed JSON body:', err instanceof Error ? err.message : err);
       return null;
     }
   }
