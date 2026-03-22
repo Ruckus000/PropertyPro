@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 export interface DocumentSearchRecord {
   id: number;
@@ -22,10 +22,13 @@ interface DocumentSearchResponse {
 
 export interface DocumentSearchProps {
   communityId: number;
+  /** Pre-populate search from command palette "View all" link */
+  initialQuery?: string;
 }
 
-export function DocumentSearch({ communityId }: DocumentSearchProps) {
-  const [query, setQuery] = useState('');
+export function DocumentSearch({ communityId, initialQuery }: DocumentSearchProps) {
+  const [query, setQuery] = useState(initialQuery ?? '');
+  const didAutoSearch = useRef(false);
   const [items, setItems] = useState<DocumentSearchRecord[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,14 @@ export function DocumentSearch({ communityId }: DocumentSearchProps) {
       }
     });
   };
+
+  // Auto-trigger search when initialQuery is provided
+  useEffect(() => {
+    if (initialQuery && !didAutoSearch.current) {
+      didAutoSearch.current = true;
+      fetchResults(null);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <section className="space-y-4">

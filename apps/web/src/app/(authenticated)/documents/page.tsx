@@ -25,7 +25,9 @@ export default async function DocumentsRedirectPage({ searchParams }: PageProps)
   });
 
   if (context.communityId) {
-    redirect(`/communities/${context.communityId}/documents`);
+    const q = resolvedSearchParams.q;
+    const qParam = typeof q === 'string' && q ? `?q=${encodeURIComponent(q)}` : '';
+    redirect(`/communities/${context.communityId}/documents${qParam}`);
   }
 
   return (

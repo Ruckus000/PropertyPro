@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
-import { ADMIN_ROLES, resolvePlanId } from '@propertypro/shared';
+import { ADMIN_ROLES } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
 import { CommandPalette as CommandPaletteLegacy } from './command-palette';
@@ -182,8 +182,6 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
         communityId={community?.id ?? null}
         role={role}
         features={features}
-        communityType={community?.type ?? null}
-        planId={community?.plan ? resolvePlanId(community.plan) : null}
       />
     </div>
   );

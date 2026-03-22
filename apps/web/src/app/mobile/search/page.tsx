@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { getEffectiveFeaturesAndPlanForPage } from '@/lib/middleware/plan-guard';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { MobileSearchContent } from '@/components/mobile/MobileSearchContent';
 
 interface PageProps {
@@ -34,18 +34,13 @@ export default async function MobileSearchPage({ searchParams }: PageProps) {
     redirect('/auth/login');
   }
 
-  const { features, planId } = await getEffectiveFeaturesAndPlanForPage(
-    communityId,
-    membership.communityType,
-  );
+  const features = getFeaturesForCommunity(membership.communityType);
 
   return (
     <MobileSearchContent
       communityId={communityId}
       role={membership.role}
       features={features}
-      communityType={membership.communityType}
-      planId={planId}
     />
   );
 }
