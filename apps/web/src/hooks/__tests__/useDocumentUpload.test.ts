@@ -237,6 +237,80 @@ describe('useDocumentUpload', () => {
     );
   });
 
+  it('handles expired presigned URL (slow connection, large file)', async () => {
+    // Scenario: presign succeeds, but by the time the 45MB PDF finishes
+    // uploading on spotty condo WiFi, the presigned URL has expired.
+    // S3 returns 403 Forbidden on the PUT.
+    mockPresignSuccess();
+
+    const { result } = renderHook(() => useDocumentUpload());
+    let error: Error | undefined;
+
+    const uploadPromise = act(async () => {
+      try {
+        // Simulate a large file upload
+        await result.current.uploadDocument(
+          makeUploadRequest({
+            file: createTestFile('insurance-policy.pdf', 45 * 1024 * 1024),
+          }),
+        );
+      } catch (e) {
+        error = e as Error;
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(mockXHRInstance.send).toHaveBeenCalled();
+    });
+
+    // Simulate expired presigned URL — S3 returns 403
+    await act(async () => {
+      mockXHRInstance.status = 403;
+      mockXHRInstance.onload?.();
+    });
+
+    await uploadPromise;
+
+    // User should see a clear error, not a spinner
+    expect(error?.message).toBe('Upload failed. Please try again.');
+    expect(result.current.isUploading).toBe(false);
+    expect(result.current.error).toBe('Upload failed. Please try again.');
+    // Progress should reset — not stuck at some partial value
+    expect(result.current.progress).toBe(0);
+  });
+
+  it('handles S3 timeout during upload (request takes too long)', async () => {
+    // Scenario: presign succeeds, upload starts, but S3 times out the request
+    // because the connection is too slow. XHR fires onerror.
+    mockPresignSuccess();
+
+    const { result } = renderHook(() => useDocumentUpload());
+    let error: Error | undefined;
+
+    const uploadPromise = act(async () => {
+      try {
+        await result.current.uploadDocument(makeUploadRequest());
+      } catch (e) {
+        error = e as Error;
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(mockXHRInstance.send).toHaveBeenCalled();
+    });
+
+    // Simulate timeout — XHR fires onerror (distinct from non-2xx onload)
+    await act(async () => {
+      mockXHRInstance.onerror?.();
+    });
+
+    await uploadPromise;
+
+    expect(error?.message).toBe('Upload failed. Please try again.');
+    expect(result.current.isUploading).toBe(false);
+    expect(result.current.error).toBe('Upload failed. Please try again.');
+  });
+
   it('completes full upload cycle: presign → S3 → document create', async () => {
     mockPresignSuccess();
     mockDocumentCreateSuccess();

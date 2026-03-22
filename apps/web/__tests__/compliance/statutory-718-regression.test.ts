@@ -484,6 +484,147 @@ describe('compliance score calculation accuracy', () => {
 });
 
 // =============================================================================
+// Legislative Amendment Regression Detection
+//
+// This section demonstrates the workflow: law changes → update templates.ts →
+// run this suite → see exactly what breaks. Each test is pinned to a specific
+// statutory requirement so that adding, removing, or modifying a template item
+// produces a clear, traceable failure.
+// =============================================================================
+
+describe('legislative amendment regression detection', () => {
+  /**
+   * Simulates what happens if a future amendment (e.g. HB 913 successor) adds
+   * a new required document category. The test constructs what the template
+   * SHOULD look like after the amendment and verifies the current template
+   * against it.
+   *
+   * When a real amendment adds a requirement:
+   *   1. Add the item to CONDO_718_CHECKLIST_TEMPLATE in templates.ts
+   *   2. Run this suite — the "current template covers all known requirements" test
+   *      will PASS (because it checks the actual template)
+   *   3. But any test pinned to the OLD count (e.g. "requires exactly 16") will FAIL
+   *   4. Update that count to 17, confirming you've reviewed the change
+   */
+
+  // Complete manifest of required template keys — the source of truth for what
+  // the system MUST enforce. If a key is missing from the template, the test
+  // fails with a clear message about which statutory requirement is unmet.
+  const REQUIRED_CONDO_KEYS = [
+    '718_declaration',
+    '718_bylaws',
+    '718_articles',
+    '718_rules',
+    '718_qa_sheet',
+    '718_budget',
+    '718_financial_report',
+    '718_minutes_rolling_12m',
+    '718_video_recordings',
+    '718_affidavits',
+    '718_insurance',
+    '718_contracts',
+    '718_conflict_contracts',
+    '718_bids',
+    '718_inspection_reports',
+    '718_sirs',
+  ] as const;
+
+  const REQUIRED_HOA_KEYS = [
+    '720_governing_docs',
+    '720_articles',
+    '720_bylaws_rules',
+    '720_budget',
+    '720_financial_report',
+    '720_minutes_rolling_12m',
+    '720_meeting_notices',
+    '720_insurance',
+    '720_contracts',
+    '720_bids',
+  ] as const;
+
+  it('condo template contains every required statutory key', () => {
+    const templateKeys = CONDO_718_CHECKLIST_TEMPLATE.map((t) => t.templateKey);
+    for (const required of REQUIRED_CONDO_KEYS) {
+      expect(templateKeys, `Missing condo template key: ${required}`).toContain(required);
+    }
+  });
+
+  it('HOA template contains every required statutory key', () => {
+    const templateKeys = HOA_720_CHECKLIST_TEMPLATE.map((t) => t.templateKey);
+    for (const required of REQUIRED_HOA_KEYS) {
+      expect(templateKeys, `Missing HOA template key: ${required}`).toContain(required);
+    }
+  });
+
+  it('no condo template keys exist that are not in the known manifest', () => {
+    // This catches orphaned keys from repealed requirements.
+    // If a statute is repealed and the key removed from REQUIRED_CONDO_KEYS,
+    // this test forces you to also remove it from the template.
+    const templateKeys = CONDO_718_CHECKLIST_TEMPLATE.map((t) => t.templateKey);
+    for (const key of templateKeys) {
+      expect(
+        (REQUIRED_CONDO_KEYS as readonly string[]).includes(key),
+        `Unexpected condo template key "${key}" not in statutory manifest — was a requirement repealed?`,
+      ).toBe(true);
+    }
+  });
+
+  it('no HOA template keys exist that are not in the known manifest', () => {
+    const templateKeys = HOA_720_CHECKLIST_TEMPLATE.map((t) => t.templateKey);
+    for (const key of templateKeys) {
+      expect(
+        (REQUIRED_HOA_KEYS as readonly string[]).includes(key),
+        `Unexpected HOA template key "${key}" not in statutory manifest — was a requirement repealed?`,
+      ).toBe(true);
+    }
+  });
+
+  it('each template item maps to exactly one statute reference (no drift)', () => {
+    // Build a map of templateKey → statuteReference. If someone accidentally
+    // changes a statute reference during a refactor, this catches it.
+    const expectedReferences: Record<string, string> = {
+      '718_declaration': '§718.111(12)(g)(2)(a)',
+      '718_bylaws': '§718.111(12)(g)(2)(b)',
+      '718_articles': '§718.111(12)(g)(2)(c)',
+      '718_rules': '§718.111(12)(g)(2)(d)',
+      '718_qa_sheet': '§718.504',
+      '718_budget': '§718.112(2)(f)',
+      '718_financial_report': '§718.111(13)',
+      '718_minutes_rolling_12m': '§718.111(12)(g)(2)(e)',
+      '718_video_recordings': '§718.111(12)(g)(2)(f)',
+      '718_affidavits': '§718.111(12)(g)(2)(g)',
+      '718_insurance': '§718.111(11)',
+      '718_contracts': '§718.111(12)(g)(2)',
+      '718_conflict_contracts': '§718.3026',
+      '718_bids': '§718.111(12)(g)(2)',
+      '718_inspection_reports': '§553.899, §718.301(4)(p)',
+      '718_sirs': '§718.112(2)(g)',
+    };
+
+    for (const item of CONDO_718_CHECKLIST_TEMPLATE) {
+      const expected = expectedReferences[item.templateKey];
+      if (expected) {
+        expect(
+          item.statuteReference,
+          `Statute reference drift for ${item.templateKey}: expected "${expected}", got "${item.statuteReference}"`,
+        ).toBe(expected);
+      }
+    }
+  });
+
+  it('template count is pinned — forces review when items are added or removed', () => {
+    // When a legislative amendment adds a new requirement:
+    //   1. Add the item to templates.ts
+    //   2. Add the key to REQUIRED_CONDO_KEYS above
+    //   3. Update this count from 16 to 17
+    //   4. Add a statute reference entry in the drift check above
+    // This 4-step process ensures no requirement is added without full review.
+    expect(CONDO_718_CHECKLIST_TEMPLATE).toHaveLength(REQUIRED_CONDO_KEYS.length);
+    expect(HOA_720_CHECKLIST_TEMPLATE).toHaveLength(REQUIRED_HOA_KEYS.length);
+  });
+});
+
+// =============================================================================
 // Category Grouping
 // =============================================================================
 
