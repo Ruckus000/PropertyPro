@@ -9,7 +9,7 @@
  * Auth: cron secret (ACCOUNT_LIFECYCLE_CRON_SECRET)
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq, and, lt, isNull, isNotNull, sql } from '@propertypro/db/filters';
+import { eq, and, lt, isNull, isNotNull } from '@propertypro/db/filters';
 import { accessPlans, accountDeletionRequests } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -93,9 +93,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // -------------------------------------------------------------------------
   // 3. Free access expiry notifications
   // -------------------------------------------------------------------------
-  const fourteenDaysFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
   // Find plans needing notifications (active, not revoked/converted)
   const activePlans = await db
     .select()
