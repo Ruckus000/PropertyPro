@@ -49,6 +49,8 @@ export const communities = pgTable('communities', {
   nextReminderAt: timestamp('next_reminder_at', { withTimezone: true }),
   /** P2-34a: When the subscription was canceled (start of 30-day grace period). Null = not canceled. */
   subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
+  /** Account lifecycle: denormalized from access_plans for fast subscription guard check. */
+  freeAccessExpiresAt: timestamp('free_access_expires_at', { withTimezone: true }),
   /** Admin: true for demo communities created via the admin console. */
   isDemo: boolean('is_demo').notNull().default(false),
   /** Admin: reserved for future auto-expiry. Demos persist until manually deleted. */

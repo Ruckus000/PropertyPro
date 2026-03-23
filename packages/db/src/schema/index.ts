@@ -362,3 +362,7 @@ export type NewFaq = typeof faqs.$inferInsert;
 import type { accessRequests } from './access-requests';
 export type AccessRequest = typeof accessRequests.$inferSelect;
 export type NewAccessRequest = typeof accessRequests.$inferInsert;
+
+// Access Plans (account lifecycle)
+export { accessPlans } from './access-plans';
+export { accountDeletionRequests } from './account-deletion-requests';
