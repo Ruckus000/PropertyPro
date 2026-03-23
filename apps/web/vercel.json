@@ -37,6 +37,10 @@
     {
       "path": "/api/v1/internal/expire-demos",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/v1/internal/account-lifecycle",
+      "schedule": "0 4 * * *"
     }
   ]
 }
