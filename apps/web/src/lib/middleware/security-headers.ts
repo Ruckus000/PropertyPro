@@ -67,6 +67,19 @@ export function isAllowedOrigin(origin: string): boolean {
 }
 
 /**
+ * Extract the origin from a Referer header value and check against allowlist.
+ * Falls back to false for malformed URLs.
+ */
+export function isAllowedReferer(referer: string): boolean {
+  try {
+    const url = new URL(referer);
+    return isAllowedOrigin(url.origin);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build CORS response headers for a given Origin.
  * Returns an empty record when the origin is not in the allowlist so that
  * callers can safely spread the result without leaking permissive CORS.

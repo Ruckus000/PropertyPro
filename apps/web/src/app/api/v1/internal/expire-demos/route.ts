@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances, communities } from '@propertypro/db';
-import { eq, and, isNull, lt } from '@propertypro/db/filters';
+import { demoInstances, communities, accessRequests } from '@propertypro/db';
+import { eq, and, isNull, lt, inArray, sql } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -65,5 +65,20 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     count++;
   }
 
-  return NextResponse.json({ data: { expired: count } });
+  // Expire stale access requests older than 30 days
+  const expiredRequests = await db
+    .update(accessRequests)
+    .set({ status: 'expired', updatedAt: now })
+    .where(
+      and(
+        inArray(accessRequests.status, ['pending_verification', 'pending']),
+        lt(accessRequests.createdAt, sql`now() - interval '30 days'`),
+        isNull(accessRequests.deletedAt),
+      ),
+    )
+    .returning({ id: accessRequests.id });
+
+  console.info(`[expire-demos] expired ${expiredRequests.length} stale access requests`);
+
+  return NextResponse.json({ data: { expired: count, expiredRequests: expiredRequests.length } });
 });

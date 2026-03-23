@@ -34,7 +34,9 @@ export type AuditAction =
   | 'proxy_rejected' | 'proxy_revoked'                           // Proxy denial/revocation
   // FAQ & profile audit actions (Mobile Settings & Help)
   | 'faq.created' | 'faq.updated' | 'faq.deleted' | 'faq.reordered'
-  | 'community.contact_updated' | 'profile.updated';
+  | 'community.contact_updated' | 'profile.updated'
+  // Access request audit actions (self-service resident signup)
+  | 'access_request.approved' | 'access_request.denied';
 
 export interface AuditEventParams {
   userId: string;

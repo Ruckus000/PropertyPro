@@ -1,6 +1,7 @@
 /**
  * Schema barrel export — all tables, enums, and inferred types.
  */
+export * from './access-requests';
 export * from './enums';
 export * from './communities';
 export * from './users';
@@ -356,3 +357,8 @@ export type NewElectionEligibilitySnapshot = typeof electionEligibilitySnapshots
 import type { faqs } from './faqs';
 export type Faq = typeof faqs.$inferSelect;
 export type NewFaq = typeof faqs.$inferInsert;
+
+// Access Requests (self-service resident signup)
+import type { accessRequests } from './access-requests';
+export type AccessRequest = typeof accessRequests.$inferSelect;
+export type NewAccessRequest = typeof accessRequests.$inferInsert;

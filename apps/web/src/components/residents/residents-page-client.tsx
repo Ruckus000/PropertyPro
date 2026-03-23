@@ -10,6 +10,7 @@ import { ResidentForm, type ResidentFormSubmitValues } from '@/components/reside
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AccessRequestList } from '@/components/access-requests/access-request-list';
 import {
   Dialog,
   DialogContent,
@@ -273,6 +274,14 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
       {searchQuery && filteredResidents.length === 0 && (
         <EmptyState preset="no_results" size="sm" />
       )}
+
+      <div className="space-y-3 pt-2">
+        <h2 className="text-lg font-semibold text-content">Access Requests</h2>
+        <p className="text-sm text-content-secondary">
+          Review and approve or deny pending requests to join this community.
+        </p>
+        <AccessRequestList communityId={communityId} />
+      </div>
 
       <AddResidentDialog
         open={dialogOpen}

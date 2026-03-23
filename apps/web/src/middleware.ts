@@ -21,6 +21,7 @@ import {
 } from './lib/middleware/rate-limit-config';
 import {
   isAllowedOrigin,
+  isAllowedReferer,
   buildCorsHeaders,
   buildSecurityHeaders,
   buildCspHeader,
@@ -80,6 +81,9 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
   { path: '/api/v1/auth/confirm-verification', method: 'POST' },
   { path: '/api/v1/internal/expire-demos', method: 'POST' },
+  // Self-service resident signup: public submit + OTP verify (no session required)
+  { path: '/api/v1/access-requests', method: 'POST' },
+  { path: '/api/v1/access-requests/verify', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
@@ -311,6 +315,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return preflightResponse;
     }
     return new NextResponse(null, { status: 403 });
+  }
+
+  // ── CSRF Origin/Referer enforcement for state-changing API routes ──
+  const method = request.method.toUpperCase();
+  if (
+    ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
+    pathname.startsWith('/api/v1/') &&
+    !isTokenAuthenticatedApiRoute(request)
+  ) {
+    const origin = request.headers.get('origin');
+    const referer = request.headers.get('referer');
+    if (origin && !isAllowedOrigin(origin)) {
+      return NextResponse.json({ error: 'Forbidden: invalid origin' }, { status: 403 });
+    }
+    if (!origin && referer && !isAllowedReferer(referer)) {
+      return NextResponse.json({ error: 'Forbidden: invalid referer' }, { status: 403 });
+    }
   }
 
   // Refresh Supabase session (reads + writes cookies)
