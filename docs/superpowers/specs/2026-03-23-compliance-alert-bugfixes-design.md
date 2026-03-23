@@ -44,7 +44,28 @@ Additionally, during design review, a **notification spam problem** was identifi
 
 ### 1. compliance-alert-service.ts
 
-#### 1a. Replace overdue detection with `calculateComplianceStatus`
+#### 1a. Update `checkAndAlertOverdueItems` signature to accept injectable `now`
+
+Current signature:
+```typescript
+export async function checkAndAlertOverdueItems(
+  communityId: number,
+  actorUserId?: string,
+): Promise<ComplianceAlertResult>
+```
+
+New signature (adds `now` parameter for testability, required by `processComplianceAlerts`):
+```typescript
+export async function checkAndAlertOverdueItems(
+  communityId: number,
+  actorUserId?: string,
+  now: Date = new Date(),
+): Promise<ComplianceAlertResult>
+```
+
+Remove the internal `const now = new Date();` (line 36) since it's now a parameter.
+
+#### 1b. Replace overdue detection with `calculateComplianceStatus`
 
 Current broken loop (lines 44-63):
 ```typescript
@@ -79,7 +100,17 @@ for (const row of rows) {
 
 This extraction pattern mirrors the GET handler in `apps/web/src/app/api/v1/compliance/route.ts:73-93`.
 
-#### 1b. Aggregate into single digest notification per community
+The overdue items accumulator stores formatted strings for the deadline field (matching the existing `dueDate?: string` type on `ComplianceAlertEvent`):
+```typescript
+interface OverdueItem {
+  title: string;
+  description: string;
+  deadline: string;          // pre-formatted string, e.g. "March 15, 2026"
+  statuteReference: string;
+}
+```
+
+#### 1c. Aggregate into single digest notification per community
 
 Instead of calling `sendNotification` in a per-item loop, accumulate overdue items into a list, then send ONE notification after the loop:
 
@@ -95,6 +126,8 @@ const event: ComplianceAlertEvent = {
   dueDate: overdueItems[0].deadline,
   severity: 'critical',
   statuteReference: overdueItems.map(i => i.statuteReference).join(', '),
+  sourceType: 'compliance',
+  sourceId: String(communityId),
 };
 
 const notifiedCount = await sendNotification(communityId, event, 'community_admins', actorUserId);
@@ -102,7 +135,7 @@ const notifiedCount = await sendNotification(communityId, event, 'community_admi
 
 One notification per community per cron run. Not one per item.
 
-#### 1c. Add `processComplianceAlerts()` entry point
+#### 1d. Add `processComplianceAlerts()` entry point
 
 New exported function owning cross-community iteration. Pattern matches `processOverdueTransitions()` from `assessment-automation-service.ts`:
 
@@ -216,16 +249,36 @@ The compliance scoring system in `apps/web/src/lib/utils/compliance-calculator.t
 
 #### Updated: `compliance-alert-service.test.ts`
 
-New test cases for `checkAndAlertOverdueItems`:
+**Mock structure rebuild required.** The existing test mocks `sendEmail` (the raw mailer from `@propertypro/email`) because the old implementation called `sendNotification` which internally resolved recipients and called `sendEmail`. After the refactor, the alert service still calls `sendNotification`, but the test mock layer must change:
+
+- Replace `sendEmailMock` with `sendNotificationMock` by mocking `@/lib/services/notification-service` directly (vi.mock the module, not its internal dependency)
+- Remove the `@propertypro/email` mock since the alert service no longer transits through it
+- Update `setupMock` to only need `complianceChecklistItems` rows (notification internals are mocked away)
+
+**Contradictory test replacement.** The existing test "sends one alert per overdue item" (line 148) asserts `sendEmailMock.toHaveBeenCalledTimes(2)` for 2 overdue items. This directly contradicts the new digest behavior. **Delete this test** and replace with its inverse:
+
+| Test | Asserts |
+|------|---------|
+| **REPLACE** "sends one alert per overdue item" | **DELETE** — contradicts new digest behavior |
+
+**Existing tests to update.** These existing tests remain valid but need mock structure updates:
+- "detects overdue items" — assert `sendNotificationMock` called once (was `sendEmailMock`)
+- "does not flag items with linked documents" — assert `sendNotificationMock` not called
+- "does not flag items with future deadlines" — no notification mock assertion needed
+- "does not flag items with no deadline" — no notification mock assertion needed
+- "returns zero counts when no checklist items exist" — no change needed
+
+**New test cases for `checkAndAlertOverdueItems`:**
 
 | Test | Asserts |
 |------|---------|
 | N/A items excluded from overdue count | Item with `isApplicable: false` and past deadline → `overdueCount: 0` |
 | Rolling-window stale document counted as overdue | Item with `documentId`, `documentPostedAt` 13 months ago, `rollingWindow: {months: 12}` → `overdueCount: 1` |
 | Rolling-window fresh document NOT counted | Item with `documentId`, `documentPostedAt` 3 months ago, `rollingWindow: {months: 12}` → `overdueCount: 0` |
-| Single digest notification per community | 3 overdue items → `sendNotification` called exactly once (not 3 times) |
+| Single digest notification per community | 3 overdue items → `sendNotificationMock` called exactly once (not 3 times) |
+| Digest event includes sourceId and sourceType | `sendNotificationMock` called with event containing `sourceType: 'compliance'` and `sourceId: String(communityId)` |
 
-New test cases for `processComplianceAlerts`:
+**New test cases for `processComplianceAlerts`:**
 
 | Test | Asserts |
 |------|---------|
@@ -239,6 +292,7 @@ New test cases for `processComplianceAlerts`:
 |------|---------|
 | Returns 401 without valid cron secret | Missing/wrong Bearer token → 401 |
 | Calls processComplianceAlerts and returns summary | Valid token → 200, response contains summary shape |
+| Returns 500 when processComplianceAlerts throws | Service throws → 500 with error response |
 
 ## Non-Goals
 
