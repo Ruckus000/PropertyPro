@@ -251,7 +251,7 @@ describe('useLedger', () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = mockFetch.mock.calls[0]![0] as string;
     expect(url).toContain('communityId=42');
     expect(url).toContain('entryType=payment');
     expect(url).toContain('unitId=7');
@@ -274,7 +274,7 @@ describe('useLedger', () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = mockFetch.mock.calls[0]![0] as string;
     expect(url).toContain('entryType=charge');
     expect(url).not.toContain('unitId');
     expect(url).not.toContain('startDate');
