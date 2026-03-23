@@ -363,6 +363,14 @@ import type { accessRequests } from './access-requests';
 export type AccessRequest = typeof accessRequests.$inferSelect;
 export type NewAccessRequest = typeof accessRequests.$inferInsert;
 
-// Access Plans (account lifecycle)
+// Account Lifecycle
 export { accessPlans } from './access-plans';
 export { accountDeletionRequests } from './account-deletion-requests';
+
+import type { accessPlans as _accessPlans } from './access-plans';
+export type AccessPlan = typeof _accessPlans.$inferSelect;
+export type NewAccessPlan = typeof _accessPlans.$inferInsert;
+
+import type { accountDeletionRequests as _accountDeletionRequests } from './account-deletion-requests';
+export type AccountDeletionRequest = typeof _accountDeletionRequests.$inferSelect;
+export type NewAccountDeletionRequest = typeof _accountDeletionRequests.$inferInsert;
