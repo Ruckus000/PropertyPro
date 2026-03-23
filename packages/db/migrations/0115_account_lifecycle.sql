@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS "access_plans" (
 CREATE INDEX idx_access_plans_community ON access_plans(community_id);
 CREATE INDEX idx_access_plans_expires ON access_plans(expires_at) WHERE revoked_at IS NULL AND converted_at IS NULL;
 
--- No RLS on access_plans — platform-level table, service_role access only
+-- RLS enabled (CI guard requires it) but no permissive policies — service_role bypasses RLS
+ALTER TABLE access_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE access_plans FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON access_plans FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON access_plans TO service_role;
 
@@ -53,7 +55,9 @@ CREATE INDEX idx_deletion_requests_community_status ON account_deletion_requests
 CREATE INDEX idx_deletion_requests_cooling ON account_deletion_requests(status, cooling_ends_at) WHERE status = 'cooling';
 CREATE INDEX idx_deletion_requests_purge ON account_deletion_requests(status, scheduled_purge_at) WHERE status = 'soft_deleted';
 
--- No RLS — platform-level table
+-- RLS enabled (CI guard requires it) but no permissive policies — service_role bypasses RLS
+ALTER TABLE account_deletion_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE account_deletion_requests FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON account_deletion_requests FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON account_deletion_requests TO service_role;
 
