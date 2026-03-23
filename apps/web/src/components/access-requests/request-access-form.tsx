@@ -31,7 +31,7 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
   const [unitNumber, setUnitNumber] = useState('');
   const [isUnitOwner, setIsUnitOwner] = useState(false);
   const [otp, setOtp] = useState('');
-  const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<number | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -74,8 +74,8 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
         throw new Error((body as { message?: string }).message ?? 'Something went wrong. Please try again.');
       }
 
-      const body = await res.json() as { requestId: string };
-      setRequestId(body.requestId);
+      const body = await res.json() as { data: { requestId: number } };
+      setRequestId(body.data.requestId);
       setState('otp_input');
     } catch (err) {
       setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

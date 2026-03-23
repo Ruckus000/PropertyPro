@@ -18,7 +18,7 @@ export interface AccessRequest {
   email: string;
   claimedUnitIdentifier: string | null;
   claimedUnitId: number | null;
-  role: 'owner' | 'tenant';
+  isUnitOwner: boolean;
   status: 'pending' | 'approved' | 'denied';
   createdAt: string;
 }
@@ -181,7 +181,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
                   <p className="text-sm font-medium text-content">{request.fullName}</p>
                   <p className="text-sm text-content-secondary">{request.email}</p>
                 </div>
-                <RoleBadge role={request.role} />
+                <RoleBadge role={request.isUnitOwner ? 'owner' : 'tenant'} />
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-content-secondary">
                 {request.claimedUnitIdentifier && (
@@ -224,7 +224,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
                   claimedUnitId={request.claimedUnitId}
                 />
               </div>
-              <RoleBadge role={request.role} />
+              <RoleBadge role={request.isUnitOwner ? 'owner' : 'tenant'} />
               <span className="text-sm text-content-secondary">{formatDate(request.createdAt)}</span>
               <div className="flex items-center gap-2">
                 <ApproveDialog
