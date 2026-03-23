@@ -32,7 +32,6 @@ async function approveRequest(requestId: number, unitId?: number): Promise<void>
 
 interface ApproveDialogProps {
   requestId: number;
-  communityId: number;
   requestName: string;
   onSuccess: () => void;
 }
@@ -41,7 +40,6 @@ interface ApproveDialogProps {
 
 export function ApproveDialog({
   requestId,
-  communityId: _communityId,
   requestName,
   onSuccess,
 }: ApproveDialogProps) {

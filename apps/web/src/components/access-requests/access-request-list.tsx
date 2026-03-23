@@ -199,7 +199,6 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
               <div className="flex gap-2">
                 <ApproveDialog
                   requestId={request.id}
-                  communityId={communityId}
                   requestName={request.fullName}
                   onSuccess={handleActionSuccess}
                 />
@@ -229,7 +228,6 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
               <div className="flex items-center gap-2">
                 <ApproveDialog
                   requestId={request.id}
-                  communityId={communityId}
                   requestName={request.fullName}
                   onSuccess={handleActionSuccess}
                 />

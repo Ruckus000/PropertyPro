@@ -39,8 +39,13 @@ export const POST = withErrorHandler(
       throw new ValidationError('Validation failed');
     }
 
+    const requestId = Number(id);
+    if (isNaN(requestId)) {
+      throw new ValidationError('Invalid request ID');
+    }
+
     await denyAccessRequest({
-      requestId: Number(id),
+      requestId,
       communityId: membership.communityId,
       reviewerId: userId,
       reason: parsed.data.reason,

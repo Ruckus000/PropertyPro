@@ -247,11 +247,11 @@ Both public routes are also exempt from CSRF Origin enforcement (see §2.4) sinc
 ### 3.6 OTP Verification Details
 
 - **Generation:** `crypto.randomInt(100000, 999999)` → 6-digit code
-- **Storage:** bcrypt hash in `otp_hash`, expiry in `otp_expires_at` (10 minutes)
+- **Storage:** HMAC-SHA256 hash in `otp_hash`, expiry in `otp_expires_at` (10 minutes)
 - **Attempts:** Max 5 per OTP. After 5 failures, must request new OTP.
 - **Rate limit:** Max 3 OTP sends per email per community per hour (prevents spam)
 - **Resend:** Same POST endpoint; if existing request has `pending_verification` status, regenerate OTP instead of creating duplicate
-- **Timing safety:** bcrypt comparison is inherently constant-time; no additional `timingSafeEqual` wrapper needed
+- **Timing safety:** OTP verification uses `crypto.timingSafeEqual` for constant-time comparison
 
 ### 3.7 Admin Review UI
 
@@ -305,7 +305,7 @@ Public page (no auth required). Community resolved from the `[slug]` route param
 ### 3.12 Security Considerations
 
 - **No auth account until approval:** Prevents Supabase auth user count inflation from spam
-- **OTP is hashed (bcrypt):** Not stored in plaintext
+- **OTP is hashed (HMAC-SHA256):** Not stored in plaintext
 - **Rate limiting:** 3 OTP sends/hour/email/community at API layer
 - **No PII in URL:** Only community slug and optional non-secret ref code
 - **Audit trail:** All approvals/denials logged via `logAuditEvent()`

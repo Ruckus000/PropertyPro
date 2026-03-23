@@ -39,8 +39,13 @@ export const POST = withErrorHandler(
       throw new ValidationError('Validation failed');
     }
 
+    const requestId = Number(id);
+    if (isNaN(requestId)) {
+      throw new ValidationError('Invalid request ID');
+    }
+
     const result = await approveAccessRequest({
-      requestId: Number(id),
+      requestId,
       communityId: membership.communityId,
       reviewerId: userId,
       unitId: parsed.data.unitId,
