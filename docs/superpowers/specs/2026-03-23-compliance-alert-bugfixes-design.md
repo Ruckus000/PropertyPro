@@ -147,6 +147,7 @@ import { isNull } from '@propertypro/db/filters';
 export interface ComplianceAlertSummary {
   communitiesProcessed: number;
   totalOverdue: number;
+  /** Sum of admin recipients reached across all communities (not notification count). */
   totalNotified: number;
   errors: number;
 }
