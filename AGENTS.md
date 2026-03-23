@@ -93,3 +93,21 @@ Synthesized from recurring incidents — these are the root causes, not the symp
 - **`any`:** Avoid. Use `unknown` with a type guard, or `as unknown as T` backed by a runtime column/property check (this pattern is used in `scoped-client.ts` at Drizzle generic boundaries).
 - **`@ts-ignore`:** Never. Use `@ts-expect-error` with a comment explaining why — it auto-fails when the underlying error is fixed, preventing stale suppressions.
 - **Unscoped DB access:** Use `createUnscopedClient()` via `@propertypro/db/unsafe`. Document the authorization contract. Add the file to the CI allowlist in `scripts/verify-scoped-db-access.ts`.
+
+---
+
+## 8. Platform Admin App (`apps/admin/`)
+
+The admin app is a separate Next.js application for platform administrators (PM company admins). It communicates with the web app via HTTP API routes under `/api/v1/admin/`.
+
+**Key features:**
+- Community management (demo lifecycle, subscription status, branding)
+- Access plan management (grant/revoke/extend free access)
+- Deletion request dashboard (intervene, recover)
+- Platform dashboard with KPI stats
+
+**Auth:** Admin routes use `requirePlatformAdmin()` which verifies `pm_admin` role. CORS is handled per-route with `corsHeaders()` from `@/lib/api/admin-cors`.
+
+**DB access:** The admin app uses Supabase admin client (`createAdminClient()`) for direct queries — it is NOT in the scoped client allowlist and does NOT use `createScopedClient()`.
+
+**Account lifecycle tables** (`access_plans`, `account_deletion_requests`): Platform-level, NOT tenant-scoped. Listed in `RLS_GLOBAL_TABLE_EXCLUSIONS`, not `RLS_TENANT_TABLES`. Service-role only access (REVOKE from anon/authenticated).

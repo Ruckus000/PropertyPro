@@ -40,6 +40,19 @@ GET      /api/v1/calendar/events, /meetings.ics, /my-meetings.ics
 GET      /api/v1/pm/communities, /dashboard/summary, /reports/[reportType]
 POST     /api/v1/pm/bulk/announcements, /bulk/documents
 
+# Account lifecycle
+GET/POST /api/v1/admin/access-plans          (admin: list/grant free access)
+DELETE   /api/v1/admin/access-plans/[id]     (admin: revoke)
+POST     /api/v1/admin/access-plans/[id]/extend (admin: extend)
+GET      /api/v1/admin/deletion-requests     (admin: list deletion requests)
+POST     /api/v1/admin/deletion-requests/[id]/intervene, /recover
+POST     /api/v1/account/delete              (user: request own deletion)
+DELETE   /api/v1/account/delete              (user: cancel own deletion)
+POST     /api/v1/communities/delete          (admin: request community deletion)
+DELETE   /api/v1/communities/delete          (admin: cancel community deletion)
+POST     /api/v1/subscribe                   (user: Stripe checkout for subscription)
+POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
+
 # Move checklists, packages, visitors — under /api/v1/
 # Auth & onboarding — /api/v1/auth/signup, /onboarding/condo, /onboarding/apartment
 # Webhooks — /api/v1/webhooks/stripe
