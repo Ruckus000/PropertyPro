@@ -70,7 +70,26 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
+  // If an access plan was active when the community subscribed, mark it as converted.
+  const accessPlanId = session.metadata?.accessPlanId;
+  if (accessPlanId) {
+    const { accessPlans } = await import('@propertypro/db');
+    const db = createUnscopedClient();
+    await db
+      .update(accessPlans)
+      .set({ convertedAt: new Date() })
+      .where(
+        and(
+          eq(accessPlans.id, Number(accessPlanId)),
+          isNull(accessPlans.convertedAt),
+          isNull(accessPlans.revokedAt),
+        ),
+      );
+  }
+
   if (!signupRequestId) {
+    // If we only had an accessPlanId (self-service subscribe), we're done.
+    if (accessPlanId) return;
     console.warn('[stripe-webhook] checkout.session.completed: no demoId or signupRequestId in metadata');
     return;
   }
