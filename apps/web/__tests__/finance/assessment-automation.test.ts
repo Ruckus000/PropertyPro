@@ -151,6 +151,115 @@ describe('assessment-automation-service', () => {
     });
   });
 
+  describe('processRecurringAssessments', () => {
+    it('returns zero totals when no active recurring assessments exist', async () => {
+      const { processRecurringAssessments } = await import(
+        '../../src/lib/services/assessment-automation-service'
+      );
+
+      // Community exists but has no active recurring assessments
+      mockSelectFrom.mockResolvedValueOnce([]);
+
+      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+
+      expect(summary.communitiesScanned).toBe(1);
+      expect(summary.assessmentsProcessed).toBe(0);
+      expect(summary.totalInserted).toBe(0);
+      expect(summary.totalSkipped).toBe(0);
+      expect(summary.errors).toBe(0);
+    });
+
+    it('generates line items for each unit in a community with active assessment', async () => {
+      const { processRecurringAssessments } = await import(
+        '../../src/lib/services/assessment-automation-service'
+      );
+      const { generateAssessmentLineItemsForCommunity } = await import(
+        '../../src/lib/services/finance-service'
+      );
+
+      // Active recurring assessment (monthly, started Jan 2026)
+      mockSelectFrom.mockResolvedValueOnce([
+        { id: 5, frequency: 'monthly', startDate: '2026-01-01', endDate: null, isActive: true },
+      ]);
+
+      // generateAssessmentLineItemsForCommunity returns inserted/skipped counts
+      vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
+        insertedCount: 4,
+        skippedCount: 0,
+      });
+
+      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+
+      expect(summary.communitiesScanned).toBe(1);
+      expect(summary.assessmentsProcessed).toBe(1);
+      expect(summary.totalInserted).toBe(4);
+      expect(summary.totalSkipped).toBe(0);
+      expect(summary.errors).toBe(0);
+      expect(generateAssessmentLineItemsForCommunity).toHaveBeenCalledWith(1, 5, 'system');
+    });
+
+    it('skips assessments that already have line items for current period (idempotency)', async () => {
+      const { processRecurringAssessments } = await import(
+        '../../src/lib/services/assessment-automation-service'
+      );
+      const { generateAssessmentLineItemsForCommunity } = await import(
+        '../../src/lib/services/finance-service'
+      );
+
+      mockSelectFrom.mockResolvedValueOnce([
+        { id: 5, frequency: 'monthly', startDate: '2026-01-01', endDate: null, isActive: true },
+      ]);
+
+      // All units already have line items — everything skipped
+      vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
+        insertedCount: 0,
+        skippedCount: 4,
+      });
+
+      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+
+      expect(summary.assessmentsProcessed).toBe(1);
+      expect(summary.totalInserted).toBe(0);
+      expect(summary.totalSkipped).toBe(4);
+      expect(summary.errors).toBe(0);
+    });
+
+    it('handles errors in one community without stopping others', async () => {
+      const { processRecurringAssessments } = await import(
+        '../../src/lib/services/assessment-automation-service'
+      );
+      const { generateAssessmentLineItemsForCommunity } = await import(
+        '../../src/lib/services/finance-service'
+      );
+
+      // Two communities
+      mockUnscopedDb.where.mockResolvedValueOnce([
+        { id: 1 },
+        { id: 2 },
+      ]);
+
+      // Community 1: selectFrom throws
+      mockSelectFrom.mockRejectedValueOnce(new Error('DB connection lost'));
+
+      // Community 2: has an active assessment that succeeds
+      mockSelectFrom.mockResolvedValueOnce([
+        { id: 8, frequency: 'monthly', startDate: '2026-01-01', endDate: null, isActive: true },
+      ]);
+      vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
+        insertedCount: 3,
+        skippedCount: 1,
+      });
+
+      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+
+      expect(summary.communitiesScanned).toBe(2);
+      expect(summary.errors).toBe(1);
+      expect(summary.assessmentsProcessed).toBe(1);
+      expect(summary.totalInserted).toBe(3);
+      expect(summary.totalSkipped).toBe(1);
+    });
+  });
+
   describe('processAssessmentDueReminders', () => {
     it('sends reminder emails for items due in 7 days', async () => {
       const { processAssessmentDueReminders } = await import(
