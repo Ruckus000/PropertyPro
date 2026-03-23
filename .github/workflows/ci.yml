@@ -93,7 +93,8 @@ jobs:
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' build
 
       - name: Run unit tests with coverage
-        run: pnpm exec vitest run --coverage --config apps/web/vitest.config.ts
+        working-directory: apps/web
+        run: pnpm exec vitest run --coverage
 
       - name: Run package unit tests
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' test

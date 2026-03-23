@@ -85,6 +85,9 @@ const LEGACY_ALLOWLIST = new Map<string, string>([
     'LEGACY: mocks auth'],
   ['apps/web/__tests__/integration/feature-flag-enforcement.integration.test.ts',
     'LEGACY: mocks auth'],
+  // Compliance statutory deadlines — cherry-picked from test coverage branch
+  ['apps/web/__tests__/integration/compliance-statutory-deadlines.integration.test.ts',
+    'LEGACY: mocks auth, DB scoped client — cherry-picked pre-existing test'],
   // Billing integration test — lives outside __tests__/integration/ directory
   ['apps/web/__tests__/billing/subscription-guard-integration.test.ts',
     'LEGACY: mocks DB unsafe, admin client, auth — deep refactor needed'],
