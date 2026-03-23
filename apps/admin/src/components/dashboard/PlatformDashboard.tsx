@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   DollarSign,
   Loader2,
+  KeyRound,
+  Trash2,
 } from 'lucide-react';
 
 interface Stats {
@@ -31,6 +33,10 @@ interface Stats {
     averageScore: number | null;
     atRiskCount: number;
     totalTracked: number;
+  };
+  lifecycle?: {
+    activeFreeAccess: number;
+    pendingDeletions: number;
   };
 }
 
@@ -148,6 +154,22 @@ export function PlatformDashboard() {
           )}
         </div>
       </div>
+
+      {/* Account Lifecycle */}
+      {stats.lifecycle && (stats.lifecycle.activeFreeAccess > 0 || stats.lifecycle.pendingDeletions > 0) && (
+        <div>
+          <h2 className="mb-4 text-sm font-semibold text-gray-700 uppercase tracking-wide">Account Lifecycle</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <StatCard icon={KeyRound} label="Active Free Access" value={stats.lifecycle.activeFreeAccess} />
+            <StatCard
+              icon={Trash2}
+              label="Pending Deletions"
+              value={stats.lifecycle.pendingDeletions}
+              href={stats.lifecycle.pendingDeletions > 0 ? '/deletion-requests' : undefined}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div>
