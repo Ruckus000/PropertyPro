@@ -111,9 +111,8 @@ describe('AssessmentManager', () => {
 
     // $350.00 should be displayed (35000 cents → $350)
     await waitFor(() => {
-      const bodyText = document.body.textContent || '';
-      expect(bodyText).toContain('350');
-      expect(bodyText).toContain('Monthly Maintenance');
+      expect(screen.getByText(/\$350\.00/)).toBeInTheDocument();
+      expect(screen.getByText('Monthly Maintenance')).toBeInTheDocument();
     }, { timeout: 10000 });
   });
 

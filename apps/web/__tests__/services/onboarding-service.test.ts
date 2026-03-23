@@ -345,8 +345,7 @@ describe('createOnboardingInvitation', () => {
     });
 
     // Returns token and expiresAt
-    expect(result.token).toEqual(expect.any(String));
-    expect(result.token.length).toBeGreaterThan(30); // two UUIDs concatenated without dashes
+    expect(result.token).toMatch(/^[a-f0-9]{64}$/); // two UUIDs concatenated without dashes
     expect(result.expiresAt).toBeInstanceOf(Date);
 
     // expiresAt should be ~7 days in the future
