@@ -61,6 +61,8 @@ export async function GET() {
     documentsResult,
     subscriptionResult,
     complianceResult,
+    activeAccessResult,
+    coolingDeletionsResult,
   ] = await Promise.all([
     // Total demo instances
     db.from('demo_instances')
@@ -87,6 +89,18 @@ export async function GET() {
     realIds.length > 0
       ? fetchAllRows(db, realIds)
       : Promise.resolve({ data: [], error: null }),
+    // Active free access plans (not revoked/converted and not expired)
+    (db.from('access_plans')
+      .select('*', { count: 'exact', head: true })
+      .is('revoked_at', null)
+      .is('converted_at', null)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .gte('grace_ends_at', new Date().toISOString()) as any),
+    // Deletion requests in cooling status
+    (db.from('account_deletion_requests')
+      .select('*', { count: 'exact', head: true })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .eq('status', 'cooling') as any),
   ]);
 
   const demoCount = demosResult.count ?? 0;
@@ -127,6 +141,9 @@ export async function GET() {
 
   const atRisk = complianceScores.filter((c) => c.score < 70).length;
 
+  const activeFreeAccessCount = activeAccessResult.count ?? 0;
+  const pendingDeletionsCount = coolingDeletionsResult.count ?? 0;
+
   return NextResponse.json({
     overview: {
       communities: communityCount,
@@ -139,6 +156,10 @@ export async function GET() {
       averageScore: avgCompliance,
       atRiskCount: atRisk,
       totalTracked: complianceScores.length,
+    },
+    lifecycle: {
+      activeFreeAccess: activeFreeAccessCount,
+      pendingDeletions: pendingDeletionsCount,
     },
   });
 }

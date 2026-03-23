@@ -26,6 +26,7 @@ import { CommandPalette as CommandPaletteLegacy } from './command-palette';
 import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { DemoBanner } from '@/components/demo/DemoBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 
@@ -53,10 +54,11 @@ interface AppShellProps {
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
   subscriptionStatus?: string | null;
+  freeAccessExpiresAt?: Date | null;
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, features, subscriptionStatus, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, features, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { expanded, mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -167,6 +169,11 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
                 </a>
               }
             />
+          </div>
+        )}
+        {freeAccessExpiresAt && (
+          <div className="px-6 pt-4 lg:px-8">
+            <FreeAccessBanner expiresAt={freeAccessExpiresAt} />
           </div>
         )}
         <main

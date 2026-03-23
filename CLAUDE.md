@@ -20,6 +20,7 @@ Compliance and community management platform for Florida condominium association
 
 ```
 apps/web/src/           # Next.js app (routes, components, hooks, lib, middleware)
+apps/admin/src/         # Platform admin app (community management, access plans, deletion requests)
 packages/db/            # Drizzle ORM schema, migrations, scoped-client, queries
 packages/email/         # Email templates and service
 packages/shared/        # Shared types and constants

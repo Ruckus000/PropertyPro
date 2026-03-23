@@ -244,6 +244,8 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'pending_signups', reason: 'Pre-provisioning flow, not community-scoped yet' },
   { tableName: 'stripe_webhook_events', reason: 'Global billing webhook log' },
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
+  { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
+  { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);

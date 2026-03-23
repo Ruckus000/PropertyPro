@@ -83,6 +83,21 @@ export type { AccessRequestApprovedEmailProps } from "./templates/access-request
 export { AccessRequestDeniedEmail } from "./templates/access-request-denied";
 export type { AccessRequestDeniedEmailProps } from "./templates/access-request-denied";
 
+export { FreeAccessExpiringEmail } from "./templates/free-access-expiring-email";
+export type { FreeAccessExpiringEmailProps } from "./templates/free-access-expiring-email";
+
+export { FreeAccessExpiredEmail } from "./templates/free-access-expired-email";
+export type { FreeAccessExpiredEmailProps } from "./templates/free-access-expired-email";
+
+export { AccountDeletionInitiatedEmail } from "./templates/account-deletion-initiated-email";
+export type { AccountDeletionInitiatedEmailProps } from "./templates/account-deletion-initiated-email";
+
+export { AccountDeletionExecutedEmail } from "./templates/account-deletion-executed-email";
+export type { AccountDeletionExecutedEmailProps } from "./templates/account-deletion-executed-email";
+
+export { AccountRecoveredEmail } from "./templates/account-recovered-email";
+export type { AccountRecoveredEmailProps } from "./templates/account-recovered-email";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

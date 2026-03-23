@@ -15,6 +15,7 @@ import { CommunitySettingsEditor } from './CommunitySettingsEditor';
 import { CommunityMembers } from './CommunityMembers';
 import { CommunityCompliance } from './CommunityCompliance';
 import { WebsiteTabPanel } from './WebsiteTabPanel';
+import { CommunityAccess } from './CommunityAccess';
 
 interface CommunitySettings {
   announcementsWriteLevel?: 'all_members' | 'admin_only';
@@ -49,12 +50,13 @@ interface ClientWorkspaceProps {
   community: Community;
 }
 
-type Tab = 'overview' | 'members' | 'compliance' | 'website' | 'settings';
+type Tab = 'overview' | 'members' | 'compliance' | 'access' | 'website' | 'settings';
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Overview',
   members: 'Members',
   compliance: 'Compliance',
+  access: 'Access',
   website: 'Website',
   settings: 'Settings',
 };
@@ -71,8 +73,8 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
 
   // Apartments have no compliance items — hide the tab
   const tabs: Tab[] = community.community_type === 'apartment'
-    ? ['overview', 'members', 'website', 'settings']
-    : ['overview', 'members', 'compliance', 'website', 'settings'];
+    ? ['overview', 'members', 'access', 'website', 'settings']
+    : ['overview', 'members', 'compliance', 'access', 'website', 'settings'];
 
   return (
     <div className="flex flex-col h-full">
@@ -216,6 +218,10 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
 
         {activeTab === 'compliance' && (
           <CommunityCompliance communityId={community.id} />
+        )}
+
+        {activeTab === 'access' && (
+          <CommunityAccess communityId={community.id} />
         )}
 
         {activeTab === 'website' && (

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -10,11 +11,20 @@ import {
   LogOut,
   ChevronsLeft,
   ChevronsRight,
+  Trash2,
 } from 'lucide-react';
 
-const NAV_ITEMS = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof BarChart3;
+  badge?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
+  { href: '/deletion-requests', label: 'Deletion Requests', icon: Trash2, badge: true },
   { href: '/demo', label: 'Demos', icon: MonitorPlay },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -26,6 +36,22 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const [coolingCount, setCoolingCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchCoolingCount() {
+      try {
+        const res = await fetch('/api/admin/deletion-requests?status=cooling');
+        const data = await res.json();
+        if (res.ok && data.requests) {
+          setCoolingCount(data.requests.length);
+        }
+      } catch {
+        // Silently fail — badge is non-critical
+      }
+    }
+    fetchCoolingCount();
+  }, []);
 
   return (
     <aside
@@ -57,8 +83,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
           const active = pathname === href || pathname.startsWith(href + '/');
+          const showBadge = badge && coolingCount > 0;
+
           return (
             <Link
               key={href}
@@ -73,7 +101,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               ].join(' ')}
             >
               <Icon size={16} className="shrink-0" />
-              {!collapsed && label}
+              {!collapsed && (
+                <span className="flex-1">{label}</span>
+              )}
+              {showBadge && (
+                <span className={[
+                  'rounded-full bg-yellow-500 text-xs font-bold text-gray-900',
+                  collapsed ? 'absolute ml-3 -mt-3 h-4 min-w-4 flex items-center justify-center px-1' : 'px-1.5 py-0.5',
+                ].join(' ')}>
+                  {coolingCount}
+                </span>
+              )}
             </Link>
           );
         })}

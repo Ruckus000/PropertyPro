@@ -107,6 +107,26 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
   // U-06: Access request service — pre-tenant OTP verification before communityId is scoped
   resolve(repoRoot, 'apps/web/src/lib/services/access-request-service.ts'),
+  // Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
+  resolve(repoRoot, 'apps/web/src/lib/services/account-lifecycle-service.ts'),
+  // Platform admin auth guard — queries platform_admin_users (no community_id)
+  resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
+  // Admin access-plans routes — platform-level CRUD on access_plans table
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/community/[id]/route.ts'),
+  // Admin deletion-requests routes — platform-level deletion workflow management
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/[id]/recover/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/[id]/intervene/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/[id]/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/[id]/extend/route.ts'),
+  // User-facing deletion routes — cross-community deletion workflows
+  resolve(repoRoot, 'apps/web/src/app/api/v1/account/delete/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/delete/route.ts'),
+  // Subscribe route — Stripe checkout + access plan conversion
+  resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/route.ts'),
+  // Account lifecycle cron — cross-community deletion + notification processing
+  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
