@@ -19,7 +19,7 @@
 
 ## Compliance Engine
 
-The compliance scoring system in `apps/web/src/lib/services/compliance-service.ts` tracks:
+The compliance scoring system in `apps/web/src/lib/utils/compliance-calculator.ts` tracks:
 - Document posting timeliness (30-day window)
 - Meeting notice compliance (14-day / 48-hour windows)
 - Required document categories present/missing

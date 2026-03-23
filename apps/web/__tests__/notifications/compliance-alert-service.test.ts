@@ -1,27 +1,25 @@
 /**
- * Unit tests for the compliance alert service (P2-41).
+ * Unit tests for the compliance alert service.
  *
  * Tests:
- * - Overdue items are detected correctly
- * - Items with linked documents are not flagged
- * - Notifications sent to community admins
- * - Returns correct counts
+ * - Overdue detection via calculateComplianceStatus (not manual deadline check)
+ * - N/A items excluded from overdue count
+ * - Rolling-window items with stale/fresh documents
+ * - Single digest notification per community (not one per item)
+ * - processComplianceAlerts cross-community iteration
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createScopedClientMock,
-  sendEmailMock,
-  logAuditEventMock,
+  sendNotificationMock,
+  createUnscopedClientMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
-  sendEmailMock: vi.fn(),
-  logAuditEventMock: vi.fn(),
+  sendNotificationMock: vi.fn(),
+  createUnscopedClientMock: vi.fn(),
   tables: {
-    userRoles: Symbol('user_roles'),
-    users: Symbol('users'),
-    notificationPreferences: Symbol('notification_preferences'),
     communities: Symbol('communities'),
     complianceChecklistItems: Symbol('compliance_checklist_items'),
   },
@@ -29,151 +27,358 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
-  logAuditEvent: logAuditEventMock,
-  userRoles: tables.userRoles,
-  users: tables.users,
-  notificationPreferences: tables.notificationPreferences,
   communities: tables.communities,
   complianceChecklistItems: tables.complianceChecklistItems,
 }));
 
-vi.mock('@propertypro/email', () => ({
-  MeetingNoticeEmail: (props: unknown) => ({ type: 'MeetingNoticeEmail', props }),
-  MaintenanceUpdateEmail: (props: unknown) => ({ type: 'MaintenanceUpdateEmail', props }),
-  ComplianceAlertEmail: (props: unknown) => ({ type: 'ComplianceAlertEmail', props }),
-  DocumentPostedEmail: (props: unknown) => ({ type: 'DocumentPostedEmail', props }),
-  sendEmail: sendEmailMock,
+vi.mock('@propertypro/db/filters', () => ({
+  isNull: vi.fn(() => 'isNull_placeholder'),
 }));
 
-import { checkAndAlertOverdueItems } from '../../src/lib/services/compliance-alert-service';
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: createUnscopedClientMock,
+}));
+
+vi.mock('@/lib/services/notification-service', () => ({
+  sendNotification: sendNotificationMock,
+}));
+
+import {
+  checkAndAlertOverdueItems,
+  processComplianceAlerts,
+} from '../../src/lib/services/compliance-alert-service';
 
 const COMMUNITY_ID = 5;
-const pastDate = new Date(Date.now() - 86400000).toISOString(); // yesterday
-const futureDate = new Date(Date.now() + 86400000 * 30).toISOString(); // 30 days from now
+const NOW = new Date('2026-03-15T12:00:00.000Z');
+const pastDate = new Date('2026-02-01T00:00:00.000Z').toISOString();
+const futureDate = new Date('2026-04-15T00:00:00.000Z').toISOString();
 
-function setupMock(
-  checklistRows: Array<Record<string, unknown>>,
-) {
-  const query = vi.fn(async (table: unknown) => {
-    if (table === tables.complianceChecklistItems) return checklistRows;
-    if (table === tables.userRoles) {
-      return [{ userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } }];
-    }
-    if (table === tables.users) {
-      return [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }];
-    }
-    if (table === tables.notificationPreferences) return [];
-    if (table === tables.communities) {
-      return [{ id: COMMUNITY_ID, name: 'Palm Gardens Condo' }];
-    }
-    return [];
+function setupChecklistMock(rows: Array<Record<string, unknown>>) {
+  createScopedClientMock.mockReturnValue({
+    query: vi.fn(async () => rows),
   });
-
-  createScopedClientMock.mockReturnValue({ query });
 }
 
-describe('compliance-alert-service', () => {
+describe('checkAndAlertOverdueItems', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sendEmailMock.mockResolvedValue({ id: 'msg-1' });
-    logAuditEventMock.mockResolvedValue(undefined);
+    sendNotificationMock.mockResolvedValue(1);
   });
 
   it('detects overdue items (deadline in past, no document linked)', async () => {
-    setupMock([
+    setupChecklistMock([
       {
         title: 'Annual Budget',
         description: 'Must post annual budget',
         deadline: pastDate,
         documentId: null,
-        statuteReference: '§718.111(12)(a)',
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
       },
     ]);
 
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(1);
     expect(result.notifiedCount).toBe(1);
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not flag items with linked documents', async () => {
-    setupMock([
+    setupChecklistMock([
       {
         title: 'Annual Budget',
         description: 'Must post annual budget',
         deadline: pastDate,
-        documentId: 42, // already has a linked document
-        statuteReference: '§718.111(12)(a)',
+        documentId: 42,
+        documentPostedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(),
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
       },
     ]);
 
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(0);
     expect(result.notifiedCount).toBe(0);
-    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendNotificationMock).not.toHaveBeenCalled();
   });
 
   it('does not flag items with future deadlines', async () => {
-    setupMock([
+    setupChecklistMock([
       {
         title: 'Annual Budget',
         description: 'Must post annual budget',
         deadline: futureDate,
         documentId: null,
-        statuteReference: '§718.111(12)(a)',
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
       },
     ]);
 
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(0);
     expect(result.notifiedCount).toBe(0);
   });
 
-  it('does not flag items with no deadline', async () => {
-    setupMock([
+  it('does not flag items with no deadline and no rolling window', async () => {
+    setupChecklistMock([
       {
         title: 'Optional Document',
         description: 'No deadline set',
         deadline: null,
         documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
         statuteReference: '§718.111(12)(a)',
       },
     ]);
 
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(0);
     expect(result.notifiedCount).toBe(0);
-  });
-
-  it('sends one alert per overdue item', async () => {
-    setupMock([
-      {
-        title: 'Annual Budget',
-        description: 'Must post annual budget',
-        deadline: pastDate,
-        documentId: null,
-        statuteReference: '§718.111(12)(a)',
-      },
-      {
-        title: 'Meeting Minutes',
-        description: 'Must post meeting minutes',
-        deadline: pastDate,
-        documentId: null,
-        statuteReference: '§718.111(12)(b)',
-      },
-    ]);
-
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
-    expect(result.overdueCount).toBe(2);
-    // Each overdue item triggers notification to the 1 admin (cam)
-    expect(sendEmailMock).toHaveBeenCalledTimes(2);
   });
 
   it('returns zero counts when no checklist items exist', async () => {
-    setupMock([]);
+    setupChecklistMock([]);
 
-    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system');
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(0);
     expect(result.notifiedCount).toBe(0);
+  });
+
+  // Bug 1 fix: N/A items must be excluded
+  it('excludes items marked not applicable from overdue count', async () => {
+    setupChecklistMock([
+      {
+        title: 'SIRS Report',
+        description: 'Structural integrity reserve study',
+        deadline: pastDate,
+        documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: false,
+        statuteReference: '§718.112(2)(g)',
+      },
+    ]);
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(0);
+    expect(result.notifiedCount).toBe(0);
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+  });
+
+  // Bug 2 fix: Rolling-window items with stale documents
+  it('counts rolling-window item with stale document as overdue', async () => {
+    setupChecklistMock([
+      {
+        title: 'Meeting Minutes',
+        description: 'Rolling 12-month minutes',
+        deadline: null,
+        documentId: 100,
+        documentPostedAt: new Date('2025-01-01T00:00:00.000Z').toISOString(), // 14+ months ago
+        rollingWindow: { months: 12 },
+        isApplicable: true,
+        statuteReference: '§718.111(12)(g)(2)(e)',
+      },
+    ]);
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(1);
+    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Bug 2 fix: Rolling-window items with fresh documents
+  it('does not count rolling-window item with fresh document as overdue', async () => {
+    setupChecklistMock([
+      {
+        title: 'Meeting Minutes',
+        description: 'Rolling 12-month minutes',
+        deadline: null,
+        documentId: 100,
+        documentPostedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(), // 2.5 months ago
+        rollingWindow: { months: 12 },
+        isApplicable: true,
+        statuteReference: '§718.111(12)(g)(2)(e)',
+      },
+    ]);
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(0);
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+  });
+
+  // Spam fix: Single digest per community
+  it('sends single digest notification for multiple overdue items', async () => {
+    setupChecklistMock([
+      {
+        title: 'Annual Budget',
+        description: 'Budget posting',
+        deadline: pastDate,
+        documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
+      },
+      {
+        title: 'Financial Report',
+        description: 'Annual report',
+        deadline: pastDate,
+        documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.111(13)',
+      },
+      {
+        title: 'Insurance Policies',
+        description: 'Current policies',
+        deadline: pastDate,
+        documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.111(11)',
+      },
+    ]);
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(3);
+    // Single digest — NOT 3 separate calls
+    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Digest event includes sourceId and sourceType for proper routing
+  it('digest event includes sourceId and sourceType', async () => {
+    setupChecklistMock([
+      {
+        title: 'Annual Budget',
+        description: 'Budget posting',
+        deadline: pastDate,
+        documentId: null,
+        documentPostedAt: null,
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
+      },
+    ]);
+
+    await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      expect.objectContaining({
+        type: 'compliance_alert',
+        sourceType: 'compliance',
+        sourceId: String(COMMUNITY_ID),
+      }),
+      'community_admins',
+      'system',
+    );
+  });
+});
+
+describe('processComplianceAlerts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendNotificationMock.mockResolvedValue(1);
+  });
+
+  function setupUnscopedMock(
+    communityRows: Array<{ id: number; communityType: string }>,
+  ) {
+    createUnscopedClientMock.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue(communityRows),
+        }),
+      }),
+    });
+  }
+
+  it('iterates only condo/HOA communities, skips apartments', async () => {
+    setupUnscopedMock([
+      { id: 1, communityType: 'condo_718' },
+      { id: 2, communityType: 'hoa_720' },
+      { id: 3, communityType: 'apartment' },
+    ]);
+
+    // Each compliance community returns 0 overdue items
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async () => []),
+    });
+
+    const summary = await processComplianceAlerts(NOW);
+    expect(summary.communitiesProcessed).toBe(2);
+    expect(summary.errors).toBe(0);
+    // Scoped client should be created for communities 1 and 2 only
+    expect(createScopedClientMock).toHaveBeenCalledWith(1);
+    expect(createScopedClientMock).toHaveBeenCalledWith(2);
+    expect(createScopedClientMock).not.toHaveBeenCalledWith(3);
+  });
+
+  it('continues processing if one community throws', async () => {
+    setupUnscopedMock([
+      { id: 1, communityType: 'condo_718' },
+      { id: 2, communityType: 'condo_718' },
+    ]);
+
+    let callCount = 0;
+    createScopedClientMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          query: vi.fn(async () => { throw new Error('DB connection failed'); }),
+        };
+      }
+      return {
+        query: vi.fn(async () => []),
+      };
+    });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const summary = await processComplianceAlerts(NOW);
+    expect(summary.communitiesProcessed).toBe(1);
+    expect(summary.errors).toBe(1);
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    consoleSpy.mockRestore();
+  });
+
+  it('aggregates totals across communities', async () => {
+    setupUnscopedMock([
+      { id: 1, communityType: 'condo_718' },
+      { id: 2, communityType: 'hoa_720' },
+    ]);
+
+    let callCount = 0;
+    createScopedClientMock.mockImplementation(() => {
+      callCount++;
+      return {
+        query: vi.fn(async () => {
+          if (callCount === 1) {
+            // Community 1: 3 overdue items
+            return [
+              { title: 'Budget', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§718.112(2)(f)' },
+              { title: 'Report', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§718.111(13)' },
+              { title: 'Insurance', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§718.111(11)' },
+            ];
+          }
+          // Community 2: 2 overdue items
+          return [
+            { title: 'Covenants', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§720.303(4)' },
+            { title: 'HOA Budget', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§720.303(6)' },
+          ];
+        }),
+      };
+    });
+
+    const summary = await processComplianceAlerts(NOW);
+    expect(summary.communitiesProcessed).toBe(2);
+    expect(summary.totalOverdue).toBe(5);
+    expect(summary.errors).toBe(0);
   });
 });

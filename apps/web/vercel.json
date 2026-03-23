@@ -41,6 +41,10 @@
     {
       "path": "/api/v1/internal/account-lifecycle",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/v1/internal/compliance-alerts",
+      "schedule": "30 7 * * *"
     }
   ]
 }
