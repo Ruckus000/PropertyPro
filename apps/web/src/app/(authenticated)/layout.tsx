@@ -45,7 +45,7 @@ async function resolveUser(): Promise<AppShellUser | null> {
 async function resolveCommunity(
   requestHeaders: Headers,
   userId: string,
-): Promise<{ community: AppShellCommunity; role: AnyCommunityRole; subscriptionStatus: string | null; isDemo: boolean } | null> {
+): Promise<{ community: AppShellCommunity; role: AnyCommunityRole; subscriptionStatus: string | null; freeAccessExpiresAt: Date | null; isDemo: boolean } | null> {
   const communityIdStr = requestHeaders.get('x-community-id');
   if (!communityIdStr) return null;
 
@@ -75,6 +75,7 @@ async function resolveCommunity(
       },
       role: role as AnyCommunityRole,
       subscriptionStatus: match.subscriptionStatus ?? null,
+      freeAccessExpiresAt: match.freeAccessExpiresAt ?? null,
       isDemo: match.isDemo,
     };
   } catch (error) {
@@ -106,6 +107,7 @@ export default async function AuthenticatedLayout({
   const community = communityData?.community ?? null;
   const role = communityData?.role ?? null;
   const subscriptionStatus = communityData?.subscriptionStatus ?? null;
+  const freeAccessExpiresAt = communityData?.freeAccessExpiresAt ?? null;
   const features = community ? getFeaturesForCommunity(community.type) : null;
   const demoInfo = detectDemoInfo(communityData?.isDemo ?? false, user?.email ?? null);
 
@@ -125,7 +127,7 @@ export default async function AuthenticatedLayout({
         <AuthSessionSync />
         <AppQueryProvider>
           <MotionProvider>
-            <AppShell user={user} community={community} role={role} features={features} subscriptionStatus={subscriptionStatus} demoInfo={demoInfo}>
+            <AppShell user={user} community={community} role={role} features={features} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
               {children}
             </AppShell>
           </MotionProvider>

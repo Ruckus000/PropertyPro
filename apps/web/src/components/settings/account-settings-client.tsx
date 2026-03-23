@@ -1,9 +1,18 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { AlertCircle, Check, User, Lock, Shield } from 'lucide-react';
+import { AlertCircle, Check, User, Lock, Shield, Trash2, Clock } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@/lib/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 // ── Password requirements (same as set-password-form) ──────────────
 
@@ -415,28 +424,251 @@ export function AccountSettingsClient({
       </section>
 
       {/* ── Danger Zone ──────────────────────────────── */}
-      <section aria-labelledby="danger-heading">
-        <div className={cn(cardClassName, 'border-[var(--border-error)]')}>
-          <div className="mb-3 flex items-center gap-2">
-            <Shield size={18} className="text-[var(--text-error)]" aria-hidden="true" />
-            <h2 id="danger-heading" className="text-base font-semibold text-[var(--text-error)]">
-              Danger Zone
-            </h2>
+      <DangerZoneSection />
+    </div>
+  );
+}
+
+// ── Danger Zone / Account Deletion ─────────────────────────
+
+interface DeletionRequest {
+  id: number;
+  status: 'cooling' | 'recovering' | 'purging' | 'completed' | 'canceled';
+  coolingEndsAt: string;
+  createdAt: string;
+}
+
+function getDaysUntil(dateStr: string): number {
+  const target = new Date(dateStr);
+  const now = new Date();
+  const diff = target.getTime() - now.getTime();
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
+function DangerZoneSection() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const queryClient = useQueryClient();
+
+  // Fetch active deletion request
+  const { data: deletionRequest, isLoading } = useQuery<DeletionRequest | null>({
+    queryKey: ['account-deletion-request'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/account/delete');
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('Failed to fetch deletion status');
+      const json = await res.json();
+      return json.data ?? null;
+    },
+  });
+
+  // Request deletion
+  const requestDeletion = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(json?.error?.message ?? 'Failed to request account deletion.');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account-deletion-request'] });
+      setDialogOpen(false);
+      setConfirmText('');
+    },
+  });
+
+  // Cancel deletion
+  const cancelDeletion = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/account/delete', {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(json?.error?.message ?? 'Failed to cancel account deletion.');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account-deletion-request'] });
+    },
+  });
+
+  const hasCoolingRequest = deletionRequest?.status === 'cooling';
+
+  return (
+    <section aria-labelledby="danger-heading">
+      <div className={cn(cardClassName, 'border-[var(--border-error)]')}>
+        <div className="mb-3 flex items-center gap-2">
+          <Shield size={18} className="text-[var(--text-error)]" aria-hidden="true" />
+          <h2 id="danger-heading" className="text-base font-semibold text-[var(--text-error)]">
+            Danger Zone
+          </h2>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-[var(--text-primary)]">Delete Account</h3>
+            <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
+              Request permanent deletion of your account. You&apos;ll have 30 days to change your
+              mind, and your data is recoverable for 6 months after that.
+            </p>
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)]">Delete Account</h3>
-              <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
-                Permanently remove your account and all associated data. This action cannot be undone.
-              </p>
-              <p className="mt-2 text-sm text-[var(--text-tertiary)]">
-                Contact support to delete your account.
-              </p>
+          {isLoading ? (
+            <div className="h-10 w-48 animate-pulse rounded-[var(--radius-md,10px)] bg-[var(--surface-secondary)]" />
+          ) : hasCoolingRequest ? (
+            <div className="space-y-3">
+              <div
+                role="status"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+              >
+                <Clock size={16} aria-hidden="true" />
+                <span>
+                  Deletion scheduled &mdash; {getDaysUntil(deletionRequest.coolingEndsAt)} days
+                  remaining in cooling period.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => cancelDeletion.mutate()}
+                disabled={cancelDeletion.isPending}
+                className={cn(
+                  'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                  'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]',
+                  'hover:bg-[var(--surface-secondary)]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                )}
+              >
+                {cancelDeletion.isPending ? 'Canceling...' : 'Cancel Deletion'}
+              </button>
+              {cancelDeletion.isError && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+                >
+                  <AlertCircle size={16} aria-hidden="true" />
+                  {cancelDeletion.error instanceof Error
+                    ? cancelDeletion.error.message
+                    : 'Failed to cancel deletion. Please try again.'}
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                'bg-[var(--interactive-danger)] text-white hover:bg-[var(--interactive-danger-hover,var(--interactive-danger))]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+              )}
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              Delete My Account
+            </button>
+          )}
         </div>
-      </section>
-    </div>
+      </div>
+
+      {/* ── Confirmation Dialog ─────────────── */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Delete Your Account?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <p>Account deletion happens in three phases:</p>
+                <ol className="list-inside list-decimal space-y-1.5 text-sm text-[var(--text-secondary)]">
+                  <li>
+                    <strong className="text-[var(--text-primary)]">30-day cooling period</strong>{' '}
+                    &mdash; You can cancel anytime and restore full access.
+                  </li>
+                  <li>
+                    <strong className="text-[var(--text-primary)]">6-month recovery window</strong>{' '}
+                    &mdash; Your data is retained but your account is deactivated. Contact support to
+                    recover.
+                  </li>
+                  <li>
+                    <strong className="text-[var(--text-primary)]">Permanent purge</strong> &mdash;
+                    All personal data is permanently deleted.
+                  </li>
+                </ol>
+                <div className="pt-2">
+                  <label
+                    htmlFor="delete-confirm-input"
+                    className="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+                  >
+                    Type <strong className="text-[var(--text-error)]">DELETE</strong> to confirm
+                  </label>
+                  <input
+                    id="delete-confirm-input"
+                    type="text"
+                    autoComplete="off"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className={inputClassName}
+                  />
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          {requestDeletion.isError && (
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+            >
+              <AlertCircle size={16} aria-hidden="true" />
+              {requestDeletion.error instanceof Error
+                ? requestDeletion.error.message
+                : 'Failed to request deletion. Please try again.'}
+            </div>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => {
+                setDialogOpen(false);
+                setConfirmText('');
+              }}
+              className={cn(
+                'inline-flex items-center justify-center rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]',
+                'hover:bg-[var(--surface-secondary)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+              )}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={confirmText !== 'DELETE' || requestDeletion.isPending}
+              onClick={() => requestDeletion.mutate()}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                'bg-[var(--interactive-danger)] text-white hover:bg-[var(--interactive-danger-hover,var(--interactive-danger))]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              {requestDeletion.isPending ? 'Requesting...' : 'Confirm Deletion'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
