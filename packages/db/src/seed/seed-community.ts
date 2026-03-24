@@ -874,6 +874,40 @@ async function seedCommunityCompliance(
   }
 }
 
+async function seedCondoHoaUnits(
+  communityId: number,
+): Promise<{ unitIds: number[]; unitNumbers: string[] }> {
+  const unitNumbers = ['1A', '1B', '2A', '2B', '3A', '3B'];
+  const unitIds: number[] = [];
+
+  for (const unitNumber of unitNumbers) {
+    const existing = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(
+        and(
+          eq(units.communityId, communityId),
+          eq(units.unitNumber, unitNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      unitIds.push(existing[0].id);
+      continue;
+    }
+
+    const [created] = await db
+      .insert(units)
+      .values({ communityId, unitNumber })
+      .returning({ id: units.id });
+
+    unitIds.push(created!.id);
+  }
+
+  return { unitIds, unitNumbers };
+}
+
 async function seedApartmentUnits(communityId: number): Promise<{ unitIds: number[]; unitNumbers: string[] }> {
   const unitNumbers = [
     '101', '102', '103', '104', '105', '106',
@@ -1469,6 +1503,8 @@ export async function seedCommunity(
 
     await seedApartmentLeases(communityId, unitIds, unitNumbers, tenantUserIds);
     await seedApartmentMaintenanceRequests(communityId, unitIds, unitNumbers, tenantUserIds);
+  } else {
+    await seedCondoHoaUnits(communityId);
   }
 
   return {
