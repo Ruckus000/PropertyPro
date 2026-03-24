@@ -16,7 +16,7 @@ import {
   users,
   violations,
 } from '@propertypro/db';
-import { and, eq, inArray, isNull } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import {
   ensureNotificationPreference,
   seedCommunity,
@@ -821,8 +821,35 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
   debugSeed('cross-community role and notification fixups complete');
 
-  // Seed violation data for condo and HOA communities (apartments don't have violations)
+  // Link owner to unit 1A for Sunset Condos (payments + assessments require unit association)
   const ownerUserId = resolveUserId(userIdsByEmail, 'owner.one@sunset.local');
+  {
+    const firstUnit = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(and(eq(units.communityId, sunsetCommunityId), isNull(units.deletedAt)))
+      .orderBy(units.unitNumber)
+      .limit(1);
+
+    if (firstUnit[0]) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(units)
+          .set({ ownerUserId, updatedAt: new Date() })
+          .where(eq(units.id, firstUnit[0]!.id));
+
+        await tx.execute(sql`
+          UPDATE user_roles
+          SET unit_id = ${firstUnit[0]!.id}
+          WHERE community_id = ${sunsetCommunityId}
+            AND user_id = ${ownerUserId}
+        `);
+      });
+      debugSeed(`linked owner to unit ${firstUnit[0].id} in community ${sunsetCommunityId}`);
+    }
+  }
+
+  // Seed violation data for condo and HOA communities (apartments don't have violations)
   await seedViolationsData(sunsetCommunityId, ownerUserId);
   // Palm Shores gets 2 violations (reported + resolved via the same function, we re-use first 2)
   await seedViolationsData(palmCommunityId, boardPresidentId);
