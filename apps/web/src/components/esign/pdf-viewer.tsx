@@ -21,10 +21,8 @@ type PdfJsModule = typeof import('pdfjs-dist/build/pdf.mjs');
 
 /** Load the browser bundle from a same-origin route to avoid Next webpack interop bugs. */
 async function loadPdfJs(): Promise<PdfJsModule> {
-  const pdfjs = (await import(
-    /* webpackIgnore: true */
-    '/pdfjs/pdf.mjs'
-  )) as PdfJsModule;
+  // @ts-expect-error — runtime-only import from same-origin proxy route; not a real module path
+  const pdfjs = (await import(/* webpackIgnore: true */ '/pdfjs/pdf.mjs')) as PdfJsModule;
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
   return pdfjs;
 }
