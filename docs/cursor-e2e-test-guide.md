@@ -189,6 +189,8 @@ If any of these fail, stop and report. The dev server is not ready.
 | 2G.2 | Navigate to Templates | Should see 2 templates: **"Proxy Designation Form"** and **"Violation Acknowledgment"**. |
 | 2G.3 | Navigate to Submissions | Should see at least 1 submission in **pending** status (the Proxy Designation demo submission with 2 pending signers). |
 
+For a **full send-to-sign** pass through the real staff and public UIs, continue in **Part 3C** (CAM, `communityId=1`).
+
 ### 2H — Finance
 
 | Step | Action | What to Verify |
@@ -267,8 +269,34 @@ If any of these fail, stop and report. The dev server is not ready.
 |------|--------|----------------|
 | 3B.1 | Documents page loads | Documents library shows Palm Shores HOA documents. |
 | 3B.2 | Meetings page loads | Calendar with Palm Shores meetings. |
-| 3B.3 | Violations inbox | Should show 2 violations for Palm Shores. |
+| 3B.3 | Violations inbox | Should show 4 violations for Palm Shores. |
 | 3B.4 | Switch back to Sunset Condos via `/select-community` | Verify you can switch communities cleanly. |
+
+### 3C — E-Sign: send and sign (full browser flow)
+
+Use this flow when you need to **see** the real staff UI and public signer UI react to input—not only the hub snapshot in **2G**. Pin **Sunset Condos** so seeded e-sign templates exist (`communityId=1`).
+
+**Session A — staff (CAM)**
+
+| Step | Action | What to Verify |
+|------|--------|----------------|
+| 3C.1 | Navigate to `http://localhost:3000/dev/agent-login?as=cam&communityId=1` | Redirect completes; dashboard loads for Sunset Condos. **Screenshot** after redirect. |
+| 3C.2 | Go to `http://localhost:3000/esign?communityId=1` (or click **E-Sign** in the Admin sidebar, then confirm URL has `communityId=1`) | **E-Sign** hub: heading "E-Sign", **Send Document** button visible. **Screenshot.** |
+| 3C.3 | Click **Send Document** | **Send Document for Signing** page: step "1. Select Template", template field shows **Choose a template...**. **Screenshot.** |
+| 3C.4 | Open the template control, use **Search templates...**, type `Violation`, select **Violation Acknowledgment** | Step 2 **Configure Signers** appears with role/name/email fields. **Screenshot.** |
+| 3C.5 | Enter signer **Full name** `Tenant One` and **Email address** `tenant.one@sunset.local` | Fields accept input; **Review & Send** enables when valid. |
+| 3C.6 | Click **Review & Send**, then **Send for Signing** on the confirm card | Request submits; you return to `/esign?communityId=1` (or stay in flow briefly). **Screenshot** of hub with an additional pending submission if visible. |
+| 3C.7 | Click the **newest** pending row (or open the submission you just created from the list) | Submission detail loads. **Screenshot.** |
+| 3C.8 | In **Signers**, find **Copy signing link** and **Open signing page** for the pending signer | Controls are visible for pending/opened signers. **Screenshot.** (Automated tests may read the create response instead; this is the user-visible path.) |
+
+**Session B — public signer (same browser or new tab)**
+
+| Step | Action | What to Verify |
+|------|--------|----------------|
+| 3C.9 | Click **Open signing page** (opens `/sign/...` in a new tab) or paste the copied URL in the address bar | Public signing page: **Signing as:** and signer email visible. **Screenshot.** |
+| 3C.10 | Complete required PDF fields (placeholders depend on template), open **Owner Signature**, choose **Type**, type full name, **Confirm**, accept consent, **Finish** | Heading **Signing complete** (or equivalent success state). **Screenshot.** |
+
+If **Violation Acknowledgment** does not appear in the template list, stop: run `pnpm seed:demo` (with `.env.local` loaded) and retry.
 
 ---
 
@@ -520,6 +548,9 @@ After completing all test flows, fill in this rubric. For each category, assign 
 | 2 templates visible: Proxy Designation Form, Violation Acknowledgment | | |
 | 1 pending submission visible | | |
 | Submission detail shows 2 pending signers | | |
+| (Optional deep pass) Part **3C**: Send Document form → Violation Acknowledgment → signers → confirm send | | |
+| (Optional deep pass) Submission detail shows **Copy signing link** / **Open signing page** for pending signer | | |
+| (Optional deep pass) Public `/sign/...` page completes with success state | | |
 
 ### Category 9: Finance & Assessments
 
