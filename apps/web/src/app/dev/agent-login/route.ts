@@ -127,7 +127,16 @@ export async function GET(request: Request) {
 
   // Step 3: Resolve communities for this user
   const communities = await findUserCommunitiesUnscoped(authData.user.id);
-  const primary = communities[0] ?? null;
+
+  // Allow explicit community selection via ?communityId=X
+  const rawCommunityId = url.searchParams.get('communityId');
+  const requestedCommunityId = rawCommunityId ? Number(rawCommunityId) : null;
+
+  const primary = (
+    requestedCommunityId
+      ? communities.find((c) => c.communityId === requestedCommunityId)
+      : undefined
+  ) ?? communities[0] ?? null;
 
   const isAdmin = ADMIN_ROLES.has(role);
   let portal = isAdmin ? '/dashboard' : '/mobile';
