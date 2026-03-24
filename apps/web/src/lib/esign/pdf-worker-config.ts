@@ -9,10 +9,10 @@
  * unavailable during server-side rendering.
  */
 if (typeof window !== 'undefined') {
-  import(
-    /* webpackIgnore: true */
-    '/pdfjs/pdf.mjs'
-  ).then(({ GlobalWorkerOptions }) => {
-    GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
-  });
+  // @ts-expect-error — runtime-only import from same-origin proxy route; not a real module path
+  import(/* webpackIgnore: true */ '/pdfjs/pdf.mjs').then(
+    ({ GlobalWorkerOptions }: { GlobalWorkerOptions: { workerSrc: string } }) => {
+      GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+    },
+  );
 }
