@@ -17,6 +17,8 @@ const {
   flattenSignedPdfMock,
   computeDocumentHashMock,
   uploadSignedDocumentMock,
+  sendEmailMock,
+  esignReminderEmailMock,
   eqMock,
   andMock,
   isNullMock,
@@ -53,6 +55,8 @@ const {
   flattenSignedPdfMock: vi.fn(),
   computeDocumentHashMock: vi.fn(),
   uploadSignedDocumentMock: vi.fn(),
+  sendEmailMock: vi.fn(),
+  esignReminderEmailMock: vi.fn(() => ({ type: 'EsignReminderEmail' })),
   eqMock: vi.fn((...args: unknown[]) => ({ type: 'eq', args })),
   andMock: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
   isNullMock: vi.fn((...args: unknown[]) => ({ type: 'isNull', args })),
@@ -82,6 +86,11 @@ vi.mock('../../src/lib/services/esign-pdf-service', () => ({
   flattenSignedPdf: flattenSignedPdfMock,
   computeDocumentHash: computeDocumentHashMock,
   uploadSignedDocument: uploadSignedDocumentMock,
+}));
+
+vi.mock('@propertypro/email', () => ({
+  sendEmail: sendEmailMock,
+  EsignReminderEmail: esignReminderEmailMock,
 }));
 
 import type { EsignFieldsSchema } from '@propertypro/shared';
@@ -162,6 +171,115 @@ function makeScopedMock(overrides: Record<string, unknown> = {}) {
     selectFrom: vi.fn(async () => [{ id: 1, communityId: 1, ...overrides }]),
     update: vi.fn(async () => [{ id: 1, communityId: 1, ...overrides }]),
     ...overrides,
+  };
+}
+
+function makeAdminTemplateRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    community_id: 1,
+    external_id: 'tpl-ext',
+    name: 'Template',
+    description: null,
+    source_document_path: 'test.pdf',
+    template_type: 'custom',
+    fields_schema: validFieldsSchema(),
+    status: 'active',
+    created_by: 'user-1',
+    created_at: '2026-01-01',
+    updated_at: '2026-01-01',
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+function makeReminderSigner(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    communityId: 1,
+    submissionId: 10,
+    email: 'a@test.com',
+    name: 'Alice',
+    role: 'signer',
+    sortOrder: 0,
+    status: 'pending',
+    slug: 'slug-1',
+    reminderCount: 0,
+    lastReminderAt: null,
+    ...overrides,
+  };
+}
+
+function makeReminderSubmission(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 10,
+    communityId: 1,
+    templateId: 3,
+    externalId: 'sub-ext',
+    status: 'pending',
+    signingOrder: 'parallel',
+    expiresAt: null,
+    completedAt: null,
+    signedDocumentPath: null,
+    messageSubject: null,
+    messageBody: null,
+    createdBy: 'user-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeReminderTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 3,
+    communityId: 1,
+    name: 'Proxy Form',
+    sourceDocumentPath: 'communities/1/esign-templates/proxy.pdf',
+    fieldsSchema: validFieldsSchema(),
+    templateType: 'custom',
+    ...overrides,
+  };
+}
+
+function queueReminderSelects(
+  scoped: { selectFrom: ReturnType<typeof vi.fn> },
+  {
+    signer = makeReminderSigner(),
+    submission = makeReminderSubmission(),
+    signers = [signer],
+    template = makeReminderTemplate(),
+  }: {
+    signer?: Record<string, unknown>;
+    submission?: Record<string, unknown>;
+    signers?: Record<string, unknown>[];
+    template?: Record<string, unknown>;
+  } = {},
+): void {
+  let callCount = 0;
+  scoped.selectFrom = vi.fn(async () => {
+    callCount++;
+    if (callCount === 1) return [signer];
+    if (callCount === 2) return [submission];
+    if (callCount === 3) return signers;
+    if (callCount === 4) return [];
+    if (callCount === 5) return [template];
+    return [];
+  });
+}
+
+function makeCommunityAdmin() {
+  return {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          limit: vi.fn(async () => ({
+            data: [{ name: 'Sunset Condos', timezone: 'America/New_York' }],
+            error: null,
+          })),
+        })),
+      })),
+    })),
   };
 }
 
@@ -275,6 +393,7 @@ describe('E-Sign Full Lifecycle', () => {
     flattenSignedPdfMock.mockResolvedValue(new Uint8Array([1, 2, 3]));
     computeDocumentHashMock.mockReturnValue('abc123hash');
     uploadSignedDocumentMock.mockResolvedValue('communities/1/esign-signed/1/signed.pdf');
+    sendEmailMock.mockResolvedValue({ id: 'email-1' });
   });
 
   // =========================================================================
@@ -307,6 +426,7 @@ describe('E-Sign Full Lifecycle', () => {
           id: 1,
           communityId: 1,
           fieldsSchema: twoRoleFieldsSchema(),
+          sourceDocumentPath: 'test.pdf',
           status: 'active',
           name: 'Template',
         }]),
@@ -337,6 +457,9 @@ describe('E-Sign Full Lifecycle', () => {
 
   describe('Happy Path: Sequential Signing', () => {
     it('marks second signer as waiting when first has not signed', async () => {
+      const scoped = makeScopedMock();
+      createScopedClientMock.mockReturnValue(scoped);
+
       const admin = makeAdminClientMock({
         signerRow: {
           id: 2, community_id: 1, submission_id: 10, external_id: 'ext-2',
@@ -373,6 +496,7 @@ describe('E-Sign Full Lifecycle', () => {
 
       expect(context.isWaiting).toBe(true);
       expect(context.waitingFor).toBe('Alice');
+      expect(scoped.update).not.toHaveBeenCalled();
     });
 
     it('allows second signer to proceed when first has completed', async () => {
@@ -447,6 +571,38 @@ describe('E-Sign Full Lifecycle', () => {
       const context = await getSignerContext('slug-alice');
       expect(context.isWaiting).toBe(false);
     });
+
+    it('rejects a signing link when submissionExternalId does not match the slug', async () => {
+      const admin = makeAdminClientMock({
+        signerRow: {
+          id: 2, community_id: 1, submission_id: 10, external_id: 'ext-2',
+          user_id: null, email: 'b@test.com', name: 'Bob', role: 'signer',
+          slug: 'slug-bob', sort_order: 1, status: 'pending',
+          opened_at: null, completed_at: null, signed_values: null,
+          reminder_count: 0, created_at: '2026-01-01', deleted_at: null,
+        },
+        submissionRow: {
+          id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
+          status: 'pending', signing_order: 'parallel', send_email: true,
+          expires_at: null, completed_at: null, signed_document_path: null,
+          message_subject: null, message_body: null, created_by: 'user-1',
+          created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
+        },
+        templateRow: {
+          id: 1, community_id: 1, external_id: 'tpl-ext', name: 'Template',
+          description: null, source_document_path: 'test.pdf',
+          template_type: 'custom', fields_schema: validFieldsSchema(),
+          status: 'active', created_by: 'user-1', created_at: '2026-01-01',
+          updated_at: '2026-01-01', deleted_at: null,
+        },
+      });
+
+      createAdminClientMock.mockReturnValue(admin);
+
+      await expect(getSignerContext('slug-bob', 'wrong-sub-ext')).rejects.toThrow(
+        'Invalid or expired signing link',
+      );
+    });
   });
 
   // =========================================================================
@@ -508,7 +664,7 @@ describe('E-Sign Full Lifecycle', () => {
       );
     });
 
-    it('blocks a declined signer from accessing the signing page', async () => {
+    it('returns declined signer context but blocks follow-up actions', async () => {
       const admin = makeAdminClientMock({
         signerRow: {
           id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
@@ -517,11 +673,23 @@ describe('E-Sign Full Lifecycle', () => {
           opened_at: '2026-01-01', completed_at: null, signed_values: null,
           reminder_count: 0, created_at: '2026-01-01', deleted_at: null,
         },
+        submissionRow: {
+          id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
+          status: 'pending', signing_order: 'parallel', send_email: false,
+          expires_at: null, completed_at: null, signed_document_path: null,
+          message_subject: null, message_body: null, created_by: 'user-1',
+          created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
+        },
+        templateRow: makeAdminTemplateRow(),
       });
 
       createAdminClientMock.mockReturnValue(admin);
 
-      await expect(getSignerContext('slug-declined')).rejects.toThrow(
+      const context = await getSignerContext('slug-declined');
+
+      expect(context.signer.status).toBe('declined');
+      expect(createScopedClientMock).not.toHaveBeenCalled();
+      await expect(declineSigning('slug-declined')).rejects.toThrow(
         'You have declined to sign this document',
       );
     });
@@ -555,7 +723,7 @@ describe('E-Sign Full Lifecycle', () => {
       );
     });
 
-    it('signers see cancelled state when accessing a cancelled submission', async () => {
+    it('returns cancelled submission context and blocks actions', async () => {
       const admin = makeAdminClientMock({
         signerRow: {
           id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
@@ -571,11 +739,17 @@ describe('E-Sign Full Lifecycle', () => {
           message_subject: null, message_body: null, created_by: 'user-1',
           created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
         },
+        templateRow: makeAdminTemplateRow(),
       });
 
       createAdminClientMock.mockReturnValue(admin);
 
-      await expect(getSignerContext('slug-cancel')).rejects.toThrow(
+      const context = await getSignerContext('slug-cancel');
+
+      expect(context.submission.status).toBe('cancelled');
+      expect(context.submission.effectiveStatus).toBe('cancelled');
+      expect(createScopedClientMock).not.toHaveBeenCalled();
+      await expect(declineSigning('slug-cancel')).rejects.toThrow(
         'This signing request has been cancelled',
       );
     });
@@ -586,7 +760,7 @@ describe('E-Sign Full Lifecycle', () => {
   // =========================================================================
 
   describe('Expiration Flow', () => {
-    it('rejects signing when submission has expired', async () => {
+    it('returns expired effective status when pending submission is past expiresAt', async () => {
       const pastDate = new Date('2025-01-01').toISOString();
 
       const admin = makeAdminClientMock({
@@ -604,16 +778,22 @@ describe('E-Sign Full Lifecycle', () => {
           message_subject: null, message_body: null, created_by: 'user-1',
           created_at: '2025-01-01', updated_at: '2025-01-01', deleted_at: null,
         },
+        templateRow: makeAdminTemplateRow(),
       });
 
       createAdminClientMock.mockReturnValue(admin);
 
-      await expect(getSignerContext('slug-expired')).rejects.toThrow(
+      const context = await getSignerContext('slug-expired');
+
+      expect(context.submission.status).toBe('pending');
+      expect(context.submission.effectiveStatus).toBe('expired');
+      expect(createScopedClientMock).not.toHaveBeenCalled();
+      await expect(declineSigning('slug-expired')).rejects.toThrow(
         'This signing request has expired',
       );
     });
 
-    it('rejects signing when submission status is explicitly expired', async () => {
+    it('returns explicitly expired submission context and blocks actions', async () => {
       const admin = makeAdminClientMock({
         signerRow: {
           id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
@@ -629,13 +809,179 @@ describe('E-Sign Full Lifecycle', () => {
           message_subject: null, message_body: null, created_by: 'user-1',
           created_at: '2025-01-01', updated_at: '2025-01-01', deleted_at: null,
         },
+        templateRow: makeAdminTemplateRow(),
       });
 
       createAdminClientMock.mockReturnValue(admin);
 
-      await expect(getSignerContext('slug-exp-status')).rejects.toThrow(
+      const context = await getSignerContext('slug-exp-status');
+
+      expect(context.submission.status).toBe('expired');
+      expect(context.submission.effectiveStatus).toBe('expired');
+      expect(createScopedClientMock).not.toHaveBeenCalled();
+      await expect(declineSigning('slug-exp-status')).rejects.toThrow(
         'This signing request has expired',
       );
+    });
+  });
+
+  // =========================================================================
+  // Signature Validation & Finalization
+  // =========================================================================
+
+  describe('Signature Validation & Finalization', () => {
+    it('rejects signed values for unknown field IDs', async () => {
+      const admin = makeAdminClientMock({
+        signerRow: {
+          id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
+          user_id: null, email: 'a@test.com', name: 'Alice', role: 'signer',
+          slug: 'slug-validate', sort_order: 0, status: 'opened',
+          opened_at: '2026-01-01', completed_at: null, signed_values: null,
+          reminder_count: 0, created_at: '2026-01-01', deleted_at: null,
+        },
+        submissionRow: {
+          id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
+          status: 'pending', signing_order: 'parallel', send_email: false,
+          expires_at: null, completed_at: null, signed_document_path: null,
+          message_subject: null, message_body: null, created_by: 'user-1',
+          created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
+        },
+        templateRow: {
+          id: 1, community_id: 1, external_id: 'tpl-ext', name: 'Template',
+          description: null, source_document_path: 'test.pdf',
+          template_type: 'custom', fields_schema: validFieldsSchema(),
+          status: 'active', created_by: 'user-1', created_at: '2026-01-01',
+          updated_at: '2026-01-01', deleted_at: null,
+        },
+      });
+      createAdminClientMock.mockReturnValue(admin);
+
+      const scoped = makeScopedMock();
+      createScopedClientMock.mockReturnValue(scoped);
+
+      await expect(
+        submitSignature(
+          'slug-validate',
+          {
+            signedValues: {
+              bad: {
+                fieldId: 'unknown-field',
+                type: 'signature',
+                value: 'sig-data',
+                signedAt: '2026-01-01T00:00:00Z',
+              },
+            },
+            consentGiven: true,
+          },
+          '127.0.0.1',
+          'TestAgent/1.0',
+          'sub-ext',
+        ),
+      ).rejects.toThrow('Field "unknown-field" is not available for signer role "signer"');
+
+      expect(scoped.update).not.toHaveBeenCalled();
+    });
+
+    it('returns processing_failed when signed document finalization fails', async () => {
+      flattenSignedPdfMock.mockRejectedValueOnce(new Error('flatten failed'));
+
+      const admin = makeAdminClientMock({
+        signerRow: {
+          id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
+          user_id: null, email: 'a@test.com', name: 'Alice', role: 'signer',
+          slug: 'slug-finalize-fail', sort_order: 0, status: 'opened',
+          opened_at: '2026-01-01', completed_at: null, signed_values: null,
+          reminder_count: 0, created_at: '2026-01-01', deleted_at: null,
+        },
+        submissionRow: {
+          id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
+          status: 'pending', signing_order: 'parallel', send_email: false,
+          expires_at: null, completed_at: null, signed_document_path: null,
+          message_subject: null, message_body: null, created_by: 'user-1',
+          created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
+        },
+        templateRow: {
+          id: 1, community_id: 1, external_id: 'tpl-ext', name: 'Template',
+          description: null, source_document_path: 'test.pdf',
+          template_type: 'custom', fields_schema: validFieldsSchema(),
+          status: 'active', created_by: 'user-1', created_at: '2026-01-01',
+          updated_at: '2026-01-01', deleted_at: null,
+        },
+      });
+      createAdminClientMock.mockReturnValue(admin);
+
+      let updateCallCount = 0;
+      const scopedInsertCalls: Array<{ table: unknown; data: Record<string, unknown> }> = [];
+      const scoped = {
+        update: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+          updateCallCount++;
+          if (updateCallCount === 1) return [{ id: 1 }];
+          if (updateCallCount === 2) return [{ id: 10, templateId: 1 }];
+          return [{ id: 10, ...data }];
+        }),
+        insert: vi.fn(async (table: unknown, data: Record<string, unknown>) => {
+          scopedInsertCalls.push({ table, data });
+          return [{ id: scopedInsertCalls.length }];
+        }),
+        selectFrom: vi.fn(async (table: unknown) => {
+          if (table === esignSignersTable) {
+            return [{
+              id: 1,
+              communityId: 1,
+              submissionId: 10,
+              role: 'signer',
+              status: 'completed',
+              signedValues: {
+                f1: {
+                  fieldId: 'sig-1',
+                  type: 'signature',
+                  value: 'sig-data',
+                  signedAt: '2026-01-01T00:00:00Z',
+                },
+              },
+            }];
+          }
+          if (table === esignTemplatesTable) {
+            return [{
+              id: 1,
+              communityId: 1,
+              name: 'Template',
+              sourceDocumentPath: 'test.pdf',
+              fieldsSchema: validFieldsSchema(),
+            }];
+          }
+          return [];
+        }),
+      };
+      createScopedClientMock.mockReturnValue(scoped);
+
+      const result = await submitSignature(
+        'slug-finalize-fail',
+        {
+          signedValues: {
+            f1: {
+              fieldId: 'sig-1',
+              type: 'signature',
+              value: 'sig-data',
+              signedAt: '2026-01-01T00:00:00Z',
+            },
+          },
+          consentGiven: true,
+        },
+        '127.0.0.1',
+        'TestAgent/1.0',
+        'sub-ext',
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.submissionStatus).toBe('processing_failed');
+      expect(
+        scopedInsertCalls.some(
+          (call) =>
+            call.table === esignEventsTable &&
+            call.data.eventType === 'submission_processing_failed',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -646,34 +992,42 @@ describe('E-Sign Full Lifecycle', () => {
   describe('Reminder Lifecycle', () => {
     it('allows 3 reminders then rejects the 4th', async () => {
       const scoped = makeScopedMock();
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
 
       // First 3 reminders succeed
       for (let i = 0; i < 3; i++) {
         vi.clearAllMocks();
         logAuditEventMock.mockResolvedValue(undefined);
-
-        scoped.selectFrom = vi.fn(async () => [
-          { id: 1, communityId: 1, status: 'pending', reminderCount: i, submissionId: 10 },
-        ]);
+        sendEmailMock.mockResolvedValue({ id: `email-${i + 1}` });
+        createAdminClientMock.mockReturnValue(makeCommunityAdmin());
+        queueReminderSelects(scoped, {
+          signer: makeReminderSigner({ reminderCount: i }),
+          signers: [makeReminderSigner({ reminderCount: i })],
+        });
         scoped.update = vi.fn(async () => [{ id: 1 }]);
         scoped.insert = vi.fn(async () => [{ id: 1 }]);
         createScopedClientMock.mockReturnValue(scoped);
 
         await sendReminder(1, 'user-1', 10, 1);
         expect(scoped.update).toHaveBeenCalled();
+        expect(sendEmailMock).toHaveBeenCalledTimes(1);
       }
 
       // 4th reminder should fail
       vi.clearAllMocks();
       logAuditEventMock.mockResolvedValue(undefined);
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'pending', reminderCount: 3, submissionId: 10 },
-      ]);
+      sendEmailMock.mockResolvedValue({ id: 'email-4' });
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ reminderCount: 3 }),
+        signers: [makeReminderSigner({ reminderCount: 3 })],
+      });
       createScopedClientMock.mockReturnValue(scoped);
 
       await expect(sendReminder(1, 'user-1', 10, 1)).rejects.toThrow(
         'Maximum of 3 reminders reached',
       );
+      expect(sendEmailMock).not.toHaveBeenCalled();
     });
   });
 
@@ -837,7 +1191,7 @@ describe('E-Sign Full Lifecycle', () => {
   // =========================================================================
 
   describe('Security: Double-sign prevention', () => {
-    it('rejects a completed signer from accessing signing page', async () => {
+    it('returns completed signer context but blocks repeat actions', async () => {
       const admin = makeAdminClientMock({
         signerRow: {
           id: 1, community_id: 1, submission_id: 10, external_id: 'ext-1',
@@ -846,11 +1200,23 @@ describe('E-Sign Full Lifecycle', () => {
           opened_at: '2026-01-01', completed_at: '2026-01-02', signed_values: {},
           reminder_count: 0, created_at: '2026-01-01', deleted_at: null,
         },
+        submissionRow: {
+          id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
+          status: 'pending', signing_order: 'parallel', send_email: false,
+          expires_at: null, completed_at: null, signed_document_path: null,
+          message_subject: null, message_body: null, created_by: 'user-1',
+          created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
+        },
+        templateRow: makeAdminTemplateRow(),
       });
 
       createAdminClientMock.mockReturnValue(admin);
 
-      await expect(getSignerContext('slug-complete')).rejects.toThrow(
+      const context = await getSignerContext('slug-complete');
+
+      expect(context.signer.status).toBe('completed');
+      expect(createScopedClientMock).not.toHaveBeenCalled();
+      await expect(declineSigning('slug-complete')).rejects.toThrow(
         'You have already signed this document',
       );
     });

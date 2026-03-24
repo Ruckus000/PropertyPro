@@ -40,7 +40,9 @@ const createSubmissionSchema = z.object({
 
 const listStatusSchema = z.enum([
   'pending',
+  'processing',
   'completed',
+  'processing_failed',
   'declined',
   'expired',
   'cancelled',

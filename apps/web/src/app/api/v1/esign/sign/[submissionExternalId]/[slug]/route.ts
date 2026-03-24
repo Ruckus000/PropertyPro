@@ -17,15 +17,20 @@ import {
  */
 
 const submitSignatureSchema = z.object({
-  signedValues: z.record(
-    z.string(),
-    z.object({
-      fieldId: z.string(),
-      type: z.enum(['signature', 'initials', 'date', 'text', 'checkbox']),
-      value: z.string(),
-      signedAt: z.string().datetime(),
-    }),
-  ),
+  signedValues: z
+    .record(
+      z.string(),
+      z.object({
+        fieldId: z.string(),
+        type: z.enum(['signature', 'initials', 'date', 'text', 'checkbox']),
+        value: z.string(),
+        signedAt: z.string().datetime(),
+      }),
+    )
+    .refine(
+      (value) => Object.keys(value).length > 0,
+      'At least one signed field is required',
+    ),
   consentGiven: z.literal(true),
 });
 
@@ -37,10 +42,12 @@ const declineSchema = z.object({
 export const GET = withErrorHandler(
   async (_req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
     const params = await context?.params;
+    const submissionExternalId = params?.submissionExternalId;
     const slug = params?.slug;
     if (!slug) throw new BadRequestError('Missing signing slug');
+    if (!submissionExternalId) throw new BadRequestError('Missing submission ID');
 
-    const signerContext = await getSignerContext(slug);
+    const signerContext = await getSignerContext(slug, submissionExternalId);
 
     // Filter template fields to only those for this signer's role
     const signerFields = signerContext.template.fieldsSchema?.fields.filter(
@@ -73,6 +80,8 @@ export const GET = withErrorHandler(
         },
         submission: {
           externalId: signerContext.submission.externalId,
+          status: signerContext.submission.status,
+          effectiveStatus: signerContext.submission.effectiveStatus,
           messageSubject: signerContext.submission.messageSubject,
           messageBody: signerContext.submission.messageBody,
           expiresAt: signerContext.submission.expiresAt,
@@ -93,15 +102,21 @@ export const GET = withErrorHandler(
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
     const params = await context?.params;
+    const submissionExternalId = params?.submissionExternalId;
     const slug = params?.slug;
     if (!slug) throw new BadRequestError('Missing signing slug');
+    if (!submissionExternalId) throw new BadRequestError('Missing submission ID');
 
     const body: unknown = await req.json();
 
     // Check if this is a decline action
     const declineResult = declineSchema.safeParse(body);
     if (declineResult.success) {
-      const result = await declineSigning(slug, declineResult.data.reason);
+      const result = await declineSigning(
+        slug,
+        declineResult.data.reason,
+        submissionExternalId,
+      );
       return NextResponse.json({ data: result });
     }
 
@@ -125,6 +140,7 @@ export const POST = withErrorHandler(
       },
       ipAddress,
       userAgent,
+      submissionExternalId,
     );
 
     return NextResponse.json({ data: result });

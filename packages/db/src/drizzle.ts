@@ -27,3 +27,11 @@ const client = postgres(databaseUrl, { prepare: false });
 
 /** Drizzle ORM instance with full schema for relational queries */
 export const db = drizzle(client, { schema });
+
+/**
+ * Closes the shared postgres-js client.
+ * Intended for long-running scripts that should exit cleanly after finishing.
+ */
+export async function closeDb(): Promise<void> {
+  await client.end({ timeout: 5 });
+}

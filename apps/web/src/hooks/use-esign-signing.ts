@@ -1,10 +1,12 @@
 'use client';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
+import type { EsignFieldDefinition } from '@propertypro/shared';
 import type {
   EsignSignerRecord,
   EsignSubmissionRecord,
   EsignTemplateRecord,
+  SubmitSignatureResult,
 } from '@/lib/services/esign-service';
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -23,12 +25,26 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 }
 
 export interface SigningContext {
-  signer: EsignSignerRecord;
-  submission: EsignSubmissionRecord;
-  template: EsignTemplateRecord;
+  signer: Pick<
+    EsignSignerRecord,
+    'id' | 'externalId' | 'email' | 'name' | 'role' | 'status'
+  >;
+  submission: Pick<
+    EsignSubmissionRecord,
+    | 'externalId'
+    | 'status'
+    | 'effectiveStatus'
+    | 'messageSubject'
+    | 'messageBody'
+    | 'expiresAt'
+  >;
+  /** Subset of template fields for the signing UI (also returned by GET /api/v1/esign/sign/...). */
+  template: Pick<EsignTemplateRecord, 'name' | 'description'> &
+    Partial<Pick<EsignTemplateRecord, 'fieldsSchema'>>;
+  fields: EsignFieldDefinition[];
   isWaiting: boolean;
   waitingFor: string | null;
-  pdfUrl: string;
+  pdfUrl: string | null;
 }
 
 export function useSigningContext(submissionExternalId: string, slug: string) {
@@ -54,7 +70,7 @@ export function useSubmitSignature(submissionExternalId: string, slug: string) {
       }>;
       consentGiven: true;
     }) =>
-      requestJson<{ success: boolean }>(
+      requestJson<SubmitSignatureResult>(
         `/api/v1/esign/sign/${submissionExternalId}/${slug}`,
         {
           method: 'POST',

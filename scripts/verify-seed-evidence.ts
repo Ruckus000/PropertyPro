@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import postgres from 'postgres';
+import { createAdminClient } from '@propertypro/db';
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
@@ -7,6 +8,12 @@ const EXPECTED_CATEGORY_COUNTS = {
   'sunset-condos': 5,
   'palm-shores-hoa': 5,
   'sunset-ridge-apartments': 6,
+} as const satisfies Record<(typeof DEMO_SLUGS)[number], number>;
+
+const EXPECTED_ESIGN_TEMPLATE_COUNTS = {
+  'sunset-condos': 2,
+  'palm-shores-hoa': 2,
+  'sunset-ridge-apartments': 2,
 } as const satisfies Record<(typeof DEMO_SLUGS)[number], number>;
 
 interface CategoryCountRow {
@@ -19,6 +26,21 @@ interface NullCategoryRow {
   slug: string;
   docs_without_category: number;
   total_docs: number;
+}
+
+interface EsignTemplateRow {
+  slug: string;
+  template_id: number;
+  template_name: string;
+  source_document_path: string | null;
+}
+
+interface StorageCheckResult {
+  slug: string;
+  templateName: string;
+  sourcePath: string | null;
+  storageStatus: 'PASS' | 'FAIL';
+  storageMessage: string;
 }
 
 function formatTable(headers: string[], rows: string[][]): string {
@@ -47,9 +69,16 @@ async function run(): Promise<number> {
     console.error('FAIL: Missing DATABASE_URL environment variable.');
     return 1;
   }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      'FAIL: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable.',
+    );
+    return 1;
+  }
 
   let exitCode = 1;
   const sql = postgres(databaseUrl, { prepare: false });
+  const admin = createAdminClient();
 
   try {
     const databaseHost = new URL(databaseUrl).hostname;
@@ -82,6 +111,21 @@ async function run(): Promise<number> {
       where c.slug in (${DEMO_SLUGS[0]}, ${DEMO_SLUGS[1]}, ${DEMO_SLUGS[2]})
       group by c.slug
       order by c.slug
+    `;
+
+    const esignTemplateRows = await sql<EsignTemplateRow[]>`
+      select
+        c.slug,
+        et.id as template_id,
+        et.name as template_name,
+        et.source_document_path
+      from communities c
+      left join esign_templates et
+        on et.community_id = c.id
+        and et.deleted_at is null
+        and et.status = 'active'
+      where c.slug in (${DEMO_SLUGS[0]}, ${DEMO_SLUGS[1]}, ${DEMO_SLUGS[2]})
+      order by c.slug, et.id
     `;
 
     const categoryBySlug = new Map(categoryRows.map((row) => [row.slug, row]));
@@ -137,6 +181,145 @@ async function run(): Promise<number> {
       formatTable(
         ['slug', 'expected_docs_without_category', 'actual_docs_without_category', 'total_docs', 'status'],
         nullCategoryTableRows,
+      ),
+    );
+
+    const esignRowsBySlug = new Map<
+      string,
+      EsignTemplateRow[]
+    >();
+    for (const row of esignTemplateRows) {
+      const list = esignRowsBySlug.get(row.slug) ?? [];
+      if (row.template_id) {
+        list.push(row);
+      }
+      esignRowsBySlug.set(row.slug, list);
+    }
+
+    const esignCountRows: string[][] = DEMO_SLUGS.map((slug) => {
+      const expected = EXPECTED_ESIGN_TEMPLATE_COUNTS[slug];
+      const actualRows = esignRowsBySlug.get(slug) ?? [];
+      const withSourcePdf = actualRows.filter((row) => !!row.source_document_path).length;
+      const status =
+        actualRows.length === expected && withSourcePdf === expected ? 'PASS' : 'FAIL';
+
+      if (actualRows.length !== expected) {
+        failures.push(
+          `${slug}: expected ${String(expected)} active e-sign templates, got ${String(actualRows.length)}.`,
+        );
+      }
+
+      if (withSourcePdf !== expected) {
+        failures.push(
+          `${slug}: expected ${String(expected)} active e-sign templates with source PDFs, got ${String(withSourcePdf)}.`,
+        );
+      }
+
+      return [slug, String(expected), String(actualRows.length), String(withSourcePdf), status];
+    });
+
+    console.log('\nE-Sign Template Coverage');
+    console.log(
+      formatTable(
+        ['slug', 'expected_active_templates', 'actual_active_templates', 'with_source_pdf', 'status'],
+        esignCountRows,
+      ),
+    );
+
+    const storageChecks: StorageCheckResult[] = [];
+    for (const slug of DEMO_SLUGS) {
+      for (const row of esignRowsBySlug.get(slug) ?? []) {
+        if (!row.source_document_path) {
+          storageChecks.push({
+            slug,
+            templateName: row.template_name,
+            sourcePath: null,
+            storageStatus: 'FAIL',
+            storageMessage: 'Missing source_document_path',
+          });
+          continue;
+        }
+
+        const folder = row.source_document_path.slice(
+          0,
+          Math.max(row.source_document_path.lastIndexOf('/'), 0),
+        );
+        const fileName = row.source_document_path.slice(
+          row.source_document_path.lastIndexOf('/') + 1,
+        );
+
+        const { data: listing, error: listError } = await admin.storage
+          .from('documents')
+          .list(folder, { limit: 100, search: fileName });
+
+        if (listError) {
+          failures.push(
+            `${slug}: failed to list storage for ${row.template_name}: ${listError.message}.`,
+          );
+          storageChecks.push({
+            slug,
+            templateName: row.template_name,
+            sourcePath: row.source_document_path,
+            storageStatus: 'FAIL',
+            storageMessage: `List failed: ${listError.message}`,
+          });
+          continue;
+        }
+
+        const listed = (listing ?? []).some((file) => file.name === fileName);
+        if (!listed) {
+          failures.push(
+            `${slug}: storage object missing for ${row.template_name} at ${row.source_document_path}.`,
+          );
+          storageChecks.push({
+            slug,
+            templateName: row.template_name,
+            sourcePath: row.source_document_path,
+            storageStatus: 'FAIL',
+            storageMessage: 'Object missing from storage listing',
+          });
+          continue;
+        }
+
+        const { data: fileData, error: downloadError } = await admin.storage
+          .from('documents')
+          .download(row.source_document_path);
+
+        if (downloadError || !fileData) {
+          failures.push(
+            `${slug}: failed to download source PDF for ${row.template_name}: ${downloadError?.message ?? 'No data returned'}.`,
+          );
+          storageChecks.push({
+            slug,
+            templateName: row.template_name,
+            sourcePath: row.source_document_path,
+            storageStatus: 'FAIL',
+            storageMessage: `Download failed: ${downloadError?.message ?? 'No data returned'}`,
+          });
+          continue;
+        }
+
+        storageChecks.push({
+          slug,
+          templateName: row.template_name,
+          sourcePath: row.source_document_path,
+          storageStatus: 'PASS',
+          storageMessage: 'Listed and downloadable',
+        });
+      }
+    }
+
+    console.log('\nE-Sign Storage Check');
+    console.log(
+      formatTable(
+        ['slug', 'template_name', 'source_path', 'storage_status', 'details'],
+        storageChecks.map((row) => [
+          row.slug,
+          row.templateName,
+          row.sourcePath ?? 'missing',
+          row.storageStatus,
+          row.storageMessage,
+        ]),
       ),
     );
 

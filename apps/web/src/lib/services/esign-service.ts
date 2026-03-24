@@ -8,6 +8,7 @@
  * - Signing flow uses createAdminClient for unscoped reads (slug lookup), scoped client for mutations
  */
 import crypto from 'node:crypto';
+import { EsignReminderEmail, sendEmail } from '@propertypro/email';
 import {
   createAdminClient,
   createScopedClient,
@@ -22,6 +23,7 @@ import { and, eq, gte, inArray, isNull, or } from '@propertypro/db/filters';
 import {
   ESIGN_CONSENT_TEXT,
   ESIGN_MAX_REMINDERS,
+  type EsignFieldDefinition,
   type EsignFieldsSchema,
   type EsignFieldType,
   type EsignSigningOrder,
@@ -70,6 +72,7 @@ export interface EsignSubmissionRecord {
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
+  effectiveStatus?: EsignSubmissionStatus;
 }
 
 export interface EsignSignerRecord {
@@ -88,6 +91,7 @@ export interface EsignSignerRecord {
   openedAt: Date | null;
   completedAt: Date | null;
   signedValues: Record<string, unknown> | null;
+  lastReminderAt: Date | null;
   reminderCount: number;
   createdAt: Date;
 }
@@ -151,6 +155,13 @@ export interface SubmitSignatureInput {
   consentGiven: true;
 }
 
+export interface SubmitSignatureResult {
+  success: boolean;
+  signerStatus: 'completed';
+  submissionStatus: EsignSubmissionStatus;
+  message?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -186,6 +197,154 @@ function validateFieldsSchema(schema: EsignFieldsSchema): void {
   }
 }
 
+function hasRenderableSourceDocument(
+  template: Pick<EsignTemplateRecord, 'sourceDocumentPath'>,
+): boolean {
+  return (
+    typeof template.sourceDocumentPath === 'string' &&
+    template.sourceDocumentPath.trim().length > 0
+  );
+}
+
+function requireRenderableSourceDocument(
+  template: Pick<EsignTemplateRecord, 'sourceDocumentPath'>,
+): void {
+  if (!hasRenderableSourceDocument(template)) {
+    throw new BadRequestError(
+      'Template must have a source PDF before it can be sent for signing',
+    );
+  }
+}
+
+function getEffectiveSubmissionStatus(
+  submission: Pick<EsignSubmissionRecord, 'status' | 'expiresAt'>,
+): EsignSubmissionStatus {
+  if (
+    submission.status === 'pending' &&
+    submission.expiresAt &&
+    new Date(submission.expiresAt).getTime() < Date.now()
+  ) {
+    return 'expired';
+  }
+
+  return submission.status as EsignSubmissionStatus;
+}
+
+function withEffectiveStatus<T extends EsignSubmissionRecord>(
+  submission: T,
+): T & { effectiveStatus: EsignSubmissionStatus } {
+  return {
+    ...submission,
+    effectiveStatus: getEffectiveSubmissionStatus(submission),
+  };
+}
+
+function getAppBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/$/, '');
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
+  }
+
+  return 'http://localhost:3000';
+}
+
+function buildSigningUrl(
+  submissionExternalId: string,
+  slug: string,
+): string {
+  return `${getAppBaseUrl()}/sign/${submissionExternalId}/${slug}`;
+}
+
+function formatReminderExpiresAt(
+  expiresAt: Date | null,
+  timeZone?: string | null,
+): string | undefined {
+  if (!expiresAt) {
+    return undefined;
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(expiresAt));
+}
+
+function fieldValueIsPresent(
+  field: Pick<EsignFieldDefinition, 'type'>,
+  value: string,
+): boolean {
+  if (field.type === 'checkbox') {
+    return value === 'true' || value === 'checked';
+  }
+
+  return value.trim().length > 0;
+}
+
+function validateSignedValuesForSigner(
+  signer: Pick<EsignSignerRecord, 'role'>,
+  template: Pick<EsignTemplateRecord, 'fieldsSchema'>,
+  signedValues: SubmitSignatureInput['signedValues'],
+): void {
+  const fieldsSchema = template.fieldsSchema;
+
+  if (!fieldsSchema) {
+    throw new BadRequestError('Template has no field definitions');
+  }
+
+  const signerFields = fieldsSchema.fields.filter(
+    (field) => field.signerRole === signer.role,
+  );
+
+  if (signerFields.length === 0) {
+    throw new BadRequestError('No fields are assigned to this signer');
+  }
+
+  const signedEntries = Object.values(signedValues);
+  if (signedEntries.length === 0) {
+    throw new BadRequestError('At least one signed field value is required');
+  }
+
+  const signerFieldsById = new Map(signerFields.map((field) => [field.id, field]));
+  const seenFieldIds = new Set<string>();
+
+  for (const entry of signedEntries) {
+    const field = signerFieldsById.get(entry.fieldId);
+
+    if (!field) {
+      throw new BadRequestError(
+        `Field "${entry.fieldId}" is not available for signer role "${signer.role}"`,
+      );
+    }
+
+    if (seenFieldIds.has(entry.fieldId)) {
+      throw new BadRequestError(`Field "${entry.fieldId}" was submitted more than once`);
+    }
+
+    if (entry.type !== field.type) {
+      throw new BadRequestError(
+        `Field "${entry.fieldId}" must use type "${field.type}"`,
+      );
+    }
+
+    if (!fieldValueIsPresent(field, entry.value)) {
+      throw new BadRequestError(`Field "${entry.fieldId}" requires a value`);
+    }
+
+    seenFieldIds.add(entry.fieldId);
+  }
+
+  for (const field of signerFields) {
+    if (field.required && !seenFieldIds.has(field.id)) {
+      throw new BadRequestError(`Field "${field.id}" is required`);
+    }
+  }
+}
+
 /** Map a snake_case Supabase row to camelCase for our interfaces. */
 function mapSignerRow(row: AnyRow): EsignSignerRecord {
   return {
@@ -203,13 +362,14 @@ function mapSignerRow(row: AnyRow): EsignSignerRecord {
     openedAt: row.opened_at,
     completedAt: row.completed_at,
     signedValues: row.signed_values,
+    lastReminderAt: row.last_reminder_at ?? null,
     reminderCount: row.reminder_count ?? 0,
     createdAt: row.created_at,
   };
 }
 
 function mapSubmissionRow(row: AnyRow): EsignSubmissionRecord {
-  return {
+  return withEffectiveStatus({
     id: row.id,
     communityId: row.community_id,
     templateId: row.template_id,
@@ -226,7 +386,7 @@ function mapSubmissionRow(row: AnyRow): EsignSubmissionRecord {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  });
 }
 
 function mapTemplateRow(row: AnyRow): EsignTemplateRecord {
@@ -453,6 +613,7 @@ export async function createSubmission(
   if (!fieldsSchema) {
     throw new BadRequestError('Template has no field definitions');
   }
+  requireRenderableSourceDocument(template);
 
   for (const signer of input.signers) {
     if (!fieldsSchema.signerRoles.includes(signer.role)) {
@@ -521,12 +682,14 @@ export async function listSubmissions(
   filters?: { status?: EsignSubmissionStatus },
 ): Promise<EsignSubmissionRecord[]> {
   const scoped = createScopedClient(communityId);
-  const whereClause = filters?.status
-    ? eq(esignSubmissions.status, filters.status)
-    : undefined;
+  const rows = (await scoped.selectFrom(esignSubmissions, {})) as EsignSubmissionRecord[];
+  const submissions = rows.map((row) => withEffectiveStatus(row));
 
-  const rows = await scoped.selectFrom(esignSubmissions, {}, whereClause);
-  return rows as EsignSubmissionRecord[];
+  if (!filters?.status) {
+    return submissions;
+  }
+
+  return submissions.filter((row) => row.effectiveStatus === filters.status);
 }
 
 // ---------------------------------------------------------------------------
@@ -652,13 +815,13 @@ export async function getSubmission(
   if (subRows.length === 0) {
     throw new NotFoundError('Submission not found');
   }
-  const submission = subRows[0] as EsignSubmissionRecord;
+  const submission = withEffectiveStatus(subRows[0] as EsignSubmissionRecord);
 
-  const signerRows = await scoped.selectFrom(
+  const signerRows = (await scoped.selectFrom(
     esignSigners,
     {},
     eq(esignSigners.submissionId, submissionId),
-  );
+  )) as EsignSignerRecord[];
 
   const eventRows = await scoped.selectFrom(
     esignEvents,
@@ -668,7 +831,11 @@ export async function getSubmission(
 
   return {
     submission,
-    signers: signerRows as EsignSignerRecord[],
+    signers: signerRows.map((signer) => ({
+      ...signer,
+      lastReminderAt: signer.lastReminderAt ?? null,
+      reminderCount: signer.reminderCount ?? 0,
+    })),
     events: eventRows as EsignEventRecord[],
   };
 }
@@ -681,7 +848,7 @@ export async function cancelSubmission(
 ): Promise<void> {
   const { submission } = await getSubmission(communityId, submissionId);
 
-  if (submission.status !== 'pending') {
+  if (submission.effectiveStatus !== 'pending') {
     throw new UnprocessableEntityError('Only pending submissions can be cancelled');
   }
 
@@ -728,21 +895,77 @@ export async function sendReminder(
   }
 
   const signer = signerRows[0] as EsignSignerRecord;
+  const { submission, signers } = await getSubmission(communityId, submissionId);
+  const template = await getTemplate(communityId, submission.templateId);
 
   if (signer.status !== 'pending' && signer.status !== 'opened') {
     throw new UnprocessableEntityError('Can only send reminders to pending or opened signers');
   }
-
   if (signer.reminderCount >= ESIGN_MAX_REMINDERS) {
     throw new UnprocessableEntityError(
       `Maximum of ${ESIGN_MAX_REMINDERS} reminders reached for this signer`,
     );
   }
 
+  if (submission.effectiveStatus !== 'pending') {
+    throw new UnprocessableEntityError('Can only send reminders for pending submissions');
+  }
+  if (!signer.slug) {
+    throw new UnprocessableEntityError('Signer does not have a public signing link');
+  }
+
+  if (submission.signingOrder === 'sequential') {
+    const blockedByPriorSigner = signers.some(
+      (candidate) =>
+        candidate.id !== signer.id &&
+        candidate.sortOrder < signer.sortOrder &&
+        candidate.status !== 'completed',
+    );
+
+    if (blockedByPriorSigner) {
+      throw new UnprocessableEntityError(
+        'Can only send reminders to signers whose turn is currently active',
+      );
+    }
+  }
+
+  const admin = getAdmin();
+  const { data: communityRows } = await admin
+    .from('communities')
+    .select('name, timezone')
+    .eq('id', communityId)
+    .limit(1);
+
+  const community = (communityRows?.[0] ?? null) as
+    | { name?: string | null; timezone?: string | null }
+    | null;
+  const documentName = submission.messageSubject ?? template.name;
+  const signingUrl = buildSigningUrl(submission.externalId, signer.slug);
+  const reminderNumber = signer.reminderCount + 1;
+
+  await sendEmail({
+    to: signer.email,
+    subject: `Reminder: Signature needed for ${documentName}`,
+    category: 'transactional',
+    react: EsignReminderEmail({
+      branding: {
+        communityName: community?.name ?? 'PropertyPro',
+      },
+      signerName: signer.name ?? signer.email,
+      documentName,
+      signingUrl,
+      reminderNumber,
+      expiresAt: formatReminderExpiresAt(
+        submission.expiresAt,
+        community?.timezone ?? undefined,
+      ),
+    }),
+  });
+
   await scoped.update(
     esignSigners,
     {
-      reminderCount: signer.reminderCount + 1,
+      reminderCount: reminderNumber,
       lastReminderAt: new Date(),
       updatedAt: new Date(),
     },
@@ -754,7 +977,7 @@ export async function sendReminder(
     submissionId: signer.submissionId,
     signerId: signer.id,
     eventType: 'reminder_sent',
-    eventData: { reminderNumber: signer.reminderCount + 1 },
+    eventData: { reminderNumber },
   });
 
   await logAuditEvent({
@@ -763,7 +986,7 @@ export async function sendReminder(
     resourceType: 'esign_signer',
     resourceId: String(signerId),
     communityId,
-    metadata: { reminderNumber: signer.reminderCount + 1, requestId: requestId ?? null },
+    metadata: { reminderNumber, requestId: requestId ?? null },
   });
 }
 
@@ -771,7 +994,10 @@ export async function sendReminder(
 // Signing flow (token-authenticated — admin client for unscoped SELECTs, scoped client for mutations)
 // ---------------------------------------------------------------------------
 
-export async function getSignerContext(slug: string): Promise<{
+export async function getSignerContext(
+  slug: string,
+  expectedSubmissionExternalId?: string,
+): Promise<{
   signer: EsignSignerRecord;
   submission: EsignSubmissionRecord;
   template: EsignTemplateRecord;
@@ -793,13 +1019,6 @@ export async function getSignerContext(slug: string): Promise<{
 
   const signer = mapSignerRow(signerRows[0] as AnyRow);
 
-  if (signer.status === 'completed') {
-    throw new UnprocessableEntityError('You have already signed this document');
-  }
-  if (signer.status === 'declined') {
-    throw new UnprocessableEntityError('You have declined to sign this document');
-  }
-
   const { data: subRows } = await admin
     .from('esign_submissions')
     .select('*')
@@ -813,12 +1032,11 @@ export async function getSignerContext(slug: string): Promise<{
 
   const submission = mapSubmissionRow(subRows[0] as AnyRow);
 
-  if (submission.status === 'cancelled') {
-    throw new UnprocessableEntityError('This signing request has been cancelled');
-  }
-  if (submission.status === 'expired' ||
-    (submission.expiresAt && new Date(submission.expiresAt) < new Date())) {
-    throw new UnprocessableEntityError('This signing request has expired');
+  if (
+    expectedSubmissionExternalId &&
+    submission.externalId !== expectedSubmissionExternalId
+  ) {
+    throw new NotFoundError('Invalid or expired signing link');
   }
 
   const { data: tplRows } = await admin
@@ -857,7 +1075,11 @@ export async function getSignerContext(slug: string): Promise<{
   }
 
   // Mark as opened if first access — use scoped client for mutations
-  if (signer.status === 'pending') {
+  const isActiveSubmission = submission.effectiveStatus === 'pending';
+  const isTerminalSignerState =
+    signer.status === 'completed' || signer.status === 'declined';
+
+  if (!isWaiting && isActiveSubmission && !isTerminalSignerState && signer.status === 'pending') {
     const scoped = createScopedClient(signer.communityId);
 
     await scoped.update(
@@ -880,17 +1102,45 @@ export async function getSignerContext(slug: string): Promise<{
   return { signer, submission, template, isWaiting, waitingFor };
 }
 
+function assertSignerContextCanAct(
+  context: Awaited<ReturnType<typeof getSignerContext>>,
+): void {
+  const { signer, submission, isWaiting } = context;
+
+  if (signer.status === 'completed') {
+    throw new UnprocessableEntityError('You have already signed this document');
+  }
+  if (signer.status === 'declined') {
+    throw new UnprocessableEntityError('You have declined to sign this document');
+  }
+  if (submission.effectiveStatus === 'cancelled') {
+    throw new UnprocessableEntityError('This signing request has been cancelled');
+  }
+  if (submission.effectiveStatus === 'expired') {
+    throw new UnprocessableEntityError('This signing request has expired');
+  }
+  if (isWaiting) {
+    throw new UnprocessableEntityError(
+      'This signing request is waiting for a previous signer to complete first',
+    );
+  }
+}
+
 export async function submitSignature(
   slug: string,
   input: SubmitSignatureInput,
   ipAddress: string,
   userAgent: string,
-): Promise<{ success: boolean }> {
-  const { signer } = await getSignerContext(slug);
+  expectedSubmissionExternalId?: string,
+): Promise<SubmitSignatureResult> {
+  const context = await getSignerContext(
+    slug,
+    expectedSubmissionExternalId,
+  );
+  assertSignerContextCanAct(context);
+  const { signer, template } = context;
 
-  if (signer.status === 'completed') {
-    throw new UnprocessableEntityError('You have already signed this document');
-  }
+  validateSignedValuesForSigner(signer, template, input.signedValues);
 
   const scoped = createScopedClient(signer.communityId);
 
@@ -952,16 +1202,47 @@ export async function submitSignature(
     userAgent,
   });
 
-  await checkAndCompleteSubmission(signer.communityId, signer.submissionId);
+  const completionResult = await checkAndCompleteSubmission(
+    signer.communityId,
+    signer.submissionId,
+  );
 
-  return { success: true };
+  if (completionResult.status === 'processing_failed') {
+    return {
+      success: false,
+      signerStatus: 'completed',
+      submissionStatus: completionResult.status,
+      message:
+        completionResult.message ??
+        'Your signature was captured, but the signed document could not be finalized.',
+    };
+  }
+
+  if (completionResult.status === 'processing') {
+    return {
+      success: true,
+      signerStatus: 'completed',
+      submissionStatus: completionResult.status,
+      message:
+        'Your signature was captured and the signed document is still being finalized.',
+    };
+  }
+
+  return {
+    success: true,
+    signerStatus: 'completed',
+    submissionStatus: completionResult.status,
+  };
 }
 
 export async function declineSigning(
   slug: string,
   reason?: string,
+  expectedSubmissionExternalId?: string,
 ): Promise<{ success: boolean }> {
-  const { signer } = await getSignerContext(slug);
+  const context = await getSignerContext(slug, expectedSubmissionExternalId);
+  assertSignerContextCanAct(context);
+  const { signer } = context;
   const scoped = createScopedClient(signer.communityId);
 
   await scoped.update(
@@ -991,10 +1272,18 @@ export async function declineSigning(
 // Completion logic (internal)
 // ---------------------------------------------------------------------------
 
+interface SubmissionCompletionResult {
+  status: Extract<
+    EsignSubmissionStatus,
+    'pending' | 'processing' | 'completed' | 'processing_failed'
+  >;
+  message?: string;
+}
+
 async function checkAndCompleteSubmission(
   communityId: number,
   submissionId: number,
-): Promise<void> {
+): Promise<SubmissionCompletionResult> {
   const scoped = createScopedClient(communityId);
 
   const signerRows = await scoped.selectFrom(
@@ -1003,22 +1292,46 @@ async function checkAndCompleteSubmission(
     eq(esignSigners.submissionId, submissionId),
   );
 
-  if (signerRows.length === 0) return;
+  if (signerRows.length === 0) {
+    return { status: 'pending' };
+  }
 
   const allCompleted = signerRows.every(
     (s) => (s as Record<string, unknown>).status === 'completed',
   );
-  if (!allCompleted) return;
+  if (!allCompleted) {
+    return { status: 'pending' };
+  }
 
   // Atomic guard: only one concurrent caller can claim the finalization slot
   const guardRows = await scoped.update(
     esignSubmissions,
-    { status: 'completing' },
+    { status: 'processing', updatedAt: new Date() },
     and(eq(esignSubmissions.id, submissionId), eq(esignSubmissions.status, 'pending')),
   );
 
   const sub = guardRows[0] as Record<string, unknown> | undefined;
-  if (!sub) return; // Another concurrent call already claimed finalization
+  if (!sub) {
+    const currentRows = await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.id, submissionId),
+    );
+    const currentStatus = (currentRows[0] as Record<string, unknown> | undefined)
+      ?.status;
+
+    if (
+      currentStatus === 'processing' ||
+      currentStatus === 'completed' ||
+      currentStatus === 'processing_failed'
+    ) {
+      return {
+        status: currentStatus,
+      } as SubmissionCompletionResult;
+    }
+
+    return { status: 'pending' };
+  }
 
   const tplRows = await scoped.selectFrom(
     esignTemplates,
@@ -1026,11 +1339,28 @@ async function checkAndCompleteSubmission(
     eq(esignTemplates.id, sub.templateId as number),
   );
 
-  const tpl = tplRows[0] as Record<string, unknown> | undefined;
-  if (!tpl) return;
+  const tpl = tplRows[0] as EsignTemplateRecord | undefined;
+  if (!tpl || !tpl.fieldsSchema || !hasRenderableSourceDocument(tpl)) {
+    const message =
+      'The signed document could not be finalized because the source PDF is unavailable.';
+
+    await scoped.update(
+      esignSubmissions,
+      { status: 'processing_failed', updatedAt: new Date() },
+      eq(esignSubmissions.id, submissionId),
+    );
+
+    await scoped.insert(esignEvents, {
+      communityId,
+      submissionId,
+      eventType: 'submission_processing_failed',
+      eventData: { message },
+    });
+
+    return { status: 'processing_failed', message };
+  }
 
   try {
-    const fieldsSchema = tpl.fieldsSchema as EsignFieldsSchema;
     const signers = signerRows.map((r) => {
       const row = r as Record<string, unknown>;
       return {
@@ -1040,13 +1370,13 @@ async function checkAndCompleteSubmission(
     });
 
     const pdfBytes = await flattenSignedPdf(
-      tpl.sourceDocumentPath as string,
+      tpl.sourceDocumentPath!,
       signers,
-      fieldsSchema,
+      tpl.fieldsSchema,
     );
 
     const hash = computeDocumentHash(pdfBytes);
-    const safeName = (tpl.name as string).replace(/[^a-zA-Z0-9-_]/g, '_');
+    const safeName = tpl.name.replace(/[^a-zA-Z0-9-_]/g, '_');
     const storagePath = await uploadSignedDocument(communityId, submissionId, pdfBytes, `${safeName}_signed.pdf`);
 
     await scoped.update(
@@ -1056,6 +1386,7 @@ async function checkAndCompleteSubmission(
         completedAt: new Date(),
         documentHash: hash,
         signedDocumentPath: storagePath,
+        updatedAt: new Date(),
       },
       eq(esignSubmissions.id, submissionId),
     );
@@ -1066,19 +1397,34 @@ async function checkAndCompleteSubmission(
       eventType: 'submission_completed',
       eventData: { documentHash: hash, signerCount: signerRows.length },
     });
+
+    return { status: 'completed' };
   } catch (error) {
     console.error('[esign-service] failed to finalize submission', {
       submissionId,
       error: error instanceof Error ? error.message : String(error),
     });
 
-    // Revert to pending so the finalization can be retried — do NOT mark completed
-    // without a signed document, as that would break the audit trail
+    const message =
+      'The signature was captured, but we could not finalize the signed document.';
+
     await scoped.update(
       esignSubmissions,
-      { status: 'pending' },
+      { status: 'processing_failed', updatedAt: new Date() },
       eq(esignSubmissions.id, submissionId),
     );
+
+    await scoped.insert(esignEvents, {
+      communityId,
+      submissionId,
+      eventType: 'submission_processing_failed',
+      eventData: {
+        message,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+
+    return { status: 'processing_failed', message };
   }
 }
 

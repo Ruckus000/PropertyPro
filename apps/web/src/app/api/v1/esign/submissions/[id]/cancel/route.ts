@@ -1,12 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { BadRequestError } from '@/lib/api/errors';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { BadRequestError, ValidationError } from '@/lib/api/errors';
+import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignWritePermission } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { cancelSubmission } from '@/lib/services/esign-service';
+
+const cancelSchema = z.object({
+  communityId: z.number().int().positive().optional(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -15,7 +21,19 @@ export const POST = withErrorHandler(
     if (!id || isNaN(id)) throw new BadRequestError('Invalid ID');
 
     const actorUserId = await requireAuthenticatedUserId();
-    const communityId = parseCommunityIdFromQuery(req);
+    const body: unknown = await req.json().catch(() => ({}));
+    const parseResult = cancelSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      throw new ValidationError('Invalid cancel payload', {
+        fields: formatZodErrors(parseResult.error),
+      });
+    }
+
+    const communityId =
+      parseResult.data.communityId !== undefined
+        ? parseCommunityIdFromBody(req, parseResult.data.communityId)
+        : parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignWritePermission(membership);
@@ -24,6 +42,6 @@ export const POST = withErrorHandler(
     const requestId = req.headers.get('x-request-id');
     await cancelSubmission(communityId, actorUserId, id, requestId);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ data: { success: true } });
   },
 );

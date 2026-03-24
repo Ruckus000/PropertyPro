@@ -39,6 +39,13 @@ interface SignerInput {
   email: string;
 }
 
+function templateHasSourceDocument(template: Pick<EsignTemplateRecord, 'sourceDocumentPath'>): boolean {
+  return (
+    typeof template.sourceDocumentPath === 'string' &&
+    template.sourceDocumentPath.trim().length > 0
+  );
+}
+
 export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
   const router = useRouter();
 
@@ -79,6 +86,9 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
   // Initialize signers when template selected
   const handleSelectTemplate = useCallback(
     (template: EsignTemplateRecord) => {
+      if (!templateHasSourceDocument(template)) {
+        return;
+      }
       setSelectedTemplate(template);
       setShowTemplateDropdown(false);
       setTemplateSearch('');
@@ -122,6 +132,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
   // Validation
   const isValid = useMemo(() => {
     if (!selectedTemplate) return false;
+    if (!templateHasSourceDocument(selectedTemplate)) return false;
     if (signers.length === 0) return false;
     return signers.every(
       (s) => s.name.trim() && s.email.trim() && s.email.includes('@'),
@@ -145,7 +156,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
           sortOrder: i,
         })),
         signingOrder,
-        sendEmail: true,
+        sendEmail: false,
         expiresAt: expiresAt.toISOString(),
         messageSubject: messageSubject.trim() || undefined,
         messageBody: messageBody.trim() || undefined,
@@ -193,6 +204,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
           </h2>
           <div className="relative">
             <div
+              data-testid="esign-template-select-trigger"
               className="w-full border border-edge-strong rounded-md px-3 py-2.5 flex items-center justify-between cursor-pointer hover:border-edge-strong transition-colors duration-quick"
               onClick={() => setShowTemplateDropdown((p) => !p)}
             >
@@ -236,21 +248,38 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                       </p>
                     )}
                   {filteredTemplates.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => handleSelectTemplate(t)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-surface-hover text-sm transition-colors duration-quick"
-                    >
-                      <span className="font-medium text-content">
-                        {t.name}
-                      </span>
-                      {t.description && (
-                        <span className="block text-xs text-content-disabled mt-0.5 truncate">
-                          {t.description}
-                        </span>
-                      )}
-                    </button>
+                    (() => {
+                      const isReady = templateHasSourceDocument(t);
+
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleSelectTemplate(t)}
+                          disabled={!isReady}
+                          aria-disabled={!isReady}
+                          className={`w-full text-left px-3 py-2.5 text-sm transition-colors duration-quick ${
+                            isReady
+                              ? 'hover:bg-surface-hover'
+                              : 'cursor-not-allowed opacity-60'
+                          }`}
+                        >
+                          <span className="font-medium text-content">
+                            {t.name}
+                          </span>
+                          {t.description && (
+                            <span className="block text-xs text-content-disabled mt-0.5 truncate">
+                              {t.description}
+                            </span>
+                          )}
+                          {!isReady && (
+                            <span className="block text-xs text-status-warning mt-1">
+                              Source PDF required before sending.
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -360,7 +389,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 <p className="text-xs text-content-disabled mt-1">
                   {signingOrder === 'parallel'
                     ? 'All signers can sign at the same time.'
-                    : 'Signers will be notified in order.'}
+                    : 'Signing links unlock in order. Share them from the submission detail page.'}
                 </p>
               </div>
 
