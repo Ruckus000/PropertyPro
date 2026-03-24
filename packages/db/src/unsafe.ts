@@ -4,7 +4,7 @@
  * This module is the only sanctioned escape hatch for unscoped database access.
  * Importers must treat usage as an exception and justify it in code review.
  */
-import { db } from './drizzle';
+import { closeDb, db } from './drizzle';
 
 export { findCommunityBySlugUnscoped } from './queries/community-lookup';
 export {
@@ -61,4 +61,11 @@ export {
  */
 export function createUnscopedClient(): typeof db {
   return db;
+}
+
+/**
+ * Closes the shared unscoped Drizzle client used by CLI scripts.
+ */
+export async function closeUnscopedClient(): Promise<void> {
+  await closeDb();
 }

@@ -115,6 +115,6 @@ export const DELETE = withErrorHandler(
     const requestId = req.headers.get('x-request-id');
     await archiveTemplate(communityId, actorUserId, id, requestId);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ data: { success: true } });
   },
 );

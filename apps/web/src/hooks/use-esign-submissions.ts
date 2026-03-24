@@ -57,6 +57,8 @@ export function useEsignSubmission(communityId: number, submissionId: number | n
         submission: EsignSubmissionRecord;
         signers: EsignSignerRecord[];
         events: EsignEventRecord[];
+        previewPdfUrl: string | null;
+        downloadUrl: string | null;
       }>(`/api/v1/esign/submissions/${submissionId}?communityId=${communityId}`),
     enabled: communityId > 0 && submissionId !== null,
   });
@@ -99,7 +101,7 @@ export function useCancelEsignSubmission(communityId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (submissionId: number) =>
-      requestJson<void>(`/api/v1/esign/submissions/${submissionId}/cancel`, {
+      requestJson<{ success: boolean }>(`/api/v1/esign/submissions/${submissionId}/cancel`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId }),
@@ -114,7 +116,7 @@ export function useSendEsignReminder(communityId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: { submissionId: number; signerId: number }) =>
-      requestJson<void>(
+      requestJson<{ success: boolean }>(
         `/api/v1/esign/submissions/${payload.submissionId}/remind`,
         {
           method: 'POST',

@@ -5,15 +5,17 @@
  * signer status / event timeline for a single e-sign submission.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card } from '@propertypro/ui';
 import type { BadgeVariant } from '@propertypro/ui';
+import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
 import {
   useEsignSubmission,
   useCancelEsignSubmission,
   useSendEsignReminder,
 } from '@/hooks/use-esign-submissions';
+import { PdfViewer } from '@/components/esign/pdf-viewer';
 import type {
   EsignSignerRecord,
   EsignEventRecord,
@@ -27,11 +29,12 @@ import {
   Send,
   Ban,
   Download,
-  Mail,
   Eye,
   FileSignature,
   Loader2,
   User,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 
 interface SubmissionDetailProps {
@@ -47,6 +50,8 @@ interface StatusConfigEntry {
 
 const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
   pending: { label: 'Pending', variant: 'warning', icon: Clock },
+  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
+  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
   opened: { label: 'Opened', variant: 'info', icon: Eye },
   completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
   declined: { label: 'Declined', variant: 'danger', icon: XCircle },
@@ -65,9 +70,10 @@ const EVENT_ICONS: Record<string, typeof Clock> = {
   declined: XCircle,
   expired: AlertTriangle,
   cancelled: Ban,
-  reminder_sent: Mail,
+  reminder_sent: Send,
   signer_completed: CheckCircle2,
   submission_completed: CheckCircle2,
+  submission_processing_failed: AlertTriangle,
   consent_given: CheckCircle2,
   verified: CheckCircle2,
   downloaded: Download,
@@ -91,6 +97,23 @@ function formatEventType(type: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function signerIsBlockedBySequence(
+  signingOrder: string,
+  signers: EsignSignerRecord[],
+  signer: EsignSignerRecord,
+): boolean {
+  if (signingOrder !== 'sequential') {
+    return false;
+  }
+
+  return signers.some(
+    (candidate) =>
+      candidate.id !== signer.id &&
+      candidate.sortOrder < signer.sortOrder &&
+      candidate.status !== 'completed',
+  );
+}
+
 export function SubmissionDetail({
   communityId,
   submissionId,
@@ -102,6 +125,7 @@ export function SubmissionDetail({
 
   const cancelMutation = useCancelEsignSubmission(communityId);
   const remindMutation = useSendEsignReminder(communityId);
+  const [currentPage, setCurrentPage] = useState(0);
 
   const handleCancel = useCallback(async () => {
     if (!confirm('Cancel this signing request? All pending signatures will be voided.')) {
@@ -110,11 +134,27 @@ export function SubmissionDetail({
     await cancelMutation.mutateAsync(submissionId);
   }, [submissionId, cancelMutation]);
 
+  const copySigningUrl = useCallback(
+    async (submissionExternalId: string, slug: string) => {
+      const url = `${window.location.origin}/sign/${submissionExternalId}/${slug}`;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        window.prompt('Copy signing link:', url);
+      }
+    },
+    [],
+  );
+
+  const openDownload = useCallback((downloadUrl: string) => {
+    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+  }, []);
+
   const handleRemind = useCallback(
     async (signerId: number) => {
       await remindMutation.mutateAsync({ submissionId, signerId });
     },
-    [submissionId, remindMutation],
+    [remindMutation, submissionId],
   );
 
   if (isLoading) {
@@ -145,9 +185,10 @@ export function SubmissionDetail({
   }
 
   const { submission, signers, events } = data;
-  const submissionConfig = STATUS_CONFIG[submission.status] ?? DEFAULT_STATUS;
+  const effectiveStatus = submission.effectiveStatus ?? submission.status;
+  const submissionConfig = STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
   const SubIcon = submissionConfig.icon;
-  const isPending = submission.status === 'pending';
+  const isPending = effectiveStatus === 'pending';
 
   return (
     <div>
@@ -165,14 +206,28 @@ export function SubmissionDetail({
         {/* Left: PDF preview */}
         <div className="lg:col-span-3">
           <Card className="overflow-hidden">
-            <div className="relative min-h-[500px] bg-surface-muted flex items-center justify-center">
-              <div className="text-center">
-                <FileSignature className="h-12 w-12 mx-auto text-content-disabled mb-3" />
-                <p className="text-sm text-content-disabled">
-                  PDF Document Preview
-                </p>
+            {data.previewPdfUrl ? (
+              <div className="p-4">
+                <PdfViewer
+                  pdfUrl={data.previewPdfUrl}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onDocumentLoad={({ totalPages }) => {
+                    setCurrentPage((page) => Math.min(page, Math.max(totalPages - 1, 0)));
+                  }}
+                  scale={1}
+                />
               </div>
-            </div>
+            ) : (
+              <div className="relative min-h-[500px] bg-surface-muted flex items-center justify-center">
+                <div className="text-center">
+                  <FileSignature className="h-12 w-12 mx-auto text-content-disabled mb-3" />
+                  <p className="text-sm text-content-disabled">
+                    PDF preview unavailable
+                  </p>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
 
@@ -231,9 +286,21 @@ export function SubmissionDetail({
                 const signerConfig =
                   STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
+                const blockedBySequence = signerIsBlockedBySequence(
+                  submission.signingOrder,
+                  signers,
+                  signer,
+                );
+                const showSigningLink =
+                  Boolean(signer.slug) &&
+                  isPending &&
+                  !blockedBySequence &&
+                  (signer.status === 'pending' || signer.status === 'opened');
                 const canRemind =
                   isPending &&
-                  (signer.status === 'pending' || signer.status === 'opened');
+                  !blockedBySequence &&
+                  (signer.status === 'pending' || signer.status === 'opened') &&
+                  signer.reminderCount < ESIGN_MAX_REMINDERS;
 
                 return (
                   <div
@@ -263,18 +330,72 @@ export function SubmissionDetail({
                         {signer.completedAt &&
                           ` \u00B7 Signed ${formatDateTime(signer.completedAt)}`}
                       </p>
+                      {(signer.reminderCount > 0 || signer.lastReminderAt) && (
+                        <p className="text-xs text-content-disabled mt-1">
+                          {`Reminders sent: ${signer.reminderCount}`}
+                          {signer.lastReminderAt &&
+                            ` \u00B7 Last reminder ${formatDateTime(signer.lastReminderAt)}`}
+                        </p>
+                      )}
+                      {showSigningLink && signer.slug && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            data-testid={`esign-copy-signing-link-${signer.id}`}
+                            onClick={() =>
+                              copySigningUrl(submission.externalId, signer.slug!)
+                            }
+                          >
+                            <Copy className="h-3.5 w-3.5 mr-1" />
+                            Copy signing link
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            data-testid={`esign-open-signing-link-${signer.id}`}
+                            onClick={() =>
+                              window.open(
+                                `/sign/${submission.externalId}/${signer.slug}`,
+                                '_blank',
+                                'noopener,noreferrer',
+                              )
+                            }
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                            Open signing page
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            data-testid={`esign-send-reminder-${signer.id}`}
+                            onClick={() => handleRemind(signer.id)}
+                            disabled={remindMutation.isPending || !canRemind}
+                          >
+                            <Send className="h-3.5 w-3.5 mr-1" />
+                            Send reminder
+                          </Button>
+                        </div>
+                      )}
+                      {showSigningLink && (
+                        <p className="text-xs text-content-disabled mt-2">
+                          Share the signing link above if this signer needs a nudge.
+                        </p>
+                      )}
+                      {!showSigningLink && blockedBySequence && isPending && (
+                        <p className="text-xs text-content-disabled mt-2">
+                          Signing link unlocks after earlier signers complete the document.
+                        </p>
+                      )}
+                      {!showSigningLink && !blockedBySequence && signer.reminderCount >= ESIGN_MAX_REMINDERS && (
+                        <p className="text-xs text-content-disabled mt-2">
+                          Maximum reminders sent for this signer.
+                        </p>
+                      )}
                     </div>
-                    {canRemind && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemind(signer.id)}
-                        disabled={remindMutation.isPending}
-                        title="Send reminder"
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
                   </div>
                 );
               })}
@@ -296,8 +417,12 @@ export function SubmissionDetail({
             </div>
           )}
 
-          {submission.signedDocumentPath && (
-            <Button variant="secondary" className="w-full">
+          {data.downloadUrl && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => openDownload(data.downloadUrl!)}
+            >
               <Download className="h-4 w-4 mr-2" />
               Download Signed Document
             </Button>

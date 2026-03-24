@@ -17,6 +17,8 @@ const {
   flattenSignedPdfMock,
   computeDocumentHashMock,
   uploadSignedDocumentMock,
+  sendEmailMock,
+  esignReminderEmailMock,
   eqMock,
   andMock,
   isNullMock,
@@ -55,6 +57,8 @@ const {
   flattenSignedPdfMock: vi.fn(),
   computeDocumentHashMock: vi.fn(),
   uploadSignedDocumentMock: vi.fn(),
+  sendEmailMock: vi.fn(),
+  esignReminderEmailMock: vi.fn(() => ({ type: 'EsignReminderEmail' })),
   eqMock: vi.fn((...args: unknown[]) => ({ type: 'eq', args })),
   andMock: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
   isNullMock: vi.fn((...args: unknown[]) => ({ type: 'isNull', args })),
@@ -86,6 +90,11 @@ vi.mock('../../src/lib/services/esign-pdf-service', () => ({
   flattenSignedPdf: flattenSignedPdfMock,
   computeDocumentHash: computeDocumentHashMock,
   uploadSignedDocument: uploadSignedDocumentMock,
+}));
+
+vi.mock('@propertypro/email', () => ({
+  sendEmail: sendEmailMock,
+  EsignReminderEmail: esignReminderEmailMock,
 }));
 
 import type { EsignFieldsSchema } from '@propertypro/shared';
@@ -142,6 +151,81 @@ function validFieldsSchema(extra: Partial<EsignFieldsSchema> = {}): EsignFieldsS
   };
 }
 
+function makeReminderSigner(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    communityId: 1,
+    submissionId: 10,
+    email: 'a@test.com',
+    name: 'Alice',
+    role: 'signer',
+    sortOrder: 0,
+    status: 'pending',
+    slug: 'slug-1',
+    reminderCount: 0,
+    lastReminderAt: null,
+    ...overrides,
+  };
+}
+
+function makeReminderSubmission(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 10,
+    communityId: 1,
+    templateId: 3,
+    externalId: 'sub-ext',
+    status: 'pending',
+    signingOrder: 'parallel',
+    expiresAt: null,
+    completedAt: null,
+    signedDocumentPath: null,
+    messageSubject: null,
+    messageBody: null,
+    createdBy: 'user-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeReminderTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 3,
+    communityId: 1,
+    name: 'Proxy Form',
+    sourceDocumentPath: 'communities/1/esign-templates/proxy.pdf',
+    fieldsSchema: validFieldsSchema(),
+    templateType: 'custom',
+    ...overrides,
+  };
+}
+
+function queueReminderSelects(
+  scoped: { selectFrom: ReturnType<typeof vi.fn> },
+  {
+    signer = makeReminderSigner(),
+    submission = makeReminderSubmission(),
+    signers = [signer],
+    template = makeReminderTemplate(),
+  }: {
+    signer?: Record<string, unknown>;
+    submission?: Record<string, unknown>;
+    signers?: Record<string, unknown>[];
+    template?: Record<string, unknown>;
+  } = {},
+): void {
+  let callCount = 0;
+  scoped.selectFrom = vi.fn(async () => {
+    callCount++;
+    if (callCount === 1) return [signer];
+    if (callCount === 2) return [submission];
+    if (callCount === 3) return signers;
+    if (callCount === 4) return [];
+    if (callCount === 5) return [template];
+    return [];
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -150,6 +234,7 @@ describe('esign-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     logAuditEventMock.mockResolvedValue(undefined);
+    sendEmailMock.mockResolvedValue({ id: 'email-1' });
   });
 
   // =========================================================================
@@ -394,6 +479,7 @@ describe('esign-service', () => {
             id: 1,
             communityId: 1,
             fieldsSchema: validFieldsSchema(),
+            sourceDocumentPath: 'test.pdf',
             status: 'active',
             name: 'Template',
           },
@@ -560,7 +646,11 @@ describe('esign-service', () => {
 
   describe('createSubmission', () => {
     it('rejects if template has no field definitions', async () => {
-      const scoped = makeScopedMock({ fieldsSchema: null, status: 'active' });
+      const scoped = makeScopedMock({
+        fieldsSchema: null,
+        sourceDocumentPath: 'test.pdf',
+        status: 'active',
+      });
       createScopedClientMock.mockReturnValue(scoped);
 
       await expect(
@@ -576,6 +666,7 @@ describe('esign-service', () => {
     it('rejects signer with role not defined in template', async () => {
       const scoped = makeScopedMock({
         fieldsSchema: validFieldsSchema(),
+        sourceDocumentPath: 'test.pdf',
         status: 'active',
       });
       createScopedClientMock.mockReturnValue(scoped);
@@ -590,6 +681,24 @@ describe('esign-service', () => {
       ).rejects.toThrow('Signer role "bad_role" not defined in template');
     });
 
+    it('rejects templates without a source PDF', async () => {
+      const scoped = makeScopedMock({
+        fieldsSchema: validFieldsSchema(),
+        sourceDocumentPath: null,
+        status: 'active',
+      });
+      createScopedClientMock.mockReturnValue(scoped);
+
+      await expect(
+        createSubmission(1, 'user-1', {
+          templateId: 1,
+          signers: [{ email: 'a@test.com', name: 'A', role: 'signer', sortOrder: 0 }],
+          signingOrder: 'parallel',
+          sendEmail: false,
+        }),
+      ).rejects.toThrow('Template must have a source PDF before it can be sent for signing');
+    });
+
     it('creates submission, signers, and event on success', async () => {
       const insertCalls: unknown[] = [];
       const scoped = {
@@ -598,6 +707,7 @@ describe('esign-service', () => {
             id: 1,
             communityId: 1,
             fieldsSchema: validFieldsSchema(),
+            sourceDocumentPath: 'test.pdf',
             status: 'active',
             name: 'Template',
           },
@@ -640,10 +750,21 @@ describe('esign-service', () => {
 
     it('filters by status', async () => {
       const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 1, communityId: 1, status: 'pending', expiresAt: null },
+        { id: 2, communityId: 1, status: 'pending', expiresAt: '2025-01-01T00:00:00.000Z' },
+      ]);
       createScopedClientMock.mockReturnValue(scoped);
 
-      await listSubmissions(1, { status: 'pending' });
-      expect(eqMock).toHaveBeenCalledWith(esignSubmissionsTable.status, 'pending');
+      const pending = await listSubmissions(1, { status: 'pending' });
+      const expired = await listSubmissions(1, { status: 'expired' });
+
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.id).toBe(1);
+      expect(pending[0]?.effectiveStatus).toBe('pending');
+      expect(expired).toHaveLength(1);
+      expect(expired[0]?.id).toBe(2);
+      expect(expired[0]?.effectiveStatus).toBe('expired');
     });
   });
 
@@ -723,6 +844,19 @@ describe('esign-service', () => {
   // =========================================================================
 
   describe('sendReminder', () => {
+    const makeCommunityAdmin = () => ({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            limit: vi.fn(async () => ({
+              data: [{ name: 'Sunset Condos', timezone: 'America/New_York' }],
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    });
+
     it('throws NotFoundError when signer not found', async () => {
       const scoped = makeScopedMock();
       scoped.selectFrom = vi.fn(async () => []);
@@ -733,9 +867,9 @@ describe('esign-service', () => {
 
     it('throws when signer status is completed', async () => {
       const scoped = makeScopedMock();
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'completed', reminderCount: 0, submissionId: 1 },
-      ]);
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ status: 'completed' }),
+      });
       createScopedClientMock.mockReturnValue(scoped);
 
       await expect(sendReminder(1, 'user-1', 1, 1)).rejects.toThrow(
@@ -745,9 +879,9 @@ describe('esign-service', () => {
 
     it('throws when signer status is declined', async () => {
       const scoped = makeScopedMock();
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'declined', reminderCount: 0, submissionId: 1 },
-      ]);
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ status: 'declined' }),
+      });
       createScopedClientMock.mockReturnValue(scoped);
 
       await expect(sendReminder(1, 'user-1', 1, 1)).rejects.toThrow(
@@ -757,9 +891,9 @@ describe('esign-service', () => {
 
     it('throws when reminder count >= ESIGN_MAX_REMINDERS (3)', async () => {
       const scoped = makeScopedMock();
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'pending', reminderCount: 3, submissionId: 1 },
-      ]);
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ reminderCount: 3 }),
+      });
       createScopedClientMock.mockReturnValue(scoped);
 
       await expect(sendReminder(1, 'user-1', 1, 1)).rejects.toThrow(
@@ -769,16 +903,37 @@ describe('esign-service', () => {
 
     it('increments reminder count and logs event on success', async () => {
       const scoped = makeScopedMock();
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'pending', reminderCount: 1, submissionId: 10 },
-      ]);
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ reminderCount: 1 }),
+        signers: [makeReminderSigner({ reminderCount: 1 })],
+      });
       createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
 
       await sendReminder(1, 'user-1', 10, 1);
 
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(sendEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'a@test.com',
+          subject: 'Reminder: Signature needed for Proxy Form',
+        }),
+      );
+      expect(esignReminderEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branding: expect.objectContaining({ communityName: 'Sunset Condos' }),
+          signerName: 'Alice',
+          documentName: 'Proxy Form',
+          signingUrl: 'http://localhost:3000/sign/sub-ext/slug-1',
+          reminderNumber: 2,
+        }),
+      );
       expect(scoped.update).toHaveBeenCalledWith(
         esignSignersTable,
-        expect.objectContaining({ reminderCount: 2 }),
+        expect.objectContaining({
+          reminderCount: 2,
+          lastReminderAt: expect.any(Date),
+        }),
         expect.anything(),
       );
       expect(scoped.insert).toHaveBeenCalledWith(
@@ -795,14 +950,28 @@ describe('esign-service', () => {
 
     it('allows reminders for opened signers', async () => {
       const scoped = makeScopedMock();
-      scoped.selectFrom = vi.fn(async () => [
-        { id: 1, communityId: 1, status: 'opened', reminderCount: 0, submissionId: 10 },
-      ]);
+      queueReminderSelects(scoped, {
+        signer: makeReminderSigner({ status: 'opened' }),
+        signers: [makeReminderSigner({ status: 'opened' })],
+      });
       createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
 
       await sendReminder(1, 'user-1', 10, 1);
 
       expect(scoped.update).toHaveBeenCalled();
+    });
+
+    it('does not mutate reminder state when email delivery fails', async () => {
+      const scoped = makeScopedMock();
+      queueReminderSelects(scoped);
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
+      sendEmailMock.mockRejectedValueOnce(new Error('smtp down'));
+
+      await expect(sendReminder(1, 'user-1', 10, 1)).rejects.toThrow('smtp down');
+      expect(scoped.update).not.toHaveBeenCalled();
+      expect(scoped.insert).not.toHaveBeenCalled();
     });
 
     it('fails when signerId does not belong to the given submissionId (cross-submission)', async () => {
