@@ -874,79 +874,54 @@ async function seedCommunityCompliance(
   }
 }
 
-async function seedCondoHoaUnits(
+/**
+ * Seed units for a community — idempotent (skips existing units).
+ * Shared by both condo/HOA and apartment seeding paths.
+ */
+async function seedUnits(
   communityId: number,
+  unitNumbers: string[],
 ): Promise<{ unitIds: number[]; unitNumbers: string[] }> {
-  const unitNumbers = ['1A', '1B', '2A', '2B', '3A', '3B'];
+  const existing = await db
+    .select({ id: units.id, unitNumber: units.unitNumber })
+    .from(units)
+    .where(eq(units.communityId, communityId));
+
+  const existingByNumber = new Map(existing.map((u) => [u.unitNumber, u.id]));
   const unitIds: number[] = [];
 
-  for (const unitNumber of unitNumbers) {
-    const existing = await db
-      .select({ id: units.id })
-      .from(units)
-      .where(
-        and(
-          eq(units.communityId, communityId),
-          eq(units.unitNumber, unitNumber),
-        ),
-      )
-      .limit(1);
-
-    if (existing[0]) {
-      unitIds.push(existing[0].id);
-      continue;
-    }
-
-    const [created] = await db
+  // Collect units that need to be inserted
+  const toInsert = unitNumbers.filter((un) => !existingByNumber.has(un));
+  if (toInsert.length > 0) {
+    const inserted = await db
       .insert(units)
-      .values({ communityId, unitNumber })
-      .returning({ id: units.id });
+      .values(toInsert.map((unitNumber) => ({ communityId, unitNumber })))
+      .returning({ id: units.id, unitNumber: units.unitNumber });
 
-    unitIds.push(created!.id);
+    for (const row of inserted) {
+      existingByNumber.set(row.unitNumber, row.id);
+    }
+  }
+
+  // Return IDs in the same order as the input unitNumbers
+  for (const un of unitNumbers) {
+    unitIds.push(existingByNumber.get(un)!);
   }
 
   return { unitIds, unitNumbers };
 }
 
-async function seedApartmentUnits(communityId: number): Promise<{ unitIds: number[]; unitNumbers: string[] }> {
-  const unitNumbers = [
+function seedCondoHoaUnits(communityId: number) {
+  return seedUnits(communityId, ['1A', '1B', '2A', '2B', '3A', '3B']);
+}
+
+function seedApartmentUnits(communityId: number) {
+  return seedUnits(communityId, [
     '101', '102', '103', '104', '105', '106',
     '201', '202', '203', '204', '205', '206',
     '301', '302', '303', '304', '305', '306',
     '401', '402', '403', '404',
-  ];
-
-  const unitIds: number[] = [];
-
-  for (const unitNumber of unitNumbers) {
-    const existing = await db
-      .select({ id: units.id })
-      .from(units)
-      .where(
-        and(
-          eq(units.communityId, communityId),
-          eq(units.unitNumber, unitNumber),
-        ),
-      )
-      .limit(1);
-
-    if (existing[0]) {
-      unitIds.push(existing[0].id);
-      continue;
-    }
-
-    const [created] = await db
-      .insert(units)
-      .values({
-        communityId,
-        unitNumber,
-      })
-      .returning({ id: units.id });
-
-    unitIds.push(created!.id);
-  }
-
-  return { unitIds, unitNumbers };
+  ]);
 }
 
 async function seedApartmentLeases(

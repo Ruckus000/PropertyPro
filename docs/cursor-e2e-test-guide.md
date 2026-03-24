@@ -269,7 +269,7 @@ For a **full send-to-sign** pass through the real staff and public UIs, continue
 |------|--------|----------------|
 | 3B.1 | Documents page loads | Documents library shows Palm Shores HOA documents. |
 | 3B.2 | Meetings page loads | Calendar with Palm Shores meetings. |
-| 3B.3 | Violations inbox | Should show 4 violations for Palm Shores. |
+| 3B.3 | Violations inbox | Should show 2 violations for Palm Shores. |
 | 3B.4 | Switch back to Sunset Condos via `/select-community` | Verify you can switch communities cleanly. |
 
 ### 3C — E-Sign: send and sign (full browser flow)

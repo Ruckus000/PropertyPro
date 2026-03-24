@@ -832,17 +832,19 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
       .limit(1);
 
     if (firstUnit[0]) {
-      await db
-        .update(units)
-        .set({ ownerUserId, updatedAt: new Date() })
-        .where(eq(units.id, firstUnit[0].id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(units)
+          .set({ ownerUserId, updatedAt: new Date() })
+          .where(eq(units.id, firstUnit[0]!.id));
 
-      await db.execute(sql`
-        UPDATE user_roles
-        SET unit_id = ${firstUnit[0].id}
-        WHERE community_id = ${sunsetCommunityId}
-          AND user_id = ${ownerUserId}
-      `);
+        await tx.execute(sql`
+          UPDATE user_roles
+          SET unit_id = ${firstUnit[0]!.id}
+          WHERE community_id = ${sunsetCommunityId}
+            AND user_id = ${ownerUserId}
+        `);
+      });
       debugSeed(`linked owner to unit ${firstUnit[0].id} in community ${sunsetCommunityId}`);
     }
   }
