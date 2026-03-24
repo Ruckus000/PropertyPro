@@ -9,6 +9,7 @@ const {
   getSignerContextMock,
   submitSignatureMock,
   declineSigningMock,
+  cancelSubmissionMock,
   getConsentStatusMock,
   revokeConsentMock,
   sendReminderMock,
@@ -19,10 +20,12 @@ const {
   parseCommunityIdFromBodyMock,
   requireEsignReadPermissionMock,
   requireEsignWritePermissionMock,
+  getTemplateMock,
 } = vi.hoisted(() => ({
   getSignerContextMock: vi.fn(),
   submitSignatureMock: vi.fn(),
   declineSigningMock: vi.fn(),
+  cancelSubmissionMock: vi.fn(),
   getConsentStatusMock: vi.fn(),
   revokeConsentMock: vi.fn(),
   sendReminderMock: vi.fn(),
@@ -33,6 +36,7 @@ const {
   parseCommunityIdFromBodyMock: vi.fn(),
   requireEsignReadPermissionMock: vi.fn(),
   requireEsignWritePermissionMock: vi.fn(),
+  getTemplateMock: vi.fn(),
 }));
 
 // Mock the esign service
@@ -40,9 +44,11 @@ vi.mock('@/lib/services/esign-service', () => ({
   getSignerContext: getSignerContextMock,
   submitSignature: submitSignatureMock,
   declineSigning: declineSigningMock,
+  cancelSubmission: cancelSubmissionMock,
   getConsentStatus: getConsentStatusMock,
   revokeConsent: revokeConsentMock,
   sendReminder: sendReminderMock,
+  getTemplate: getTemplateMock,
 }));
 
 // Mock auth
@@ -108,7 +114,9 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 
 import { GET as signingGET, POST as signingPOST } from '../../src/app/api/v1/esign/sign/[submissionExternalId]/[slug]/route';
 import { GET as consentGET, DELETE as consentDELETE } from '../../src/app/api/v1/esign/consent/route';
+import { POST as cancelPOST } from '../../src/app/api/v1/esign/submissions/[id]/cancel/route';
 import { POST as remindPOST } from '../../src/app/api/v1/esign/submissions/[id]/remind/route';
+import { GET as templatePdfGET } from '../../src/app/api/v1/esign/templates/[id]/pdf/route';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -213,6 +221,7 @@ describe('E-Sign Routes', () => {
 
       // Should contain the presigned URL, not the raw path
       expect(json.data.pdfUrl).toBe(presignedUrl);
+      expect(getSignerContextMock).toHaveBeenCalledWith('test-slug', 'sub-ext');
       expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
         'documents',
         'communities/1/esign/template.pdf',
@@ -337,7 +346,25 @@ describe('E-Sign Routes', () => {
         expect.objectContaining({ consentGiven: true }),
         '192.168.1.1',
         'TestBrowser/1.0',
+        'sub-ext',
       );
+    });
+
+    it('rejects an empty signedValues payload', async () => {
+      const body = {
+        signedValues: {},
+        consentGiven: true,
+      };
+
+      const req = makeRequest('/api/v1/esign/sign/sub-ext/test-slug', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+      });
+      const context = makeRouteParams({ submissionExternalId: 'sub-ext', slug: 'test-slug' });
+
+      await expect(signingPOST(req, context)).rejects.toThrow();
+      expect(submitSignatureMock).not.toHaveBeenCalled();
     });
 
     it('rejects payload missing consentGiven', async () => {
@@ -415,7 +442,11 @@ describe('E-Sign Routes', () => {
       const json = await response.json();
 
       expect(json.data.success).toBe(true);
-      expect(declineSigningMock).toHaveBeenCalledWith('test-slug', 'I do not agree with the terms');
+      expect(declineSigningMock).toHaveBeenCalledWith(
+        'test-slug',
+        'I do not agree with the terms',
+        'sub-ext',
+      );
       expect(submitSignatureMock).not.toHaveBeenCalled();
     });
   });
@@ -453,9 +484,28 @@ describe('E-Sign Routes', () => {
       const response = await consentDELETE(req);
       const json = await response.json();
 
-      expect(json.success).toBe(true);
+      expect(json.data.success).toBe(true);
       expect(requireEsignWritePermissionMock).toHaveBeenCalled();
       expect(revokeConsentMock).toHaveBeenCalledWith(1, 'user-1', 'req-123');
+    });
+  });
+
+  describe('POST /api/v1/esign/submissions/[id]/cancel', () => {
+    it('cancels a submission using communityId from the request body', async () => {
+      cancelSubmissionMock.mockResolvedValue(undefined);
+
+      const req = makeRequest('/api/v1/esign/submissions/12/cancel', {
+        method: 'POST',
+        body: JSON.stringify({ communityId: 1 }),
+        headers: { 'content-type': 'application/json', 'x-request-id': 'req-999' },
+      });
+      const context = makeRouteParams({ id: '12' });
+
+      const response = await cancelPOST(req, context);
+      const json = await response.json();
+
+      expect(json.data.success).toBe(true);
+      expect(cancelSubmissionMock).toHaveBeenCalledWith(1, 'user-1', 12, 'req-999');
     });
   });
 
@@ -478,7 +528,7 @@ describe('E-Sign Routes', () => {
       const response = await remindPOST(req, context);
       const json = await response.json();
 
-      expect(json.success).toBe(true);
+      expect(json.data.success).toBe(true);
       // Verify submissionId (10) is passed from URL params
       expect(sendReminderMock).toHaveBeenCalledWith(1, 'user-1', 10, 42, 'req-456');
     });
@@ -521,6 +571,81 @@ describe('E-Sign Routes', () => {
       const context = makeRouteParams({ id: '10' });
 
       await expect(remindPOST(req, context)).rejects.toThrow();
+    });
+  });
+
+  // =========================================================================
+  // Template PDF preview route
+  // =========================================================================
+
+  describe('GET /api/v1/esign/templates/[id]/pdf', () => {
+    it('returns presigned URL for template with sourceDocumentPath', async () => {
+      const presignedUrl = 'https://supabase.storage/signed-url?token=xyz';
+      createPresignedDownloadUrlMock.mockResolvedValue(presignedUrl);
+
+      getTemplateMock.mockResolvedValue({
+        id: 5,
+        name: 'Violation Acknowledgment',
+        sourceDocumentPath: 'communities/1/esign/violation-ack.pdf',
+      });
+
+      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
+      const context = makeRouteParams({ id: '5' });
+
+      const response = await templatePdfGET(req, context);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.pdfUrl).toBe(presignedUrl);
+      expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
+        'documents',
+        'communities/1/esign/violation-ack.pdf',
+      );
+      expect(requireEsignReadPermissionMock).toHaveBeenCalled();
+    });
+
+    it('returns 404 when template has no sourceDocumentPath', async () => {
+      getTemplateMock.mockResolvedValue({
+        id: 5,
+        name: 'Empty Template',
+        sourceDocumentPath: null,
+      });
+
+      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
+      const context = makeRouteParams({ id: '5' });
+
+      const response = await templatePdfGET(req, context);
+      const json = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(json.error.code).toBe('NOT_FOUND');
+      expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when presigned URL generation fails', async () => {
+      createPresignedDownloadUrlMock.mockRejectedValue(new Error('Object not found'));
+
+      getTemplateMock.mockResolvedValue({
+        id: 5,
+        name: 'Template',
+        sourceDocumentPath: 'communities/1/esign/missing.pdf',
+      });
+
+      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
+      const context = makeRouteParams({ id: '5' });
+
+      const response = await templatePdfGET(req, context);
+      const json = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(json.error.code).toBe('NOT_FOUND');
+    });
+
+    it('rejects invalid template ID', async () => {
+      const req = makeRequest('/api/v1/esign/templates/abc/pdf?communityId=1');
+      const context = makeRouteParams({ id: 'abc' });
+
+      await expect(templatePdfGET(req, context)).rejects.toThrow('Invalid ID');
     });
   });
 });

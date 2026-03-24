@@ -7,7 +7,7 @@
  * and action buttons (Send for Signing, Edit Fields, Clone, Archive).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -98,6 +98,33 @@ export function TemplateDetailClient({
   const [pageDimensions, setPageDimensions] = useState<PageDimension[]>([]);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneName, setCloneName] = useState('');
+  const [presignedPdfUrl, setPresignedPdfUrl] = useState<string | null>(null);
+  const [pdfFetchError, setPdfFetchError] = useState(false);
+  const [pdfFetchAttempt, setPdfFetchAttempt] = useState(0);
+
+  // Fetch presigned PDF URL when template loads (or on retry)
+  useEffect(() => {
+    if (!template?.sourceDocumentPath) return;
+    let cancelled = false;
+    setPdfFetchError(false);
+    setPresignedPdfUrl(null);
+
+    fetch(`/api/v1/esign/templates/${templateId}/pdf?communityId=${communityId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (cancelled) return;
+        if (json?.data?.pdfUrl) {
+          setPresignedPdfUrl(json.data.pdfUrl);
+        } else {
+          setPdfFetchError(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPdfFetchError(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [template?.sourceDocumentPath, templateId, communityId, pdfFetchAttempt]);
 
   // -----------------------------------------------------------------------
   // Derived state
@@ -303,23 +330,43 @@ export function TemplateDetailClient({
 
       {/* PDF preview with field overlay */}
       {template.sourceDocumentPath ? (
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-6">
-          <PdfViewer
-            pdfUrl={`/api/v1/esign/templates/${templateId}/pdf?communityId=${communityId}`}
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            onDocumentLoad={handleDocumentLoad}
-            scale={1}
-          >
-            <FieldOverlay
-              fields={fields}
-              pageDimensions={currentDimensions}
+        presignedPdfUrl ? (
+          <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-6">
+            <PdfViewer
+              pdfUrl={presignedPdfUrl}
               currentPage={currentPage}
-              mode="view"
-              signerRoleColors={signerRoleColors}
-            />
-          </PdfViewer>
-        </div>
+              onPageChange={setCurrentPage}
+              onDocumentLoad={handleDocumentLoad}
+              scale={1}
+            >
+              <FieldOverlay
+                fields={fields}
+                pageDimensions={currentDimensions}
+                currentPage={currentPage}
+                mode="view"
+                signerRoleColors={signerRoleColors}
+              />
+            </PdfViewer>
+          </div>
+        ) : pdfFetchError ? (
+          <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">
+            <p className="text-sm text-[var(--status-danger)]">We couldn&apos;t load the PDF preview. Please try again.</p>
+            <button
+              type="button"
+              onClick={() => setPdfFetchAttempt((n) => n + 1)}
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--interactive-primary-hover)] transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
+              <p className="text-sm text-[var(--text-tertiary)]">Loading PDF preview...</p>
+            </div>
+          </div>
+        )
       ) : (
         <div className="flex items-center justify-center rounded-lg border border-dashed border-[var(--border-subtle)] bg-[var(--surface-card)] py-16">
           <p className="text-sm text-[var(--text-tertiary)]">

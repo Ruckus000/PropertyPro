@@ -14,16 +14,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist/build/pdf.mjs';
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 
-/** Lazily load pdfjs-dist (browser-only) and configure the worker. */
-async function loadPdfJs() {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-  ).toString();
+type PdfJsModule = typeof import('pdfjs-dist/build/pdf.mjs');
+
+/** Load the browser bundle from a same-origin route to avoid Next webpack interop bugs. */
+async function loadPdfJs(): Promise<PdfJsModule> {
+  const pdfjs = (await import(
+    /* webpackIgnore: true */
+    '/pdfjs/pdf.mjs'
+  )) as PdfJsModule;
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
   return pdfjs;
 }
 
@@ -42,7 +44,10 @@ interface DocumentMeta {
 }
 
 export interface PdfViewerProps {
-  pdfUrl: string;
+  /** URL to fetch the PDF from (presigned URL or API endpoint). */
+  pdfUrl?: string;
+  /** Raw PDF bytes — avoids blob URLs and CSP issues for local file previews. */
+  pdfData?: Uint8Array;
   currentPage: number;
   onPageChange: (page: number) => void;
   onDocumentLoad: (meta: DocumentMeta) => void;
@@ -57,6 +62,7 @@ export interface PdfViewerProps {
 
 export function PdfViewer({
   pdfUrl,
+  pdfData,
   currentPage,
   onPageChange,
   onDocumentLoad,
@@ -83,11 +89,15 @@ export function PdfViewer({
   // Load PDF document
   // -----------------------------------------------------------------------
   const loadDocument = useCallback(async () => {
+    if (!pdfUrl && !pdfData) return;
     setLoading(true);
     setError(null);
     try {
       const pdfjs = await loadPdfJs();
-      const loadingTask = pdfjs.getDocument(pdfUrl);
+      // Copy pdfData so the original ArrayBuffer isn't detached when PDF.js
+      // transfers it to its worker thread via postMessage.
+      const source = pdfData ? { data: pdfData.slice() } : pdfUrl!;
+      const loadingTask = pdfjs.getDocument(source);
       const pdf = await loadingTask.promise;
       pdfDocRef.current = pdf;
       setTotalPages(pdf.numPages);
@@ -106,7 +116,7 @@ export function PdfViewer({
       setError(err instanceof Error ? err.message : 'Failed to load PDF');
       setLoading(false);
     }
-  }, [pdfUrl, onDocumentLoad]);
+  }, [pdfUrl, pdfData, onDocumentLoad]);
 
   useEffect(() => {
     void loadDocument();
@@ -117,7 +127,7 @@ export function PdfViewer({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl]);
+  }, [pdfUrl, pdfData]);
 
   // -----------------------------------------------------------------------
   // Render current page
@@ -140,6 +150,11 @@ export function PdfViewer({
         const page = await pdf!.getPage(currentPage + 1); // pdfjs is 1-indexed
         const viewport = page.getViewport({ scale });
         const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
+        const canvasContext = canvas!.getContext('2d');
+
+        if (!canvasContext) {
+          throw new Error('PDF preview could not acquire a rendering context');
+        }
 
         canvas!.width = Math.floor(viewport.width * dpr);
         canvas!.height = Math.floor(viewport.height * dpr);
@@ -151,7 +166,13 @@ export function PdfViewer({
           height: viewport.height,
         });
 
-        const task = page.render({ canvas: canvas!, viewport });
+        const task = page.render({
+          canvasContext,
+          viewport,
+          ...(dpr !== 1
+            ? { transform: [dpr, 0, 0, dpr, 0, 0] as const }
+            : {}),
+        });
         renderTaskRef.current = task;
         await task.promise;
 

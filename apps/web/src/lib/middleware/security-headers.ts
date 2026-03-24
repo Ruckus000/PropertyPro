@@ -147,6 +147,7 @@ export function buildCspHeader(options?: { isPreview?: boolean }): string {
     `img-src 'self' data: blob: https://${supabaseHost}`,
     `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
     "font-src 'self' data:",
+    "worker-src 'self'",
     options?.isPreview
       ? `frame-ancestors 'self' ${getAdminOrigins()}`
       : "frame-ancestors 'none'",

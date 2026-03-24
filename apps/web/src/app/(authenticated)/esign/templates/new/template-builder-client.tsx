@@ -52,6 +52,14 @@ interface PageDimension {
   height: number;
 }
 
+interface TemplateUploadResponse {
+  data: {
+    path: string;
+    token?: string;
+    uploadUrl: string;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -86,6 +94,14 @@ const DEFAULT_FIELD_SIZE: Record<EsignFieldType, { w: number; h: number }> = {
   checkbox: { w: 4, h: 4 },
 };
 
+function buildUploadUrl(uploadUrl: string, token?: string): string {
+  if (!token || uploadUrl.includes('token=')) {
+    return uploadUrl;
+  }
+
+  return `${uploadUrl}${uploadUrl.includes('?') ? '&' : '?'}token=${token}`;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -109,7 +125,7 @@ export function TemplateBuilderClient({
   const [templateType, setTemplateType] = useState<EsignTemplateType>('custom');
   const [description, setDescription] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [signerRoles, setSignerRoles] = useState<string[]>(['signer']);
   const [newRoleInput, setNewRoleInput] = useState('');
 
@@ -153,7 +169,7 @@ export function TemplateBuilderClient({
   // PDF upload handler
   // -----------------------------------------------------------------------
   const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.type !== 'application/pdf') {
@@ -161,9 +177,9 @@ export function TemplateBuilderClient({
         return;
       }
       setPdfFile(file);
-      // Create a local blob URL for preview
-      const url = URL.createObjectURL(file);
-      setPdfUrl(url);
+      // Read file into Uint8Array for CSP-safe PDF.js preview (no blob: URLs)
+      const buffer = await file.arrayBuffer();
+      setPdfData(new Uint8Array(buffer));
     },
     [],
   );
@@ -193,7 +209,7 @@ export function TemplateBuilderClient({
   // -----------------------------------------------------------------------
   // Phase transition
   // -----------------------------------------------------------------------
-  const canProceedToEditor = name.trim() && pdfUrl;
+  const canProceedToEditor = name.trim() && pdfData;
 
   const goToEditor = useCallback(() => {
     if (!canProceedToEditor) return;
@@ -278,9 +294,37 @@ export function TemplateBuilderClient({
 
     setSaving(true);
     try {
-      // Upload PDF to get storage path (simplified: use filename for now)
-      // In production, this uploads to Supabase Storage first.
-      const storagePath = `esign-templates/${communityId}/${Date.now()}-${pdfFile.name}`;
+      const uploadPrepRes = await fetch('/api/v1/esign/templates/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId,
+          fileName: pdfFile.name,
+          fileSize: pdfFile.size,
+          mimeType: pdfFile.type || 'application/pdf',
+        }),
+      });
+
+      if (!uploadPrepRes.ok) {
+        throw new Error('Failed to prepare template PDF upload');
+      }
+
+      const uploadPrepBody = (await uploadPrepRes.json()) as TemplateUploadResponse;
+      const storagePath = uploadPrepBody.data.path;
+      const uploadUrl = buildUploadUrl(
+        uploadPrepBody.data.uploadUrl,
+        uploadPrepBody.data.token,
+      );
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'content-type': pdfFile.type || 'application/pdf' },
+        body: pdfFile,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload template PDF');
+      }
 
       const fieldsSchema: EsignFieldsSchema = {
         version: 1,
@@ -415,8 +459,7 @@ export function TemplateBuilderClient({
                   type="button"
                   onClick={() => {
                     setPdfFile(null);
-                    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-                    setPdfUrl(null);
+                    setPdfData(null);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
                   className="text-[var(--text-tertiary)] hover:text-[var(--status-danger)] transition-colors"
@@ -592,9 +635,9 @@ export function TemplateBuilderClient({
           onClick={activeFieldType ? handleOverlayClick : undefined}
           style={{ cursor: activeFieldType ? 'crosshair' : undefined }}
         >
-          {pdfUrl && (
+          {pdfData && (
             <PdfViewer
-              pdfUrl={pdfUrl}
+              pdfData={pdfData}
               currentPage={currentPage}
               onPageChange={setCurrentPage}
               onDocumentLoad={handleDocumentLoad}
