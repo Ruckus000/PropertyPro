@@ -5,7 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
-import { getSubmission, getTemplate } from '@/lib/services/esign-service';
+import { getTemplate } from '@/lib/services/esign-service';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 
 export const GET = withErrorHandler(
@@ -20,39 +20,24 @@ export const GET = withErrorHandler(
 
     await requireEsignReadPermission(membership);
 
-    const data = await getSubmission(communityId, id);
-    const template = await getTemplate(communityId, data.submission.templateId);
+    const template = await getTemplate(communityId, id);
 
-    const previewPath =
-      data.submission.signedDocumentPath ?? template.sourceDocumentPath ?? null;
-
-    let previewPdfUrl: string | null = null;
-    if (previewPath) {
+    let pdfUrl: string | null = null;
+    if (template.sourceDocumentPath) {
       try {
-        previewPdfUrl = await createPresignedDownloadUrl('documents', previewPath);
+        pdfUrl = await createPresignedDownloadUrl('documents', template.sourceDocumentPath);
       } catch {
-        previewPdfUrl = null;
+        pdfUrl = null;
       }
     }
 
-    let downloadUrl: string | null = null;
-    if (data.submission.signedDocumentPath) {
-      try {
-        downloadUrl = await createPresignedDownloadUrl(
-          'documents',
-          data.submission.signedDocumentPath,
-        );
-      } catch {
-        downloadUrl = null;
-      }
+    if (!pdfUrl) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'No PDF available for this template' } },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({
-      data: {
-        ...data,
-        previewPdfUrl,
-        downloadUrl,
-      },
-    });
+    return NextResponse.json({ data: { pdfUrl } });
   },
 );

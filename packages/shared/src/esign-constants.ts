@@ -32,7 +32,9 @@ export type EsignTemplateStatus = (typeof ESIGN_TEMPLATE_STATUSES)[number];
 
 export const ESIGN_SUBMISSION_STATUSES = [
   'pending',
+  'processing',
   'completed',
+  'processing_failed',
   'declined',
   'expired',
   'cancelled',
@@ -67,6 +69,7 @@ export const ESIGN_EVENT_TYPES = [
   'downloaded',
   'signer_completed',
   'submission_completed',
+  'submission_processing_failed',
 ] as const;
 export type EsignEventType = (typeof ESIGN_EVENT_TYPES)[number];
 

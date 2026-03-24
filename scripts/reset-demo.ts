@@ -14,7 +14,7 @@
 import { pathToFileURL } from 'node:url';
 import { inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
 import { runDemoSeed } from './seed-demo';
@@ -243,7 +243,11 @@ export async function runDemoReset(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  await runDemoReset();
+  try {
+    await runDemoReset();
+  } finally {
+    await closeUnscopedClient();
+  }
 }
 
 const isEntrypoint = process.argv[1]

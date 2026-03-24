@@ -4,6 +4,7 @@ import {
   assessments,
   communities,
   complianceChecklistItems,
+  createAdminClient,
   documents,
   emergencyBroadcastRecipients,
   emergencyBroadcasts,
@@ -25,8 +26,9 @@ import {
   type SeedCommunityResult,
   type SeedUserConfig,
 } from '@propertypro/db/seed/seed-community';
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { getComplianceTemplate, type CommunityType } from '@propertypro/shared';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
 import { runBackfill } from './backfill-compliance-templates';
 
@@ -571,6 +573,117 @@ async function seedEmergencyBroadcastData(
 // E-Sign seed data
 // ---------------------------------------------------------------------------
 
+function sanitizeStorageSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+async function uploadSeedEsignSourceDocument(
+  communityId: number,
+  templateName: string,
+  description: string,
+  fieldsSchema: {
+    signerRoles: string[];
+    fields: Array<{ label?: string; type: string; signerRole: string }>;
+  },
+): Promise<string> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([612, 792]);
+  const headingFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const bodyFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  page.drawText(templateName, {
+    x: 48,
+    y: 736,
+    size: 20,
+    font: headingFont,
+    color: rgb(0.1, 0.15, 0.21),
+  });
+
+  page.drawText(description, {
+    x: 48,
+    y: 706,
+    size: 11,
+    font: bodyFont,
+    color: rgb(0.24, 0.28, 0.33),
+    maxWidth: 516,
+    lineHeight: 15,
+  });
+
+  page.drawText(`Signer roles: ${fieldsSchema.signerRoles.join(', ')}`, {
+    x: 48,
+    y: 664,
+    size: 11,
+    font: bodyFont,
+    color: rgb(0.24, 0.28, 0.33),
+  });
+
+  page.drawText('Seeded field guide', {
+    x: 48,
+    y: 628,
+    size: 13,
+    font: headingFont,
+    color: rgb(0.1, 0.15, 0.21),
+  });
+
+  let cursorY = 606;
+  for (const field of fieldsSchema.fields.slice(0, 12)) {
+    page.drawText(
+      `- ${field.label ?? field.type} (${field.signerRole}, ${field.type})`,
+      {
+        x: 60,
+        y: cursorY,
+        size: 10,
+        font: bodyFont,
+        color: rgb(0.24, 0.28, 0.33),
+      },
+    );
+    cursorY -= 18;
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  const storagePath = `communities/${communityId}/esign-templates/${sanitizeStorageSegment(templateName)}.pdf`;
+  const admin = createAdminClient();
+  const { error } = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`Failed to upload seeded e-sign source PDF: ${error.message}`);
+  }
+
+  const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
+  const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
+  const { data: listing, error: listError } = await admin.storage
+    .from('documents')
+    .list(storageFolder, { limit: 100, search: storageFileName });
+
+  if (listError) {
+    throw new Error(
+      `Failed to verify seeded e-sign source PDF listing: ${listError.message}`,
+    );
+  }
+
+  const listed = (listing ?? []).some((file) => file.name === storageFileName);
+  if (!listed) {
+    throw new Error(
+      `Seeded e-sign source PDF upload was not visible in storage listing for ${storagePath}`,
+    );
+  }
+
+  const { data: downloadedFile, error: downloadError } = await admin.storage
+    .from('documents')
+    .download(storagePath);
+
+  if (downloadError || !downloadedFile) {
+    throw new Error(
+      `Failed to verify seeded e-sign source PDF download: ${downloadError?.message ?? 'No data returned'}`,
+    );
+  }
+
+  return storagePath;
+}
+
 /**
  * Prebuilt e-sign template definitions for seeding.
  * Inlined here to avoid importing from apps/web/src (no path alias from scripts/).
@@ -627,12 +740,23 @@ async function seedEsignData(
   createdByUserId: string,
   ownerUserId?: string,
 ): Promise<void> {
-  // Idempotent: delete existing e-sign data for this community
+  // Idempotent: clear dependent rows before templates to satisfy template_id FKs.
+  await db
+    .delete(esignSubmissions)
+    .where(eq(esignSubmissions.communityId, communityId));
+
   await db.delete(esignTemplates).where(eq(esignTemplates.communityId, communityId));
 
   const insertedTemplates: Array<{ id: number; name: string }> = [];
 
   for (const tpl of ESIGN_SEED_TEMPLATES) {
+    const sourceDocumentPath = await uploadSeedEsignSourceDocument(
+      communityId,
+      tpl.name,
+      tpl.description,
+      tpl.fieldsSchema,
+    );
+
     const [row] = await db
       .insert(esignTemplates)
       .values({
@@ -640,6 +764,7 @@ async function seedEsignData(
         externalId: crypto.randomUUID(),
         name: tpl.name,
         description: tpl.description,
+        sourceDocumentPath,
         templateType: tpl.templateType,
         fieldsSchema: tpl.fieldsSchema,
         status: 'active',
@@ -757,6 +882,11 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   for (const [slug, assignments] of crossBySlug) {
     await seedRoles(assignments, communityTypeBySlug[slug]);
   }
+
+  const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({
+    communityId: communityIdsBySlug[assignment.slug]!,
+    userId: resolveUserId(userIdsByEmail, assignment.email),
+  }));
 
   await Promise.all(
     crossAssignments.map((a) => ensureNotificationPreference(a.communityId, a.userId)),
@@ -991,9 +1121,13 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
 }
 
 async function main(): Promise<void> {
-  await runDemoSeed();
-  // eslint-disable-next-line no-console
-  console.log('Demo seed complete.');
+  try {
+    await runDemoSeed();
+    // eslint-disable-next-line no-console
+    console.log('Demo seed complete.');
+  } finally {
+    await closeUnscopedClient();
+  }
 }
 
 const isEntrypoint = process.argv[1]
@@ -1001,9 +1135,13 @@ const isEntrypoint = process.argv[1]
   : false;
 
 if (isEntrypoint) {
-  main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('Demo seed failed:', error);
-    process.exitCode = 1;
-  });
+  main()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error('Demo seed failed:', error);
+      process.exit(1);
+    });
 }

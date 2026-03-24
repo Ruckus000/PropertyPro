@@ -114,9 +114,9 @@ export async function flattenSignedPdf(
         size: Math.min(fieldHeightPts * 0.6, 12),
       });
     } else if (value.type === 'checkbox') {
-      // Draw checkmark
+      // Use an ASCII-safe mark so pdf-lib's default font can always encode it.
       if (value.value === 'true' || value.value === 'checked') {
-        page.drawText('✓', {
+        page.drawText('X', {
           x: pdfX + fieldWidthPts / 4,
           y: pdfY + fieldHeightPts / 4,
           size: Math.min(fieldHeightPts * 0.7, 14),

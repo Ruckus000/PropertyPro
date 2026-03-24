@@ -21,6 +21,7 @@ import {
   useSubmitSignature,
   useDeclineSigning,
 } from '@/hooks/use-esign-signing';
+import { PdfViewer } from '@/components/esign/pdf-viewer';
 import { SignatureCapture } from '@/components/esign/signature-capture';
 import {
   Lock,
@@ -42,6 +43,23 @@ interface FieldValue {
   type: string;
   value: string;
   signedAt: string;
+}
+
+type CompletionState = 'idle' | 'completed' | 'processing' | 'processing_failed';
+
+function isFieldCompleted(
+  field: Pick<EsignFieldDefinition, 'type'>,
+  value: FieldValue | undefined,
+): boolean {
+  if (!value) {
+    return false;
+  }
+
+  if (field.type === 'checkbox') {
+    return value.value === 'true';
+  }
+
+  return value.value.trim().length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,12 +106,20 @@ export default function SigningPage() {
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
 
-  // Completed state
-  const [isCompleted, setIsCompleted] = useState(false);
+  // Submission completion state
+  const [completionState, setCompletionState] = useState<CompletionState>('idle');
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+
+  // PDF page state
+  const [currentPage, setCurrentPage] = useState(0);
 
   // ---- Derived data ----
   const fields = useMemo<EsignFieldDefinition[]>(() => {
-    if (!data?.template?.fieldsSchema?.fields || !data?.signer) return [];
+    if (!data?.signer) return [];
+    if (data.fields?.length) {
+      return data.fields;
+    }
+    if (!data.template?.fieldsSchema?.fields) return [];
     return data.template.fieldsSchema.fields.filter(
       (f) => f.signerRole === data.signer.role,
     );
@@ -105,14 +131,20 @@ export default function SigningPage() {
   );
 
   const completedCount = useMemo(
-    () => fields.filter((f) => signedValues[f.id]).length,
+    () => fields.filter((f) => isFieldCompleted(f, signedValues[f.id])).length,
     [fields, signedValues],
   );
 
   const allRequiredDone = useMemo(
-    () => requiredFields.every((f) => signedValues[f.id]),
+    () => requiredFields.every((f) => isFieldCompleted(f, signedValues[f.id])),
     [requiredFields, signedValues],
   );
+
+  const currentPageFields = useMemo(
+    () => fields.filter((field) => field.page === currentPage),
+    [currentPage, fields],
+  );
+  const submissionStatus = data?.submission.effectiveStatus ?? data?.submission.status;
 
   // ---- Handlers ----
   const handleFieldClick = useCallback(
@@ -132,6 +164,11 @@ export default function SigningPage() {
         setSignedValues((prev) => {
           const current = prev[field.id];
           const newValue = current?.value === 'true' ? 'false' : 'true';
+          if (newValue === 'false') {
+            const next = { ...prev };
+            delete next[field.id];
+            return next;
+          }
           const entry: FieldValue = {
             fieldId: field.id,
             type: field.type,
@@ -185,17 +222,37 @@ export default function SigningPage() {
   );
 
   const handleFinish = useCallback(async () => {
-    if (!allRequiredDone || !consentChecked) return;
+    if (!allRequiredDone || !consentChecked || !data?.pdfUrl) return;
     try {
-      await submitMutation.mutateAsync({
+      const result = await submitMutation.mutateAsync({
         signedValues,
         consentGiven: true,
       });
-      setIsCompleted(true);
+
+      if (!result.success || result.submissionStatus === 'processing_failed') {
+        setCompletionState('processing_failed');
+        setCompletionMessage(
+          result.message ??
+            'Your signature was captured, but the signed document could not be finalized.',
+        );
+        return;
+      }
+
+      if (result.submissionStatus === 'processing') {
+        setCompletionState('processing');
+        setCompletionMessage(
+          result.message ??
+            'Your signature was captured and the document is still being finalized.',
+        );
+        return;
+      }
+
+      setCompletionState('completed');
+      setCompletionMessage(null);
     } catch {
       // Error handled by mutation state
     }
-  }, [allRequiredDone, consentChecked, signedValues, submitMutation]);
+  }, [allRequiredDone, consentChecked, data?.pdfUrl, signedValues, submitMutation]);
 
   const handleDecline = useCallback(async () => {
     try {
@@ -237,8 +294,38 @@ export default function SigningPage() {
     );
   }
 
+  if (completionState === 'processing_failed') {
+    return (
+      <SigningShell>
+        <StateCard
+          icon={<AlertTriangle className="h-12 w-12 text-status-danger" />}
+          title="Signature captured, processing failed"
+          description={
+            completionMessage ??
+            'Your signature was recorded, but the signed document could not be finalized.'
+          }
+        />
+      </SigningShell>
+    );
+  }
+
+  if (completionState === 'processing') {
+    return (
+      <SigningShell>
+        <StateCard
+          icon={<Clock className="h-12 w-12 text-interactive" />}
+          title="Signature captured"
+          description={
+            completionMessage ??
+            'Your signature was recorded and the signed document is still being finalized.'
+          }
+        />
+      </SigningShell>
+    );
+  }
+
   // Already completed
-  if (data.signer.status === 'completed' || isCompleted) {
+  if (data.signer.status === 'completed' || completionState === 'completed') {
     return (
       <SigningShell>
         <StateCard
@@ -264,7 +351,7 @@ export default function SigningPage() {
   }
 
   // Cancelled
-  if (data.submission.status === 'cancelled') {
+  if (submissionStatus === 'cancelled') {
     return (
       <SigningShell>
         <StateCard
@@ -277,7 +364,7 @@ export default function SigningPage() {
   }
 
   // Expired
-  if (data.submission.status === 'expired') {
+  if (submissionStatus === 'expired') {
     return (
       <SigningShell>
         <StateCard
@@ -297,6 +384,18 @@ export default function SigningPage() {
           icon={<Clock className="h-12 w-12 text-interactive" />}
           title="Waiting for another signer"
           description={`Waiting for ${data.waitingFor ?? 'the previous signer'} to sign first.`}
+        />
+      </SigningShell>
+    );
+  }
+
+  if (!data.pdfUrl) {
+    return (
+      <SigningShell>
+        <StateCard
+          icon={<AlertTriangle className="h-12 w-12 text-status-warning" />}
+          title="Document unavailable"
+          description="This signing request cannot be completed because the source PDF is unavailable. Please contact the sender."
         />
       </SigningShell>
     );
@@ -353,74 +452,88 @@ export default function SigningPage() {
 
       {/* PDF + Fields */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-surface-card border rounded-md shadow-sm overflow-hidden">
-          {/* PDF Viewer placeholder — rendered by PdfViewer + FieldOverlay */}
-          <div className="relative min-h-[600px] bg-surface-muted flex items-center justify-center">
-            <p className="text-content-disabled text-sm">
-              PDF Document Preview
-            </p>
+        <div className="bg-surface-card border rounded-md shadow-sm overflow-hidden p-4">
+          <PdfViewer
+            pdfUrl={data.pdfUrl}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onDocumentLoad={({ totalPages }) => {
+              setCurrentPage((page) => Math.min(page, Math.max(totalPages - 1, 0)));
+            }}
+            scale={1}
+          >
+            <div className="absolute inset-0">
+              {currentPageFields.map((field) => {
+                const value = signedValues[field.id];
+                const isFilled = isFieldCompleted(field, value);
+                const sharedStyle = {
+                  left: `${field.x}%`,
+                  top: `${field.y}%`,
+                  width: `${field.width}%`,
+                  height: `${field.height}%`,
+                };
 
-            {/* Field overlays */}
-            {fields.map((field) => {
-              const value = signedValues[field.id];
-              return (
-                <button
-                  key={field.id}
-                  type="button"
-                  onClick={() => {
-                    if (field.type === 'text') return; // text handled by input
-                    handleFieldClick(field);
-                  }}
-                  className={`absolute border-2 rounded transition-colors cursor-pointer ${
-                    value
-                      ? 'border-status-success bg-status-success-bg/80'
-                      : 'border-interactive bg-interactive-subtle/60 hover:bg-interactive-subtle/80'
-                  }`}
-                  style={{
-                    left: `${field.x}%`,
-                    top: `${field.y}%`,
-                    width: `${field.width}%`,
-                    height: `${field.height}%`,
-                  }}
-                  title={field.label ?? field.type}
-                >
-                  {value && (field.type === 'signature' || field.type === 'initials') && (
-                    <img
-                      src={value.value}
-                      alt={field.type}
-                      className="w-full h-full object-contain p-0.5"
-                    />
-                  )}
-                  {value && field.type === 'date' && (
-                    <span className="text-xs text-content-secondary">{value.value}</span>
-                  )}
-                  {value && field.type === 'checkbox' && (
-                    <span className="text-status-success text-lg">
-                      {value.value === 'true' ? '\u2713' : ''}
-                    </span>
-                  )}
-                  {field.type === 'text' && (
-                    <input
-                      type="text"
-                      value={value?.value ?? ''}
-                      onChange={(e) =>
-                        handleTextFieldChange(field, e.target.value)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full h-full bg-transparent text-xs px-1 outline-none"
-                      placeholder={field.label ?? 'Enter text'}
-                    />
-                  )}
-                  {!value &&
-                    field.type !== 'text' && (
+                if (field.type === 'text') {
+                  return (
+                    <div
+                      key={field.id}
+                      className={`absolute border-2 rounded transition-colors ${
+                        isFilled
+                          ? 'border-status-success bg-status-success-bg/80'
+                          : 'border-interactive bg-interactive-subtle/60'
+                      }`}
+                      style={sharedStyle}
+                      title={field.label ?? field.type}
+                    >
+                      <input
+                        type="text"
+                        value={value?.value ?? ''}
+                        onChange={(e) => handleTextFieldChange(field, e.target.value)}
+                        className="w-full h-full bg-transparent text-xs px-1 outline-none"
+                        placeholder={field.label ?? 'Enter text'}
+                      />
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={field.id}
+                    type="button"
+                    onClick={() => handleFieldClick(field)}
+                    className={`absolute border-2 rounded transition-colors cursor-pointer ${
+                      isFilled
+                        ? 'border-status-success bg-status-success-bg/80'
+                        : 'border-interactive bg-interactive-subtle/60 hover:bg-interactive-subtle/80'
+                    }`}
+                    style={sharedStyle}
+                    title={field.label ?? field.type}
+                  >
+                    {isFilled && (field.type === 'signature' || field.type === 'initials') && (
+                      <img
+                        src={value?.value ?? ''}
+                        alt={field.type}
+                        className="w-full h-full object-contain p-0.5"
+                      />
+                    )}
+                    {isFilled && field.type === 'date' && (
+                      <span className="text-xs text-content-secondary">{value?.value ?? ''}</span>
+                    )}
+                    {isFilled && field.type === 'checkbox' && (
+                      <span className="text-status-success text-lg">
+                        {value?.value === 'true' ? '\u2713' : ''}
+                      </span>
+                    )}
+                    {!isFilled && (
                       <span className="text-xs text-interactive font-medium">
                         {field.label ?? field.type}
                       </span>
                     )}
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          </PdfViewer>
         </div>
       </div>
 

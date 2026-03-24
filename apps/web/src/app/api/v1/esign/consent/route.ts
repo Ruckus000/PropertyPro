@@ -27,5 +27,5 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const requestId = req.headers.get('x-request-id');
   await revokeConsent(communityId, actorUserId, requestId);
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ data: { success: true } });
 });

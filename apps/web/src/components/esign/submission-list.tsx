@@ -31,7 +31,9 @@ interface SubmissionListProps {
 const STATUS_FILTERS = [
   { value: '', label: 'All' },
   { value: 'pending', label: 'Pending' },
+  { value: 'processing', label: 'Processing' },
   { value: 'completed', label: 'Completed' },
+  { value: 'processing_failed', label: 'Processing Failed' },
   { value: 'expired', label: 'Expired' },
 ] as const;
 
@@ -43,6 +45,8 @@ interface StatusConfigEntry {
 
 const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
   pending: { label: 'Pending', variant: 'warning', icon: Clock },
+  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
+  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
   completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
   declined: { label: 'Declined', variant: 'danger', icon: XCircle },
   expired: { label: 'Expired', variant: 'neutral', icon: AlertTriangle },
@@ -150,7 +154,8 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
               </thead>
               <tbody>
                 {submissions.map((submission) => {
-                  const config = STATUS_CONFIG[submission.status] ??
+                  const effectiveStatus = submission.effectiveStatus ?? submission.status;
+                  const config = STATUS_CONFIG[effectiveStatus] ??
                     DEFAULT_STATUS;
                   const Icon = config.icon;
 

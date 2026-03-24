@@ -19,67 +19,8 @@
  * Flow 4: Renter → can see documents → CANNOT see financials
  * Flow 5: Public site → marketing pages load → login accessible
  */
-import { expect, test, type Page } from '@playwright/test';
-
-type DevRole =
-  | 'board_president'
-  | 'owner'
-  | 'tenant'
-  | 'cam'
-  | 'pm_admin'
-  | 'site_manager';
-
-/**
- * Authenticate via the dev agent-login endpoint.
- *
- * Uses the JSON API endpoint first (no page navigation cost), then navigates
- * to the portal URL only after confirming auth succeeded. This avoids
- * flakiness from Supabase cold starts or slow session cookie propagation.
- */
-async function loginAs(
-  page: Page,
-  role: DevRole,
-): Promise<{ communityId: number; portal: string }> {
-  // Use waitForResponse-style retry: if the dev server is still warming up
-  // from a cold start, the first request might 502.
-  let response;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await page.request.get(`/dev/agent-login?as=${role}`, {
-      headers: { accept: 'application/json' },
-    });
-    if (response.ok()) break;
-    // Brief pause before retry on server error
-    if (response.status() >= 500) {
-      await page.waitForTimeout(2000);
-    }
-  }
-
-  expect(response!.ok(), `agent-login failed for role=${role}: ${response!.status()}`).toBeTruthy();
-
-  const payload = (await response!.json()) as {
-    ok: boolean;
-    portal: string;
-    community: { id: number } | null;
-  };
-  expect(payload.ok).toBe(true);
-
-  const portalUrl = new URL(payload.portal, 'http://127.0.0.1:3000');
-  const communityId = Number(
-    portalUrl.searchParams.get('communityId') ?? payload.community?.id,
-  );
-
-  if (!Number.isInteger(communityId) || communityId <= 0) {
-    throw new Error(
-      `Dev login for ${role} returned invalid communityId. Portal: ${payload.portal}`,
-    );
-  }
-
-  // Navigate and wait for the page to be fully interactive — not just
-  // DOMContentLoaded, which fires before React hydration completes.
-  await page.goto(payload.portal, { waitUntil: 'networkidle' });
-
-  return { communityId, portal: payload.portal };
-}
+import { expect, test } from '@playwright/test';
+import { loginAs } from './helpers/dev-login';
 
 // =============================================================================
 // Flow 1: Board Admin Compliance Journey

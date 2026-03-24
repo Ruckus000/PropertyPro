@@ -9,11 +9,10 @@
  * unavailable during server-side rendering.
  */
 if (typeof window !== 'undefined') {
-  // Dynamic import avoids pdfjs-dist being evaluated on the server
-  import('pdfjs-dist').then(({ GlobalWorkerOptions }) => {
-    GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url,
-    ).toString();
-  });
+  // @ts-expect-error — runtime-only import from same-origin proxy route; not a real module path
+  import(/* webpackIgnore: true */ '/pdfjs/pdf.mjs').then(
+    ({ GlobalWorkerOptions }: { GlobalWorkerOptions: { workerSrc: string } }) => {
+      GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+    },
+  );
 }

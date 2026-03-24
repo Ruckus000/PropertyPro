@@ -40,6 +40,6 @@ export const POST = withErrorHandler(
     const requestId = req.headers.get('x-request-id');
     await sendReminder(communityId, actorUserId, id, parseResult.data.signerId, requestId);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ data: { success: true } });
   },
 );

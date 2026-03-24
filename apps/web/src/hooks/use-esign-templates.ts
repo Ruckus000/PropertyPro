@@ -105,7 +105,7 @@ export function useArchiveEsignTemplate(communityId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (templateId: number) =>
-      requestJson<void>(`/api/v1/esign/templates/${templateId}?communityId=${communityId}`, {
+      requestJson<{ success: boolean }>(`/api/v1/esign/templates/${templateId}?communityId=${communityId}`, {
         method: 'DELETE',
       }),
     onSuccess: async () => {

@@ -99,7 +99,9 @@ describe('e-sign constants', () => {
   describe('ESIGN_SUBMISSION_STATUSES', () => {
     it('includes all lifecycle statuses', () => {
       expect(ESIGN_SUBMISSION_STATUSES).toContain('pending');
+      expect(ESIGN_SUBMISSION_STATUSES).toContain('processing');
       expect(ESIGN_SUBMISSION_STATUSES).toContain('completed');
+      expect(ESIGN_SUBMISSION_STATUSES).toContain('processing_failed');
       expect(ESIGN_SUBMISSION_STATUSES).toContain('declined');
       expect(ESIGN_SUBMISSION_STATUSES).toContain('expired');
       expect(ESIGN_SUBMISSION_STATUSES).toContain('cancelled');
@@ -133,6 +135,7 @@ describe('e-sign constants', () => {
         'downloaded',
         'signer_completed',
         'submission_completed',
+        'submission_processing_failed',
       ];
       for (const e of coreEvents) {
         expect(ESIGN_EVENT_TYPES).toContain(e);

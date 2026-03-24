@@ -22,6 +22,7 @@
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
     "playwright:install": "pnpm --filter @propertypro/web playwright:install",
     "test:e2e": "pnpm --filter @propertypro/web test:e2e",
+    "test:e2e:esign": "pnpm --filter @propertypro/web test:e2e -- e2e/esign-and-documents-flow.spec.ts",
     "test:e2e:headed": "pnpm --filter @propertypro/web test:e2e:headed",
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
