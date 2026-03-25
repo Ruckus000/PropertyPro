@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { ALLOWED_FONTS } from '@propertypro/theme';
-import { isValidHexColor, type CommunityBranding } from '@propertypro/shared';
+import { isValidHexColor, type CommunityBranding, isDemoTemplateId, getStrategyById, getTemplateById } from '@propertypro/shared';
 import {
   generateDemoToken,
   encryptDemoTokenSecret,
@@ -17,6 +17,7 @@ import {
 import { seedCommunity } from '@propertypro/db/seed/seed-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { listDemos, insertDemo } from '@/lib/db/demo-queries';
+import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
 
@@ -37,6 +38,12 @@ const createDemoSchema = z.object({
   }),
   externalCrmUrl: z.string().url().optional().or(z.literal('')),
   prospectNotes: z.string().max(2000).optional(),
+  publicTemplateId: z.string().refine(isDemoTemplateId, 'Invalid public template ID').optional(),
+  mobileTemplateId: z.string().refine(isDemoTemplateId, 'Invalid mobile template ID').optional(),
+  contentStrategy: z.string().refine(
+    (id) => getStrategyById(id) !== undefined,
+    'Invalid content strategy',
+  ).optional(),
 });
 
 export async function GET() {
@@ -81,7 +88,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { templateType, prospectName, branding, externalCrmUrl, prospectNotes } = parseResult.data;
+  const { templateType, prospectName, branding, externalCrmUrl, prospectNotes, publicTemplateId, mobileTemplateId, contentStrategy } = parseResult.data;
+
+  // Validate that template IDs match the selected community type (when provided)
+  if (publicTemplateId !== undefined) {
+    const publicTemplate = getTemplateById(publicTemplateId);
+    if (!publicTemplate || publicTemplate.communityType !== templateType) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'Public template ID does not match the selected community type' } },
+        { status: 400 },
+      );
+    }
+  }
+  if (mobileTemplateId !== undefined) {
+    const mobileTemplate = getTemplateById(mobileTemplateId);
+    if (!mobileTemplate || mobileTemplate.communityType !== templateType) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'Mobile template ID does not match the selected community type' } },
+        { status: 400 },
+      );
+    }
+  }
 
   // Generate unique slug
   const sanitized = prospectName
@@ -105,19 +132,25 @@ export async function POST(request: NextRequest) {
     logoPath: branding.logoPath,
   };
 
+  const strategy = contentStrategy !== undefined ? getStrategyById(contentStrategy) : undefined;
+
   let seedResult;
   try {
+    const seedConfig: Parameters<typeof seedCommunity>[0] = {
+      name: prospectName,
+      slug,
+      communityType: templateType,
+      branding: brandingPayload,
+      isDemo: true,
+      city: 'Demo City',
+      state: 'FL',
+      zipCode: '00000',
+    };
+    if (strategy?.seedHints) {
+      seedConfig.seedHints = strategy.seedHints;
+    }
     seedResult = await seedCommunity(
-      {
-        name: prospectName,
-        slug,
-        communityType: templateType,
-        branding: brandingPayload,
-        isDemo: true,
-        city: 'Demo City',
-        state: 'FL',
-        zipCode: '00000',
-      },
+      seedConfig,
       [
         { email: residentEmail, fullName: 'Demo Resident', role: 'owner' },
         { email: boardEmail, fullName: 'Demo Board Member', role: 'board_member' },
@@ -181,7 +214,7 @@ export async function POST(request: NextRequest) {
     template_type: templateType,
     prospect_name: prospectName,
     slug,
-    theme: brandingPayload as Record<string, unknown>,
+    theme: { ...brandingPayload, ...(contentStrategy !== undefined ? { contentStrategy } : {}) } as Record<string, unknown>,
     seeded_community_id: seedResult.communityId,
     demo_resident_user_id: residentUser.userId,
     demo_board_user_id: boardUser.userId,
@@ -197,6 +230,68 @@ export async function POST(request: NextRequest) {
       { error: { code: 'INTERNAL_ERROR', message: insertError?.message ?? 'Failed to create demo instance' } },
       { status: 500 },
     );
+  }
+
+  // Compile and store site_blocks when template IDs are provided
+  if (publicTemplateId !== undefined || mobileTemplateId !== undefined) {
+    const communityId = seedResult.communityId;
+    const now = new Date().toISOString();
+    const adminDb = createAdminClient();
+
+    const templateCompilations: Promise<void>[] = [];
+
+    if (publicTemplateId !== undefined) {
+      const publicTemplate = getTemplateById(publicTemplateId)!;
+      templateCompilations.push(
+        compileDemoTemplate({ templateId: publicTemplateId, communityName: prospectName, branding }).then(
+          async (publicHtml) => {
+            await adminDb.from('site_blocks').upsert({
+              community_id: communityId,
+              block_type: 'jsx_template',
+              block_order: 0,
+              content: {
+                jsxSource: publicTemplate.build({ communityName: prospectName, branding }),
+                compiledHtml: publicHtml,
+                compiledAt: now,
+              },
+              is_draft: false,
+              published_at: now,
+              template_variant: 'public',
+            } as never, { onConflict: 'community_id,block_type,is_draft,template_variant' });
+          },
+        ),
+      );
+    }
+
+    if (mobileTemplateId !== undefined) {
+      const mobileTemplate = getTemplateById(mobileTemplateId)!;
+      templateCompilations.push(
+        compileDemoTemplate({ templateId: mobileTemplateId, communityName: prospectName, branding }).then(
+          async (mobileHtml) => {
+            await adminDb.from('site_blocks').upsert({
+              community_id: communityId,
+              block_type: 'jsx_template',
+              block_order: 0,
+              content: {
+                jsxSource: mobileTemplate.build({ communityName: prospectName, branding }),
+                compiledHtml: mobileHtml,
+                compiledAt: now,
+              },
+              is_draft: false,
+              published_at: now,
+              template_variant: 'mobile',
+            } as never, { onConflict: 'community_id,block_type,is_draft,template_variant' });
+          },
+        ),
+      );
+    }
+
+    try {
+      await Promise.all(templateCompilations);
+    } catch (err) {
+      console.error('[demos/POST] Failed to compile/store site_blocks:', err instanceof Error ? err.message : err);
+      // Non-fatal: demo was created, templates can be regenerated later
+    }
   }
 
   // Generate preview tokens (1-hour TTL)

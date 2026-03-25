@@ -24,6 +24,7 @@ import {
   type CommunityBranding,
   type CommunityType,
   type PresetKey,
+  type SeedHints,
 } from '@propertypro/shared';
 
 const db = createUnscopedClient();
@@ -39,6 +40,7 @@ export interface SeedCommunityConfig {
   addressLine1?: string;
   branding?: CommunityBranding;
   isDemo?: boolean;
+  seedHints?: SeedHints;
 }
 
 export interface SeedUserConfig {
@@ -1337,6 +1339,82 @@ export async function seedCommunity(
     });
   }
 
+  // --- seedHints: documentBias extra documents ---
+  if (config.seedHints) {
+    const { documentBias } = config.seedHints;
+    if (documentBias === 'compliance') {
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-meeting-notice`,
+          `${config.name} Board Meeting Notice`,
+          `${config.slug}-board-meeting-notice.pdf`,
+          `${config.name} statutory meeting notice compliance`,
+          categoryIds.meeting_minutes ?? categoryIds.announcements ?? null,
+        ),
+        attachToMeeting: true,
+      });
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-bylaws-amendment`,
+          `${config.name} Bylaws Amendment`,
+          `${config.slug}-bylaws-amendment.pdf`,
+          `${config.name} bylaws amendment governing documents`,
+          categoryIds.declaration ?? categoryIds.rules ?? null,
+        ),
+        attachToMeeting: false,
+      });
+    } else if (documentBias === 'maintenance') {
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-maintenance-log`,
+          `${config.name} Maintenance Log`,
+          `${config.slug}-maintenance-log.pdf`,
+          `${config.name} property maintenance work orders log`,
+          categoryIds.maintenance_records ?? categoryIds.inspection_reports ?? null,
+        ),
+        attachToMeeting: false,
+      });
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-inspection-report`,
+          `${config.name} Property Inspection Report`,
+          `${config.slug}-property-inspection.pdf`,
+          `${config.name} annual property inspection safety report`,
+          categoryIds.inspection_reports ?? categoryIds.maintenance_records ?? null,
+        ),
+        attachToMeeting: true,
+      });
+    } else if (documentBias === 'financial') {
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-reserve-study`,
+          `${config.name} Reserve Fund Study`,
+          `${config.slug}-reserve-fund-study.pdf`,
+          `${config.name} reserve fund financial study report`,
+          categoryIds.rules ?? categoryIds.declaration ?? null,
+        ),
+        attachToMeeting: false,
+      });
+      seededDocuments.push({
+        id: await seedRegistryDocument(
+          communityId,
+          `${config.slug}-doc-hints-budget-summary`,
+          `${config.name} Budget Summary`,
+          `${config.slug}-budget-summary.pdf`,
+          `${config.name} annual budget summary financial disclosure`,
+          categoryIds.rules ?? null,
+        ),
+        attachToMeeting: true,
+      });
+    }
+    // documentBias === 'general' — no extra documents beyond the defaults
+  }
+
   const meetingConfigByType: Record<SeedCommunityConfig['communityType'], {
     seedKey: string;
     title: string;
@@ -1376,6 +1454,41 @@ export async function seedCommunity(
     new Date(Date.now() + meetingConfig.startsInDays * DAY_MS),
     meetingConfig.location,
   );
+
+  // --- seedHints: meetingDensity extra meetings ---
+  // Default seeding creates 1 meeting. low=1-2, medium=3-4, high=5-6.
+  // We already have 1 default meeting so we add 0-1 more for low, 2-3 for medium, 4-5 for high.
+  if (config.seedHints) {
+    const { meetingDensity } = config.seedHints;
+    type ExtraMeetingBlueprint = { seedKeySuffix: string; titleSuffix: string; meetingType: string; startsInDays: number };
+    const extraMeetingsByDensity: Record<typeof meetingDensity, ExtraMeetingBlueprint[]> = {
+      low: [
+        { seedKeySuffix: 'extra-1', titleSuffix: 'Committee Meeting', meetingType: 'committee', startsInDays: 30 },
+      ],
+      medium: [
+        { seedKeySuffix: 'extra-1', titleSuffix: 'Committee Meeting', meetingType: 'committee', startsInDays: 30 },
+        { seedKeySuffix: 'extra-2', titleSuffix: 'Board Workshop', meetingType: 'board', startsInDays: 45 },
+        { seedKeySuffix: 'extra-3', titleSuffix: 'Special Meeting', meetingType: 'special', startsInDays: 60 },
+      ],
+      high: [
+        { seedKeySuffix: 'extra-1', titleSuffix: 'Committee Meeting', meetingType: 'committee', startsInDays: 30 },
+        { seedKeySuffix: 'extra-2', titleSuffix: 'Board Workshop', meetingType: 'board', startsInDays: 45 },
+        { seedKeySuffix: 'extra-3', titleSuffix: 'Special Meeting', meetingType: 'special', startsInDays: 60 },
+        { seedKeySuffix: 'extra-4', titleSuffix: 'Annual Planning Session', meetingType: 'annual', startsInDays: 75 },
+        { seedKeySuffix: 'extra-5', titleSuffix: 'Budget Review Meeting', meetingType: 'board', startsInDays: 90 },
+      ],
+    };
+    for (const blueprint of extraMeetingsByDensity[meetingDensity]) {
+      await seedRegistryMeeting(
+        communityId,
+        `${config.slug}-meeting-${blueprint.seedKeySuffix}`,
+        `${config.name} ${blueprint.titleSuffix}`,
+        blueprint.meetingType,
+        new Date(Date.now() + blueprint.startsInDays * DAY_MS),
+        meetingConfig.location,
+      );
+    }
+  }
 
   const announcementAuthor = usersToSeed.find((user) => ANNOUNCEMENT_AUTHOR_ROLES.has(user.role)) ?? usersToSeed[0];
   if (!announcementAuthor) {
@@ -1459,6 +1572,53 @@ export async function seedCommunity(
       authorId,
       'all',
     );
+  }
+
+  // --- seedHints: announcementTone extra announcement ---
+  if (config.seedHints) {
+    const { announcementTone } = config.seedHints;
+    const toneAnnouncements: Record<typeof announcementTone, { title: string; body: string }> = {
+      formal: {
+        title: `${config.name} — Official Board Notice`,
+        body: `The Board of Directors of ${config.name} hereby provides notice of the following community update. Residents are requested to review and acknowledge this communication at their earliest convenience.`,
+      },
+      friendly: {
+        title: `Hey ${config.name} Neighbors!`,
+        body: `We have some exciting updates to share with our ${config.name} community! Thanks for being a great neighbor — here is what is happening this month.`,
+      },
+      urgent: {
+        title: `ACTION REQUIRED: ${config.name} Deadline Notice`,
+        body: `URGENT: Residents of ${config.name} must respond by the deadline indicated. Failure to act may result in additional fees or loss of access. Please contact management immediately with any questions.`,
+      },
+    };
+    const toneContent = toneAnnouncements[announcementTone];
+    await seedRegistryAnnouncement(
+      communityId,
+      `${config.slug}-announcement-hints-tone`,
+      toneContent.title,
+      toneContent.body,
+      authorId,
+      'all',
+      announcementTone === 'urgent',
+    );
+  }
+
+  // --- seedHints: complianceScore — adjust createdAt on hint-seeded documents ---
+  // A high complianceScore means documents were posted within the 30-day window.
+  // A low complianceScore means documents were posted late (>30 days ago).
+  // Only the hint-driven extra documents (file_name pattern *-hints-*) are affected;
+  // default documents retain their natural createdAt.
+  if (config.seedHints) {
+    const score = Math.max(0, Math.min(100, config.seedHints.complianceScore));
+    // Linear interpolation: score=100 → 5 days ago (compliant); score=0 → 45 days ago (overdue).
+    const postingOffsetDays = Math.round(5 + (1 - score / 100) * 40);
+    const createdAt = new Date(Date.now() - postingOffsetDays * DAY_MS);
+    await db.execute(sql`
+      UPDATE documents
+      SET created_at = ${createdAt}
+      WHERE community_id = ${communityId}
+        AND file_name LIKE ${`${config.slug}-%-hints-%`}
+    `);
   }
 
   const attachment = seededDocuments.find((document) => document.attachToMeeting) ?? seededDocuments[0];

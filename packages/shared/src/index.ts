@@ -104,4 +104,6 @@ export type {
   MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent, JsxTemplateBlockContent,
 } from './site-blocks';
 export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';
+export * from './demo-templates';
+export * from './demo-content-strategies';
 export * from './support-access';
