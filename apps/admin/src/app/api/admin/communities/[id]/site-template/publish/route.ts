@@ -7,11 +7,9 @@
  * sanitizes with DOMPurify, and stores the published result.
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import React from 'react';
-import { transform } from 'sucrase';
-// DOMPurify is dynamically imported below to avoid jsdom build errors in Next.js route handlers
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
+import { compileJsxToHtml } from '@/lib/site-template/compile-template';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 interface RouteContext {
@@ -61,61 +59,17 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     );
   }
 
-  // 2. Compile JSX → JS via sucrase
-  let compiledCode: string;
+  // 2. Compile JSX → sanitized static HTML
+  let compiledHtml: string;
   try {
-    const result = transform(jsxSource, {
-      transforms: ['jsx', 'typescript'],
-      jsxRuntime: 'classic',
-      production: true,
-    });
-    compiledCode = result.code;
+    compiledHtml = await compileJsxToHtml(jsxSource);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'JSX compilation failed';
+    const message = err instanceof Error ? err.message : 'Compilation failed';
     return NextResponse.json(
       { error: { code: 'COMPILE_ERROR', message } },
       { status: 400 },
     );
   }
-
-  // 3. Execute compiled code to produce a React element, then render to static HTML
-  let compiledHtml: string;
-  try {
-    // The user convention: define a function App() that returns JSX.
-    // After sucrase compilation, App is a plain function returning React.createElement calls.
-    // eslint-disable-next-line no-new-func
-    const factory = new Function(
-      'React',
-      compiledCode + ';\nreturn typeof App !== "undefined" ? React.createElement(App) : null;',
-    );
-    const element = factory(React);
-
-    if (!element) {
-      return NextResponse.json(
-        { error: { code: 'COMPILE_ERROR', message: 'No App component found in JSX source' } },
-        { status: 400 },
-      );
-    }
-
-    // Dynamic import to avoid Next.js build error with react-dom/server in route handlers
-    const ReactDOMServer = (await import('react-dom/server')).default;
-    compiledHtml = ReactDOMServer.renderToStaticMarkup(element);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Render failed';
-    return NextResponse.json(
-      { error: { code: 'RENDER_ERROR', message } },
-      { status: 400 },
-    );
-  }
-
-  // 4. Sanitize compiled HTML (defense-in-depth)
-  const DOMPurify = (await import('isomorphic-dompurify')).default;
-  compiledHtml = DOMPurify.sanitize(compiledHtml, {
-    ADD_TAGS: ['style'],
-    ADD_ATTR: ['target', 'rel'],
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
-    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
-  });
 
   const now = new Date().toISOString();
 
