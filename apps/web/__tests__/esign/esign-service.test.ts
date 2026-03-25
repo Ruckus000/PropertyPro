@@ -471,7 +471,7 @@ describe('esign-service', () => {
 
   describe('signing slug generation (via createSubmission)', () => {
     it('generates slug for each signer that is set in the insert call', async () => {
-      const insertedValues: Record<string, unknown>[] = [];
+      const insertedValues: unknown[] = [];
 
       const scoped = {
         selectFrom: vi.fn(async () => [
@@ -484,9 +484,17 @@ describe('esign-service', () => {
             name: 'Template',
           },
         ]),
-        insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
           insertedValues.push(data);
-          return [{ id: insertedValues.length, communityId: 1, ...data }];
+          // Batch signer insert receives an array; return each row
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertedValues.length, communityId: 1, ...(data as Record<string, unknown>) }];
         }),
         update: vi.fn(async () => []),
       };
@@ -501,13 +509,14 @@ describe('esign-service', () => {
         sendEmail: true,
       });
 
-      // The second insert call is for the signer (first is submission)
-      const signerInsert = insertedValues.find(
-        (v) => typeof v.slug === 'string',
-      );
-      expect(signerInsert).toBeDefined();
+      // The second insert call is for the signer batch (first is submission)
+      // data is an array of signer objects; find the one with a slug
+      const signerBatch = insertedValues.find(
+        (v) => Array.isArray(v) && v.length > 0 && typeof (v as Record<string, unknown>[])[0]?.slug === 'string',
+      ) as Record<string, unknown>[] | undefined;
+      expect(signerBatch).toBeDefined();
 
-      const slug = signerInsert!.slug as string;
+      const slug = signerBatch![0]!.slug as string;
       // Slug should be 64 hex characters (two UUIDs with dashes removed: 32 + 32)
       expect(slug).toHaveLength(64);
       expect(slug).toMatch(/^[a-f0-9]{64}$/);
@@ -712,9 +721,17 @@ describe('esign-service', () => {
             name: 'Template',
           },
         ]),
-        insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
           insertCalls.push(data);
-          return [{ id: insertCalls.length, communityId: 1, ...data }];
+          // Batch signer insert receives an array; return each row
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertCalls.length, communityId: 1, ...(data as Record<string, unknown>) }];
         }),
         update: vi.fn(async () => []),
       };
@@ -732,8 +749,8 @@ describe('esign-service', () => {
 
       expect(result.submission).toBeDefined();
       expect(result.signers).toHaveLength(2);
-      // 1 submission + 2 signers + 1 event = 4 inserts
-      expect(scoped.insert).toHaveBeenCalledTimes(4);
+      // 1 submission + 1 batch signers insert + 1 event = 3 inserts
+      expect(scoped.insert).toHaveBeenCalledTimes(3);
       expect(logAuditEventMock).toHaveBeenCalled();
     });
   });

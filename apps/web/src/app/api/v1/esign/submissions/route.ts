@@ -29,7 +29,7 @@ const createSubmissionSchema = z.object({
       userId: z.string().uuid().optional(),
       prefilledFields: z.record(z.string(), z.unknown()).optional(),
     }),
-  ).min(1),
+  ).min(1).max(50),
   signingOrder: z.enum(['parallel', 'sequential']),
   sendEmail: z.boolean(),
   expiresAt: z.string().datetime().optional(),

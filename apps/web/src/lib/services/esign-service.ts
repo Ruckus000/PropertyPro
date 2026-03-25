@@ -639,23 +639,21 @@ export async function createSubmission(
   });
   const submission = subRows[0] as EsignSubmissionRecord;
 
-  const signerRecords: EsignSignerRecord[] = [];
-  for (const signerInput of input.signers) {
-    const signerRows = await scoped.insert(esignSigners, {
-      communityId,
-      submissionId: submission.id,
-      externalId: generateExternalId(),
-      userId: signerInput.userId ?? null,
-      email: signerInput.email,
-      name: signerInput.name,
-      role: signerInput.role,
-      slug: generateSigningSlug(),
-      sortOrder: signerInput.sortOrder,
-      status: 'pending',
-      prefilledFields: signerInput.prefilledFields ?? null,
-    });
-    signerRecords.push(signerRows[0] as EsignSignerRecord);
-  }
+  const signerValues = input.signers.map((signerInput) => ({
+    communityId,
+    submissionId: submission.id,
+    externalId: generateExternalId(),
+    userId: signerInput.userId ?? null,
+    email: signerInput.email,
+    name: signerInput.name,
+    role: signerInput.role,
+    slug: generateSigningSlug(),
+    sortOrder: signerInput.sortOrder,
+    status: 'pending' as const,
+    prefilledFields: signerInput.prefilledFields ?? null,
+  }));
+
+  const signerRecords = (await scoped.insert(esignSigners, signerValues)) as EsignSignerRecord[];
 
   await scoped.insert(esignEvents, {
     communityId,
