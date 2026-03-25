@@ -18,6 +18,7 @@ const {
   queuePdfExtractionMock,
   getAccessibleDocumentsMock,
   requireActiveSubscriptionForMutationMock,
+  queueNotificationDetailedMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
@@ -35,6 +36,12 @@ const {
   queuePdfExtractionMock: vi.fn(),
   getAccessibleDocumentsMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
+  queueNotificationDetailedMock: vi.fn().mockResolvedValue({
+    recipientsCount: 1,
+    sentCount: 1,
+    queuedCount: 0,
+    failedCount: 0,
+  }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -59,7 +66,7 @@ vi.mock('@/lib/workers/pdf-extraction', () => ({
 }));
 
 vi.mock('@/lib/services/notification-service', () => ({
-  queueNotification: vi.fn(),
+  queueNotificationDetailed: queueNotificationDetailedMock,
 }));
 
 vi.mock('@/lib/middleware/subscription-guard', () => ({
@@ -74,12 +81,37 @@ const MANAGER_MEMBERSHIP = {
   permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
 };
 
+function resetRouteMocks() {
+  vi.resetAllMocks();
+  requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
+  requireCommunityMembershipMock.mockResolvedValue({
+    role: 'resident',
+    isAdmin: false,
+    isUnitOwner: true,
+    displayTitle: 'Owner',
+    communityType: 'condo_718',
+  });
+  createPresignedDownloadUrlMock.mockResolvedValue('https://example.com/signed-download');
+  deleteStorageObjectMock.mockResolvedValue(undefined);
+  logAuditEventMock.mockResolvedValue(undefined);
+  getAccessibleDocumentsMock.mockResolvedValue([]);
+  requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+  queueNotificationDetailedMock.mockResolvedValue({
+    recipientsCount: 1,
+    sentCount: 1,
+    queuedCount: 0,
+    failedCount: 0,
+  });
+  createScopedClientMock.mockReturnValue({
+    insert: scopedInsertMock,
+    query: scopedQueryMock,
+    softDelete: scopedSoftDeleteMock,
+  });
+}
+
 describe('p1-11 documents route', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
-    createPresignedDownloadUrlMock.mockResolvedValue('https://example.com/signed-download');
-    getAccessibleDocumentsMock.mockResolvedValue([]);
+    resetRouteMocks();
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -92,12 +124,6 @@ describe('p1-11 documents route', () => {
         } as Response;
       }),
     );
-
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-      query: scopedQueryMock,
-      softDelete: scopedSoftDeleteMock,
-    });
   });
 
   afterEach(() => {
@@ -124,7 +150,7 @@ describe('p1-11 documents route', () => {
         communityId: 42,
         title: 'Board Minutes',
         description: 'March meeting minutes',
-        categoryId: null,
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/minutes.pdf',
         fileName: 'minutes.pdf',
         fileSize: 1024,
@@ -144,7 +170,9 @@ describe('p1-11 documents route', () => {
       documentsTable,
       expect.objectContaining({
         title: 'Board Minutes',
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/minutes.pdf',
+        sourceType: 'library',
       }),
     );
 
@@ -210,6 +238,7 @@ describe('p1-11 documents route', () => {
       body: JSON.stringify({
         communityId: 42,
         title: 'Board Minutes',
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/minutes.pdf',
         fileName: 'minutes.pdf',
         fileSize: 1024,
@@ -232,6 +261,7 @@ describe('p1-11 documents route', () => {
       body: JSON.stringify({
         communityId: 42,
         title: 'Board Minutes',
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/minutes.pdf',
         fileName: 'minutes.pdf',
         fileSize: 1024,
@@ -252,6 +282,7 @@ describe('p1-11 documents route', () => {
       body: JSON.stringify({
         communityId: 42,
         title: 'Board Minutes',
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/minutes.pdf',
         fileName: 'minutes.pdf',
         fileSize: 2048,
@@ -295,6 +326,7 @@ describe('p1-11 documents route', () => {
       body: JSON.stringify({
         communityId: 42,
         title: 'Fake PDF',
+        categoryId: 7,
         filePath: 'communities/42/documents/abc/fake.pdf',
         fileName: 'fake.pdf',
         fileSize: 2,
@@ -335,19 +367,77 @@ describe('p1-11 documents route', () => {
 
     expect(res.status).toBe(403);
   });
+
+  it('POST rejects missing categoryId for library documents', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Board Minutes',
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+        fileName: 'minutes.pdf',
+        fileSize: 1024,
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(scopedInsertMock).not.toHaveBeenCalled();
+  });
+
+  it('POST returns warnings when notification dispatch fails', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+    queueNotificationDetailedMock.mockResolvedValueOnce({
+      recipientsCount: 5,
+      sentCount: 0,
+      queuedCount: 0,
+      failedCount: 5,
+    });
+    scopedInsertMock.mockResolvedValue([
+      {
+        id: 99,
+        communityId: 42,
+        title: 'Board Minutes',
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+      },
+    ]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Board Minutes',
+        description: 'March meeting minutes',
+        categoryId: 7,
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+        fileName: 'minutes.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      }),
+    });
+
+    const res = await POST(req);
+    const json = await res.json() as { warnings?: Array<{ code: string }> };
+
+    expect(res.status).toBe(201);
+    expect(json.warnings).toEqual([
+      expect.objectContaining({ code: 'notification_dispatch_failed' }),
+    ]);
+  });
 });
 
 describe('p1-15 documents route DELETE', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
-    requireCommunityMembershipMock.mockResolvedValue({ role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner', communityType: 'condo_718' });
-
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-      query: scopedQueryMock,
-      softDelete: scopedSoftDeleteMock,
-    });
+    resetRouteMocks();
   });
 
   it('DELETE soft-deletes document and logs audit event', async () => {
@@ -488,10 +578,7 @@ describe('p1-15 documents route DELETE', () => {
 
 describe('p1-11 documents route — additional coverage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockResolvedValue('95c454d2-9728-4f1f-8b75-5b9549fb9679');
-    createPresignedDownloadUrlMock.mockResolvedValue('https://example.com/signed-download');
-    getAccessibleDocumentsMock.mockResolvedValue([]);
+    resetRouteMocks();
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -504,12 +591,6 @@ describe('p1-11 documents route — additional coverage', () => {
         } as Response;
       }),
     );
-
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-      query: scopedQueryMock,
-      softDelete: scopedSoftDeleteMock,
-    });
   });
 
   afterEach(() => {
@@ -529,6 +610,7 @@ describe('p1-11 documents route — additional coverage', () => {
         body: JSON.stringify({
           communityId: 42,
           title: 'Board Minutes',
+          categoryId: 7,
           filePath: 'communities/42/documents/abc/minutes.pdf',
           fileName: 'minutes.pdf',
           fileSize: 1024,
@@ -572,6 +654,7 @@ describe('p1-11 documents route — additional coverage', () => {
         body: JSON.stringify({
           communityId: 42,
           title: 'Board Minutes',
+          categoryId: 7,
           filePath: 'communities/42/documents/abc/minutes.pdf',
           fileName: 'minutes.pdf',
           fileSize: 1024,
@@ -606,6 +689,7 @@ describe('p1-11 documents route — additional coverage', () => {
         body: JSON.stringify({
           communityId: 42,
           title: 'Fake PDF',
+          categoryId: 7,
           filePath: 'communities/42/documents/abc/fake.pdf',
           fileName: 'fake.pdf',
           fileSize: 2,

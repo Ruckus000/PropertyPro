@@ -3,11 +3,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { X, Upload, FileUp } from "lucide-react";
 import { Button } from "@propertypro/ui";
+import { AlertBanner } from "@/components/shared/alert-banner";
+import { EmptyState } from "@/components/shared/empty-state";
+import { useDocumentCategories } from "@/hooks/useDocumentCategories";
 import { useDocumentUpload } from "@/hooks/useDocumentUpload";
 
 interface UploadDocumentModalProps {
   communityId: number;
   defaultTitle: string;
+  categoryName: string;
   onUploaded: (documentId: number) => void;
   onClose: () => void;
 }
@@ -15,14 +19,24 @@ interface UploadDocumentModalProps {
 export function UploadDocumentModal({
   communityId,
   defaultTitle,
+  categoryName,
   onUploaded,
   onClose,
 }: UploadDocumentModalProps) {
   const [title, setTitle] = useState(defaultTitle);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isUploading, progress, error, uploadDocument } = useDocumentUpload();
+  const {
+    categories,
+    isLoading: isLoadingCategories,
+    error: categoriesError,
+    resolveCategoryId,
+  } = useDocumentCategories(communityId);
+  const resolvedCategoryId = resolveCategoryId(categoryName);
+  const resolvedCategoryName = categories.find((category) => category.id === resolvedCategoryId)?.name ?? categoryName;
 
   // Close on Escape
   useEffect(() => {
@@ -47,20 +61,24 @@ export function UploadDocumentModal({
   }, []);
 
   async function handleUpload() {
-    if (!file || !title.trim()) return;
+    if (!file || !title.trim() || resolvedCategoryId == null) return;
 
     try {
       const result = await uploadDocument({
         communityId,
         title: title.trim(),
+        categoryId: resolvedCategoryId,
         file,
       });
+      setWarnings(result.warnings);
       // The result should include the document id
-      const docId = (result as Record<string, unknown>).id as number;
+      const docId = (result.document as Record<string, unknown>).id as number;
       if (docId) {
         onUploaded(docId);
       }
-      onClose();
+      if (result.warnings.length === 0) {
+        onClose();
+      }
     } catch {
       // error state is handled by the hook
     }
@@ -98,6 +116,49 @@ export function UploadDocumentModal({
 
         {/* Body */}
         <div className="px-4 py-4 flex flex-col gap-4">
+          {warnings.length > 0 && (
+            <AlertBanner
+              status="warning"
+              title="Uploaded with warnings"
+              description={warnings.map((warning) => warning.message).join(' ')}
+            />
+          )}
+
+          {isLoadingCategories && (
+            <p className="text-sm text-content-secondary">Loading upload settings...</p>
+          )}
+
+          {!isLoadingCategories && categoriesError && (
+            <AlertBanner
+              status="danger"
+              title="Unable to load categories"
+              description={categoriesError}
+            />
+          )}
+
+          {!isLoadingCategories && !categoriesError && categories.length === 0 && (
+            <EmptyState
+              icon="file-text"
+              title="Create a category before uploading"
+              description="Compliance uploads are blocked until this community has at least one document category."
+              size="sm"
+            />
+          )}
+
+          {!isLoadingCategories && !categoriesError && categories.length > 0 && resolvedCategoryId == null && (
+            <AlertBanner
+              status="danger"
+              title="Category mapping required"
+              description={`This checklist item could not be matched to a document category (${categoryName}).`}
+            />
+          )}
+
+          {!isLoadingCategories && !categoriesError && resolvedCategoryId != null && (
+            <p className="text-sm text-content-tertiary">
+              Category: <span className="font-medium text-content-secondary">{resolvedCategoryName}</span>
+            </p>
+          )}
+
           {/* Title input */}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="upload-title" className="text-xs font-medium text-content-secondary">
@@ -107,9 +168,9 @@ export function UploadDocumentModal({
               id="upload-title"
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={isUploading}
-              className="
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isUploading || isLoadingCategories || resolvedCategoryId == null}
+            className="
                 w-full px-3 py-2 text-sm
                 rounded-[var(--radius-md)]
                 border border-edge
@@ -162,7 +223,7 @@ export function UploadDocumentModal({
               type="file"
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files)}
-              disabled={isUploading}
+              disabled={isUploading || isLoadingCategories || resolvedCategoryId == null}
             />
           </div>
 
@@ -191,7 +252,7 @@ export function UploadDocumentModal({
             variant="primary"
             size="sm"
             onClick={handleUpload}
-            disabled={!file || !title.trim() || isUploading}
+            disabled={!file || !title.trim() || isUploading || isLoadingCategories || resolvedCategoryId == null}
           >
             {isUploading ? `Uploading ${progress}%` : "Upload & Link"}
           </Button>

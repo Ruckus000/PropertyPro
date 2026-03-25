@@ -163,7 +163,7 @@ export function DocumentList({
   };
 
   const handleDownload = (doc: DocumentListItem) => {
-    window.open(`/api/v1/documents/${doc.id}/download?communityId=${communityId}`, '_blank');
+    window.open(`/api/v1/documents/${doc.id}/download?communityId=${communityId}&attachment=true`, '_blank');
   };
 
   if (error) {

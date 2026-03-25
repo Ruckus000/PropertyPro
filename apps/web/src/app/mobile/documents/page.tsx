@@ -43,10 +43,11 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
     id: doc['id'] as number,
     title: doc['title'] as string,
     fileName: doc['fileName'] as string,
+    mimeType: (doc['mimeType'] as string) ?? 'application/octet-stream',
     category: (doc['category'] as string) ?? 'Other',
     createdAt: doc['createdAt'] as string,
     requiresSignature: (doc['requiresSignature'] as boolean) ?? false,
   }));
 
-  return <MobileDocumentsContent documents={serialized} timezone={timezone} />;
+  return <MobileDocumentsContent communityId={communityId} documents={serialized} timezone={timezone} />;
 }

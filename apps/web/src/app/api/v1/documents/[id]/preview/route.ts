@@ -5,14 +5,18 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { AppError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { resolveLibraryDocumentRequest } from '@/lib/documents/library-document-resolver';
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
-  attachment: z.enum(['true', 'false']).optional(),
 });
+
+function buildInlineDisposition(fileName: string): string {
+  const sanitized = fileName.replace(/["\r\n]/g, '_');
+  return `inline; filename="${sanitized}"`;
+}
 
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
   if (!context?.params) {
@@ -29,7 +33,6 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
   const { searchParams } = new URL(req.url);
   const parseResult = querySchema.safeParse({
     communityId: searchParams.get('communityId'),
-    attachment: searchParams.get('attachment') ?? undefined,
   });
 
   if (!parseResult.success) {
@@ -38,21 +41,26 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     });
   }
 
-  const { attachment } = parseResult.data;
-  const { userId, communityId, document: doc } = await resolveLibraryDocumentRequest({
+  const { userId, communityId, document } = await resolveLibraryDocumentRequest({
     req,
     communityId: parseResult.data.communityId,
     documentId,
   });
 
-  const filePath = doc['filePath'] as string;
-  const fileName = doc['fileName'] as string;
+  const mimeType = String(document['mimeType'] ?? '');
+  if (!mimeType.toLowerCase().includes('pdf')) {
+    throw new ValidationError('Inline preview is only available for PDF documents');
+  }
 
-  // Generate presigned download URL (valid for 1 hour)
+  const filePath = String(document['filePath']);
+  const fileName = String(document['fileName']);
   const signedUrl = await createPresignedDownloadUrl('documents', filePath, 3600);
+  const upstream = await fetch(signedUrl);
 
-  // Fire-and-forget: access logging must never block document viewing.
-  // Placed after URL generation so a failed presign doesn't leave a false-positive audit entry.
+  if (!upstream.ok || !upstream.body) {
+    throw new AppError('Unable to load document preview', 502, 'DOCUMENT_PREVIEW_FAILED');
+  }
+
   logAuditEvent({
     userId,
     action: 'document_accessed',
@@ -60,25 +68,22 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     resourceId: String(documentId),
     communityId,
     metadata: {
-      accessType: attachment === 'true' ? 'download' : 'preview',
+      accessType: 'inline_preview',
       fileName,
     },
   }).catch(() => {
-    // Swallow audit failures for reads — never block document viewing
+    // Never block previewing on audit logging.
   });
 
-  // If attachment=true, redirect directly to download (triggers browser download)
-  if (attachment === 'true') {
-    return NextResponse.redirect(signedUrl);
-  }
+  const contentLength = upstream.headers.get('content-length');
 
-  // Otherwise, return the URL for client-side use (preview, etc.)
-  return NextResponse.json({
-    data: {
-      url: signedUrl,
-      fileName,
-      mimeType: doc['mimeType'],
-      fileSize: doc['fileSize'],
+  return new NextResponse(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': buildInlineDisposition(fileName),
+      'Cache-Control': 'private, no-store',
+      ...(contentLength ? { 'Content-Length': contentLength } : {}),
     },
   });
 });

@@ -5,7 +5,7 @@
 import { bigint, bigserial, customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documentCategories } from './document-categories';
-import { extractionStatusEnum } from './enums';
+import { documentSourceTypeEnum, extractionStatusEnum } from './enums';
 import { users } from './users';
 
 /**
@@ -36,6 +36,7 @@ export const documents = pgTable(
     fileName: text('file_name').notNull(),
     fileSize: bigint('file_size', { mode: 'number' }).notNull(),
     mimeType: text('mime_type').notNull(),
+    sourceType: documentSourceTypeEnum('source_type').notNull().default('library'),
     uploadedBy: uuid('uploaded_by').references(() => users.id, {
       onDelete: 'set null',
     }),

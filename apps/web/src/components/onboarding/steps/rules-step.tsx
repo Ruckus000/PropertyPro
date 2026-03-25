@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DocumentUploadArea } from '@/components/documents/document-upload-area';
+import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
 import type { RulesStepData } from '@/lib/onboarding/apartment-wizard-types';
-
-interface DocumentCategorySummary {
-  id: number;
-  name: string;
-}
+import type { DocumentCategoryOption } from '@/lib/documents/categories';
 
 interface RulesStepProps {
   communityId: number;
@@ -16,7 +14,7 @@ interface RulesStepProps {
   onBack: () => void;
 }
 
-function pickRulesCategoryId(categories: DocumentCategorySummary[]): number | null {
+function pickRulesCategoryId(categories: DocumentCategoryOption[]): number | null {
   if (categories.length === 0) return null;
 
   const byPriority = [
@@ -34,50 +32,19 @@ function pickRulesCategoryId(categories: DocumentCategorySummary[]): number | nu
 }
 
 export function RulesStep({ communityId, initialData, onNext, onBack }: RulesStepProps) {
-  const [categories, setCategories] = useState<DocumentCategorySummary[]>([]);
   const [uploadedRule, setUploadedRule] = useState<RulesStepData | null>(initialData ?? null);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadCategories(): Promise<void> {
-      setIsLoadingCategories(true);
-      try {
-        const response = await fetch(`/api/v1/document-categories?communityId=${communityId}`);
-        if (!response.ok) {
-          throw new Error('Failed to load document categories');
-        }
-        const body = (await response.json()) as {
-          data: Array<{ id: number; name: string }>;
-        };
-
-        if (active) {
-          setCategories(body.data);
-        }
-      } catch (loadError) {
-        if (active) {
-          setError(loadError instanceof Error ? loadError.message : 'Failed to load categories');
-        }
-      } finally {
-        if (active) {
-          setIsLoadingCategories(false);
-        }
-      }
-    }
-
-    loadCategories();
-
-    return () => {
-      active = false;
-    };
-  }, [communityId]);
+  const {
+    categories,
+    isLoading: isLoadingCategories,
+    error: categoriesError,
+  } = useDocumentCategories(communityId);
 
   const rulesCategoryId = useMemo(() => pickRulesCategoryId(categories), [categories]);
 
-  function handleUpload(document: Record<string, unknown>): void {
+  function handleUpload(result: UploadDocumentResult): void {
+    const document = result.document;
     const documentId = Number(document.id);
     const pathValue =
       typeof document.filePath === 'string'
@@ -141,7 +108,7 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
         ) : (
           <DocumentUploadArea
             communityId={communityId}
-            categoryId={rulesCategoryId}
+            initialCategoryId={rulesCategoryId}
             onUploaded={handleUpload}
           />
         )}
@@ -153,9 +120,9 @@ export function RulesStep({ communityId, initialData, onNext, onBack }: RulesSte
         )}
       </div>
 
-      {error && (
+      {(categoriesError || error) && (
         <div className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger">
-          {error}
+          {categoriesError ?? error}
         </div>
       )}
 

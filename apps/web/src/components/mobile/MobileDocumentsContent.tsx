@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { FileText, Search } from "lucide-react";
+import { AlertBanner } from "@/components/shared/alert-banner";
 import { cn } from "@/lib/utils";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import {
@@ -16,12 +17,14 @@ interface SerializedDocument {
   id: number;
   title: string;
   fileName: string;
+  mimeType: string;
   category: string;
   createdAt: string;
   requiresSignature: boolean;
 }
 
 interface MobileDocumentsContentProps {
+  communityId: number;
   documents: SerializedDocument[];
   timezone: string;
 }
@@ -45,11 +48,13 @@ function getFileType(fileName: string): string {
 // ── Component ───────────────────────────────────────
 
 export function MobileDocumentsContent({
+  communityId,
   documents,
   timezone,
 }: MobileDocumentsContentProps) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(documents.map((d) => d.category))).sort();
@@ -69,10 +74,45 @@ export function MobileDocumentsContent({
   const showFilters = categories.length > 2;
   const showSearchAndFilters = documents.length > 0;
 
+  function isPreviewable(mimeType: string): boolean {
+    return mimeType.includes("pdf") || mimeType.includes("image");
+  }
+
+  async function handleOpen(doc: SerializedDocument): Promise<void> {
+    setActionError(null);
+
+    try {
+      const response = await fetch(`/api/v1/documents/${doc.id}/download?communityId=${communityId}`);
+      if (!response.ok) {
+        throw new Error("Unable to open document");
+      }
+
+      const body = (await response.json()) as { data: { url: string } };
+      window.location.assign(body.data.url);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to open document");
+    }
+  }
+
+  function handleDownload(doc: SerializedDocument): void {
+    setActionError(null);
+    window.location.assign(`/api/v1/documents/${doc.id}/download?communityId=${communityId}&attachment=true`);
+  }
+
   return (
     <PageTransition>
       <div className="flex flex-col pb-6">
         <MobileBackHeader title="Documents" />
+
+        {actionError && (
+          <div className="px-4 pt-4">
+            <AlertBanner
+              status="warning"
+              title="Document action unavailable"
+              description={actionError}
+            />
+          </div>
+        )}
 
         {/* ── Search + Filters ── */}
         {showSearchAndFilters && (
@@ -172,6 +212,26 @@ export function MobileDocumentsContent({
                           Signature Required
                         </span>
                       )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {isPreviewable(doc.mimeType) && (
+                          <button
+                            type="button"
+                            onClick={() => void handleOpen(doc)}
+                            data-testid={`mobile-document-open-${doc.id}`}
+                            className="min-h-11 rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
+                          >
+                            Open
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(doc)}
+                          data-testid={`mobile-document-download-${doc.id}`}
+                          className="min-h-11 rounded-full bg-stone-900 px-4 text-sm font-medium text-white"
+                        >
+                          Download
+                        </button>
+                      </div>
                     </div>
                   </li>
                 </StaggerItem>

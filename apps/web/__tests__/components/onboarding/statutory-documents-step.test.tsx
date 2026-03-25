@@ -12,7 +12,7 @@ vi.mock('@/components/documents/document-uploader', () => {
                 {
                     type: 'button',
                     'data-testid': 'mock-upload',
-                    onClick: () => onUploaded?.({ id: 123 }),
+                    onClick: () => onUploaded?.({ document: { id: 123 }, warnings: [] }),
                 },
                 'Mock Upload',
             ),

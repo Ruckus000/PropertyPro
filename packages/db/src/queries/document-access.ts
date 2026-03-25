@@ -17,6 +17,10 @@ import { createScopedClient } from '../scoped-client';
 import { documentCategories } from '../schema/document-categories';
 import { documents } from '../schema/documents';
 
+function buildLibrarySourceFilter(): SQL {
+  return eq(documents.sourceType, 'library');
+}
+
 export interface DocumentAccessContext {
   communityId: number;
   role: CommunityRole | NewCommunityRole;
@@ -77,13 +81,18 @@ export async function getAccessibleDocuments(
 ): Promise<Record<string, unknown>[]> {
   const scoped = createScopedClient(context.communityId);
   const accessFilter = await buildDocumentAccessFilter(context);
+  const libraryFilter = buildLibrarySourceFilter();
 
-  const combinedFilter = accessFilter && additionalFilter
-    ? and(accessFilter, additionalFilter)
-    : accessFilter ?? additionalFilter;
+  const combinedFilter = [libraryFilter, accessFilter, additionalFilter].filter(
+    (filter): filter is SQL => filter !== undefined,
+  );
 
   // Use selectFrom which auto-applies community_id and deleted_at scoping
-  return scoped.selectFrom(documents, {}, combinedFilter);
+  return scoped.selectFrom(
+    documents,
+    {},
+    combinedFilter.length === 1 ? combinedFilter[0] : and(...combinedFilter),
+  );
 }
 
 export async function getDocumentWithAccessCheck(
@@ -92,12 +101,17 @@ export async function getDocumentWithAccessCheck(
 ): Promise<Record<string, unknown> | null> {
   const scoped = createScopedClient(context.communityId);
   const accessFilter = await buildDocumentAccessFilter(context);
-  const idFilter = eq(documents.id, documentId);
-  const combinedFilter = accessFilter ? and(idFilter, accessFilter) : idFilter;
+  const combinedFilter = [eq(documents.id, documentId), buildLibrarySourceFilter(), accessFilter].filter(
+    (filter): filter is SQL => filter !== undefined,
+  );
 
   // Use selectFrom which auto-applies community_id and deleted_at scoping
   const rows = await scoped
-    .selectFrom(documents, {}, combinedFilter)
+    .selectFrom(
+      documents,
+      {},
+      combinedFilter.length === 1 ? combinedFilter[0] : and(...combinedFilter),
+    )
     .limit(1);
 
   return rows[0] ?? null;
@@ -110,4 +124,3 @@ export async function isDocumentAccessible(
   const row = await getDocumentWithAccessCheck(context, documentId);
   return row != null;
 }
-

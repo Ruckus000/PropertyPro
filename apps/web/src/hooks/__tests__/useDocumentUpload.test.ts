@@ -50,6 +50,7 @@ function makeUploadRequest(overrides?: Partial<UploadRequest>): UploadRequest {
   return {
     communityId: 1,
     title: 'Test Document',
+    categoryId: 11,
     file: createTestFile(),
     ...overrides,
   };
