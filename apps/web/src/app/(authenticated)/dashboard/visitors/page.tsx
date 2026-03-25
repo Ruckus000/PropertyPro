@@ -8,10 +8,13 @@
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
+import { communities, createScopedClient } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { listActorUnitIds } from '@/lib/units/actor-units';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
 
@@ -44,6 +47,11 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
   }
 
   const isStaff = isAdminRole(membership.role);
+  const scoped = createScopedClient(communityId);
+  const communityRows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
+  const community = communityRows[0];
+  const communitySettings = (community?.communitySettings as Record<string, unknown> | undefined) ?? {};
+  const hostUnitId = isStaff ? undefined : (await listActorUnitIds(scoped, userId))[0];
 
   return (
     <>
@@ -61,7 +69,12 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
       {isStaff ? (
         <VisitorStaffView communityId={communityId} />
       ) : (
-        <VisitorResidentView communityId={communityId} />
+        <VisitorResidentView
+          communityId={communityId}
+          hostUnitId={hostUnitId}
+          allowResidentVisitorRevoke={communitySettings.allowResidentVisitorRevoke === true}
+          currentUserId={userId}
+        />
       )}
     </>
   );

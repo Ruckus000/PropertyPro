@@ -12,10 +12,10 @@ import {
   requireVisitorsReadPermission,
 } from '@/lib/logistics/common';
 import {
-  deriveVisitorStatus,
   listMyVisitorsForCommunity,
   listVisitorsForCommunity,
 } from '@/lib/services/package-visitor-service';
+import { deriveVisitorStatus } from '@/lib/visitors/visitor-logic';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();

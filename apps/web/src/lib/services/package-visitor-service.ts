@@ -11,6 +11,11 @@ import {
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
+import {
+  deriveVisitorStatus,
+  filterDeniedVisitorMatches,
+  type VisitorStatus,
+} from '@/lib/visitors/visitor-logic';
 
 interface PackageLogRow {
   [key: string]: unknown;
@@ -246,6 +251,35 @@ async function notifyResidentsOfPackage(
   }
 
   return notifiedCount;
+}
+
+async function notifyHostResidentOfVisitorEvent(
+  communityId: number,
+  actorUserId: string,
+  visitorId: number,
+  hostUserId: string | null,
+  title: string,
+  description: string,
+): Promise<void> {
+  if (!hostUserId) return;
+
+  try {
+    await queueNotification(
+      communityId,
+      {
+        type: 'compliance_alert',
+        alertTitle: title,
+        alertDescription: description,
+        severity: 'info',
+        sourceType: 'compliance',
+        sourceId: String(visitorId),
+      },
+      { type: 'specific_user', userId: hostUserId },
+      actorUserId,
+    );
+  } catch {
+    // Notification delivery is best-effort and should not block visitor workflows.
+  }
 }
 
 export async function createPackageForCommunity(
@@ -551,6 +585,15 @@ export async function checkInVisitorForCommunity(
     },
   });
 
+  await notifyHostResidentOfVisitorEvent(
+    communityId,
+    actorUserId,
+    visitorId,
+    existing.hostUserId,
+    `${existing.visitorName} has checked in`,
+    `Your visitor ${existing.visitorName} was checked in successfully.`,
+  );
+
   return row;
 }
 
@@ -632,25 +675,6 @@ export async function listMyVisitorsForCommunity(
   return rows.filter((row) => row.hostUserId === actorUserId || allowedUnitIds.includes(row.hostUnitId));
 }
 
-export type VisitorStatus =
-  | 'expected'
-  | 'checked_in'
-  | 'checked_out'
-  | 'expired'
-  | 'overstayed'
-  | 'revoked'
-  | 'revoked_on_site';
-
-export function deriveVisitorStatus(visitor: VisitorLogRow): VisitorStatus {
-  if (visitor.revokedAt && !visitor.checkedOutAt) return 'revoked_on_site';
-  if (visitor.revokedAt) return 'revoked';
-  if (visitor.checkedOutAt) return 'checked_out';
-  if (visitor.checkedInAt && visitor.validUntil && visitor.validUntil < new Date()) return 'overstayed';
-  if (visitor.checkedInAt) return 'checked_in';
-  if (visitor.validUntil && visitor.validUntil < new Date()) return 'expired';
-  return 'expected';
-}
-
 export async function revokeVisitorForCommunity(
   communityId: number,
   visitorId: number,
@@ -701,6 +725,17 @@ export async function revokeVisitorForCommunity(
     metadata: { requestId, transition: 'revoke', reason },
   });
 
+  await notifyHostResidentOfVisitorEvent(
+    communityId,
+    actorUserId,
+    visitorId,
+    existing.hostUserId,
+    `${existing.visitorName} visitor pass revoked`,
+    reason
+      ? `The visitor pass for ${existing.visitorName} was revoked. Reason: ${reason}`
+      : `The visitor pass for ${existing.visitorName} was revoked.`,
+  );
+
   return row;
 }
 
@@ -711,7 +746,7 @@ export async function revokeVisitorPassesForUser(
   const scoped = createScopedClient(communityId);
   const result = await scoped.update(
     visitorLog,
-    { revokedAt: new Date() },
+    { revokedAt: new Date(), updatedAt: new Date() },
     and(
       eq(visitorLog.hostUserId, userId),
       isNull(visitorLog.revokedAt),
@@ -904,12 +939,5 @@ export async function matchDeniedVisitors(
     eq(deniedVisitors.isActive, true),
   );
 
-  const nameNorm = name?.toLowerCase().trim() ?? null;
-  const plateNorm = plate?.toUpperCase().trim() ?? null;
-
-  return rows.filter((row) => {
-    if (nameNorm && row.fullName.toLowerCase().trim() === nameNorm) return true;
-    if (plateNorm && row.vehiclePlate?.toUpperCase().trim() === plateNorm) return true;
-    return false;
-  });
+  return filterDeniedVisitorMatches(rows, name, plate);
 }
