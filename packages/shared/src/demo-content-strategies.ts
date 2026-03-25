@@ -84,7 +84,7 @@ export function getContentStrategies(communityType: CommunityType): ContentStrat
 
 export function getDefaultStrategy(communityType: CommunityType): ContentStrategy {
   const id = DEFAULT_MAP[communityType];
-  return CONTENT_STRATEGIES.find((s) => s.id === id) ?? CONTENT_STRATEGIES[0];
+  return CONTENT_STRATEGIES.find((s) => s.id === id) ?? (CONTENT_STRATEGIES[0] as ContentStrategy);
 }
 
 export function getStrategyById(id: string): ContentStrategy | undefined {
