@@ -131,6 +131,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts'),
   // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts'),
+  // Support access consent — uses createAdminClient for cross-community consent/log queries
+  resolve(repoRoot, 'apps/web/src/app/api/v1/settings/support-access/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
