@@ -7,6 +7,7 @@ import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context'
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { PageHeader } from '@/components/shared/page-header';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -34,7 +35,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   if (!context.communityId) {
     return (
       <>
-        <h1 className="mb-4 text-xl font-semibold">Settings</h1>
+        <PageHeader title="Settings" />
         <p className="text-sm text-content-secondary">Provide a communityId to edit preferences.</p>
       </>
     );
@@ -45,6 +46,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-8">
+      <PageHeader title="Settings" />
       <div>
         <h2 className="mb-2 text-xl font-semibold">Personal Settings</h2>
         <p className="mb-4 text-sm text-content-secondary">
@@ -63,7 +65,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
       <div>
-        <h1 className="mb-2 text-xl font-semibold">Notification Preferences</h1>
+        <h2 className="mb-2 text-xl font-semibold">Notification Preferences</h2>
         <p className="mb-4 text-sm text-content-secondary">
           Choose which emails you receive and when they should be delivered.
         </p>

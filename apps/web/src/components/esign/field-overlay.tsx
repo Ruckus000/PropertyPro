@@ -150,7 +150,7 @@ function DraggableField({
       onKeyDown={handleKeyDown}
       className={`absolute flex items-center justify-center rounded border-2 text-xs font-medium cursor-grab transition-shadow ${
         isDragging ? 'z-50 opacity-80 shadow-lg cursor-grabbing' : 'z-10'
-      } ${isSelected ? 'ring-2 ring-[var(--interactive-primary)] ring-offset-1' : ''}`}
+      } ${isSelected ? 'ring-2 ring-interactive ring-offset-1' : ''}`}
       style={{
         left: `${field.x + transformX}%`,
         top: `${field.y + transformY}%`,
@@ -172,7 +172,7 @@ function DraggableField({
             e.stopPropagation();
             onRemove();
           }}
-          className="absolute -right-2 -top-2 z-20 flex size-4 items-center justify-center rounded-full bg-[var(--status-danger)] text-content-inverse hover:opacity-80"
+          className="absolute -right-2 -top-2 z-20 flex size-4 items-center justify-center rounded-full bg-status-danger text-content-inverse hover:opacity-80"
           aria-label="Remove field"
         >
           <X className="size-3" />
@@ -253,7 +253,7 @@ function SignableField({ field, color, isFilled, onClick }: SignableFieldProps) 
       }
     >
       {isFilled ? (
-        <Check className="size-4 text-[var(--status-success)]" />
+        <Check className="size-4 text-status-success" />
       ) : (
         <Icon className="size-3.5" style={{ color }} />
       )}

@@ -18,16 +18,23 @@ import type { EsignFieldsSchema } from '@propertypro/shared';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import { useCreateEsignSubmission } from '@/hooks/use-esign-submissions';
 import type { EsignTemplateRecord } from '@/lib/services/esign-service';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import {
   ArrowLeft,
+  Check,
+  ChevronsUpDown,
   ChevronDown,
   ChevronUp,
   Loader2,
   Plus,
-  Search,
   Trash2,
   Send,
 } from 'lucide-react';
+
 
 interface NewSubmissionFormProps {
   communityId: number;
@@ -54,15 +61,15 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
     data: templates,
     isLoading: templatesLoading,
   } = useEsignTemplates(communityId, { status: 'active' });
-  const [templateSearch, setTemplateSearch] = useState('');
   const [selectedTemplate, setSelectedTemplate] =
     useState<EsignTemplateRecord | null>(null);
-  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
 
   // Signer config
   const [signers, setSigners] = useState<SignerInput[]>([]);
 
   // Options
+  const [sendEmail, setSendEmail] = useState(true);
   const [signingOrder, setSigningOrder] = useState<'parallel' | 'sequential'>(
     'parallel',
   );
@@ -90,26 +97,13 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
         return;
       }
       setSelectedTemplate(template);
-      setShowTemplateDropdown(false);
-      setTemplateSearch('');
+      setTemplateOpen(false);
       const schema = template.fieldsSchema as EsignFieldsSchema | null;
       const roles = schema?.signerRoles ?? [];
       setSigners(roles.map((role) => ({ role, name: '', email: '' })));
     },
     [],
   );
-
-  // Filter templates by search
-  const filteredTemplates = useMemo(() => {
-    if (!templates) return [];
-    if (!templateSearch.trim()) return templates;
-    const q = templateSearch.toLowerCase();
-    return templates.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (t.description ?? '').toLowerCase().includes(q),
-    );
-  }, [templates, templateSearch]);
 
   // Signer updates
   const updateSigner = useCallback(
@@ -156,7 +150,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
           sortOrder: i,
         })),
         signingOrder,
-        sendEmail: false,
+        sendEmail,
         expiresAt: expiresAt.toISOString(),
         messageSubject: messageSubject.trim() || undefined,
         messageBody: messageBody.trim() || undefined,
@@ -170,6 +164,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
     isValid,
     signers,
     signingOrder,
+    sendEmail,
     expirationDays,
     messageSubject,
     messageBody,
@@ -202,89 +197,78 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
           <h2 className="text-sm font-medium text-content mb-3">
             1. Select Template
           </h2>
-          <div className="relative">
-            <div
-              data-testid="esign-template-select-trigger"
-              className="w-full border border-edge-strong rounded-md px-3 py-2.5 flex items-center justify-between cursor-pointer hover:border-edge-strong transition-colors duration-quick"
-              onClick={() => setShowTemplateDropdown((p) => !p)}
-            >
-              <span
-                className={
-                  selectedTemplate
-                    ? 'text-content text-sm'
-                    : 'text-content-disabled text-sm'
-                }
+          <Popover open={templateOpen} onOpenChange={setTemplateOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                data-testid="esign-template-select-trigger"
+                role="combobox"
+                aria-expanded={templateOpen}
+                className="w-full border border-edge-strong rounded-md px-3 py-2.5 flex items-center justify-between cursor-pointer hover:border-edge-strong transition-colors duration-quick text-left"
               >
-                {selectedTemplate?.name ?? 'Choose a template...'}
-              </span>
-              <ChevronDown className="h-4 w-4 text-content-disabled" />
-            </div>
-
-            {showTemplateDropdown && (
-              <div className="absolute z-20 w-full mt-1 bg-surface-card border border-edge rounded-md shadow-lg max-h-64 overflow-hidden">
-                <div className="p-2 border-b">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-content-disabled" />
-                    <input
-                      type="text"
-                      value={templateSearch}
-                      onChange={(e) => setTemplateSearch(e.target.value)}
-                      placeholder="Search templates..."
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-edge rounded-md focus:outline-none focus:ring-2 focus:ring-focus"
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <div className="overflow-y-auto max-h-48">
-                  {templatesLoading && (
+                <span
+                  className={
+                    selectedTemplate
+                      ? 'text-content text-sm'
+                      : 'text-content-disabled text-sm'
+                  }
+                >
+                  {selectedTemplate?.name ?? 'Choose a template...'}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-content-disabled" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search templates..." />
+                <CommandList>
+                  {templatesLoading ? (
                     <div className="px-3 py-4 text-center">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto text-content-disabled" />
                     </div>
+                  ) : (
+                    <>
+                      <CommandEmpty>No templates found.</CommandEmpty>
+                      <CommandGroup>
+                        {(templates ?? []).map((t) => {
+                          const isReady = templateHasSourceDocument(t);
+                          return (
+                            <CommandItem
+                              key={t.id}
+                              value={t.name}
+                              disabled={!isReady}
+                              onSelect={() => handleSelectTemplate(t)}
+                              className={cn(!isReady && 'opacity-60 cursor-not-allowed')}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4 shrink-0',
+                                  selectedTemplate?.id === t.id ? 'opacity-100' : 'opacity-0',
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-content">{t.name}</div>
+                                {t.description && (
+                                  <div className="text-xs text-content-disabled mt-0.5 truncate">
+                                    {t.description}
+                                  </div>
+                                )}
+                                {!isReady && (
+                                  <div className="text-xs text-status-warning mt-0.5">
+                                    Source PDF required before sending.
+                                  </div>
+                                )}
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </>
                   )}
-                  {!templatesLoading &&
-                    filteredTemplates.length === 0 && (
-                      <p className="px-3 py-4 text-sm text-content-disabled text-center">
-                        No templates found.
-                      </p>
-                    )}
-                  {filteredTemplates.map((t) => (
-                    (() => {
-                      const isReady = templateHasSourceDocument(t);
-
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => handleSelectTemplate(t)}
-                          disabled={!isReady}
-                          aria-disabled={!isReady}
-                          className={`w-full text-left px-3 py-2.5 text-sm transition-colors duration-quick ${
-                            isReady
-                              ? 'hover:bg-surface-hover'
-                              : 'cursor-not-allowed opacity-60'
-                          }`}
-                        >
-                          <span className="font-medium text-content">
-                            {t.name}
-                          </span>
-                          {t.description && (
-                            <span className="block text-xs text-content-disabled mt-0.5 truncate">
-                              {t.description}
-                            </span>
-                          )}
-                          {!isReady && (
-                            <span className="block text-xs text-status-warning mt-1">
-                              Source PDF required before sending.
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })()
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </Card>
 
         {/* Step 2: Signers */}
@@ -391,6 +375,21 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                     ? 'All signers can sign at the same time.'
                     : 'Signing links unlock in order. Share them from the submission detail page.'}
                 </p>
+              </div>
+
+              {/* Email signers toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sendEmail">Email signers</Label>
+                  <p className="text-sm text-content-secondary">
+                    Send signing invitation emails automatically when the request is created.
+                  </p>
+                </div>
+                <Switch
+                  id="sendEmail"
+                  checked={sendEmail}
+                  onCheckedChange={setSendEmail}
+                />
               </div>
 
               {/* Expiration */}

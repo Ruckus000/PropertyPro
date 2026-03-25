@@ -1,4 +1,4 @@
--- 0116_visitor_system_upgrade.sql
+-- 0117_visitor_system_upgrade.sql
 -- Visitor system upgrade: guest types, vehicle tracking, denied-entry list, auto-checkout
 
 -- 1. Add new columns to visitor_log

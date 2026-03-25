@@ -1,12 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-
-export interface DocumentCategory {
-  id: number;
-  name: string;
-  description: string | null;
-}
+import React from 'react';
+import { useDocumentCategories } from '@/hooks/useDocumentCategories';
 
 interface DocumentCategoryFilterProps {
   communityId: number;
@@ -14,35 +9,12 @@ interface DocumentCategoryFilterProps {
   onCategoryChange: (categoryId: number | null) => void;
 }
 
-interface CategoriesResponse {
-  data: DocumentCategory[];
-}
-
 export function DocumentCategoryFilter({
   communityId,
   selectedCategoryId,
   onCategoryChange,
 }: DocumentCategoryFilterProps) {
-  const [categories, setCategories] = useState<DocumentCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    setIsLoading(true);
-    fetch(`/api/v1/document-categories?communityId=${communityId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load categories');
-        return res.json();
-      })
-      .then((json: CategoriesResponse) => {
-        setCategories(json.data);
-      })
-      .catch(() => {
-        // Silently fail - categories are optional for filtering
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, [communityId]);
+  const { categories, isLoading } = useDocumentCategories(communityId);
 
   if (isLoading) {
     return (

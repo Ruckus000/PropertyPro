@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import type { DocumentMutationWarning } from '@/lib/documents/types';
 
 export interface UploadRequest {
   communityId: number;
   title: string;
-  categoryId?: number | null;
+  categoryId: number;
   description?: string | null;
   file: File;
 }
@@ -27,6 +28,12 @@ interface PresignResponse {
 
 interface DocumentCreateResponse {
   data: Record<string, unknown>;
+  warnings?: DocumentMutationWarning[];
+}
+
+export interface UploadDocumentResult {
+  document: Record<string, unknown>;
+  warnings: DocumentMutationWarning[];
 }
 
 function uploadWithProgress(uploadUrl: string, file: File, onProgress: (value: number) => void): Promise<void> {
@@ -97,7 +104,7 @@ export function useDocumentUpload() {
           communityId: request.communityId,
           title: request.title,
           description: request.description ?? null,
-          categoryId: request.categoryId ?? null,
+          categoryId: request.categoryId,
           filePath: presignBody.data.path,
           fileName: request.file.name,
           fileSize: request.file.size,
@@ -112,7 +119,10 @@ export function useDocumentUpload() {
       const createBody = (await createRes.json()) as DocumentCreateResponse;
 
       setState({ isUploading: false, progress: 100, error: null });
-      return createBody.data;
+      return {
+        document: createBody.data,
+        warnings: createBody.warnings ?? [],
+      } satisfies UploadDocumentResult;
     } catch (error) {
       setState({
         isUploading: false,

@@ -2,15 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   createPresignedDownloadUrl,
-  getDocumentWithAccessCheck,
   logAuditEvent,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError, NotFoundError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { resolveLibraryDocumentRequest } from '@/lib/documents/library-document-resolver';
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -18,8 +15,6 @@ const querySchema = z.object({
 });
 
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
-  const userId = await requireAuthenticatedUserId();
-
   if (!context?.params) {
     throw new ValidationError('Missing route parameters');
   }
@@ -43,25 +38,12 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     });
   }
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   const { attachment } = parseResult.data;
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  // Use access-aware document retrieval (returns null if not accessible)
-  const doc = await getDocumentWithAccessCheck(
-    {
-      communityId,
-      role: membership.role,
-      communityType: membership.communityType,
-      isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
-    },
+  const { userId, communityId, document: doc } = await resolveLibraryDocumentRequest({
+    req,
+    communityId: parseResult.data.communityId,
     documentId,
-  );
-
-  if (!doc) {
-    throw new NotFoundError('Document not found');
-  }
+  });
 
   const filePath = doc['filePath'] as string;
   const fileName = doc['fileName'] as string;

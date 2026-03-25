@@ -1,4 +1,4 @@
--- 0117_visitor_user_fk_alignment.sql
+-- 0118_visitor_user_fk_alignment.sql
 -- Align visitor upgrade foreign keys with the application users table.
 
 ALTER TABLE visitor_log

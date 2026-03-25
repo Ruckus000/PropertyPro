@@ -10,7 +10,7 @@ vi.mock('@/components/documents/document-upload-area', () => ({
       'button',
       {
         type: 'button',
-        onClick: () => onUploaded?.({ id: 55, filePath: 'documents/rules.pdf' }),
+        onClick: () => onUploaded?.({ document: { id: 55, filePath: 'documents/rules.pdf' }, warnings: [] }),
       },
       'Mock Upload',
     ),

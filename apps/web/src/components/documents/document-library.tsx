@@ -9,6 +9,7 @@ import { DocumentViewer } from './document-viewer';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentSearch } from './document-search';
+import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
 
 interface DocumentLibraryProps {
   communityId: number;
@@ -31,6 +32,7 @@ export function DocumentLibrary({
   initialSearchQuery,
 }: DocumentLibraryProps) {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [uploadCategoryId, setUploadCategoryId] = useState<number | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DocumentListItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -40,9 +42,16 @@ export function DocumentLibrary({
 
   const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
 
-  const handleDocumentUploaded = useCallback(() => {
+  const openUploadPanel = useCallback(() => {
+    setUploadCategoryId(selectedCategoryId);
+    setShowUpload(true);
+  }, [selectedCategoryId]);
+
+  const handleDocumentUploaded = useCallback((result: UploadDocumentResult) => {
     setRefreshKey((prev) => prev + 1);
-    setShowUpload(false);
+    if (result.warnings.length === 0) {
+      setShowUpload(false);
+    }
   }, []);
 
   const handleSelectDocument = useCallback((doc: DocumentListItem) => {
@@ -104,7 +113,13 @@ export function DocumentLibrary({
           {canUpload && (
             <button
               type="button"
-              onClick={() => setShowUpload(!showUpload)}
+              onClick={() => {
+                if (showUpload) {
+                  setShowUpload(false);
+                  return;
+                }
+                openUploadPanel();
+              }}
               className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 showUpload
                   ? 'bg-surface-muted text-content'
@@ -148,7 +163,7 @@ export function DocumentLibrary({
           <h2 className="mb-4 text-lg font-medium text-content">Upload Document</h2>
           <DocumentUploadArea
             communityId={communityId}
-            categoryId={selectedCategoryId}
+            initialCategoryId={uploadCategoryId}
             onUploaded={handleDocumentUploaded}
           />
         </div>
@@ -177,7 +192,7 @@ export function DocumentLibrary({
               categoryId={selectedCategoryId}
               onSelectDocument={handleSelectDocument}
               onDeleteDocument={handleDeleteDocument}
-              onUploadRequest={() => setShowUpload(true)}
+              onUploadRequest={openUploadPanel}
               refreshKey={refreshKey}
               canManage={canUpload}
             />

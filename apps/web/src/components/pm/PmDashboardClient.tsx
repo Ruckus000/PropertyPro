@@ -39,8 +39,8 @@ export function PmDashboardClient() {
 
   return (
     <div className="space-y-6">
-      {/* Page header — no h1 here, AppTopBar owns the page title */}
       <PageHeader
+        title="Communities"
         description={
           isLoading
             ? 'Loading...'

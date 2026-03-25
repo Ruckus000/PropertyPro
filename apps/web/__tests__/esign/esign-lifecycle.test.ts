@@ -19,6 +19,7 @@ const {
   uploadSignedDocumentMock,
   sendEmailMock,
   esignReminderEmailMock,
+  esignInvitationEmailMock,
   eqMock,
   andMock,
   isNullMock,
@@ -57,6 +58,7 @@ const {
   uploadSignedDocumentMock: vi.fn(),
   sendEmailMock: vi.fn(),
   esignReminderEmailMock: vi.fn(() => ({ type: 'EsignReminderEmail' })),
+  esignInvitationEmailMock: vi.fn(() => ({ type: 'EsignInvitationEmail' })),
   eqMock: vi.fn((...args: unknown[]) => ({ type: 'eq', args })),
   andMock: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
   isNullMock: vi.fn((...args: unknown[]) => ({ type: 'isNull', args })),
@@ -91,6 +93,7 @@ vi.mock('../../src/lib/services/esign-pdf-service', () => ({
 vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
   EsignReminderEmail: esignReminderEmailMock,
+  EsignInvitationEmail: esignInvitationEmailMock,
 }));
 
 import type { EsignFieldsSchema } from '@propertypro/shared';
@@ -394,6 +397,43 @@ describe('E-Sign Full Lifecycle', () => {
     computeDocumentHashMock.mockReturnValue('abc123hash');
     uploadSignedDocumentMock.mockResolvedValue('communities/1/esign-signed/1/signed.pdf');
     sendEmailMock.mockResolvedValue({ id: 'email-1' });
+
+    // Default admin client mock that handles both users and communities lookups
+    createAdminClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === 'users') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { full_name: 'Admin User', email: 'admin@test.com' },
+                  error: null,
+                })),
+                limit: vi.fn(async () => ({
+                  data: [{ full_name: 'Admin User', email: 'admin@test.com' }],
+                  error: null,
+                })),
+              })),
+            })),
+          };
+        }
+        // communities
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              limit: vi.fn(async () => ({
+                data: [{ name: 'Test Community', timezone: 'America/New_York' }],
+                error: null,
+              })),
+              single: vi.fn(async () => ({
+                data: { name: 'Test Community', timezone: 'America/New_York' },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }),
+    });
   });
 
   // =========================================================================
@@ -430,9 +470,16 @@ describe('E-Sign Full Lifecycle', () => {
           status: 'active',
           name: 'Template',
         }]),
-        insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
           insertCalls.push(data);
-          return [{ id: insertCalls.length, communityId: 1, ...data }];
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertCalls.length, communityId: 1, externalId: 'sub-ext-1', ...(data as Record<string, unknown>) }];
         }),
         update: vi.fn(async () => []),
       };
@@ -450,8 +497,8 @@ describe('E-Sign Full Lifecycle', () => {
 
       expect(result.submission).toBeDefined();
       expect(result.signers).toHaveLength(2);
-      // 1 submission + 2 signers + 1 event = 4 inserts
-      expect(scoped.insert).toHaveBeenCalledTimes(4);
+      // 1 submission + 1 batch signers insert + 1 event = 3 inserts
+      expect(scoped.insert).toHaveBeenCalledTimes(3);
     });
   });
 

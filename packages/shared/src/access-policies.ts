@@ -36,6 +36,7 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
   declarations: 'declaration',
   governing_documents: 'declaration',
   governing_docs: 'declaration',
+  governing: 'declaration',
   bylaws: 'declaration',
   by_laws: 'declaration',
   articles: 'declaration',
@@ -56,11 +57,16 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
   minutes: 'meeting_minutes',
   board_minutes: 'meeting_minutes',
   meeting_notes: 'meeting_minutes',
+  meeting_records: 'meeting_minutes',
+  meeting_record: 'meeting_minutes',
 
   announcements: 'announcements',
   announcement: 'announcements',
   notices: 'announcements',
   notice: 'announcements',
+  correspondence: 'announcements',
+  communication: 'announcements',
+  communications: 'announcements',
 
   maintenance_records: 'maintenance_records',
   maintenance: 'maintenance_records',
@@ -71,6 +77,7 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
   lease_documents: 'lease_docs',
   lease_agreement: 'lease_docs',
   lease_agreements: 'lease_docs',
+  lease: 'lease_docs',
   leases: 'lease_docs',
 
   community_handbook: 'community_handbook',

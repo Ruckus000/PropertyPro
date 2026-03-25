@@ -14,6 +14,11 @@ describe('access-policies strict matrix', () => {
     expect(normalizeCategoryName('Rules & Regulations')).toBe('rules');
     expect(normalizeCategoryName('board-minutes')).toBe('meeting_minutes');
     expect(normalizeCategoryName('Lease Agreement')).toBe('lease_docs');
+    expect(normalizeCategoryName('Governing Documents')).toBe('declaration');
+    expect(normalizeCategoryName('Meeting Records')).toBe('meeting_minutes');
+    expect(normalizeCategoryName('Correspondence')).toBe('announcements');
+    expect(normalizeCategoryName('Communications')).toBe('announcements');
+    expect(normalizeCategoryName('Lease Agreements')).toBe('lease_docs');
     expect(normalizeCategoryName('custom category')).toBe('unknown');
     expect(normalizeCategoryName(null)).toBe('unknown');
   });

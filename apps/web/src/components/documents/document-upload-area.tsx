@@ -1,25 +1,49 @@
 'use client';
 
-import { useCallback, useState, type DragEvent, type ChangeEvent } from 'react';
-import { useDocumentUpload } from '@/hooks/useDocumentUpload';
+import { useCallback, useEffect, useState, type DragEvent, type ChangeEvent } from 'react';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import {
+  useDocumentUpload,
+  type UploadDocumentResult,
+} from '@/hooks/useDocumentUpload';
 
 interface DocumentUploadAreaProps {
   communityId: number;
-  categoryId?: number | null;
-  onUploaded?: (document: Record<string, unknown>) => void;
+  initialCategoryId?: number | null;
+  onUploaded?: (result: UploadDocumentResult) => void;
 }
 
 export function DocumentUploadArea({
   communityId,
-  categoryId,
+  initialCategoryId,
   onUploaded,
 }: DocumentUploadAreaProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(initialCategoryId ?? null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
 
   const { uploadDocument, isUploading, progress, error } = useDocumentUpload();
+  const { categories, isLoading, error: categoriesError } = useDocumentCategories(communityId);
+
+  useEffect(() => {
+    if (initialCategoryId != null && categories.some((category) => category.id === initialCategoryId)) {
+      setSelectedCategoryId(initialCategoryId);
+      setCategoryError(null);
+    }
+  }, [initialCategoryId, categories]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -66,28 +90,98 @@ export function DocumentUploadArea({
     if (!selectedFile || !title.trim()) {
       return;
     }
+    if (selectedCategoryId == null) {
+      setCategoryError('Choose a category before uploading this document.');
+      return;
+    }
 
     try {
-      const created = await uploadDocument({
+      const result = await uploadDocument({
         communityId,
         title: title.trim(),
         description: description.trim() || null,
-        categoryId: categoryId ?? null,
+        categoryId: selectedCategoryId,
         file: selectedFile,
       });
 
+      setWarnings(result.warnings);
       setTitle('');
       setDescription('');
       setSelectedFile(null);
+      setSelectedCategoryId(initialCategoryId ?? null);
+      setCategoryError(null);
 
-      onUploaded?.(created);
+      onUploaded?.(result);
     } catch {
       // Error is handled by the hook
     }
   };
 
+  if (isLoading) {
+    return <p className="text-sm text-content-secondary">Loading upload settings...</p>;
+  }
+
+  if (categoriesError) {
+    return (
+      <AlertBanner
+        status="danger"
+        title="Unable to load categories"
+        description={categoriesError}
+      />
+    );
+  }
+
+  if (categories.length === 0) {
+    return (
+      <EmptyState
+        icon="file-text"
+        title="Create a category before uploading"
+        description="Document uploads are blocked until this community has at least one document category."
+        size="sm"
+      />
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {warnings.length > 0 && (
+        <AlertBanner
+          status="warning"
+          title="Uploaded with warnings"
+          description={warnings.map((warning) => warning.message).join(' ')}
+        />
+      )}
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-content-secondary">
+          Category
+        </label>
+        <Select
+          value={selectedCategoryId != null ? String(selectedCategoryId) : undefined}
+          onValueChange={(value) => {
+            setSelectedCategoryId(Number(value));
+            setCategoryError(null);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Choose a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={String(category.id)}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-2 text-xs text-content-tertiary">
+          Residents will only see documents that match their allowed category access.
+        </p>
+        {categoryError && (
+          <p className="mt-1 text-xs text-status-danger">{categoryError}</p>
+        )}
+      </div>
+
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -149,10 +243,11 @@ export function DocumentUploadArea({
       {selectedFile && (
         <>
           <div>
-            <label className="mb-1 block text-sm font-medium text-content-secondary">
+            <label htmlFor="document-upload-title" className="mb-1 block text-sm font-medium text-content-secondary">
               Title
             </label>
             <input
+              id="document-upload-title"
               type="text"
               required
               value={title}
@@ -163,10 +258,11 @@ export function DocumentUploadArea({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-content-secondary">
+            <label htmlFor="document-upload-description" className="mb-1 block text-sm font-medium text-content-secondary">
               Description (optional)
             </label>
             <textarea
+              id="document-upload-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
@@ -196,7 +292,7 @@ export function DocumentUploadArea({
 
       <button
         type="submit"
-        disabled={isUploading || !selectedFile || !title.trim()}
+        disabled={isUploading || !selectedFile || !title.trim() || selectedCategoryId == null}
         className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isUploading ? 'Uploading...' : 'Upload Document'}

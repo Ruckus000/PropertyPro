@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
-  createPresignedDownloadUrl,
-  deleteStorageObject,
   createScopedClient,
   documents,
   logAuditEvent,
@@ -10,94 +8,26 @@ import {
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError, UnprocessableEntityError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
-import { validateFile } from '@/lib/utils/file-validation';
 import { isElevatedRole } from '@propertypro/shared';
 import { requirePermission } from '@/lib/db/access-control';
-import { queueNotification } from '@/lib/services/notification-service';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
   title: z.string().min(1).max(500),
   description: z.string().nullable().optional(),
-  categoryId: z.number().int().positive().nullable().optional(),
+  categoryId: z.number().int().positive(),
   filePath: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
   mimeType: z.string().min(1).optional(),
 });
-
-async function downloadStorageBytes(path: string): Promise<Uint8Array> {
-  const signedUrl = await createPresignedDownloadUrl('documents', path, 300);
-  const res = await fetch(signedUrl);
-  if (!res.ok) {
-    throw new ValidationError(`Unable to read uploaded file from storage (status ${res.status})`);
-  }
-
-  const buffer = await res.arrayBuffer();
-  return new Uint8Array(buffer);
-}
-
-interface InvalidUploadContext {
-  userId: string;
-  communityId: number;
-  filePath: string;
-  fileName: string;
-  fileSize: number;
-  reason: string;
-  message: string;
-  details?: Record<string, unknown>;
-}
-
-function stringifyUnknownError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never> {
-  let cleanupSucceeded = true;
-  let cleanupError: string | undefined;
-
-  try {
-    await deleteStorageObject('documents', context.filePath);
-  } catch (error) {
-    cleanupSucceeded = false;
-    cleanupError = stringifyUnknownError(error);
-    // eslint-disable-next-line no-console
-    console.error('[documents] failed to clean up invalid upload', {
-      communityId: context.communityId,
-      filePath: context.filePath,
-      error: cleanupError,
-    });
-  }
-
-  await logAuditEvent({
-    userId: context.userId,
-    action: 'validation_failed',
-    resourceType: 'document_upload',
-    resourceId: context.filePath,
-    communityId: context.communityId,
-    metadata: {
-      reason: context.reason,
-      filePath: context.filePath,
-      fileName: context.fileName,
-      fileSize: context.fileSize,
-      cleanupAttempted: true,
-      cleanupSucceeded,
-      ...(cleanupError ? { cleanupError } : {}),
-      ...(context.details ?? {}),
-    },
-  });
-
-  throw new UnprocessableEntityError(context.message, {
-    reason: context.reason,
-  });
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -153,125 +83,25 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
-  const storageBytes = await downloadStorageBytes(payload.filePath);
-  if (storageBytes.byteLength !== payload.fileSize) {
-    await rejectInvalidUpload({
-      userId,
-      communityId: effectiveCommunityId,
-      filePath: payload.filePath,
-      fileName: payload.fileName,
-      fileSize: payload.fileSize,
-      reason: 'file_size_mismatch',
-      message: 'Uploaded file failed validation. Please retry your upload.',
-      details: {
-        expectedFileSize: payload.fileSize,
-        actualFileSize: storageBytes.byteLength,
-      },
-    });
-  }
-
-  const validation = await validateFile(storageBytes, storageBytes.byteLength);
-  if (!validation.ok || !validation.type) {
-    await rejectInvalidUpload({
-      userId,
-      communityId: effectiveCommunityId,
-      filePath: payload.filePath,
-      fileName: payload.fileName,
-      fileSize: payload.fileSize,
-      reason: 'magic_bytes_validation_failed',
-      message:
-        validation.error
-        ?? 'Uploaded file failed validation. Upload a supported PDF, DOCX, PNG, or JPG file.',
-      details: {
-        validationError: validation.error ?? null,
-      },
-    });
-  }
-  const detectedType = validation.type;
-  if (!detectedType) {
-    throw new ValidationError('Failed to detect uploaded file type');
-  }
-
-  const scoped = createScopedClient(effectiveCommunityId);
-
-  const isPdf = detectedType.mime.toLowerCase().includes('pdf');
-
-  const insertedRows = await scoped.insert(documents, {
+  const result = await createUploadedDocument({
+    userId,
+    communityId: effectiveCommunityId,
     title: payload.title,
     description: payload.description ?? null,
-    categoryId: payload.categoryId ?? null,
+    categoryId: payload.categoryId,
     filePath: payload.filePath,
     fileName: payload.fileName,
-    fileSize: storageBytes.byteLength,
-    mimeType: detectedType.mime,
-    uploadedBy: userId,
-    extractionStatus: isPdf ? 'pending' : 'not_applicable',
+    fileSize: payload.fileSize,
+    sourceType: 'library',
   });
 
-  const created = insertedRows[0];
-  if (!created) {
-    throw new ValidationError('Failed to create document');
-  }
-
-  await logAuditEvent({
-    userId,
-    action: 'create',
-    resourceType: 'document',
-    resourceId: String(created['id']),
-    communityId: effectiveCommunityId,
-    newValues: {
-      title: payload.title,
-      categoryId: payload.categoryId ?? null,
-      filePath: payload.filePath,
-      fileName: payload.fileName,
-      fileSize: storageBytes.byteLength,
-      mimeType: detectedType.mime,
+  return NextResponse.json(
+    {
+      data: result.document,
+      ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
     },
-  });
-
-  // Fire-and-forget: trigger PDF text extraction without delaying the response
-  try {
-    if (isPdf) {
-      const docId = Number((created as Record<string, unknown>)['id']);
-      const communityId = Number((created as Record<string, unknown>)['communityId'] ?? effectiveCommunityId);
-      if (Number.isFinite(docId) && Number.isFinite(communityId)) {
-        queuePdfExtraction({
-          communityId,
-          documentId: docId,
-          path: payload.filePath,
-          mimeType: detectedType.mime,
-          bucket: 'documents',
-        });
-      }
-    }
-  } catch (_) {
-    // Swallow extraction scheduling errors — never block document creation
-  }
-
-  try {
-    await queueNotification(
-      effectiveCommunityId,
-      {
-        type: 'document_posted',
-        documentTitle: payload.title,
-        uploadedByName: 'Community Team', // resolved from context; simplified for now
-        documentId: String(created['id']),
-        sourceType: 'document',
-        sourceId: String(created['id']),
-      },
-      'all',
-      userId,
-    );
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[documents] notification dispatch failed', {
-      communityId: effectiveCommunityId,
-      documentId: String(created['id']),
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  return NextResponse.json({ data: created }, { status: 201 });
+    { status: 201 },
+  );
 });
 
 const deleteDocumentSchema = z.object({

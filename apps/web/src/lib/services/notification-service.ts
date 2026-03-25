@@ -107,6 +107,13 @@ interface RecipientDelivery extends Recipient {
   mode: 'immediate' | 'digest';
 }
 
+export interface NotificationDispatchResult {
+  recipientsCount: number;
+  sentCount: number;
+  queuedCount: number;
+  failedCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -458,12 +465,12 @@ function renderEmailForEvent(
  *
  * @returns Number of recipients processed (immediate sends + newly queued digest rows)
  */
-export async function sendNotification(
+async function dispatchNotification(
   communityId: number,
   event: NotificationEvent,
   recipientFilter: RecipientFilter,
   actorUserId?: string,
-): Promise<number> {
+): Promise<NotificationDispatchResult> {
   const notificationKind = EVENT_TO_KIND[event.type];
   const digestPayload = buildDigestPayload(event, communityId);
   const deliveries = await resolveRecipientDeliveries(
@@ -473,7 +480,14 @@ export async function sendNotification(
     digestPayload != null,
   );
 
-  if (deliveries.length === 0) return 0;
+  if (deliveries.length === 0) {
+    return {
+      recipientsCount: 0,
+      sentCount: 0,
+      queuedCount: 0,
+      failedCount: 0,
+    };
+  }
 
   const immediateRecipients = deliveries.filter((delivery) => delivery.mode === 'immediate');
   const digestRecipients =
@@ -506,6 +520,7 @@ export async function sendNotification(
   }
 
   let sentCount = 0;
+  let failedCount = 0;
   if (immediateRecipients.length > 0) {
     const branding = await loadBranding(communityId);
     const baseUrl = getBaseUrl();
@@ -527,6 +542,7 @@ export async function sendNotification(
 
             sentCount += 1;
           } catch (error) {
+            failedCount += 1;
             // eslint-disable-next-line no-console
             console.error('[notification-service] email send failed', {
               communityId,
@@ -555,11 +571,27 @@ export async function sendNotification(
         digestRecipientCount: digestRecipients.length,
         sentCount,
         queuedCount,
+        failedCount,
       },
     });
   }
 
-  return sentCount + queuedCount;
+  return {
+    recipientsCount: deliveries.length,
+    sentCount,
+    queuedCount,
+    failedCount,
+  };
+}
+
+export async function sendNotification(
+  communityId: number,
+  event: NotificationEvent,
+  recipientFilter: RecipientFilter,
+  actorUserId?: string,
+): Promise<number> {
+  const result = await dispatchNotification(communityId, event, recipientFilter, actorUserId);
+  return result.sentCount + result.queuedCount;
 }
 
 /**
@@ -574,5 +606,15 @@ export async function queueNotification(
   recipientFilter: RecipientFilter,
   actorUserId?: string,
 ): Promise<number> {
-  return sendNotification(communityId, event, recipientFilter, actorUserId);
+  const result = await dispatchNotification(communityId, event, recipientFilter, actorUserId);
+  return result.sentCount + result.queuedCount;
+}
+
+export async function queueNotificationDetailed(
+  communityId: number,
+  event: NotificationEvent,
+  recipientFilter: RecipientFilter,
+  actorUserId?: string,
+): Promise<NotificationDispatchResult> {
+  return dispatchNotification(communityId, event, recipientFilter, actorUserId);
 }

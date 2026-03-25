@@ -19,6 +19,7 @@ const {
   uploadSignedDocumentMock,
   sendEmailMock,
   esignReminderEmailMock,
+  esignInvitationEmailMock,
   eqMock,
   andMock,
   isNullMock,
@@ -59,6 +60,7 @@ const {
   uploadSignedDocumentMock: vi.fn(),
   sendEmailMock: vi.fn(),
   esignReminderEmailMock: vi.fn(() => ({ type: 'EsignReminderEmail' })),
+  esignInvitationEmailMock: vi.fn(() => ({ type: 'EsignInvitationEmail' })),
   eqMock: vi.fn((...args: unknown[]) => ({ type: 'eq', args })),
   andMock: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
   isNullMock: vi.fn((...args: unknown[]) => ({ type: 'isNull', args })),
@@ -95,6 +97,7 @@ vi.mock('../../src/lib/services/esign-pdf-service', () => ({
 vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
   EsignReminderEmail: esignReminderEmailMock,
+  EsignInvitationEmail: esignInvitationEmailMock,
 }));
 
 import type { EsignFieldsSchema } from '@propertypro/shared';
@@ -471,7 +474,7 @@ describe('esign-service', () => {
 
   describe('signing slug generation (via createSubmission)', () => {
     it('generates slug for each signer that is set in the insert call', async () => {
-      const insertedValues: Record<string, unknown>[] = [];
+      const insertedValues: unknown[] = [];
 
       const scoped = {
         selectFrom: vi.fn(async () => [
@@ -484,9 +487,17 @@ describe('esign-service', () => {
             name: 'Template',
           },
         ]),
-        insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
           insertedValues.push(data);
-          return [{ id: insertedValues.length, communityId: 1, ...data }];
+          // Batch signer insert receives an array; return each row
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertedValues.length, communityId: 1, ...(data as Record<string, unknown>) }];
         }),
         update: vi.fn(async () => []),
       };
@@ -498,16 +509,17 @@ describe('esign-service', () => {
           { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
         ],
         signingOrder: 'parallel',
-        sendEmail: true,
+        sendEmail: false,
       });
 
-      // The second insert call is for the signer (first is submission)
-      const signerInsert = insertedValues.find(
-        (v) => typeof v.slug === 'string',
-      );
-      expect(signerInsert).toBeDefined();
+      // The second insert call is for the signer batch (first is submission)
+      // data is an array of signer objects; find the one with a slug
+      const signerBatch = insertedValues.find(
+        (v) => Array.isArray(v) && v.length > 0 && typeof (v as Record<string, unknown>[])[0]?.slug === 'string',
+      ) as Record<string, unknown>[] | undefined;
+      expect(signerBatch).toBeDefined();
 
-      const slug = signerInsert!.slug as string;
+      const slug = signerBatch![0]!.slug as string;
       // Slug should be 64 hex characters (two UUIDs with dashes removed: 32 + 32)
       expect(slug).toHaveLength(64);
       expect(slug).toMatch(/^[a-f0-9]{64}$/);
@@ -712,9 +724,17 @@ describe('esign-service', () => {
             name: 'Template',
           },
         ]),
-        insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
           insertCalls.push(data);
-          return [{ id: insertCalls.length, communityId: 1, ...data }];
+          // Batch signer insert receives an array; return each row
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertCalls.length, communityId: 1, ...(data as Record<string, unknown>) }];
         }),
         update: vi.fn(async () => []),
       };
@@ -727,14 +747,195 @@ describe('esign-service', () => {
           { email: 'b@test.com', name: 'Bob', role: 'signer', sortOrder: 1 },
         ],
         signingOrder: 'sequential',
-        sendEmail: true,
+        sendEmail: false,
       });
 
       expect(result.submission).toBeDefined();
       expect(result.signers).toHaveLength(2);
-      // 1 submission + 2 signers + 1 event = 4 inserts
-      expect(scoped.insert).toHaveBeenCalledTimes(4);
+      // 1 submission + 1 batch signers insert + 1 event = 3 inserts
+      expect(scoped.insert).toHaveBeenCalledTimes(3);
       expect(logAuditEventMock).toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // createSubmission — invitation emails
+  // =========================================================================
+
+  describe('createSubmission - invitation emails', () => {
+    function makeSubmissionScoped() {
+      const insertCalls: unknown[] = [];
+      return {
+        selectFrom: vi.fn(async () => [
+          {
+            id: 1,
+            communityId: 1,
+            fieldsSchema: validFieldsSchema(),
+            sourceDocumentPath: 'test.pdf',
+            status: 'active',
+            name: 'Proxy Form',
+          },
+        ]),
+        insert: vi.fn(async (_table: unknown, data: unknown) => {
+          insertCalls.push(data);
+          if (Array.isArray(data)) {
+            return data.map((item: Record<string, unknown>, i: number) => ({
+              id: i + 1,
+              communityId: 1,
+              ...item,
+            }));
+          }
+          return [{ id: insertCalls.length, communityId: 1, externalId: 'sub-ext-1', ...(data as Record<string, unknown>) }];
+        }),
+        update: vi.fn(async () => []),
+        _insertCalls: insertCalls,
+      };
+    }
+
+    function makeTableAwareAdmin(
+      userRow: { full_name: string | null; email: string } | null = { full_name: 'Jane Admin', email: 'jane@test.com' },
+      communityRow: { name: string } | null = { name: 'Sunset Condos' },
+    ) {
+      return {
+        from: vi.fn((table: string) => {
+          if (table === 'users') {
+            return {
+              select: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  single: vi.fn(async () => ({
+                    data: userRow,
+                    error: null,
+                  })),
+                })),
+              })),
+            };
+          }
+          // communities
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                limit: vi.fn(async () => ({
+                  data: communityRow ? [communityRow] : [],
+                  error: null,
+                })),
+              })),
+            })),
+          };
+        }),
+      };
+    }
+
+    it('sends invitation emails when sendEmail=true', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeTableAwareAdmin());
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: true,
+      });
+
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(sendEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'a@test.com',
+          subject: 'Signature requested: Proxy Form',
+          category: 'transactional',
+        }),
+      );
+      expect(esignInvitationEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branding: { communityName: 'Sunset Condos' },
+          signerName: 'Alice',
+          senderName: 'Jane Admin',
+          documentName: 'Proxy Form',
+        }),
+      );
+    });
+
+    it('does NOT send emails when sendEmail=false', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: false,
+      });
+
+      expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('email failure does not abort submission creation', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeTableAwareAdmin());
+      sendEmailMock.mockRejectedValueOnce(new Error('smtp down'));
+
+      const result = await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: true,
+      });
+
+      // Submission still succeeds despite email failure
+      expect(result.submission).toBeDefined();
+      expect(result.signers).toHaveLength(1);
+      expect(logAuditEventMock).toHaveBeenCalled();
+    });
+
+    it('falls back to email when signer name is empty', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeTableAwareAdmin());
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: '', role: 'signer', sortOrder: 0 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: true,
+      });
+
+      expect(esignInvitationEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signerName: 'a@test.com',
+        }),
+      );
+    });
+
+    it('falls back to email when sender fullName is null', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(
+        makeTableAwareAdmin({ full_name: null, email: 'jane@test.com' }),
+      );
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: true,
+      });
+
+      expect(esignInvitationEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          senderName: 'jane@test.com',
+        }),
+      );
     });
   });
 
@@ -746,25 +947,77 @@ describe('esign-service', () => {
 
       const result = await listSubmissions(1);
       expect(result).toHaveLength(2);
+      // No filter — selectFrom called with no WHERE condition (2 args only)
+      expect(scoped.selectFrom).toHaveBeenCalledWith(
+        esignSubmissionsTable,
+        {},
+      );
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(2);
     });
 
-    it('filters by status', async () => {
+    it('pushes stored status filter to SQL WHERE clause', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 3, communityId: 1, status: 'completed' },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'completed'] });
+
+      const result = await listSubmissions(1, { status: 'completed' });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.effectiveStatus).toBe('completed');
+      // WHERE condition passed as 3rd arg
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+      expect(eqMock).toHaveBeenCalledWith(esignSubmissionsTable.status, 'completed');
+    });
+
+    it('filters expired in JS from pending SQL rows', async () => {
       const scoped = makeScopedMock();
       scoped.selectFrom = vi.fn(async () => [
         { id: 1, communityId: 1, status: 'pending', expiresAt: null },
-        { id: 2, communityId: 1, status: 'pending', expiresAt: '2025-01-01T00:00:00.000Z' },
+        { id: 2, communityId: 1, status: 'pending', expiresAt: '2020-01-01T00:00:00.000Z' },
       ]);
       createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
 
-      const pending = await listSubmissions(1, { status: 'pending' });
-      const expired = await listSubmissions(1, { status: 'expired' });
+      const result = await listSubmissions(1, { status: 'expired' });
+      // Only the row with a past expiresAt should be returned
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(2);
+      expect(result[0]?.effectiveStatus).toBe('expired');
+      // SQL WHERE pushed to pending
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+      expect(eqMock).toHaveBeenCalledWith(esignSubmissionsTable.status, 'pending');
+    });
 
-      expect(pending).toHaveLength(1);
-      expect(pending[0]?.id).toBe(1);
-      expect(pending[0]?.effectiveStatus).toBe('pending');
-      expect(expired).toHaveLength(1);
-      expect(expired[0]?.id).toBe(2);
-      expect(expired[0]?.effectiveStatus).toBe('expired');
+    it('filters pending in JS to exclude expired rows', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 1, communityId: 1, status: 'pending', expiresAt: null },
+        { id: 2, communityId: 1, status: 'pending', expiresAt: '2020-01-01T00:00:00.000Z' },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
+
+      const result = await listSubmissions(1, { status: 'pending' });
+      // Only non-expired pending row should be returned
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(1);
+      expect(result[0]?.effectiveStatus).toBe('pending');
+      // SQL WHERE pushed to pending
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+    });
+
+    it('edge: pending row with null expiresAt is NOT in expired results', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 5, communityId: 1, status: 'pending', expiresAt: null },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
+
+      const result = await listSubmissions(1, { status: 'expired' });
+      expect(result).toHaveLength(0);
     });
   });
 

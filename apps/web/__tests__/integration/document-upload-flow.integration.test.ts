@@ -116,6 +116,7 @@ type DocumentSearchRouteModule = typeof import('../../src/app/api/v1/documents/s
 let state: TestKitState | null = null;
 let documentsRoute: DocumentsRouteModule | null = null;
 let searchRoute: DocumentSearchRouteModule | null = null;
+let communityADefaultCategoryId: number | null = null;
 
 function requireState(): TestKitState {
   if (!state) throw new Error('Test state not initialized');
@@ -130,6 +131,13 @@ function requireDocumentsRoute(): DocumentsRouteModule {
 function requireSearchRoute(): DocumentSearchRouteModule {
   if (!searchRoute) throw new Error('Route not loaded');
   return searchRoute;
+}
+
+function requireCommunityADefaultCategoryId(): number {
+  if (!communityADefaultCategoryId) {
+    throw new Error('Community A default document category not initialized');
+  }
+  return communityADefaultCategoryId;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +158,19 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA', 'actorC'];
     const userFixtures = MULTI_TENANT_USERS.filter((u) => neededUsers.includes(u.key));
     await seedUsers(state, userFixtures);
+
+    const scopedA = state.dbModule.createScopedClient(requireCommunity(state, 'communityA').id);
+    const [defaultCategory] = await scopedA.insert(state.dbModule.documentCategories, {
+      name: `Integration Uploads ${state.runSuffix}`,
+      description: 'Default category for document upload integration coverage',
+      sortOrder: 1,
+      isActive: true,
+      visibility: 'all',
+    });
+    communityADefaultCategoryId = readNumberField(
+      requireInsertedRow(defaultCategory, 'defaultCategory'),
+      'id',
+    );
 
     documentsRoute = await import('../../src/app/api/v1/documents/route');
     searchRoute = await import('../../src/app/api/v1/documents/search/route');
@@ -184,6 +205,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
         communityId: communityA.id,
         title: `PDF Test Doc ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
         filePath: `communities/${communityA.id}/documents/test-${kit.runSuffix}.pdf`,
         fileName: `test-${kit.runSuffix}.pdf`,
         fileSize: PDF_MAGIC.byteLength,
@@ -212,6 +234,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
         communityId: communityA.id,
         title: `PNG Test Doc ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
         filePath: `communities/${communityA.id}/documents/test-${kit.runSuffix}.png`,
         fileName: `test-${kit.runSuffix}.png`,
         fileSize: PNG_MAGIC.byteLength,
@@ -239,6 +262,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
         communityId: communityA.id,
         title: `Invalid Test Doc ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
         filePath: `communities/${communityA.id}/documents/invalid-${kit.runSuffix}.exe`,
         fileName: `invalid-${kit.runSuffix}.exe`,
         fileSize: INVALID_MAGIC.byteLength,
@@ -350,6 +374,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const scoped = kit.dbModule.createScopedClient(communityA.id);
     await scoped.insert(kit.dbModule.documents, {
       title: `Searchable Doc ${kit.runSuffix}`,
+      categoryId: requireCommunityADefaultCategoryId(),
       filePath: `communities/${communityA.id}/documents/searchable-${kit.runSuffix}.pdf`,
       fileName: `searchable-${kit.runSuffix}.pdf`,
       fileSize: 1024,

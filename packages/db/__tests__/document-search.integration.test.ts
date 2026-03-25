@@ -15,6 +15,7 @@ const FILE_NAMES = [
   '__test_doc_search_a_minutes__.pdf',
   '__test_doc_search_a_budget__.pdf',
   '__test_doc_search_b_minutes__.pdf',
+  '__test_doc_search_hidden_evidence__.pdf',
 ];
 
 describeDb('document search integration', () => {
@@ -121,5 +122,27 @@ describeDb('document search integration', () => {
 
     expect(result.data.every((row) => row.mimeType === 'application/pdf')).toBe(true);
     expect(result.data.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('excludes hidden violation evidence from library search results', async () => {
+    await db.insert(documents).values({
+      communityId: communityAId,
+      title: 'Hidden Evidence',
+      description: 'Should stay out of the library search index',
+      filePath: 'communities/a/documents/hidden-evidence.pdf',
+      fileName: '__test_doc_search_hidden_evidence__.pdf',
+      fileSize: 1024,
+      mimeType: 'application/pdf',
+      searchText: 'minutes evidence hidden',
+      sourceType: 'violation_evidence',
+    });
+
+    const result = await searchDocuments({
+      communityId: communityAId,
+      query: 'evidence',
+      limit: 20,
+    });
+
+    expect(result.data.some((row) => row.fileName === '__test_doc_search_hidden_evidence__.pdf')).toBe(false);
   });
 });

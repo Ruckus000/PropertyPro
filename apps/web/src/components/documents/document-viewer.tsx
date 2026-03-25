@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import type { DocumentListItem } from './document-list';
 
 interface DocumentViewerProps {
@@ -16,13 +17,18 @@ export function DocumentViewer({
   onClose,
   onViewVersions,
 }: DocumentViewerProps) {
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const downloadHref = document
+    ? `/api/v1/documents/${document.id}/download?communityId=${communityId}&attachment=true`
+    : '#';
 
   useEffect(() => {
     if (!document) {
-      setDownloadUrl(null);
+      setPreviewUrl(null);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -30,12 +36,19 @@ export function DocumentViewer({
     const isImage = document.mimeType.includes('image');
 
     if (!isPdf && !isImage) {
-      setDownloadUrl(null);
+      setPreviewUrl(null);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+
+    if (isPdf) {
+      setPreviewUrl(`/api/v1/documents/${document.id}/preview?communityId=${communityId}`);
+      return;
+    }
 
     fetch(`/api/v1/documents/${document.id}/download?communityId=${communityId}`)
       .then((res) => {
@@ -43,10 +56,11 @@ export function DocumentViewer({
         return res.json();
       })
       .then((json: { data: { url: string } }) => {
-        setDownloadUrl(json.data.url);
+        setPreviewUrl(json.data.url);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load document');
+        setPreviewUrl(null);
       })
       .finally(() => {
         setIsLoading(false);
@@ -98,7 +112,7 @@ export function DocumentViewer({
             </button>
           )}
           <a
-            href={`/api/v1/documents/${document.id}/download?communityId=${communityId}&attachment=true`}
+            href={downloadHref}
             className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover"
           >
             Download
@@ -130,24 +144,45 @@ export function DocumentViewer({
         )}
 
         {error && (
-          <div className="flex h-full flex-col items-center justify-center">
-            <p className="text-sm text-status-danger">{error}</p>
+          <div className="flex h-full flex-col justify-center">
+            <AlertBanner
+              status="warning"
+              title="Preview unavailable"
+              description={error}
+              action={(
+                <a
+                  href={downloadHref}
+                  className="rounded-md border border-status-warning px-3 py-1.5 text-sm font-medium"
+                >
+                  Download
+                </a>
+              )}
+            />
           </div>
         )}
 
-        {!isLoading && !error && canPreview && downloadUrl && (
+        {!error && canPreview && previewUrl && (
           <>
             {isPdf && (
-              <iframe
-                src={downloadUrl}
-                className="h-full w-full rounded border border-edge"
-                title={document.title}
-              />
+              <div className="h-full">
+                <iframe
+                  src={previewUrl}
+                  className="h-full w-full rounded border border-edge"
+                  style={{ visibility: isLoading ? 'hidden' : 'visible' }}
+                  title={document.title}
+                  onLoad={() => setIsLoading(false)}
+                  onError={() => {
+                    setPreviewUrl(null);
+                    setIsLoading(false);
+                    setError('We could not load the PDF preview. You can still download the file.');
+                  }}
+                />
+              </div>
             )}
             {isImage && (
               <div className="flex h-full items-center justify-center">
                 <img
-                  src={downloadUrl}
+                  src={previewUrl}
                   alt={document.title}
                   className="max-h-full max-w-full object-contain"
                 />

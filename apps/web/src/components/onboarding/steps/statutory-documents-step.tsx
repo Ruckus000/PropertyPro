@@ -3,18 +3,10 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Badge } from '@propertypro/ui';
 import { DocumentUploader } from '@/components/documents/document-uploader';
+import { useDocumentCategories } from '@/hooks/useDocumentCategories';
 import type { StatutoryStepData } from '@/lib/onboarding/condo-wizard-types';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
-
-interface DocumentCategory {
-    id: number;
-    slug: string;
-    name: string;
-}
-
-function normalizeCategorySlug(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
+import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
 
 interface StatutoryDocumentsStepProps {
     communityId: number;
@@ -28,13 +20,18 @@ export function StatutoryDocumentsStep({
     initialData,
 }: StatutoryDocumentsStepProps) {
     const [items, setItems] = useState<ChecklistItemData[]>([]);
-    const [categories, setCategories] = useState<DocumentCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [nextError, setNextError] = useState<string | null>(null);
 
     // Map of templateKey -> documentId (uploaded so far)
     const [uploadedDocs, setUploadedDocs] = useState<Record<string, number>>({});
+    const {
+        categories,
+        isLoading: isLoadingCategories,
+        error: categoriesError,
+        resolveCategoryId,
+    } = useDocumentCategories(communityId);
 
     useEffect(() => {
         let mounted = true;
@@ -68,17 +65,8 @@ export function StatutoryDocumentsStep({
                 }
                 const json = (await getRes.json()) as { data: ChecklistItemData[] };
 
-                // 3. Fetch system document categories to map category string -> id
-                const catRes = await fetch(`/api/v1/document-categories?communityId=${communityId}`);
-                if (!catRes.ok) {
-                    throw new Error('Failed to load document categories');
-                }
-                const catJson = (await catRes.json()) as { data: DocumentCategory[] };
-
                 if (mounted) {
                     setItems(json.data ?? []);
-                    setCategories(catJson.data ?? []);
-
                     if (initialData?.items) {
                         const initialMap: Record<string, number> = {};
                         for (const item of initialData.items) {
@@ -107,7 +95,8 @@ export function StatutoryDocumentsStep({
     // or maybe all generated items are statutory. Let's show all items, but mark them as required.
     const requiredItems = items;
 
-    function handleDocumentUploaded(templateKey: string, doc: Record<string, unknown>) {
+    function handleDocumentUploaded(templateKey: string, result: UploadDocumentResult) {
+        const doc = result.document;
         const docId = Number(doc.id);
         if (!Number.isFinite(docId)) return;
 
@@ -124,14 +113,19 @@ export function StatutoryDocumentsStep({
         const statutoryItems: StatutoryStepData['items'] = [];
         const unresolvedCategories = new Set<string>();
 
+        for (const item of requiredItems) {
+            if (resolveCategoryId(item.category) == null) {
+                unresolvedCategories.add(item.category);
+            }
+        }
+
         for (const [tKey, dId] of Object.entries(uploadedDocs)) {
             // Find the corresponding categoryId
             const item = items.find((i) => i.templateKey === tKey);
             if (!item) continue;
 
-            const normalizedCategory = normalizeCategorySlug(item.category);
-            const matchedCat = categories.find((c) => c.slug === normalizedCategory);
-            if (!matchedCat) {
+            const matchedCategoryId = resolveCategoryId(item.category);
+            if (matchedCategoryId == null) {
                 unresolvedCategories.add(item.category);
                 continue;
             }
@@ -139,7 +133,7 @@ export function StatutoryDocumentsStep({
             statutoryItems.push({
                 templateKey: tKey,
                 documentId: dId,
-                categoryId: matchedCat.id,
+                categoryId: matchedCategoryId,
             });
         }
 
@@ -155,12 +149,12 @@ export function StatutoryDocumentsStep({
 
     const allUploaded = requiredItems.length > 0 && requiredItems.every((item) => uploadedDocs[item.templateKey] !== undefined || item.documentId !== null);
 
-    if (loading) {
+    if (loading || isLoadingCategories) {
         return <div className="py-8 text-center text-sm text-[var(--text-secondary)]">Loading compliance requirements...</div>;
     }
 
-    if (loadError) {
-        return <div className="py-8 text-center text-sm text-status-danger">{loadError}</div>;
+    if (loadError || categoriesError) {
+        return <div className="py-8 text-center text-sm text-status-danger">{loadError ?? categoriesError}</div>;
     }
 
     if (requiredItems.length === 0) {
@@ -186,6 +180,8 @@ export function StatutoryDocumentsStep({
             <div className="space-y-6">
                 {requiredItems.map((item) => {
                     const isUploaded = uploadedDocs[item.templateKey] !== undefined || item.documentId !== null;
+                    const matchedCategoryId = resolveCategoryId(item.category);
+                    const matchedCategoryName = categories.find((category) => category.id === matchedCategoryId)?.name ?? item.category;
 
                     return (
                         <Card key={item.templateKey} className={isUploaded ? 'border-status-success-border bg-status-success-bg' : ''}>
@@ -206,10 +202,18 @@ export function StatutoryDocumentsStep({
                                 )}
 
                                 {!isUploaded ? (
-                                    <DocumentUploader
-                                        communityId={communityId}
-                                        onUploaded={(doc) => handleDocumentUploaded(item.templateKey, doc)}
-                                    />
+                                    matchedCategoryId != null ? (
+                                        <DocumentUploader
+                                            communityId={communityId}
+                                            categoryId={matchedCategoryId}
+                                            categoryName={matchedCategoryName}
+                                            onUploaded={(result) => handleDocumentUploaded(item.templateKey, result)}
+                                        />
+                                    ) : (
+                                        <div className="text-sm text-status-danger">
+                                            This requirement cannot be uploaded yet because it does not match a configured document category.
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="text-sm text-status-success">
                                         Document successfully linked to your compliance checklist.
