@@ -407,9 +407,9 @@ function mapTemplateRow(row: AnyRow): EsignTemplateRecord {
 }
 
 /**
- * Returns the admin Supabase client with a typed helper for raw table access.
- * The untyped admin client's .from() returns `any`, which is fine for our
- * snake_case operations where we map results manually.
+ * Returns an untyped admin Supabase client.
+ * TODO: Generate Supabase Database types and pass to createAdminClient<Database>()
+ * to remove this `as any` cast. Affects all admin client consumers project-wide.
  */
 function getAdmin() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
