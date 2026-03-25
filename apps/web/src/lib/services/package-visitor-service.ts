@@ -7,7 +7,7 @@ import {
   userRoles,
   type PackageLogStatus,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNull } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
 
@@ -42,6 +42,17 @@ interface VisitorLogRow {
   passCode: string;
   staffUserId: string | null;
   notes: string | null;
+  guestType: string;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  recurrenceRule: string | null;
+  expectedDurationMinutes: number | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+  revokedByUserId: string | null;
+  revokedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,8 +79,17 @@ export interface CreateVisitorInput {
   visitorName: string;
   purpose: string;
   hostUnitId: number;
-  expectedArrival: string;
+  expectedArrival?: string;
   notes?: string | null;
+  guestType?: 'one_time' | 'recurring' | 'permanent' | 'vendor';
+  validFrom?: string | null;
+  validUntil?: string | null;
+  recurrenceRule?: string | null;
+  expectedDurationMinutes?: number | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleColor?: string | null;
+  vehiclePlate?: string | null;
 }
 
 function parseTimestamp(value: string, label: string): Date {
@@ -107,6 +127,8 @@ function buildVisitorWhereClause(options: {
   onlyActive?: boolean;
   allowedUnitIds?: readonly number[];
   hostUserId?: string;
+  guestType?: string;
+  status?: string;
 }) {
   const clauses = [];
 
@@ -121,6 +143,50 @@ function buildVisitorWhereClause(options: {
   }
   if (options.allowedUnitIds && options.allowedUnitIds.length > 0) {
     clauses.push(inArray(visitorLog.hostUnitId, [...options.allowedUnitIds]));
+  }
+  if (options.guestType) {
+    clauses.push(eq(visitorLog.guestType, options.guestType));
+  }
+  if (options.status) {
+    const now = new Date();
+    switch (options.status) {
+      case 'expected':
+        clauses.push(
+          isNull(visitorLog.checkedInAt),
+          isNull(visitorLog.revokedAt),
+          or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now)),
+        );
+        break;
+      case 'checked_in':
+        clauses.push(
+          isNotNull(visitorLog.checkedInAt),
+          isNull(visitorLog.checkedOutAt),
+          isNull(visitorLog.revokedAt),
+        );
+        break;
+      case 'checked_out':
+        clauses.push(isNotNull(visitorLog.checkedOutAt));
+        break;
+      case 'expired':
+        clauses.push(
+          lt(visitorLog.validUntil, now),
+          isNull(visitorLog.checkedInAt),
+          isNull(visitorLog.revokedAt),
+        );
+        break;
+      case 'revoked':
+        clauses.push(
+          isNotNull(visitorLog.revokedAt),
+          isNotNull(visitorLog.checkedOutAt),
+        );
+        break;
+      case 'revoked_on_site':
+        clauses.push(
+          isNotNull(visitorLog.revokedAt),
+          isNull(visitorLog.checkedOutAt),
+        );
+        break;
+    }
   }
 
   if (clauses.length === 0) return undefined;
@@ -342,14 +408,33 @@ export async function createVisitorForCommunity(
   const scoped = createScopedClient(communityId);
   const passCode = `V-${randomUUID().slice(0, 8).toUpperCase()}`;
 
+  const guestType = input.guestType ?? 'one_time';
+  const validFrom = input.validFrom ? parseTimestamp(input.validFrom, 'validFrom') : null;
+  const validUntil = input.validUntil ? parseTimestamp(input.validUntil, 'validUntil') : null;
+  const expectedArrival = input.expectedArrival
+    ? parseTimestamp(input.expectedArrival, 'expectedArrival')
+    : validFrom;
+  if (!expectedArrival) {
+    throw new BadRequestError('expectedArrival or validFrom is required');
+  }
+
   const [inserted] = await scoped.insert(visitorLog, {
     visitorName: input.visitorName,
     purpose: input.purpose,
     hostUnitId: input.hostUnitId,
     hostUserId: actorUserId,
-    expectedArrival: parseTimestamp(input.expectedArrival, 'expectedArrival'),
+    expectedArrival,
     passCode,
     notes: input.notes ?? null,
+    guestType,
+    validFrom,
+    validUntil,
+    recurrenceRule: input.recurrenceRule ?? null,
+    expectedDurationMinutes: input.expectedDurationMinutes ?? null,
+    vehicleMake: input.vehicleMake ?? null,
+    vehicleModel: input.vehicleModel ?? null,
+    vehicleColor: input.vehicleColor ?? null,
+    vehiclePlate: input.vehiclePlate ?? null,
   });
 
   if (!inserted) {
@@ -380,6 +465,8 @@ export async function listVisitorsForCommunity(
     onlyActive?: boolean;
     allowedUnitIds?: readonly number[];
     hostUserId?: string;
+    guestType?: string;
+    status?: string;
   } = {},
 ): Promise<VisitorLogRow[]> {
   const scoped = createScopedClient(communityId);
@@ -409,6 +496,13 @@ export async function checkInVisitorForCommunity(
   const existing = rows[0];
   if (!existing) {
     throw new NotFoundError('Visitor pass not found');
+  }
+
+  if (existing.revokedAt) {
+    throw new BadRequestError('This visitor pass has been revoked');
+  }
+  if (existing.validUntil && new Date(existing.validUntil) < new Date()) {
+    throw new BadRequestError('This visitor pass has expired');
   }
 
   if (existing.checkedInAt) {
@@ -535,4 +629,95 @@ export async function listMyVisitorsForCommunity(
   });
 
   return rows.filter((row) => row.hostUserId === actorUserId || allowedUnitIds.includes(row.hostUnitId));
+}
+
+export type VisitorStatus =
+  | 'expected'
+  | 'checked_in'
+  | 'checked_out'
+  | 'expired'
+  | 'overstayed'
+  | 'revoked'
+  | 'revoked_on_site';
+
+export function deriveVisitorStatus(visitor: VisitorLogRow): VisitorStatus {
+  if (visitor.revokedAt && !visitor.checkedOutAt) return 'revoked_on_site';
+  if (visitor.revokedAt) return 'revoked';
+  if (visitor.checkedOutAt) return 'checked_out';
+  if (visitor.checkedInAt && visitor.validUntil && visitor.validUntil < new Date()) return 'overstayed';
+  if (visitor.checkedInAt) return 'checked_in';
+  if (visitor.validUntil && visitor.validUntil < new Date()) return 'expired';
+  return 'expected';
+}
+
+export async function revokeVisitorForCommunity(
+  communityId: number,
+  visitorId: number,
+  actorUserId: string,
+  reason: string | null,
+  requestId: string | null,
+): Promise<VisitorLogRow> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<VisitorLogRow>(
+    visitorLog,
+    {},
+    and(eq(visitorLog.id, visitorId), isNull(visitorLog.deletedAt)),
+  );
+  const existing = rows[0];
+
+  if (!existing) throw new NotFoundError('Visitor pass not found');
+
+  if (existing.revokedAt) {
+    await logAuditEvent({
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'visitor_log',
+      resourceId: String(visitorId),
+      metadata: { requestId, idempotent: true, transition: 'revoke' },
+    });
+    return existing;
+  }
+
+  const [updated] = await scoped.update(
+    visitorLog,
+    { revokedAt: new Date(), revokedByUserId: actorUserId },
+    eq(visitorLog.id, visitorId),
+  );
+
+  if (!updated) throw new NotFoundError('Visitor pass not found');
+
+  const row = updated as unknown as VisitorLogRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'update',
+    resourceType: 'visitor_log',
+    resourceId: String(visitorId),
+    oldValues: { revokedAt: null, revokedByUserId: null },
+    newValues: { revokedAt: row.revokedAt, revokedByUserId: row.revokedByUserId },
+    metadata: { requestId, transition: 'revoke', reason },
+  });
+
+  return row;
+}
+
+export async function revokeVisitorPassesForUser(
+  communityId: number,
+  userId: string,
+): Promise<number> {
+  const scoped = createScopedClient(communityId);
+  const result = await scoped.update(
+    visitorLog,
+    { revokedAt: new Date() },
+    and(
+      eq(visitorLog.hostUserId, userId),
+      isNull(visitorLog.revokedAt),
+      isNull(visitorLog.checkedOutAt),
+      isNull(visitorLog.deletedAt),
+      inArray(visitorLog.guestType, ['recurring', 'permanent']),
+    ),
+  );
+  return result.length;
 }
