@@ -49,6 +49,7 @@
     "file-type": "^20.5.0",
     "framer-motion": "^12.38.0",
     "isomorphic-dompurify": "^3.0.0",
+    "jose": "^6.2.2",
     "lucide-react": "^0.575.0",
     "marked": "^17.0.3",
     "next": "^15.1.0",
