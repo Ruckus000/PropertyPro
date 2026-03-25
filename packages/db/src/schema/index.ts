@@ -35,6 +35,7 @@ export * from './amenities';
 export * from './amenity-reservations';
 export * from './package-log';
 export * from './visitor-log';
+export * from './denied-visitors';
 export * from './provisioning-jobs';
 export * from './compliance-audit-log';
 export * from './compliance-checklist-items';
@@ -357,6 +358,11 @@ export type NewElectionEligibilitySnapshot = typeof electionEligibilitySnapshots
 import type { faqs } from './faqs';
 export type Faq = typeof faqs.$inferSelect;
 export type NewFaq = typeof faqs.$inferInsert;
+
+// Denied Visitors
+import type { deniedVisitors } from './denied-visitors';
+export type DeniedVisitor = typeof deniedVisitors.$inferSelect;
+export type NewDeniedVisitor = typeof deniedVisitors.$inferInsert;
 
 // Access Requests (self-service resident signup)
 import type { accessRequests } from './access-requests';

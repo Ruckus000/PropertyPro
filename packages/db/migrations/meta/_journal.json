@@ -533,6 +533,13 @@
       "when": 1774460000000,
       "tag": "0115_account_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1774560000000,
+      "tag": "0116_visitor_system_upgrade",
+      "breakpoints": true
     }
   ]
 }
