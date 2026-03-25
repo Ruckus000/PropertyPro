@@ -17,8 +17,8 @@ import type { EsignSubmissionRecord } from '@/lib/services/esign-service';
 import {
   AlertTriangle,
   FileSignature,
-  Loader2,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ESIGN_STATUS_CONFIG } from './esign-status-config';
 import type { EsignStatusConfigEntry } from './esign-status-config';
 
@@ -84,8 +84,15 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
 
       {/* Loading */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-content-disabled" />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-4">
+              <Skeleton className="h-4 w-[200px]" />
+              <Skeleton className="h-6 w-[80px] rounded-full" />
+              <Skeleton className="h-4 w-[100px]" />
+              <Skeleton className="h-8 w-8 rounded-md ml-auto" />
+            </div>
+          ))}
         </div>
       )}
 

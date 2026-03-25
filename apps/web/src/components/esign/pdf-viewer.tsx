@@ -15,7 +15,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist/build/pdf.mjs';
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type PdfJsModule = typeof import('pdfjs-dist/build/pdf.mjs');
 
@@ -229,12 +230,9 @@ export function PdfViewer({
   if (loading) {
     return (
       <div
-        className={`flex items-center justify-center rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
+        className={`rounded-lg border border-edge-subtle bg-surface-card p-4 ${className ?? ''}`}
       >
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="size-8 animate-spin text-content-tertiary" />
-          <p className="text-sm text-content-tertiary">Loading PDF...</p>
-        </div>
+        <Skeleton className="w-full aspect-[8.5/11] rounded-sm" />
       </div>
     );
   }
