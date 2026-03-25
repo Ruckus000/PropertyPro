@@ -10,19 +10,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Card } from '@propertypro/ui';
-import type { BadgeVariant } from '@propertypro/ui';
 import {
   useEsignSubmissions,
 } from '@/hooks/use-esign-submissions';
 import type { EsignSubmissionRecord } from '@/lib/services/esign-service';
 import {
-  Clock,
-  CheckCircle2,
-  XCircle,
   AlertTriangle,
   FileSignature,
-  Loader2,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ESIGN_STATUS_CONFIG } from './esign-status-config';
+import type { EsignStatusConfigEntry } from './esign-status-config';
 
 interface SubmissionListProps {
   communityId: number;
@@ -37,23 +35,7 @@ const STATUS_FILTERS = [
   { value: 'expired', label: 'Expired' },
 ] as const;
 
-interface StatusConfigEntry {
-  label: string;
-  variant: BadgeVariant;
-  icon: typeof Clock;
-}
-
-const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
-  pending: { label: 'Pending', variant: 'warning', icon: Clock },
-  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
-  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
-  completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
-  declined: { label: 'Declined', variant: 'danger', icon: XCircle },
-  expired: { label: 'Expired', variant: 'neutral', icon: AlertTriangle },
-  cancelled: { label: 'Cancelled', variant: 'neutral', icon: XCircle },
-};
-
-const DEFAULT_STATUS: StatusConfigEntry = STATUS_CONFIG['pending']!;
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!;
 
 function formatDate(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -102,8 +84,15 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
 
       {/* Loading */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-content-disabled" />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-4">
+              <Skeleton className="h-4 w-[200px]" />
+              <Skeleton className="h-6 w-[80px] rounded-full" />
+              <Skeleton className="h-4 w-[100px]" />
+              <Skeleton className="h-8 w-8 rounded-md ml-auto" />
+            </div>
+          ))}
         </div>
       )}
 
@@ -155,7 +144,7 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
               <tbody>
                 {submissions.map((submission) => {
                   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-                  const config = STATUS_CONFIG[effectiveStatus] ??
+                  const config = ESIGN_STATUS_CONFIG[effectiveStatus] ??
                     DEFAULT_STATUS;
                   const Icon = config.icon;
 

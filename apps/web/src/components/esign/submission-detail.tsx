@@ -8,7 +8,18 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card } from '@propertypro/ui';
-import type { BadgeVariant } from '@propertypro/ui';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ESIGN_STATUS_CONFIG, EVENT_ICONS } from './esign-status-config';
+import type { EsignStatusConfigEntry } from './esign-status-config';
 import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
 import {
   useEsignSubmission,
@@ -22,62 +33,24 @@ import type {
 } from '@/lib/services/esign-service';
 import {
   ArrowLeft,
-  CheckCircle2,
-  Clock,
-  XCircle,
   AlertTriangle,
   Send,
   Ban,
   Download,
-  Eye,
   FileSignature,
-  Loader2,
   User,
   Copy,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface SubmissionDetailProps {
   communityId: number;
   submissionId: number;
 }
 
-interface StatusConfigEntry {
-  label: string;
-  variant: BadgeVariant;
-  icon: typeof Clock;
-}
-
-const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
-  pending: { label: 'Pending', variant: 'warning', icon: Clock },
-  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
-  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
-  opened: { label: 'Opened', variant: 'info', icon: Eye },
-  completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
-  declined: { label: 'Declined', variant: 'danger', icon: XCircle },
-  expired: { label: 'Expired', variant: 'neutral', icon: AlertTriangle },
-  cancelled: { label: 'Cancelled', variant: 'neutral', icon: Ban },
-};
-
-const DEFAULT_STATUS: StatusConfigEntry = STATUS_CONFIG['pending']!;
-
-const EVENT_ICONS: Record<string, typeof Clock> = {
-  created: FileSignature,
-  sent: Send,
-  opened: Eye,
-  signed: FileSignature,
-  completed: CheckCircle2,
-  declined: XCircle,
-  expired: AlertTriangle,
-  cancelled: Ban,
-  reminder_sent: Send,
-  signer_completed: CheckCircle2,
-  submission_completed: CheckCircle2,
-  submission_processing_failed: AlertTriangle,
-  consent_given: CheckCircle2,
-  verified: CheckCircle2,
-  downloaded: Download,
-};
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!
 
 function formatDateTime(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -126,12 +99,11 @@ export function SubmissionDetail({
   const cancelMutation = useCancelEsignSubmission(communityId);
   const remindMutation = useSendEsignReminder(communityId);
   const [currentPage, setCurrentPage] = useState(0);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const handleCancel = useCallback(async () => {
-    if (!confirm('Cancel this signing request? All pending signatures will be voided.')) {
-      return;
-    }
     await cancelMutation.mutateAsync(submissionId);
+    setCancelDialogOpen(false);
   }, [submissionId, cancelMutation]);
 
   const copySigningUrl = useCallback(
@@ -159,8 +131,25 @@ export function SubmissionDetail({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-content-disabled" />
+      <div className="space-y-6">
+        <div className="rounded-lg border border-edge p-6 space-y-4">
+          <Skeleton className="h-6 w-[250px]" />
+          <Skeleton className="h-4 w-[180px]" />
+          <div className="flex gap-3">
+            <Skeleton className="h-6 w-[80px] rounded-full" />
+            <Skeleton className="h-6 w-[100px] rounded-full" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-edge p-6 space-y-3">
+          <Skeleton className="h-5 w-[120px]" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <Skeleton className="h-4 w-[180px]" />
+              <Skeleton className="h-6 w-[70px] rounded-full ml-auto" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -186,7 +175,7 @@ export function SubmissionDetail({
 
   const { submission, signers, events } = data;
   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-  const submissionConfig = STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
+  const submissionConfig = ESIGN_STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
   const SubIcon = submissionConfig.icon;
   const isPending = effectiveStatus === 'pending';
 
@@ -284,7 +273,7 @@ export function SubmissionDetail({
             <div className="space-y-3">
               {signers.map((signer: EsignSignerRecord) => {
                 const signerConfig =
-                  STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
+                  ESIGN_STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
                 const blockedBySequence = signerIsBlockedBySequence(
                   submission.signingOrder,
@@ -408,7 +397,7 @@ export function SubmissionDetail({
               <Button
                 variant="ghost"
                 className="text-status-danger hover:text-status-danger hover:bg-status-danger-bg"
-                onClick={handleCancel}
+                onClick={() => setCancelDialogOpen(true)}
                 disabled={cancelMutation.isPending}
               >
                 <Ban className="h-4 w-4 mr-1" />
@@ -416,6 +405,27 @@ export function SubmissionDetail({
               </Button>
             </div>
           )}
+
+          <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel signing request?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  All pending signatures will be voided. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Go back</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-status-danger hover:bg-status-danger/90"
+                  onClick={handleCancel}
+                  disabled={cancelMutation.isPending}
+                >
+                  {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Request'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {data.downloadUrl && (
             <Button

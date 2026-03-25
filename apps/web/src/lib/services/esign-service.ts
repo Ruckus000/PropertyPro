@@ -8,7 +8,7 @@
  * - Signing flow uses createAdminClient for unscoped reads (slug lookup), scoped client for mutations
  */
 import crypto from 'node:crypto';
-import { EsignReminderEmail, sendEmail } from '@propertypro/email';
+import { EsignInvitationEmail, EsignReminderEmail, sendEmail } from '@propertypro/email';
 import {
   createAdminClient,
   createScopedClient,
@@ -407,9 +407,9 @@ function mapTemplateRow(row: AnyRow): EsignTemplateRecord {
 }
 
 /**
- * Returns the admin Supabase client with a typed helper for raw table access.
- * The untyped admin client's .from() returns `any`, which is fine for our
- * snake_case operations where we map results manually.
+ * Returns an untyped admin Supabase client.
+ * TODO: Generate Supabase Database types and pass to createAdminClient<Database>()
+ * to remove this `as any` cast. Affects all admin client consumers project-wide.
  */
 function getAdmin() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -639,22 +639,66 @@ export async function createSubmission(
   });
   const submission = subRows[0] as EsignSubmissionRecord;
 
-  const signerRecords: EsignSignerRecord[] = [];
-  for (const signerInput of input.signers) {
-    const signerRows = await scoped.insert(esignSigners, {
-      communityId,
-      submissionId: submission.id,
-      externalId: generateExternalId(),
-      userId: signerInput.userId ?? null,
-      email: signerInput.email,
-      name: signerInput.name,
-      role: signerInput.role,
-      slug: generateSigningSlug(),
-      sortOrder: signerInput.sortOrder,
-      status: 'pending',
-      prefilledFields: signerInput.prefilledFields ?? null,
-    });
-    signerRecords.push(signerRows[0] as EsignSignerRecord);
+  const signerValues = input.signers.map((signerInput) => ({
+    communityId,
+    submissionId: submission.id,
+    externalId: generateExternalId(),
+    userId: signerInput.userId ?? null,
+    email: signerInput.email,
+    name: signerInput.name,
+    role: signerInput.role,
+    slug: generateSigningSlug(),
+    sortOrder: signerInput.sortOrder,
+    status: 'pending' as const,
+    prefilledFields: signerInput.prefilledFields ?? null,
+  }));
+
+  const signerRecords = (await scoped.insert(esignSigners, signerValues)) as EsignSignerRecord[];
+
+  // --- Send invitation emails (fire-and-forget per signer) ---
+  if (input.sendEmail && signerRecords.length > 0) {
+    const admin = getAdmin();
+
+    // Look up sender name (same pattern as sendReminder)
+    const { data: senderRow } = await admin
+      .from('users')
+      .select('full_name, email')
+      .eq('id', userId)
+      .single();
+    const senderName = senderRow?.full_name || senderRow?.email || 'PropertyPro';
+
+    // Look up community name (same pattern as sendReminder)
+    const { data: communityRows } = await admin
+      .from('communities')
+      .select('name')
+      .eq('id', communityId)
+      .limit(1);
+    const communityName = (communityRows?.[0] as { name?: string } | undefined)?.name ?? 'PropertyPro';
+
+    const documentName = submission.messageSubject ?? template.name;
+
+    for (const signer of signerRecords) {
+      try {
+        const signingUrl = buildSigningUrl(submission.externalId!, signer.slug!);
+        await sendEmail({
+          to: signer.email,
+          subject: `Signature requested: ${documentName}`,
+          category: 'transactional',
+          react: EsignInvitationEmail({
+            branding: { communityName },
+            signerName: signer.name || signer.email,
+            senderName,
+            documentName,
+            signingUrl,
+            expiresAt: input.expiresAt ?? undefined,
+            messageBody: input.messageBody ?? undefined,
+          }),
+        });
+      } catch (err) {
+        console.error(`Failed to send invitation email to ${signer.email}:`, err);
+        // Continue — email failure must not abort submission creation
+      }
+    }
   }
 
   await scoped.insert(esignEvents, {
@@ -682,14 +726,32 @@ export async function listSubmissions(
   filters?: { status?: EsignSubmissionStatus },
 ): Promise<EsignSubmissionRecord[]> {
   const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(esignSubmissions, {})) as EsignSubmissionRecord[];
-  const submissions = rows.map((row) => withEffectiveStatus(row));
 
-  if (!filters?.status) {
-    return submissions;
+  // 'expired' and 'pending' are computed from 'pending' rows in the DB.
+  if (filters?.status === 'expired' || filters?.status === 'pending') {
+    const rows = (await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.status, 'pending'),
+    )) as EsignSubmissionRecord[];
+    return rows
+      .map((row) => withEffectiveStatus(row))
+      .filter((row) => row.effectiveStatus === filters.status);
   }
 
-  return submissions.filter((row) => row.effectiveStatus === filters.status);
+  // Stored statuses — push directly to SQL
+  if (filters?.status) {
+    const rows = (await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.status, filters.status),
+    )) as EsignSubmissionRecord[];
+    return rows.map((row) => withEffectiveStatus(row));
+  }
+
+  // No filter — fetch all, compute effectiveStatus
+  const rows = (await scoped.selectFrom(esignSubmissions, {})) as EsignSubmissionRecord[];
+  return rows.map((row) => withEffectiveStatus(row));
 }
 
 // ---------------------------------------------------------------------------

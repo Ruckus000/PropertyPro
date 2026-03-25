@@ -60,10 +60,10 @@ export function FieldPalette({
   signerRoleColors,
 }: FieldPaletteProps) {
   return (
-    <div className="flex w-56 flex-col gap-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4">
+    <div className="flex w-56 flex-col gap-5 rounded-lg border border-edge-subtle bg-surface-card p-4">
       {/* Signer Roles */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-content-tertiary">
           Signer Role
         </h3>
         <div className="flex flex-col gap-1">
@@ -79,8 +79,8 @@ export function FieldPalette({
                 onClick={() => onRoleChange(role)}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-[var(--surface-subtle)] text-[var(--text-primary)]'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] hover:text-[var(--text-primary)]'
+                    ? 'bg-surface-subtle text-content'
+                    : 'text-content-secondary hover:bg-surface-subtle hover:text-content'
                 }`}
               >
                 <span
@@ -91,7 +91,7 @@ export function FieldPalette({
                   {role.replace(/_/g, ' ')}
                 </span>
                 {count > 0 && (
-                  <span className="rounded-full bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[var(--text-tertiary)]">
+                  <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-content-tertiary">
                     {count}
                   </span>
                 )}
@@ -102,11 +102,11 @@ export function FieldPalette({
       </div>
 
       {/* Divider */}
-      <div className="border-t border-[var(--border-subtle)]" />
+      <div className="border-t border-edge-subtle" />
 
       {/* Field Types */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-content-tertiary">
           Field Type
         </h3>
         <div className="flex flex-col gap-1">
@@ -124,8 +124,8 @@ export function FieldPalette({
                 }
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-[var(--interactive-primary)] text-white'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] hover:text-[var(--text-primary)]'
+                    ? 'bg-interactive text-white'
+                    : 'text-content-secondary hover:bg-surface-subtle hover:text-content'
                 }`}
               >
                 <Icon className="size-4 shrink-0" />
@@ -139,8 +139,8 @@ export function FieldPalette({
       {/* Placement instruction */}
       {activeFieldType && (
         <>
-          <div className="border-t border-[var(--border-subtle)]" />
-          <div className="flex items-start gap-2 rounded-md bg-[var(--status-info-bg)] p-3 text-xs text-[var(--status-info)]">
+          <div className="border-t border-edge-subtle" />
+          <div className="flex items-start gap-2 rounded-md bg-status-info-bg p-3 text-xs text-status-info">
             <MousePointerClick className="mt-0.5 size-4 shrink-0" />
             <span>
               Click on the document to place a{' '}

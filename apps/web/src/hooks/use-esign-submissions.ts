@@ -6,6 +6,7 @@ import type {
   EsignSignerRecord,
   EsignEventRecord,
 } from '@/lib/services/esign-service';
+import { requestJson } from '@/lib/api/request-json';
 
 export const ESIGN_SUBMISSION_KEYS = {
   all: ['esign-submissions'] as const,
@@ -14,21 +15,6 @@ export const ESIGN_SUBMISSION_KEYS = {
   detail: (communityId: number, id: number) =>
     [...ESIGN_SUBMISSION_KEYS.all, 'detail', communityId, id] as const,
 };
-
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
-  const json = (await response.json()) as {
-    data?: T;
-    error?: { message?: string };
-  };
-  if (!response.ok) {
-    throw new Error(json.error?.message ?? 'Request failed');
-  }
-  if (json.data === undefined) {
-    throw new Error('Missing response payload');
-  }
-  return json.data;
-}
 
 export function useEsignSubmissions(
   communityId: number,
