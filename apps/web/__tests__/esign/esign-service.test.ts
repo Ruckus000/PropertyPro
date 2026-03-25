@@ -947,25 +947,77 @@ describe('esign-service', () => {
 
       const result = await listSubmissions(1);
       expect(result).toHaveLength(2);
+      // No filter — selectFrom called with no WHERE condition (2 args only)
+      expect(scoped.selectFrom).toHaveBeenCalledWith(
+        esignSubmissionsTable,
+        {},
+      );
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(2);
     });
 
-    it('filters by status', async () => {
+    it('pushes stored status filter to SQL WHERE clause', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 3, communityId: 1, status: 'completed' },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'completed'] });
+
+      const result = await listSubmissions(1, { status: 'completed' });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.effectiveStatus).toBe('completed');
+      // WHERE condition passed as 3rd arg
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+      expect(eqMock).toHaveBeenCalledWith(esignSubmissionsTable.status, 'completed');
+    });
+
+    it('filters expired in JS from pending SQL rows', async () => {
       const scoped = makeScopedMock();
       scoped.selectFrom = vi.fn(async () => [
         { id: 1, communityId: 1, status: 'pending', expiresAt: null },
-        { id: 2, communityId: 1, status: 'pending', expiresAt: '2025-01-01T00:00:00.000Z' },
+        { id: 2, communityId: 1, status: 'pending', expiresAt: '2020-01-01T00:00:00.000Z' },
       ]);
       createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
 
-      const pending = await listSubmissions(1, { status: 'pending' });
-      const expired = await listSubmissions(1, { status: 'expired' });
+      const result = await listSubmissions(1, { status: 'expired' });
+      // Only the row with a past expiresAt should be returned
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(2);
+      expect(result[0]?.effectiveStatus).toBe('expired');
+      // SQL WHERE pushed to pending
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+      expect(eqMock).toHaveBeenCalledWith(esignSubmissionsTable.status, 'pending');
+    });
 
-      expect(pending).toHaveLength(1);
-      expect(pending[0]?.id).toBe(1);
-      expect(pending[0]?.effectiveStatus).toBe('pending');
-      expect(expired).toHaveLength(1);
-      expect(expired[0]?.id).toBe(2);
-      expect(expired[0]?.effectiveStatus).toBe('expired');
+    it('filters pending in JS to exclude expired rows', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 1, communityId: 1, status: 'pending', expiresAt: null },
+        { id: 2, communityId: 1, status: 'pending', expiresAt: '2020-01-01T00:00:00.000Z' },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
+
+      const result = await listSubmissions(1, { status: 'pending' });
+      // Only non-expired pending row should be returned
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(1);
+      expect(result[0]?.effectiveStatus).toBe('pending');
+      // SQL WHERE pushed to pending
+      expect(scoped.selectFrom.mock.calls[0]).toHaveLength(3);
+    });
+
+    it('edge: pending row with null expiresAt is NOT in expired results', async () => {
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        { id: 5, communityId: 1, status: 'pending', expiresAt: null },
+      ]);
+      createScopedClientMock.mockReturnValue(scoped);
+      eqMock.mockReturnValueOnce({ type: 'eq', args: [esignSubmissionsTable.status, 'pending'] });
+
+      const result = await listSubmissions(1, { status: 'expired' });
+      expect(result).toHaveLength(0);
     });
   });
 

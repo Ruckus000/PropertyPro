@@ -726,14 +726,44 @@ export async function listSubmissions(
   filters?: { status?: EsignSubmissionStatus },
 ): Promise<EsignSubmissionRecord[]> {
   const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(esignSubmissions, {})) as EsignSubmissionRecord[];
-  const submissions = rows.map((row) => withEffectiveStatus(row));
 
-  if (!filters?.status) {
-    return submissions;
+  // Expired is a computed status — special handling
+  if (filters?.status === 'expired') {
+    const rows = (await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.status, 'pending'),
+    )) as EsignSubmissionRecord[];
+    return rows
+      .map((row) => withEffectiveStatus(row))
+      .filter((row) => row.effectiveStatus === 'expired');
   }
 
-  return submissions.filter((row) => row.effectiveStatus === filters.status);
+  // Pending filter — push to SQL, include non-expired pending
+  if (filters?.status === 'pending') {
+    const rows = (await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.status, 'pending'),
+    )) as EsignSubmissionRecord[];
+    return rows
+      .map((row) => withEffectiveStatus(row))
+      .filter((row) => row.effectiveStatus === 'pending');
+  }
+
+  // Stored statuses — push directly to SQL
+  if (filters?.status) {
+    const rows = (await scoped.selectFrom(
+      esignSubmissions,
+      {},
+      eq(esignSubmissions.status, filters.status),
+    )) as EsignSubmissionRecord[];
+    return rows.map((row) => withEffectiveStatus(row));
+  }
+
+  // No filter — fetch all, compute effectiveStatus
+  const rows = (await scoped.selectFrom(esignSubmissions, {})) as EsignSubmissionRecord[];
+  return rows.map((row) => withEffectiveStatus(row));
 }
 
 // ---------------------------------------------------------------------------
