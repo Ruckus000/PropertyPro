@@ -7,21 +7,18 @@
  * plus a "Send Document" primary CTA.
  */
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@propertypro/ui';
 import { Plus, FileText, LayoutTemplate } from 'lucide-react';
 import { SubmissionList } from '@/components/esign/submission-list';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
 interface EsignPageShellProps {
   communityId: number;
 }
 
-type TabId = 'documents' | 'templates';
-
 export function EsignPageShell({ communityId }: EsignPageShellProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('documents');
-
   return (
     <div>
       {/* Header */}
@@ -41,54 +38,35 @@ export function EsignPageShell({ communityId }: EsignPageShellProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b mb-6">
-        <button
-          type="button"
-          onClick={() => setActiveTab('documents')}
-          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-quick ${
-            activeTab === 'documents'
-              ? 'border-interactive text-content-link'
-              : 'border-transparent text-content-tertiary hover:text-content-secondary'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Documents
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('templates')}
-          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-quick ${
-            activeTab === 'templates'
-              ? 'border-interactive text-content-link'
-              : 'border-transparent text-content-tertiary hover:text-content-secondary'
-          }`}
-        >
-          <LayoutTemplate className="h-4 w-4" />
-          Templates
-        </button>
-      </div>
-
-      {/* Tab content */}
-      {activeTab === 'documents' && (
-        <SubmissionList communityId={communityId} />
-      )}
-
-      {activeTab === 'templates' && (
-        <div className="text-center py-16">
-          <LayoutTemplate className="h-12 w-12 mx-auto text-content-disabled mb-4" />
-          <h3 className="text-lg font-medium text-content mb-2">
-            Manage Templates
-          </h3>
-          <p className="text-sm text-content-tertiary mb-6 max-w-md mx-auto">
-            Create and manage reusable document templates for e-signing.
-          </p>
-          <Link href={`/esign/templates?communityId=${communityId}`}>
-            <Button variant="secondary">
-              Go to Templates
-            </Button>
+      <Tabs defaultValue="documents">
+        <div className="flex items-center border-b mb-6">
+          <TabsList className="h-auto rounded-none bg-transparent p-0 gap-0">
+            <TabsTrigger
+              value="documents"
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-none border-b-2 border-transparent transition-colors duration-quick',
+                'data-[state=active]:border-interactive data-[state=active]:text-content-link data-[state=active]:bg-transparent data-[state=active]:shadow-none',
+                'text-content-tertiary hover:text-content-secondary',
+              )}
+            >
+              <FileText className="h-4 w-4" />
+              Documents
+            </TabsTrigger>
+          </TabsList>
+          {/* Templates is navigation — renders as a link styled like a tab, not a TabsTrigger */}
+          <Link
+            href={`/esign/templates?communityId=${communityId}`}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-content-tertiary hover:text-content-secondary transition-colors duration-quick"
+          >
+            <LayoutTemplate className="h-4 w-4" />
+            Templates
           </Link>
         </div>
-      )}
+
+        <TabsContent value="documents">
+          <SubmissionList communityId={communityId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
