@@ -31,8 +31,11 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
   }),
 }));
 
-vi.mock('@propertypro/shared', () => ({
-  resolveCommunityContext: vi.fn().mockImplementation(({ host }: { host: string | null }) => {
+vi.mock('@propertypro/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@propertypro/shared')>();
+  return {
+    ...actual,
+    resolveCommunityContext: vi.fn().mockImplementation(({ host }: { host: string | null }) => {
     // Simulate subdomain resolution
     if (host && host.startsWith('sunset-condos.')) {
       return {
@@ -57,12 +60,18 @@ vi.mock('@propertypro/shared', () => ({
       isReservedSubdomain: false,
     };
   }),
-}));
+  };
+});
 
 vi.mock('../../src/lib/middleware/rate-limit-config', () => ({
   checkRateLimit: vi.fn().mockReturnValue(null),
   rateLimitedResponse: vi.fn(),
   classifyRoute: vi.fn().mockReturnValue('public'),
+}));
+
+vi.mock('../../src/lib/support/impersonation', () => ({
+  parseImpersonationCookie: vi.fn().mockResolvedValue(null),
+  isReadOnlyBlocked: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../src/lib/middleware/security-headers', () => ({

@@ -114,3 +114,6 @@ export const userRoleV2Enum = pgEnum('user_role_v2', [
 
 /** Platform admin role. Only 'super_admin' exists today; enum enforces type safety and makes future roles explicit. */
 export const platformAdminRoleEnum = pgEnum('platform_admin_role', ['super_admin']);
+
+/** Support access level for impersonation sessions. */
+export const supportAccessLevelEnum = pgEnum('support_access_level', ['read_only', 'read_write']);

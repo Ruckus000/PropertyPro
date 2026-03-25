@@ -11,7 +11,7 @@
  * Schedule: 0 * * * * (vercel.json)
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { visitorLog } from '@propertypro/db';
+import { logAuditEvent, visitorLog } from '@propertypro/db';
 import { and, isNotNull, isNull, sql } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -37,7 +37,26 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           sql`${visitorLog.checkedInAt} + (${visitorLog.expectedDurationMinutes} * INTERVAL '1 minute') <= NOW()`,
         ),
       )
-      .returning({ id: visitorLog.id });
+      .returning({ id: visitorLog.id, communityId: visitorLog.communityId });
+
+    // Emit a single bulk audit event per community
+    const byCommunity = new Map<number, number[]>();
+    for (const row of overdue) {
+      const ids = byCommunity.get(row.communityId) ?? [];
+      ids.push(row.id);
+      byCommunity.set(row.communityId, ids);
+    }
+    for (const [communityId, ids] of byCommunity) {
+      await logAuditEvent({
+        userId: 'system',
+        communityId,
+        action: 'update',
+        resourceType: 'visitor_log',
+        resourceId: ids.join(','),
+        newValues: { checkedOutAt: now },
+        metadata: { transition: 'auto_checkout', count: ids.length },
+      });
+    }
 
     return NextResponse.json({
       data: { autoCheckedOut: overdue.length, errors },

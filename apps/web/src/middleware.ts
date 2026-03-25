@@ -13,7 +13,11 @@
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
-import { resolveCommunityContext } from '@propertypro/shared';
+import { resolveCommunityContext, SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
+import {
+  parseImpersonationCookie,
+  isReadOnlyBlocked,
+} from './lib/support/impersonation';
 import {
   checkRateLimit,
   rateLimitedResponse,
@@ -618,6 +622,54 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         isPreviewRequest,
       );
     }
+  }
+
+  // --- Support impersonation detection [Task 9] ---
+  // If a support session cookie is present, validate it and enforce read-only mode.
+  // Invalid/expired cookies are cleared. Valid sessions inject headers for downstream use.
+  const supportCookieValue = request.cookies.get(SUPPORT_SESSION_COOKIE)?.value;
+  if (supportCookieValue) {
+    const supportSession = await parseImpersonationCookie(supportCookieValue);
+
+    if (!supportSession) {
+      // Cookie is invalid or expired — clear it
+      const clearResponse = NextResponse.next({ request: { headers: forwardedHeaders } });
+      const finalClear = finaliseResponse(
+        response as unknown as NextResponse,
+        clearResponse,
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+      finalClear.cookies.delete(SUPPORT_SESSION_COOKIE);
+      return finalClear;
+    }
+
+    // Block mutations for read_only sessions on API routes (except session management routes)
+    if (
+      supportSession.scope === 'read_only' &&
+      isApi &&
+      isReadOnlyBlocked(request.method) &&
+      !pathname.startsWith('/api/v1/support/')
+    ) {
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        NextResponse.json(
+          { error: 'Forbidden: support session is read-only' },
+          { status: 403 },
+        ),
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+    }
+
+    // Stamp support session headers for downstream route handlers
+    forwardedHeaders.set('x-support-session', '1');
+    forwardedHeaders.set('x-support-admin-id', supportSession.act.sub);
+    forwardedHeaders.set('x-support-session-id', String(supportSession.session_id));
   }
 
   const nextResponse = NextResponse.next({

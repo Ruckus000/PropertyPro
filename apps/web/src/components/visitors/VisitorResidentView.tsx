@@ -9,6 +9,7 @@ import {
   type MyVisitorFilter,
   type VisitorListItem,
 } from '@/hooks/use-visitors';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -169,7 +170,7 @@ export function VisitorResidentView({
   currentUserId,
 }: VisitorResidentViewProps) {
   const [activeTab, setActiveTab] = useState<MyVisitorFilter>('active');
-  const { data: visitors, isLoading } = useMyVisitors(communityId, activeTab);
+  const { data: visitors, isLoading, isError } = useMyVisitors(communityId, activeTab);
   const [registerOpen, setRegisterOpen] = useState(false);
   const revokeVisitor = useRevokeVisitor(communityId);
 
@@ -205,7 +206,9 @@ export function VisitorResidentView({
         </TabsList>
       </Tabs>
 
-      {!visitors || visitors.length === 0 ? (
+      {isError ? (
+        <AlertBanner status="danger" title="We couldn't load your visitors. Please try again." />
+      ) : !visitors || visitors.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">No Visitors In This View</CardTitle>

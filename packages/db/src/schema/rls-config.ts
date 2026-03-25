@@ -236,6 +236,8 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_user_scoped',
     notes: 'UETA/ESIGN Act consent tracking. Users manage their own consent; admin-tier sees all.',
   },
+  { tableName: 'support_consent_grants', policyFamily: 'service_only' },
+  { tableName: 'support_access_log', policyFamily: 'audit_log_restricted' },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -246,6 +248,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
   { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },
+  { tableName: 'support_sessions', reason: 'Platform-level support session tracking — service_role only. Admin-created sessions reference communities but are not tenant-scoped.' },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);
@@ -262,7 +265,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 46;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 48;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

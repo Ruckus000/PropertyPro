@@ -12,6 +12,7 @@ import { AppShell, type AppShellUser, type AppShellCommunity } from '@/component
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import { AppQueryProvider } from '@/components/providers/query-provider';
 import { MotionProvider } from '@/components/providers/motion-provider';
+import { SupportBanner } from '@/components/support/SupportBanner';
 
 /**
  * Resolve authenticated user info from Supabase session.
@@ -124,6 +125,7 @@ export default async function AuthenticatedLayout({
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div style={cssVars as React.CSSProperties}>
+        <SupportBanner />
         <AuthSessionSync />
         <AppQueryProvider>
           <MotionProvider>

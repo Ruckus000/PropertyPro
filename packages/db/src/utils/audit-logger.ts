@@ -36,7 +36,10 @@ export type AuditAction =
   | 'faq.created' | 'faq.updated' | 'faq.deleted' | 'faq.reordered'
   | 'community.contact_updated' | 'profile.updated'
   // Access request audit actions (self-service resident signup)
-  | 'access_request.approved' | 'access_request.denied';
+  | 'access_request.approved' | 'access_request.denied'
+  // Support access audit actions
+  | 'support_session_started' | 'support_session_ended'
+  | 'support_consent_granted' | 'support_consent_revoked';
 
 export interface AuditEventParams {
   userId: string;

@@ -743,10 +743,11 @@ export async function revokeVisitorPassesForUser(
   communityId: number,
   userId: string,
 ): Promise<number> {
+  const now = new Date();
   const scoped = createScopedClient(communityId);
   const result = await scoped.update(
     visitorLog,
-    { revokedAt: new Date(), updatedAt: new Date() },
+    { revokedAt: now, updatedAt: now },
     and(
       eq(visitorLog.hostUserId, userId),
       isNull(visitorLog.revokedAt),
@@ -755,6 +756,24 @@ export async function revokeVisitorPassesForUser(
       inArray(visitorLog.guestType, ['recurring', 'permanent']),
     ),
   );
+
+  if (result.length > 0) {
+    const revokedIds = result.map((row) => (row as unknown as { id: number }).id);
+    await logAuditEvent({
+      userId: 'system',
+      communityId,
+      action: 'update',
+      resourceType: 'visitor_log',
+      resourceId: revokedIds.join(','),
+      newValues: { revokedAt: now, revokedByUserId: null },
+      metadata: {
+        transition: 'cascade_revoke',
+        reason: `Resident ${userId} removed from community`,
+        count: result.length,
+      },
+    });
+  }
+
   return result.length;
 }
 
