@@ -679,7 +679,7 @@ export async function createSubmission(
 
     for (const signer of signerRecords) {
       try {
-        const signingUrl = buildSigningUrl(submission.externalId, signer.slug);
+        const signingUrl = buildSigningUrl(submission.externalId!, signer.slug!);
         await sendEmail({
           to: signer.email,
           subject: `Signature requested: ${documentName}`,
@@ -727,8 +727,8 @@ export async function listSubmissions(
 ): Promise<EsignSubmissionRecord[]> {
   const scoped = createScopedClient(communityId);
 
-  // Expired is a computed status — special handling
-  if (filters?.status === 'expired') {
+  // 'expired' and 'pending' are computed from 'pending' rows in the DB.
+  if (filters?.status === 'expired' || filters?.status === 'pending') {
     const rows = (await scoped.selectFrom(
       esignSubmissions,
       {},
@@ -736,19 +736,7 @@ export async function listSubmissions(
     )) as EsignSubmissionRecord[];
     return rows
       .map((row) => withEffectiveStatus(row))
-      .filter((row) => row.effectiveStatus === 'expired');
-  }
-
-  // Pending filter — push to SQL, include non-expired pending
-  if (filters?.status === 'pending') {
-    const rows = (await scoped.selectFrom(
-      esignSubmissions,
-      {},
-      eq(esignSubmissions.status, 'pending'),
-    )) as EsignSubmissionRecord[];
-    return rows
-      .map((row) => withEffectiveStatus(row))
-      .filter((row) => row.effectiveStatus === 'pending');
+      .filter((row) => row.effectiveStatus === filters.status);
   }
 
   // Stored statuses — push directly to SQL
