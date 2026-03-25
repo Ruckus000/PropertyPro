@@ -8,7 +8,8 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card } from '@propertypro/ui';
-import type { BadgeVariant } from '@propertypro/ui';
+import { ESIGN_STATUS_CONFIG, EVENT_ICONS } from './esign-status-config';
+import type { EsignStatusConfigEntry } from './esign-status-config';
 import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
 import {
   useEsignSubmission,
@@ -22,19 +23,16 @@ import type {
 } from '@/lib/services/esign-service';
 import {
   ArrowLeft,
-  CheckCircle2,
-  Clock,
-  XCircle,
   AlertTriangle,
   Send,
   Ban,
   Download,
-  Eye,
   FileSignature,
   Loader2,
   User,
   Copy,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
 
 interface SubmissionDetailProps {
@@ -42,42 +40,7 @@ interface SubmissionDetailProps {
   submissionId: number;
 }
 
-interface StatusConfigEntry {
-  label: string;
-  variant: BadgeVariant;
-  icon: typeof Clock;
-}
-
-const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
-  pending: { label: 'Pending', variant: 'warning', icon: Clock },
-  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
-  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
-  opened: { label: 'Opened', variant: 'info', icon: Eye },
-  completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
-  declined: { label: 'Declined', variant: 'danger', icon: XCircle },
-  expired: { label: 'Expired', variant: 'neutral', icon: AlertTriangle },
-  cancelled: { label: 'Cancelled', variant: 'neutral', icon: Ban },
-};
-
-const DEFAULT_STATUS: StatusConfigEntry = STATUS_CONFIG['pending']!;
-
-const EVENT_ICONS: Record<string, typeof Clock> = {
-  created: FileSignature,
-  sent: Send,
-  opened: Eye,
-  signed: FileSignature,
-  completed: CheckCircle2,
-  declined: XCircle,
-  expired: AlertTriangle,
-  cancelled: Ban,
-  reminder_sent: Send,
-  signer_completed: CheckCircle2,
-  submission_completed: CheckCircle2,
-  submission_processing_failed: AlertTriangle,
-  consent_given: CheckCircle2,
-  verified: CheckCircle2,
-  downloaded: Download,
-};
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!
 
 function formatDateTime(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -186,7 +149,7 @@ export function SubmissionDetail({
 
   const { submission, signers, events } = data;
   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-  const submissionConfig = STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
+  const submissionConfig = ESIGN_STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
   const SubIcon = submissionConfig.icon;
   const isPending = effectiveStatus === 'pending';
 
@@ -284,7 +247,7 @@ export function SubmissionDetail({
             <div className="space-y-3">
               {signers.map((signer: EsignSignerRecord) => {
                 const signerConfig =
-                  STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
+                  ESIGN_STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
                 const blockedBySequence = signerIsBlockedBySequence(
                   submission.signingOrder,
