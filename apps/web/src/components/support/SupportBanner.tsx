@@ -20,8 +20,11 @@ export function SupportBanner() {
 
   const handleEndSession = () => {
     // Clear the support session cookie
-    const isLocalhost = window.location.hostname.includes('localhost');
-    const cookieDomain = isLocalhost ? '' : '; domain=.propertyprofl.com';
+    // Derive root domain for cookie clearing (supports any TLD/staging)
+    const hostname = window.location.hostname;
+    const parts = hostname.split('.');
+    const rootDomain = parts.length >= 2 ? parts.slice(-2).join('.') : '';
+    const cookieDomain = hostname === 'localhost' || !rootDomain ? '' : `; domain=.${rootDomain}`;
     document.cookie = `${SUPPORT_SESSION_COOKIE}=; path=/; max-age=0; SameSite=Lax${cookieDomain}`;
     setVisible(false);
     router.push('/dashboard');

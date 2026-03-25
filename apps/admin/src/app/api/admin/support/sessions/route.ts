@@ -8,14 +8,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
-import { CreateSessionSchema } from '@propertypro/shared';
+import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
 
 // Supabase untyped client — support tables are not yet in generated types.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyQuery = any;
 
 const DAILY_SESSION_LIMIT = 10;
-const SESSION_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
 export async function POST(request: NextRequest) {
   const admin = await requirePlatformAdmin();
@@ -36,13 +35,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { communityId, targetUserId, reason } = parsed.data;
+  const { communityId, targetUserId, reason, ticketId } = parsed.data;
   const db = createAdminClient();
 
-  // Check consent: support_consent_grants for this community must be active
+  // 1. Check consent
   const { data: consentRows, error: consentError } = await (db
     .from('support_consent_grants') as AnyQuery)
-    .select('id')
+    .select('id, access_level')
     .eq('community_id', communityId)
     .is('revoked_at', null)
     .limit(1);
@@ -54,13 +53,15 @@ export async function POST(request: NextRequest) {
   if (!consentRows || consentRows.length === 0) {
     return NextResponse.json(
       {
-        error: 'No active consent grant found for this community. The community must grant support access before a session can be created.',
+        error: 'This community has not granted support access. Contact the community admin to enable it in Settings.',
       },
       { status: 403 },
     );
   }
 
-  // Block impersonation of platform admins
+  const consent = consentRows[0];
+
+  // 2. Block impersonation of platform admins
   const { data: adminRow, error: adminLookupError } = await (db
     .from('platform_admin_users') as AnyQuery)
     .select('user_id')
@@ -73,19 +74,19 @@ export async function POST(request: NextRequest) {
 
   if (adminRow) {
     return NextResponse.json(
-      { error: 'Impersonation of platform admins is not permitted.' },
+      { error: 'Cannot impersonate another platform admin' },
       { status: 403 },
     );
   }
 
-  // Enforce daily session limit per admin
+  // 3. Enforce daily session limit
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
   const { count, error: countError } = await (db
     .from('support_sessions') as AnyQuery)
     .select('id', { count: 'exact', head: true })
-    .eq('created_by', admin.id)
+    .eq('admin_user_id', admin.id)
     .gte('created_at', todayStart.toISOString());
 
   if (countError) {
@@ -94,39 +95,42 @@ export async function POST(request: NextRequest) {
 
   if ((count ?? 0) >= DAILY_SESSION_LIMIT) {
     return NextResponse.json(
-      { error: `Daily session limit of ${DAILY_SESSION_LIMIT} reached for this admin.` },
+      { error: `Daily session limit of ${DAILY_SESSION_LIMIT} reached.` },
       { status: 429 },
     );
   }
 
-  // Create the session row
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + SESSION_DURATION_MS);
+  // 4. Create session
+  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MAX_TTL_HOURS * 3600 * 1000);
 
   const { data: session, error: insertError } = await (db
     .from('support_sessions') as AnyQuery)
     .insert({
-      community_id: communityId,
+      admin_user_id: admin.id,
       target_user_id: targetUserId,
-      created_by: admin.id,
+      community_id: communityId,
       reason,
+      ticket_id: ticketId ?? null,
+      access_level: 'read_only',
       expires_at: expiresAt.toISOString(),
+      consent_id: consent.id,
     })
     .select('id')
     .single();
 
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (insertError || !session) {
+    return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });
   }
 
-  // Sign JWT
+  // 5. Sign JWT with RFC 8693 act claim
   let token: string;
   try {
     token = await signSupportToken({
-      sessionId: session.id,
-      adminId: admin.id,
-      communityId,
-      targetUserId,
+      sub: targetUserId,
+      act: { sub: admin.id },
+      community_id: communityId,
+      session_id: session.id,
+      scope: 'read_only',
     });
   } catch (err) {
     return NextResponse.json(
@@ -135,13 +139,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Log to support_access_log
+  // 6. Log to support_access_log
   await (db.from('support_access_log') as AnyQuery).insert({
-    session_id: session.id,
+    admin_user_id: admin.id,
     community_id: communityId,
-    admin_id: admin.id,
+    session_id: session.id,
     event: 'session_started',
-    metadata: { reason, target_user_id: targetUserId },
+    metadata: { reason, target_user_id: targetUserId, ticket_id: ticketId },
   });
 
   return NextResponse.json(
@@ -153,7 +157,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
 
-  const communityId = request.nextUrl.searchParams.get('communityId');
+  const communityIdParam = request.nextUrl.searchParams.get('communityId');
   const db = createAdminClient();
 
   let query = (db.from('support_sessions') as AnyQuery)
@@ -161,8 +165,11 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(50);
 
-  if (communityId) {
-    query = query.eq('community_id', Number(communityId));
+  if (communityIdParam) {
+    const communityId = Number(communityIdParam);
+    if (Number.isInteger(communityId) && communityId > 0) {
+      query = query.eq('community_id', communityId);
+    }
   }
 
   const { data, error } = await query;

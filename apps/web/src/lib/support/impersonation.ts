@@ -27,7 +27,9 @@ export async function parseImpersonationCookie(
       !payload.act ||
       typeof (payload.act as Record<string, unknown>).sub !== 'string' ||
       typeof payload.community_id !== 'number' ||
-      typeof payload.session_id !== 'number'
+      typeof payload.session_id !== 'number' ||
+      !payload.scope ||
+      !['read_only', 'read_write'].includes(payload.scope as string)
     ) {
       return null;
     }

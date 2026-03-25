@@ -62,15 +62,17 @@ export function StartSessionDialog({
       }
 
       const token: string = data.token;
-      const cookieDomain = window.location.hostname.includes('localhost')
-        ? ''
-        : '; domain=.propertyprofl.com';
+      // Derive root domain for cross-subdomain cookie (supports any TLD/staging)
+      const hostname = window.location.hostname;
+      const parts = hostname.split('.');
+      const rootDomain = parts.length >= 2 ? parts.slice(-2).join('.') : '';
+      const cookieDomain = hostname === 'localhost' || !rootDomain ? '' : `; domain=.${rootDomain}`;
 
       document.cookie = `${SUPPORT_SESSION_COOKIE}=${token}; path=/; max-age=3600; SameSite=Lax; Secure${cookieDomain}`;
 
-      const tenantUrl = window.location.hostname.includes('localhost')
+      const tenantUrl = hostname === 'localhost'
         ? `http://localhost:3000/dashboard?communityId=${communityId}`
-        : `https://${communitySlug}.propertyprofl.com/dashboard`;
+        : `https://${communitySlug}.${rootDomain}/dashboard`;
 
       window.open(tenantUrl, '_blank');
       onClose();

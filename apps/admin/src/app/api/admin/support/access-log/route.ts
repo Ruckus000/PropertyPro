@@ -14,10 +14,11 @@ type AnyQuery = any;
 export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
 
-  const communityId = request.nextUrl.searchParams.get('communityId');
-  if (!communityId || !Number.isInteger(Number(communityId))) {
+  const communityIdParam = request.nextUrl.searchParams.get('communityId');
+  const communityId = communityIdParam ? Number(communityIdParam) : NaN;
+  if (!Number.isInteger(communityId) || communityId <= 0) {
     return NextResponse.json(
-      { error: 'communityId query parameter is required' },
+      { error: 'A valid positive communityId query parameter is required' },
       { status: 400 },
     );
   }
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await (db
     .from('support_access_log') as AnyQuery)
     .select('*')
-    .eq('community_id', Number(communityId))
+    .eq('community_id', communityId)
     .order('created_at', { ascending: false })
     .limit(100);
 

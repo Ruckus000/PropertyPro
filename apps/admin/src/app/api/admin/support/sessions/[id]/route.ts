@@ -51,7 +51,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   await (db.from('support_access_log') as AnyQuery).insert({
     session_id: id,
     community_id: session.community_id,
-    admin_id: admin.id,
+    admin_user_id: admin.id,
     event: 'session_ended',
     metadata: { ended_reason: 'manual' },
   });
