@@ -1,0 +1,31 @@
+name: Visitor Auto Checkout
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-visitor-auto-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke visitor auto-checkout route
+        env:
+          VISITOR_AUTO_CHECKOUT_CRON_BASE_URL: ${{ secrets.VISITOR_AUTO_CHECKOUT_CRON_BASE_URL }}
+          VISITOR_AUTO_CHECKOUT_CRON_SECRET: ${{ secrets.VISITOR_AUTO_CHECKOUT_CRON_SECRET }}
+        run: |
+          if [ -z "$VISITOR_AUTO_CHECKOUT_CRON_BASE_URL" ]; then
+            echo "Missing VISITOR_AUTO_CHECKOUT_CRON_BASE_URL secret"
+            exit 1
+          fi
+
+          if [ -z "$VISITOR_AUTO_CHECKOUT_CRON_SECRET" ]; then
+            echo "Missing VISITOR_AUTO_CHECKOUT_CRON_SECRET secret"
+            exit 1
+          fi
+
+          curl -fsS \
+            -X POST \
+            "$VISITOR_AUTO_CHECKOUT_CRON_BASE_URL/api/v1/internal/visitor-auto-checkout" \
+            -H "Authorization: Bearer $VISITOR_AUTO_CHECKOUT_CRON_SECRET" \
+            -H "Content-Type: application/json"

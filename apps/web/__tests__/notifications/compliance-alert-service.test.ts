@@ -22,6 +22,7 @@ const {
   tables: {
     communities: Symbol('communities'),
     complianceChecklistItems: Symbol('compliance_checklist_items'),
+    visitorLog: Symbol('visitor_log'),
   },
 }));
 
@@ -29,10 +30,15 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   communities: tables.communities,
   complianceChecklistItems: tables.complianceChecklistItems,
+  visitorLog: tables.visitorLog,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
+  and: vi.fn(() => 'and_placeholder'),
+  gte: vi.fn(() => 'gte_placeholder'),
+  inArray: vi.fn(() => 'inArray_placeholder'),
   isNull: vi.fn(() => 'isNull_placeholder'),
+  lte: vi.fn(() => 'lte_placeholder'),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -289,22 +295,25 @@ describe('processComplianceAlerts', () => {
   });
 
   function setupUnscopedMock(
-    communityRows: Array<{ id: number; communityType: string }>,
+    communityRows: Array<{ id: number; communityType: string; timezone: string }>,
+    visitorRows: Array<Record<string, unknown>> = [],
   ) {
     createUnscopedClientMock.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue(communityRows),
-        }),
-      }),
+      select: vi.fn(() => ({
+        from: vi.fn((table) => ({
+          where: vi.fn().mockResolvedValue(
+            table === tables.communities ? communityRows : visitorRows,
+          ),
+        })),
+      })),
     });
   }
 
   it('iterates only condo/HOA communities, skips apartments', async () => {
     setupUnscopedMock([
-      { id: 1, communityType: 'condo_718' },
-      { id: 2, communityType: 'hoa_720' },
-      { id: 3, communityType: 'apartment' },
+      { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
+      { id: 2, communityType: 'hoa_720', timezone: 'America/Chicago' },
+      { id: 3, communityType: 'apartment', timezone: 'America/New_York' },
     ]);
 
     // Each compliance community returns 0 overdue items
@@ -323,8 +332,8 @@ describe('processComplianceAlerts', () => {
 
   it('continues processing if one community throws', async () => {
     setupUnscopedMock([
-      { id: 1, communityType: 'condo_718' },
-      { id: 2, communityType: 'condo_718' },
+      { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
+      { id: 2, communityType: 'condo_718', timezone: 'America/New_York' },
     ]);
 
     let callCount = 0;
@@ -350,8 +359,8 @@ describe('processComplianceAlerts', () => {
 
   it('aggregates totals across communities', async () => {
     setupUnscopedMock([
-      { id: 1, communityType: 'condo_718' },
-      { id: 2, communityType: 'hoa_720' },
+      { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
+      { id: 2, communityType: 'hoa_720', timezone: 'America/Chicago' },
     ]);
 
     let callCount = 0;
@@ -380,5 +389,43 @@ describe('processComplianceAlerts', () => {
     expect(summary.communitiesProcessed).toBe(2);
     expect(summary.totalOverdue).toBe(5);
     expect(summary.errors).toBe(0);
+  });
+
+  it('sends immediate visitor-expiry notifications for expiring passes', async () => {
+    setupUnscopedMock(
+      [{ id: 1, communityType: 'condo_718', timezone: 'America/New_York' }],
+      [{
+        communityId: 1,
+        id: 77,
+        visitorName: 'Casey Guest',
+        guestType: 'recurring',
+        hostUserId: 'resident-1',
+        validUntil: new Date('2026-03-20T16:30:00.000Z'),
+      }],
+    );
+
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async () => []),
+    });
+
+    const summary = await processComplianceAlerts(NOW);
+
+    expect(summary.communitiesProcessed).toBe(1);
+    expect(summary.totalExpiringVisitors).toBe(1);
+    expect(summary.totalExpiryNotifications).toBe(1);
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'compliance_alert',
+        alertTitle: 'Casey Guest visitor pass expires soon',
+        severity: 'warning',
+      }),
+      { type: 'specific_user', userId: 'resident-1' },
+      undefined,
+    );
+
+    const event = sendNotificationMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(event).toBeDefined();
+    expect('sourceId' in event).toBe(false);
   });
 });

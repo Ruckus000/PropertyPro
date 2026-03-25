@@ -2,14 +2,20 @@ import { randomUUID } from 'node:crypto';
 import {
   packageLog,
   visitorLog,
+  deniedVisitors,
   createScopedClient,
   logAuditEvent,
   userRoles,
   type PackageLogStatus,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNull } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
+import {
+  deriveVisitorStatus,
+  filterDeniedVisitorMatches,
+  type VisitorStatus,
+} from '@/lib/visitors/visitor-logic';
 
 interface PackageLogRow {
   [key: string]: unknown;
@@ -42,6 +48,17 @@ interface VisitorLogRow {
   passCode: string;
   staffUserId: string | null;
   notes: string | null;
+  guestType: string;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  recurrenceRule: string | null;
+  expectedDurationMinutes: number | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+  revokedByUserId: string | null;
+  revokedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,8 +85,17 @@ export interface CreateVisitorInput {
   visitorName: string;
   purpose: string;
   hostUnitId: number;
-  expectedArrival: string;
+  expectedArrival?: string;
   notes?: string | null;
+  guestType?: 'one_time' | 'recurring' | 'permanent' | 'vendor';
+  validFrom?: string | null;
+  validUntil?: string | null;
+  recurrenceRule?: string | null;
+  expectedDurationMinutes?: number | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleColor?: string | null;
+  vehiclePlate?: string | null;
 }
 
 function parseTimestamp(value: string, label: string): Date {
@@ -107,6 +133,8 @@ function buildVisitorWhereClause(options: {
   onlyActive?: boolean;
   allowedUnitIds?: readonly number[];
   hostUserId?: string;
+  guestType?: string;
+  status?: string;
 }) {
   const clauses = [];
 
@@ -121,6 +149,50 @@ function buildVisitorWhereClause(options: {
   }
   if (options.allowedUnitIds && options.allowedUnitIds.length > 0) {
     clauses.push(inArray(visitorLog.hostUnitId, [...options.allowedUnitIds]));
+  }
+  if (options.guestType) {
+    clauses.push(eq(visitorLog.guestType, options.guestType));
+  }
+  if (options.status) {
+    const now = new Date();
+    switch (options.status) {
+      case 'expected':
+        clauses.push(
+          isNull(visitorLog.checkedInAt),
+          isNull(visitorLog.revokedAt),
+          or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now)),
+        );
+        break;
+      case 'checked_in':
+        clauses.push(
+          isNotNull(visitorLog.checkedInAt),
+          isNull(visitorLog.checkedOutAt),
+          isNull(visitorLog.revokedAt),
+        );
+        break;
+      case 'checked_out':
+        clauses.push(isNotNull(visitorLog.checkedOutAt));
+        break;
+      case 'expired':
+        clauses.push(
+          lt(visitorLog.validUntil, now),
+          isNull(visitorLog.checkedInAt),
+          isNull(visitorLog.revokedAt),
+        );
+        break;
+      case 'revoked':
+        clauses.push(
+          isNotNull(visitorLog.revokedAt),
+          isNotNull(visitorLog.checkedOutAt),
+        );
+        break;
+      case 'revoked_on_site':
+        clauses.push(
+          isNotNull(visitorLog.revokedAt),
+          isNull(visitorLog.checkedOutAt),
+        );
+        break;
+    }
   }
 
   if (clauses.length === 0) return undefined;
@@ -179,6 +251,35 @@ async function notifyResidentsOfPackage(
   }
 
   return notifiedCount;
+}
+
+async function notifyHostResidentOfVisitorEvent(
+  communityId: number,
+  actorUserId: string,
+  visitorId: number,
+  hostUserId: string | null,
+  title: string,
+  description: string,
+): Promise<void> {
+  if (!hostUserId) return;
+
+  try {
+    await queueNotification(
+      communityId,
+      {
+        type: 'compliance_alert',
+        alertTitle: title,
+        alertDescription: description,
+        severity: 'info',
+        sourceType: 'compliance',
+        sourceId: String(visitorId),
+      },
+      { type: 'specific_user', userId: hostUserId },
+      actorUserId,
+    );
+  } catch {
+    // Notification delivery is best-effort and should not block visitor workflows.
+  }
 }
 
 export async function createPackageForCommunity(
@@ -342,14 +443,33 @@ export async function createVisitorForCommunity(
   const scoped = createScopedClient(communityId);
   const passCode = `V-${randomUUID().slice(0, 8).toUpperCase()}`;
 
+  const guestType = input.guestType ?? 'one_time';
+  const validFrom = input.validFrom ? parseTimestamp(input.validFrom, 'validFrom') : null;
+  const validUntil = input.validUntil ? parseTimestamp(input.validUntil, 'validUntil') : null;
+  const expectedArrival = input.expectedArrival
+    ? parseTimestamp(input.expectedArrival, 'expectedArrival')
+    : validFrom;
+  if (!expectedArrival) {
+    throw new BadRequestError('expectedArrival or validFrom is required');
+  }
+
   const [inserted] = await scoped.insert(visitorLog, {
     visitorName: input.visitorName,
     purpose: input.purpose,
     hostUnitId: input.hostUnitId,
     hostUserId: actorUserId,
-    expectedArrival: parseTimestamp(input.expectedArrival, 'expectedArrival'),
+    expectedArrival,
     passCode,
     notes: input.notes ?? null,
+    guestType,
+    validFrom,
+    validUntil,
+    recurrenceRule: input.recurrenceRule ?? null,
+    expectedDurationMinutes: input.expectedDurationMinutes ?? null,
+    vehicleMake: input.vehicleMake ?? null,
+    vehicleModel: input.vehicleModel ?? null,
+    vehicleColor: input.vehicleColor ?? null,
+    vehiclePlate: input.vehiclePlate ?? null,
   });
 
   if (!inserted) {
@@ -380,6 +500,8 @@ export async function listVisitorsForCommunity(
     onlyActive?: boolean;
     allowedUnitIds?: readonly number[];
     hostUserId?: string;
+    guestType?: string;
+    status?: string;
   } = {},
 ): Promise<VisitorLogRow[]> {
   const scoped = createScopedClient(communityId);
@@ -409,6 +531,13 @@ export async function checkInVisitorForCommunity(
   const existing = rows[0];
   if (!existing) {
     throw new NotFoundError('Visitor pass not found');
+  }
+
+  if (existing.revokedAt) {
+    throw new BadRequestError('This visitor pass has been revoked');
+  }
+  if (existing.validUntil && new Date(existing.validUntil) < new Date()) {
+    throw new BadRequestError('This visitor pass has expired');
   }
 
   if (existing.checkedInAt) {
@@ -455,6 +584,15 @@ export async function checkInVisitorForCommunity(
       transition: 'checkin',
     },
   });
+
+  await notifyHostResidentOfVisitorEvent(
+    communityId,
+    actorUserId,
+    visitorId,
+    existing.hostUserId,
+    `${existing.visitorName} has checked in`,
+    `Your visitor ${existing.visitorName} was checked in successfully.`,
+  );
 
   return row;
 }
@@ -535,4 +673,271 @@ export async function listMyVisitorsForCommunity(
   });
 
   return rows.filter((row) => row.hostUserId === actorUserId || allowedUnitIds.includes(row.hostUnitId));
+}
+
+export async function revokeVisitorForCommunity(
+  communityId: number,
+  visitorId: number,
+  actorUserId: string,
+  reason: string | null,
+  requestId: string | null,
+): Promise<VisitorLogRow> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<VisitorLogRow>(
+    visitorLog,
+    {},
+    and(eq(visitorLog.id, visitorId), isNull(visitorLog.deletedAt)),
+  );
+  const existing = rows[0];
+
+  if (!existing) throw new NotFoundError('Visitor pass not found');
+
+  if (existing.revokedAt) {
+    await logAuditEvent({
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'visitor_log',
+      resourceId: String(visitorId),
+      metadata: { requestId, idempotent: true, transition: 'revoke' },
+    });
+    return existing;
+  }
+
+  const [updated] = await scoped.update(
+    visitorLog,
+    { revokedAt: new Date(), revokedByUserId: actorUserId },
+    eq(visitorLog.id, visitorId),
+  );
+
+  if (!updated) throw new NotFoundError('Visitor pass not found');
+
+  const row = updated as unknown as VisitorLogRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'update',
+    resourceType: 'visitor_log',
+    resourceId: String(visitorId),
+    oldValues: { revokedAt: null, revokedByUserId: null },
+    newValues: { revokedAt: row.revokedAt, revokedByUserId: row.revokedByUserId },
+    metadata: { requestId, transition: 'revoke', reason },
+  });
+
+  await notifyHostResidentOfVisitorEvent(
+    communityId,
+    actorUserId,
+    visitorId,
+    existing.hostUserId,
+    `${existing.visitorName} visitor pass revoked`,
+    reason
+      ? `The visitor pass for ${existing.visitorName} was revoked. Reason: ${reason}`
+      : `The visitor pass for ${existing.visitorName} was revoked.`,
+  );
+
+  return row;
+}
+
+export async function revokeVisitorPassesForUser(
+  communityId: number,
+  userId: string,
+): Promise<number> {
+  const scoped = createScopedClient(communityId);
+  const result = await scoped.update(
+    visitorLog,
+    { revokedAt: new Date(), updatedAt: new Date() },
+    and(
+      eq(visitorLog.hostUserId, userId),
+      isNull(visitorLog.revokedAt),
+      isNull(visitorLog.checkedOutAt),
+      isNull(visitorLog.deletedAt),
+      inArray(visitorLog.guestType, ['recurring', 'permanent']),
+    ),
+  );
+  return result.length;
+}
+
+// ---------------------------------------------------------------------------
+// Denied Visitors
+// ---------------------------------------------------------------------------
+
+export interface DeniedVisitorRow {
+  [key: string]: unknown;
+  id: number;
+  communityId: number;
+  fullName: string;
+  reason: string;
+  deniedByUserId: string | null;
+  vehiclePlate: string | null;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeniedMatchResult {
+  [key: string]: unknown;
+  id: number;
+  fullName: string;
+  vehiclePlate: string | null;
+  reason: string;
+  isActive: boolean;
+}
+
+export interface CreateDeniedVisitorInput {
+  fullName: string;
+  reason: string;
+  vehiclePlate?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateDeniedVisitorInput {
+  fullName?: string;
+  reason?: string;
+  vehiclePlate?: string | null;
+  notes?: string | null;
+  isActive?: boolean;
+}
+
+export async function createDeniedVisitor(
+  communityId: number,
+  actorUserId: string,
+  input: CreateDeniedVisitorInput,
+  requestId: string | null,
+): Promise<DeniedVisitorRow> {
+  const scoped = createScopedClient(communityId);
+  const [created] = await scoped.insert(deniedVisitors, {
+    communityId,
+    fullName: input.fullName,
+    reason: input.reason,
+    deniedByUserId: actorUserId,
+    vehiclePlate: input.vehiclePlate ?? null,
+    notes: input.notes ?? null,
+  });
+
+  if (!created) {
+    throw new Error('Failed to create denied visitor entry');
+  }
+
+  const row = created as unknown as DeniedVisitorRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'create',
+    resourceType: 'denied_visitors',
+    resourceId: String(row.id),
+    newValues: row,
+    metadata: { requestId },
+  });
+
+  return row;
+}
+
+export async function listDeniedVisitors(
+  communityId: number,
+  onlyActive?: boolean,
+): Promise<DeniedVisitorRow[]> {
+  const scoped = createScopedClient(communityId);
+  const additionalWhere =
+    onlyActive !== undefined ? eq(deniedVisitors.isActive, onlyActive) : undefined;
+  const rows = await scoped
+    .selectFrom<DeniedVisitorRow>(deniedVisitors, {}, additionalWhere)
+    .orderBy(desc(deniedVisitors.createdAt));
+
+  return rows;
+}
+
+export async function updateDeniedVisitor(
+  communityId: number,
+  deniedId: number,
+  actorUserId: string,
+  input: UpdateDeniedVisitorInput,
+  requestId: string | null,
+): Promise<DeniedVisitorRow> {
+  const scoped = createScopedClient(communityId);
+  const existing = await scoped.selectFrom<DeniedVisitorRow>(
+    deniedVisitors,
+    {},
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!existing[0]) throw new NotFoundError('Denied visitor entry not found');
+
+  const [updated] = await scoped.update(
+    deniedVisitors,
+    { ...input, updatedAt: new Date() },
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!updated) throw new NotFoundError('Denied visitor entry not found');
+
+  const row = updated as unknown as DeniedVisitorRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'update',
+    resourceType: 'denied_visitors',
+    resourceId: String(deniedId),
+    oldValues: existing[0],
+    newValues: row,
+    metadata: { requestId },
+  });
+
+  return row;
+}
+
+export async function softDeleteDeniedVisitor(
+  communityId: number,
+  deniedId: number,
+  actorUserId: string,
+  requestId: string | null,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  const existing = await scoped.selectFrom<DeniedVisitorRow>(
+    deniedVisitors,
+    {},
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!existing[0]) throw new NotFoundError('Denied visitor entry not found');
+
+  await scoped.update(
+    deniedVisitors,
+    { deletedAt: new Date(), updatedAt: new Date() },
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'delete',
+    resourceType: 'denied_visitors',
+    resourceId: String(deniedId),
+    oldValues: existing[0],
+    metadata: { requestId },
+  });
+}
+
+export async function matchDeniedVisitors(
+  communityId: number,
+  name: string | null,
+  plate: string | null,
+): Promise<DeniedMatchResult[]> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<DeniedMatchResult>(
+    deniedVisitors,
+    {
+      id: deniedVisitors.id,
+      fullName: deniedVisitors.fullName,
+      vehiclePlate: deniedVisitors.vehiclePlate,
+      reason: deniedVisitors.reason,
+      isActive: deniedVisitors.isActive,
+    },
+    eq(deniedVisitors.isActive, true),
+  );
+
+  return filterDeniedVisitorMatches(rows, name, plate);
 }

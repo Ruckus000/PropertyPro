@@ -36,6 +36,7 @@ export const communities = pgTable('communities', {
       leasesWriteLevel?: 'all_members' | 'admin_only';
       documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
       paymentFeePolicy?: 'owner_pays' | 'association_absorbs';
+      allowResidentVisitorRevoke?: boolean;
     }>()
     .notNull()
     .default({}),

@@ -39,6 +39,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
@@ -473,6 +474,14 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   await scoped.hardDelete(userRoles, eq(userRoles.userId, userId));
+
+  // Cascade: revoke active recurring/permanent visitor passes registered by this user.
+  // Coupling note: this is the only resident removal code path in the codebase.
+  // If additional removal paths are added, they must also cascade visitor revocations.
+  const revokedCount = await revokeVisitorPassesForUser(communityId, userId);
+  if (revokedCount > 0) {
+    console.info(`Cascade-revoked ${revokedCount} visitor passes for removed user ${userId}`);
+  }
 
   await logAuditEvent({
     userId: actorUserId,

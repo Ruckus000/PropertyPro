@@ -11,7 +11,11 @@ import {
   requireVisitorLoggingEnabled,
   requireVisitorsReadPermission,
 } from '@/lib/logistics/common';
-import { listMyVisitorsForCommunity } from '@/lib/services/package-visitor-service';
+import {
+  listMyVisitorsForCommunity,
+  listVisitorsForCommunity,
+} from '@/lib/services/package-visitor-service';
+import { deriveVisitorStatus } from '@/lib/visitors/visitor-logic';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -27,7 +31,46 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(communityId);
   const allowedUnitIds = await requireActorUnitIds(scoped, actorUserId);
-  const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
 
+  const { searchParams } = new URL(req.url);
+  const filter = searchParams.get('filter') ?? undefined;
+
+  if (!filter) {
+    // Default behavior: active passes (not checked out)
+    const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
+    return NextResponse.json({ data });
+  }
+
+  if (filter === 'active') {
+    const rows = await listVisitorsForCommunity(communityId, {
+      allowedUnitIds,
+      hostUserId: actorUserId,
+      status: 'checked_in',
+    });
+    return NextResponse.json({ data: rows });
+  }
+
+  if (filter === 'upcoming') {
+    const rows = await listVisitorsForCommunity(communityId, {
+      allowedUnitIds,
+      hostUserId: actorUserId,
+      status: 'expected',
+    });
+    return NextResponse.json({ data: rows });
+  }
+
+  if (filter === 'past') {
+    const rows = await listVisitorsForCommunity(communityId, {
+      allowedUnitIds,
+      hostUserId: actorUserId,
+      onlyActive: false,
+    });
+    const pastStatuses = new Set(['checked_out', 'expired', 'revoked', 'revoked_on_site']);
+    const filtered = rows.filter((row) => pastStatuses.has(deriveVisitorStatus(row)));
+    return NextResponse.json({ data: filtered });
+  }
+
+  // Unknown filter — fall back to default behavior
+  const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
   return NextResponse.json({ data });
 });

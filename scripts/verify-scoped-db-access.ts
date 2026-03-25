@@ -129,6 +129,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/route.ts'),
   // Account lifecycle cron — cross-community deletion + notification processing
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts'),
+  // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
+  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
