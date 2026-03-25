@@ -80,6 +80,12 @@ export const extractionStatusEnum = pgEnum('extraction_status', [
   'skipped',
 ]);
 
+/** Document visibility/origin within the shared documents table. */
+export const documentSourceTypeEnum = pgEnum('document_source_type', [
+  'library',
+  'violation_evidence',
+]);
+
 /**
  * Notification email delivery cadence.
  *

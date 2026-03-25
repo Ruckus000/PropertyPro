@@ -13,10 +13,14 @@ vi.mock('next/navigation', () => ({
     }),
 }));
 
-vi.mock('lucide-react', () => ({
-    Check: ({ className }: { className?: string }) =>
-        React.createElement('svg', { className, 'data-testid': 'check-icon' }),
-}));
+vi.mock('lucide-react', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('lucide-react')>();
+    return {
+        ...actual,
+        Check: ({ className }: { className?: string }) =>
+            React.createElement('svg', { className, 'data-testid': 'check-icon' }),
+    };
+});
 
 async function flushEffects(): Promise<void> {
     await Promise.resolve();

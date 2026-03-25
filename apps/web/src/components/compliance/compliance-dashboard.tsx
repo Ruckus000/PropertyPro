@@ -525,6 +525,7 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
         <UploadDocumentModal
           communityId={communityId}
           defaultTitle={uploadModalItem.title}
+          categoryName={uploadModalItem.category}
           onUploaded={(documentId) => {
             mutations.linkDocument.mutate({ itemId: uploadModalItem.id, documentId });
           }}

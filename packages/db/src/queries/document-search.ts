@@ -69,6 +69,7 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
     : sql<number>`0`;
 
   const additionalFilters: SQL[] = [];
+  additionalFilters.push(eq(documents.sourceType, 'library'));
   if (params.categoryId != null) {
     additionalFilters.push(eq(documents.categoryId, params.categoryId));
   }

@@ -40,6 +40,7 @@ describeDb('document access control (integration, strict matrix)', () => {
     categoryId: number | null;
     title: string;
     fileName: string;
+    sourceType?: 'library' | 'violation_evidence';
   }): Promise<number> {
     fileNames.push(params.fileName);
     const [row] = await db
@@ -52,6 +53,7 @@ describeDb('document access control (integration, strict matrix)', () => {
         fileName: params.fileName,
         fileSize: 1024,
         mimeType: 'application/pdf',
+        sourceType: params.sourceType ?? 'library',
       })
       .returning({ id: documents.id });
     return row!.id;
@@ -203,5 +205,71 @@ describeDb('document access control (integration, strict matrix)', () => {
     expect(elevated).not.toBeNull();
     expect(elevated?.['id']).toBe(docId);
   });
-});
 
+  it('maps provisioned category names through access normalization', async () => {
+    const governingId = await createCategory(condoId, 'Governing Documents');
+    const meetingRecordsId = await createCategory(condoId, 'Meeting Records');
+    const correspondenceId = await createCategory(condoId, 'Correspondence');
+
+    await createDoc({ communityId: condoId, categoryId: governingId, title: 'Gov', fileName: '__doc_access_governing__.pdf' });
+    await createDoc({ communityId: condoId, categoryId: meetingRecordsId, title: 'Meetings', fileName: '__doc_access_meeting_records__.pdf' });
+    await createDoc({ communityId: condoId, categoryId: correspondenceId, title: 'Letter', fileName: '__doc_access_correspondence__.pdf' });
+
+    const tenantRows = await getAccessibleDocuments({
+      communityId: condoId,
+      role: 'resident', isUnitOwner: false,
+      communityType: 'condo_718',
+    });
+    const camRows = await getAccessibleDocuments({
+      communityId: condoId,
+      role: 'cam',
+      communityType: 'condo_718',
+    });
+
+    const tenantNames = tenantRows.map((row) => row['fileName']);
+    const camNames = camRows.map((row) => row['fileName']);
+
+    expect(tenantNames).toContain('__doc_access_governing__.pdf');
+    expect(tenantNames).not.toContain('__doc_access_meeting_records__.pdf');
+    expect(camNames).toEqual(expect.arrayContaining([
+      '__doc_access_meeting_records__.pdf',
+      '__doc_access_correspondence__.pdf',
+    ]));
+  });
+
+  it('excludes hidden violation evidence from library access queries', async () => {
+    const declarationId = await createCategory(condoId, 'Declaration');
+    const libraryDocId = await createDoc({
+      communityId: condoId,
+      categoryId: declarationId,
+      title: 'Library Doc',
+      fileName: '__doc_access_library_only__.pdf',
+    });
+
+    const evidenceId = await createDoc({
+      communityId: condoId,
+      categoryId: declarationId,
+      title: 'Hidden Evidence',
+      fileName: '__doc_access_hidden_evidence__.pdf',
+      sourceType: 'violation_evidence',
+    });
+
+    const rows = await getAccessibleDocuments({
+      communityId: condoId,
+      role: 'resident', isUnitOwner: true,
+      communityType: 'condo_718',
+    });
+
+    const foundIds = rows.map((row) => row['id']);
+    expect(foundIds).toContain(libraryDocId);
+    expect(foundIds).not.toContain(evidenceId);
+
+    const hidden = await getDocumentWithAccessCheck({
+      communityId: condoId,
+      role: 'resident', isUnitOwner: true,
+      communityType: 'condo_718',
+    }, evidenceId);
+
+    expect(hidden).toBeNull();
+  });
+});

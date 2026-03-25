@@ -3,8 +3,9 @@
 /**
  * Violation report form for owners/residents.
  * Allows submitting a violation with category, description, severity, and photo evidence.
- * Photos are uploaded via the existing document upload infrastructure (/api/v1/upload →
- * /api/v1/documents), returning document IDs stored in evidenceDocumentIds.
+ * Photos are uploaded through the dedicated hidden evidence flow
+ * (/api/v1/upload -> /api/v1/violations/evidence), returning document IDs stored
+ * in evidenceDocumentIds.
  */
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -54,10 +55,10 @@ interface DocumentCreateResponse {
 }
 
 /**
- * Upload a single photo through the existing document infrastructure:
- * 1. POST /api/v1/upload → presigned URL
+ * Upload a single photo through the dedicated violations evidence infrastructure:
+ * 1. POST /api/v1/upload -> presigned URL
  * 2. PUT file to presigned URL
- * 3. POST /api/v1/documents → creates document metadata, returns documentId
+ * 3. POST /api/v1/violations/evidence -> creates hidden evidence metadata, returns documentId
  */
 async function uploadEvidencePhoto(
   communityId: number,
@@ -94,12 +95,13 @@ async function uploadEvidencePhoto(
   }
 
   // Step 3: Create document metadata record
-  const createRes = await fetch('/api/v1/documents', {
+  const createRes = await fetch('/api/v1/violations/evidence', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       communityId,
       title: `Violation Evidence Photo ${index + 1}`,
+      description: null,
       filePath: presignBody.data.path,
       fileName: file.name,
       fileSize: file.size,
