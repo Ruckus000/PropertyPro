@@ -28,7 +28,7 @@ export function AccessLogTable({ communityId }: AccessLogTableProps) {
         const res = await fetch(`/api/admin/support/access-log?communityId=${communityId}`);
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error?.message ?? 'Failed to load access log');
+          setError(typeof data.error === 'string' ? data.error : 'Failed to load access log');
           return;
         }
         setEntries(data.entries ?? []);

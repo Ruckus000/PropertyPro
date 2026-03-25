@@ -51,7 +51,7 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
       ]);
 
       if (!sessionsRes.ok) {
-        setError(sessionsData.error?.message ?? 'Failed to load sessions');
+        setError(typeof sessionsData.error === 'string' ? sessionsData.error : 'Failed to load sessions');
         return;
       }
 

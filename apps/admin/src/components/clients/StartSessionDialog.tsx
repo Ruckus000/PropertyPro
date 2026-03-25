@@ -57,7 +57,7 @@ export function StartSessionDialog({
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error?.message ?? 'Failed to start session');
+        setError(typeof data.error === 'string' ? data.error : 'Failed to start session');
         return;
       }
 
