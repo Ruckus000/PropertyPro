@@ -71,6 +71,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.95.3
         version: 2.95.3
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       codemirror:
         specifier: ^6.0.0
         version: 6.0.2
@@ -95,6 +98,9 @@ importers:
       sucrase:
         specifier: ^3.35.0
         version: 3.35.1
+      tailwind-merge:
+        specifier: ^3.5.0
+        version: 3.5.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
