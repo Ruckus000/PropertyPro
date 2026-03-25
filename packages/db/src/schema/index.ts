@@ -380,3 +380,9 @@ export type NewAccessPlan = typeof _accessPlans.$inferInsert;
 import type { accountDeletionRequests as _accountDeletionRequests } from './account-deletion-requests';
 export type AccountDeletionRequest = typeof _accountDeletionRequests.$inferSelect;
 export type NewAccountDeletionRequest = typeof _accountDeletionRequests.$inferInsert;
+
+// Support access
+export { supportSessions, type SupportSession, type NewSupportSession } from './support-sessions';
+export { supportConsentGrants, type SupportConsentGrant, type NewSupportConsentGrant } from './support-consent-grants';
+export { supportAccessLog, type SupportAccessLogEntry, type NewSupportAccessLogEntry } from './support-access-log';
+export { supportAccessLevelEnum } from './enums';
