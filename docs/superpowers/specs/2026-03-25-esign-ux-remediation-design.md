@@ -63,11 +63,13 @@ the signing order toggle and the expiration selector. Label: "Email signers". He
 Wire to `createMutation` payload.
 
 **Service change (`esign-service.ts` → `createSubmission`):**
-1. Look up sender's `fullName` from `users` table (1 query, needed for `senderName` prop)
+1. Look up sender's `fullName` from `users` table (1 query, needed for `senderName` prop).
+   If `fullName` is null or empty, fall back to the user's email address for `senderName`.
 2. After batch signer INSERT (see 4c), if `sendEmail: true`, loop through created signers
    and call `sendEmail()` with `EsignInvitationEmail` template
-3. Email props: `signerName`, `senderName` (from user lookup), `documentName`,
-   `signingUrl` (constructed from slug), `expiresAt`, `messageBody`
+3. Email props (required): `signerName`, `senderName` (from user lookup), `documentName`,
+   `signingUrl` (constructed from slug). Optional: `expiresAt` (pass `undefined` if null,
+   not `null`), `messageBody` (pass `undefined` if not provided).
 4. Email failure for one signer must NOT abort the submission — wrap each send in try/catch,
    log failures, continue
 
@@ -97,19 +99,35 @@ Internal content (tabs, canvas, type input, upload, footer buttons) stays as-is.
 
 ### 2c. Push status filters to DB in `listSubmissions`
 
-Modify `listSubmissions` in `esign-service.ts` to accept `status` filter parameter.
-Build WHERE clause for stored statuses (`pending`, `completed`, `cancelled`, `declined`,
-`processing`, `processing_failed`).
+**Note:** The hook (`useEsignSubmissions`), API route, and service signature already accept
+a `status` filter parameter and pass it through. The only change is inside `listSubmissions`
+internals: replace JS-side filtering with a SQL WHERE clause.
 
-**Expired filter path:** Fetch `pending` rows, compute `effectiveStatus` via existing
-`getEffectiveSubmissionStatus`, filter to expired. This preserves single source of truth
-for what "expired" means.
+**For stored statuses** (`completed`, `cancelled`, `declined`, `processing`, `processing_failed`):
+```
+where(eq(esignSubmissions.status, filterStatus))
+```
 
-**No pagination UI yet.** Adding backend limit without frontend pagination controls would
-silently truncate results. Deferred to separate ticket when submission counts warrant it.
+**For `pending`** (which includes not-yet-expired submissions):
+```
+where(eq(esignSubmissions.status, 'pending'))
+```
 
-**Hook/route update:** Pass `status` query param from `useEsignSubmissions` → API route →
-service. Default: no filter (all rows, backward-compatible).
+**For `expired`** (computed status — requires two-step approach):
+```
+// Step 1: Fetch pending rows with non-null expiresAt in the past
+where(and(
+  eq(esignSubmissions.status, 'pending'),
+  isNotNull(esignSubmissions.expiresAt),
+  lt(esignSubmissions.expiresAt, new Date())
+))
+// Step 2: Compute effectiveStatus via getEffectiveSubmissionStatus (preserves single source of truth)
+```
+
+**No filter** (default): fetch all rows, compute `effectiveStatus` for each (backward-compatible).
+
+**No pagination.** Adding backend limit without frontend pagination controls would silently
+truncate results. Deferred to separate ticket.
 
 ---
 
@@ -258,8 +276,9 @@ maintenance cost without value.
 **Verification approach:** Manual testing with preview tools during implementation —
 keyboard navigation, focus trapping, ARIA attribute inspection.
 
-**Hook test update:** `use-esign-submissions.test.tsx` may need adjustment for new
-`status` and `limit` query params in the hook's fetch URL.
+**Hook test update:** `use-esign-submissions.test.tsx` may need adjustment now that the
+`status` filter triggers SQL WHERE clauses instead of JS-side filtering. Verify mock
+API responses reflect the narrower result sets returned by the updated query.
 
 ### 5d. Explicitly NOT tested
 
