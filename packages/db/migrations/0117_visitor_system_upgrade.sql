@@ -11,7 +11,7 @@ ALTER TABLE visitor_log ADD COLUMN vehicle_make TEXT;
 ALTER TABLE visitor_log ADD COLUMN vehicle_model TEXT;
 ALTER TABLE visitor_log ADD COLUMN vehicle_color TEXT;
 ALTER TABLE visitor_log ADD COLUMN vehicle_plate TEXT;
-ALTER TABLE visitor_log ADD COLUMN revoked_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE visitor_log ADD COLUMN revoked_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE visitor_log ADD COLUMN revoked_at TIMESTAMP WITH TIME ZONE;
 
 -- 2. CHECK constraints
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS denied_visitors (
   community_id BIGINT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
   full_name TEXT NOT NULL,
   reason TEXT NOT NULL,
-  denied_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  denied_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   vehicle_plate TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   notes TEXT,
@@ -78,6 +78,7 @@ CREATE POLICY denied_visitors_delete ON denied_visitors
   );
 
 -- 6. Write-scope trigger
-CREATE TRIGGER enforce_denied_visitors_community_scope
+DROP TRIGGER IF EXISTS pp_rls_enforce_tenant_scope ON denied_visitors;
+CREATE TRIGGER pp_rls_enforce_tenant_scope
   BEFORE INSERT OR UPDATE ON denied_visitors
   FOR EACH ROW EXECUTE FUNCTION pp_rls_enforce_tenant_community_id();

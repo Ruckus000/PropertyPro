@@ -99,7 +99,7 @@ export function VisitorRegistrationForm({
       notes: notes.trim() || null,
       guestType,
       validFrom: validFrom ? new Date(validFrom).toISOString() : null,
-      validUntil: validUntil ? new Date(validUntil).toISOString() : null,
+      validUntil: guestType === 'permanent' ? null : (validUntil ? new Date(validUntil).toISOString() : null),
       recurrenceRule: guestType === 'recurring' ? recurrenceRule : null,
       expectedDurationMinutes:
         guestType === 'permanent'
@@ -118,7 +118,10 @@ export function VisitorRegistrationForm({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) resetForm();
+      onOpenChange(isOpen);
+    }}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Register Visitor</DialogTitle>

@@ -17,6 +17,12 @@ import {
 } from '@/lib/services/package-visitor-service';
 import { deriveVisitorStatus } from '@/lib/visitors/visitor-logic';
 
+/** Strip passCode from resident responses — mirrors the guard in GET /visitors */
+function stripPassCode<T extends Record<string, unknown>>(rows: T[]) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return rows.map(({ passCode, ...rest }) => rest);
+}
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -38,7 +44,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (!filter) {
     // Default behavior: active passes (not checked out)
     const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: stripPassCode(data) });
   }
 
   if (filter === 'active') {
@@ -47,7 +53,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       hostUserId: actorUserId,
       status: 'checked_in',
     });
-    return NextResponse.json({ data: rows });
+    return NextResponse.json({ data: stripPassCode(rows) });
   }
 
   if (filter === 'upcoming') {
@@ -56,7 +62,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       hostUserId: actorUserId,
       status: 'expected',
     });
-    return NextResponse.json({ data: rows });
+    return NextResponse.json({ data: stripPassCode(rows) });
   }
 
   if (filter === 'past') {
@@ -67,10 +73,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
     const pastStatuses = new Set(['checked_out', 'expired', 'revoked', 'revoked_on_site']);
     const filtered = rows.filter((row) => pastStatuses.has(deriveVisitorStatus(row)));
-    return NextResponse.json({ data: filtered });
+    return NextResponse.json({ data: stripPassCode(filtered) });
   }
 
   // Unknown filter — fall back to default behavior
   const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: stripPassCode(data) });
 });

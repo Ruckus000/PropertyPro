@@ -88,7 +88,7 @@ function StatusBadge({ visitor }: { visitor: VisitorListItem }) {
     case 'overstayed':
       return (
         <Badge className="gap-1 bg-status-warning-bg text-status-warning hover:bg-status-warning-bg">
-          <AlertTriangle className="h-3.5 w-3.5" />
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
           Overstayed
         </Badge>
       );
@@ -107,14 +107,14 @@ function StatusBadge({ visitor }: { visitor: VisitorListItem }) {
     case 'revoked':
       return (
         <Badge className="gap-1 bg-status-danger-bg text-status-danger hover:bg-status-danger-bg">
-          <Ban className="h-3.5 w-3.5" />
+          <Ban className="h-3.5 w-3.5" aria-hidden="true" />
           Revoked
         </Badge>
       );
     case 'revoked_on_site':
       return (
         <Badge className="gap-1 bg-status-danger-bg text-status-danger hover:bg-status-danger-bg">
-          <Ban className="h-3.5 w-3.5" />
+          <Ban className="h-3.5 w-3.5" aria-hidden="true" />
           Revoked On-Site
         </Badge>
       );
@@ -233,7 +233,7 @@ export function getVisitorColumns(
               </Button>
             ) : null}
 
-            {!visitor.revokedAt ? (
+            {!visitor.revokedAt && status !== 'checked_out' && status !== 'expired' ? (
               <Button
                 variant="ghost"
                 size="sm"
