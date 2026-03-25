@@ -1,497 +1,440 @@
 'use client';
 
 /**
- * Demo Generator Wizard — three-step wizard to create branded demo instances.
+ * Demo Generator Wizard — Configure → Preview two-step wizard.
  *
- * Step 1: Select template type (condo, HOA, apartment)
- * Step 2: Configure branding (name, colors, fonts, logo)
- * Step 3: Confirm & generate
+ * Task 10: Configure screen only. Preview step placeholder to be replaced in Task 11.
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ALLOWED_FONTS } from '@propertypro/theme';
-import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  getDemoTemplates,
+  getDefaultTemplate,
+  getContentStrategies,
+  getDefaultStrategy,
+  type CommunityType,
+} from '@propertypro/shared';
 import { AdminLayout } from '@/components/AdminLayout';
-import { hasInvalidHexColorValues, isSixDigitHexColor } from '@/lib/utils/hex-color';
+import { TemplateCard } from '@/components/demo/TemplateCard';
+import { BrandingFormFields } from '@/components/demo/BrandingFormFields';
+import { cn } from '@/lib/utils';
 
-type WizardStep = 1 | 2 | 3 | 'creating' | 'done';
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-interface DemoResult {
-  demoId: number;
-  slug: string;
-  previewUrl: string;
-  mobilePreviewUrl: string;
+type WizardStep = 'configure' | 'preview' | 'creating' | 'done';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getInitialConfig(communityType: CommunityType = 'condo_718') {
+  return {
+    prospectName: '',
+    communityType,
+    publicTemplateId: getDefaultTemplate(communityType, 'public')?.id ?? '',
+    mobileTemplateId: getDefaultTemplate(communityType, 'mobile')?.id ?? '',
+    contentStrategy: getDefaultStrategy(communityType).id,
+    branding: {
+      primaryColor: '#2563EB',
+      secondaryColor: '#1E40AF',
+      accentColor: '#DBEAFE',
+      fontHeading: 'Inter',
+      fontBody: 'Inter',
+      logoPath: '',
+    },
+    crmUrl: '',
+    notes: '',
+  };
 }
 
-const TEMPLATE_OPTIONS: Array<{
-  type: CommunityType;
-  label: string;
-  description: string;
-  icon: string;
-}> = [
-  {
-    type: 'condo_718',
-    label: 'Condo §718',
-    description: 'Florida condominium association with 25+ units',
-    icon: '🏢',
-  },
-  {
-    type: 'hoa_720',
-    label: 'HOA §720',
-    description: 'Homeowners association with 100+ parcels',
-    icon: '🏘️',
-  },
-  {
-    type: 'apartment',
-    label: 'Apartment',
-    description: 'Apartment community with on-site management',
-    icon: '🏬',
-  },
+// ---------------------------------------------------------------------------
+// Progress bar
+// ---------------------------------------------------------------------------
+
+const WIZARD_STEPS: Array<{ id: WizardStep; label: string }> = [
+  { id: 'configure', label: 'Configure' },
+  { id: 'preview', label: 'Preview' },
 ];
 
-const DEFAULT_BRANDING = {
-  primaryColor: '#2563EB',
-  secondaryColor: '#6B7280',
-  accentColor: '#DBEAFE',
-  fontHeading: 'Inter',
-  fontBody: 'Inter',
-  logoPath: '',
-};
+function ProgressBar({ currentStep }: { currentStep: WizardStep }) {
+  const activeIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep);
 
-const COLOR_FIELDS = [
-  { field: 'primaryColor', label: 'Primary Color' },
-  { field: 'secondaryColor', label: 'Secondary Color' },
-  { field: 'accentColor', label: 'Accent Color' },
-] as const;
+  return (
+    <div className="flex items-center gap-0" aria-label="Wizard progress">
+      {WIZARD_STEPS.map((s, i) => {
+        const isActive = i === activeIndex;
+        const isDone = i < activeIndex;
+        const isLast = i === WIZARD_STEPS.length - 1;
 
-const FONT_FIELDS = [
-  { field: 'fontHeading', label: 'Heading Font' },
-  { field: 'fontBody', label: 'Body Font' },
-] as const;
+        return (
+          <div key={s.id} className="flex items-center">
+            {/* Step dot + label */}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={cn(
+                  'h-2.5 w-2.5 rounded-full transition-colors',
+                  isActive || isDone
+                    ? 'bg-[var(--interactive-primary)]'
+                    : 'bg-[var(--border-default)]',
+                )}
+                aria-current={isActive ? 'step' : undefined}
+              />
+              <span
+                className={cn(
+                  'text-xs font-medium leading-none',
+                  isActive
+                    ? 'text-[var(--interactive-primary)]'
+                    : 'text-[var(--text-secondary)]',
+                )}
+              >
+                {s.label}
+              </span>
+            </div>
 
-type BrandingField = keyof typeof DEFAULT_BRANDING;
+            {/* Connector line (not after last) */}
+            {!isLast && (
+              <div
+                className={cn(
+                  'mx-2 mb-3 h-px w-16 transition-colors',
+                  isDone
+                    ? 'bg-[var(--interactive-primary)]'
+                    : 'bg-[var(--border-default)]',
+                )}
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Community type toggle
+// ---------------------------------------------------------------------------
+
+const COMMUNITY_TYPES: Array<{ type: CommunityType; label: string }> = [
+  { type: 'condo_718', label: 'Condo' },
+  { type: 'hoa_720', label: 'HOA' },
+  { type: 'apartment', label: 'Apt' },
+];
+
+// ---------------------------------------------------------------------------
+// Section label
+// ---------------------------------------------------------------------------
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--interactive-primary)]">
+      {children}
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Collapsible section
+// ---------------------------------------------------------------------------
+
+function CollapsibleSection({
+  label,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border border-[var(--border-default)] rounded-[10px] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:ring-inset"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-[var(--text-primary)]">{label}</span>
+        {open ? (
+          <ChevronUp size={16} className="text-[var(--text-secondary)]" aria-hidden="true" />
+        ) : (
+          <ChevronDown size={16} className="text-[var(--text-secondary)]" aria-hidden="true" />
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-[var(--border-default)] px-4 py-4">{children}</div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function DemoNewPage() {
-  const router = useRouter();
-  const [step, setStep] = useState<WizardStep>(1);
-  const [templateType, setTemplateType] = useState<CommunityType | null>(null);
-  const [prospectName, setProspectName] = useState('');
-  const [branding, setBranding] = useState(DEFAULT_BRANDING);
-  const [externalCrmUrl, setExternalCrmUrl] = useState('');
-  const [prospectNotes, setProspectNotes] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<DemoResult | null>(null);
+  const [step, setStep] = useState<WizardStep>('configure');
+  const [config, setConfig] = useState(getInitialConfig('condo_718'));
 
-  const updateBranding = (field: BrandingField, value: string) => {
-    setBranding((prev) => ({ ...prev, [field]: value }));
-  };
+  function handleCommunityTypeChange(type: CommunityType) {
+    setConfig((prev) => ({
+      ...prev,
+      communityType: type,
+      publicTemplateId: getDefaultTemplate(type, 'public')?.id ?? '',
+      mobileTemplateId: getDefaultTemplate(type, 'mobile')?.id ?? '',
+      contentStrategy: getDefaultStrategy(type).id,
+    }));
+  }
 
-  const hasInvalidHexColor = hasInvalidHexColorValues(
-    COLOR_FIELDS.map(({ field }) => branding[field]),
-  );
-
-  const handleGenerate = async () => {
-    if (!templateType) return;
-    setStep('creating');
-    setError(null);
-
-    try {
-      const res = await fetch('/api/admin/demos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateType,
-          prospectName,
-          branding: {
-            primaryColor: branding.primaryColor,
-            secondaryColor: branding.secondaryColor,
-            accentColor: branding.accentColor,
-            fontHeading: branding.fontHeading,
-            fontBody: branding.fontBody,
-            logoPath: branding.logoPath || undefined,
-          },
-          externalCrmUrl: externalCrmUrl || undefined,
-          prospectNotes: prospectNotes || undefined,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message ?? 'Failed to create demo');
-      }
-
-      setResult(json.data);
-      setStep('done');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setStep(3);
-    }
-  };
-
-  const theme = resolveTheme(
-    {
-      primaryColor: branding.primaryColor,
-      secondaryColor: branding.secondaryColor,
-      accentColor: branding.accentColor,
-      fontHeading: branding.fontHeading,
-      fontBody: branding.fontBody,
-    },
-    prospectName || 'Your Community',
-    templateType ?? 'condo_718',
-  );
-  const cssVars = toCssVars(theme);
-  const fontLinks = toFontLinks(theme);
+  const publicTemplates = getDemoTemplates(config.communityType, 'public');
+  const mobileTemplates = getDemoTemplates(config.communityType, 'mobile');
+  const contentStrategies = getContentStrategies(config.communityType);
 
   return (
     <AdminLayout>
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="mx-auto max-w-3xl px-6 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <Link href="/demo" className="text-sm text-gray-500 hover:text-gray-700">
+        <div className="mb-6">
+          <Link
+            href="/demo"
+            className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] rounded"
+          >
             ← Back to Demos
           </Link>
-          <h1 className="mt-2 text-2xl font-bold text-gray-900">Create Demo</h1>
-
-          {/* Step indicator */}
-          {typeof step === 'number' && (
-            <div className="mt-4 flex gap-2">
-              {[1, 2, 3].map((s) => (
-                <div
-                  key={s}
-                  className={`h-1.5 flex-1 rounded-full ${
-                    s <= step ? 'bg-blue-600' : 'bg-gray-200'
-                  }`}
-                />
-              ))}
-            </div>
-          )}
+          <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)]">Create Demo</h1>
         </div>
 
-        {/* Step 1: Template Selection */}
-        {step === 1 && (
-          <div>
-            <h2 className="mb-4 text-lg font-semibold text-gray-800">Choose Template</h2>
-            <div className="grid grid-cols-3 gap-4">
-              {TEMPLATE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.type}
-                  onClick={() => setTemplateType(opt.type)}
-                  className={`rounded-lg border-2 p-6 text-left transition-all ${
-                    templateType === opt.type
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+        {/* Progress bar */}
+        <div className="mb-8">
+          <ProgressBar currentStep={step} />
+        </div>
+
+        {/* Configure step */}
+        {step === 'configure' && (
+          <div className="space-y-8">
+            {/* Prospect section */}
+            <section aria-labelledby="section-prospect">
+              <SectionLabel>
+                <span id="section-prospect">Prospect</span>
+              </SectionLabel>
+
+              {/* Community name input */}
+              <div className="mb-4">
+                <label
+                  htmlFor="prospect-name"
+                  className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]"
                 >
-                  <div className="text-3xl mb-3">{opt.icon}</div>
-                  <div className="font-semibold text-gray-900">{opt.label}</div>
-                  <div className="mt-1 text-sm text-gray-500">{opt.description}</div>
-                </button>
-              ))}
-            </div>
-            <div className="mt-8 flex justify-end">
-              <button
-                onClick={() => setStep(2)}
-                disabled={!templateType}
-                className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-blue-700"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Brand Configuration */}
-        {step === 2 && (
-          <div className="grid grid-cols-5 gap-8">
-            <div className="col-span-3 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-800">Brand Configuration</h2>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Prospect Name <span className="text-red-500">*</span>
+                  Community Name <span className="text-[var(--status-error)]" aria-hidden="true">*</span>
                 </label>
                 <input
+                  id="prospect-name"
                   type="text"
-                  value={prospectName}
-                  onChange={(e) => setProspectName(e.target.value)}
+                  value={config.prospectName}
+                  onChange={(e) =>
+                    setConfig((prev) => ({ ...prev, prospectName: e.target.value }))
+                  }
                   maxLength={100}
                   placeholder="e.g., Bayview Towers"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className={cn(
+                    'h-[40px] w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)]',
+                    'px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:border-[var(--interactive-primary)]',
+                  )}
                 />
               </div>
 
-              {/* Color pickers */}
-              {COLOR_FIELDS.map(({ field, label }) => {
-                const colorValue = branding[field];
-                const hasInvalidHex = !isSixDigitHexColor(colorValue);
+              {/* Community type toggle */}
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-[var(--text-primary)]">
+                  Community Type
+                </p>
+                <div className="flex gap-2">
+                  {COMMUNITY_TYPES.map(({ type, label }) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => handleCommunityTypeChange(type)}
+                      className={cn(
+                        'h-[40px] min-w-[80px] rounded-[10px] px-4 text-sm font-medium transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)]',
+                        config.communityType === type
+                          ? 'border-2 border-[var(--interactive-primary)] bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]'
+                          : 'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]',
+                      )}
+                      aria-pressed={config.communityType === type}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
 
-                return (
-                  <div key={field}>
-                    <label className="block text-sm font-medium text-gray-700">{label}</label>
-                    <div className="mt-1 flex items-center gap-3">
-                      <input
-                        type="color"
-                        value={hasInvalidHex ? DEFAULT_BRANDING[field] : colorValue}
-                        onChange={(e) => updateBranding(field, e.target.value)}
-                        className="h-9 w-12 cursor-pointer rounded border border-gray-300"
-                      />
-                      <input
-                        type="text"
-                        value={colorValue}
-                        onChange={(e) => updateBranding(field, e.target.value)}
-                        className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-mono"
-                      />
-                    </div>
-                    {hasInvalidHex && (
-                      <p className="mt-1 text-xs text-red-600">Invalid hex color</p>
+            {/* Public site template */}
+            <section aria-labelledby="section-public-template">
+              <SectionLabel>
+                <span id="section-public-template">Public Site Template</span>
+              </SectionLabel>
+              <div className="flex flex-wrap gap-3">
+                {publicTemplates.map((t) => (
+                  <div key={t.id} className="w-[180px]">
+                    <TemplateCard
+                      template={t}
+                      selected={t.id === config.publicTemplateId}
+                      onSelect={() =>
+                        setConfig((prev) => ({ ...prev, publicTemplateId: t.id }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Mobile template */}
+            <section aria-labelledby="section-mobile-template">
+              <SectionLabel>
+                <span id="section-mobile-template">Mobile Template</span>
+              </SectionLabel>
+              <div className="flex flex-wrap gap-3">
+                {mobileTemplates.map((t) => (
+                  <div key={t.id} className="w-[180px]">
+                    <TemplateCard
+                      template={t}
+                      selected={t.id === config.mobileTemplateId}
+                      onSelect={() =>
+                        setConfig((prev) => ({ ...prev, mobileTemplateId: t.id }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Content focus */}
+            <section aria-labelledby="section-content-focus">
+              <SectionLabel>
+                <span id="section-content-focus">Content Focus</span>
+              </SectionLabel>
+              <div className="flex flex-wrap gap-2">
+                {contentStrategies.map((s) => {
+                  const isSelected = s.id === config.contentStrategy;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() =>
+                        setConfig((prev) => ({ ...prev, contentStrategy: s.id }))
+                      }
+                      title={s.description}
+                      className={cn(
+                        'rounded-full px-3 py-2 text-sm transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)]',
+                        isSelected
+                          ? 'border-2 border-[var(--interactive-primary)] bg-[var(--interactive-subtle)] text-[var(--interactive-primary)] font-medium'
+                          : 'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-secondary)]',
+                      )}
+                      aria-pressed={isSelected}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Branding — collapsible */}
+            <CollapsibleSection label="Branding">
+              <BrandingFormFields
+                value={config.branding}
+                onChange={(branding) => setConfig((prev) => ({ ...prev, branding }))}
+              />
+            </CollapsibleSection>
+
+            {/* Optional fields — collapsible */}
+            <CollapsibleSection label="Optional">
+              <div className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="crm-url"
+                    className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]"
+                  >
+                    CRM Link
+                    <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    id="crm-url"
+                    type="url"
+                    value={config.crmUrl}
+                    onChange={(e) =>
+                      setConfig((prev) => ({ ...prev, crmUrl: e.target.value }))
+                    }
+                    placeholder="https://crm.example.com/deal/123"
+                    className={cn(
+                      'h-[40px] w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)]',
+                      'px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:border-[var(--interactive-primary)]',
                     )}
-                  </div>
-                );
-              })}
-
-              {/* Font selectors */}
-              {FONT_FIELDS.map(({ field, label }) => (
-                <div key={field}>
-                  <label className="block text-sm font-medium text-gray-700">{label}</label>
-                  <select
-                    value={branding[field]}
-                    onChange={(e) => updateBranding(field, e.target.value)}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    {ALLOWED_FONTS.map((font) => (
-                      <option key={font} value={font}>
-                        {font}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setStep(1)}
-                  className="rounded-md border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  disabled={!prospectName.trim() || hasInvalidHexColor}
-                  className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-blue-700"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
-            {/* Live Preview */}
-            <div className="col-span-2">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">Live Preview</h3>
-              {/* eslint-disable-next-line @next/next/no-head-element */}
-              {fontLinks.map((href) => (
-                // eslint-disable-next-line @next/next/no-page-custom-font
-                <link key={href} rel="stylesheet" href={href} />
-              ))}
-              <div
-                className="overflow-hidden rounded-lg border border-gray-200 shadow-sm"
-                style={cssVars as React.CSSProperties}
-              >
-                <div
-                  className="px-4 py-3 text-white"
-                  style={{ backgroundColor: 'var(--theme-primary)' }}
-                >
-                  <h2
-                    className="text-lg font-bold"
-                    style={{ fontFamily: 'var(--theme-font-heading)' }}
-                  >
-                    {prospectName || 'Your Community'}
-                  </h2>
-                  <p className="text-sm opacity-80">
-                    {templateType ? COMMUNITY_TYPE_DISPLAY_NAMES[templateType] : 'Community'}
-                  </p>
-                </div>
-                <div className="p-4" style={{ fontFamily: 'var(--theme-font-body)' }}>
-                  <p className="text-sm text-gray-600">
-                    Sample body text in the selected font. This is how content will appear in the demo portal.
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <span
-                      className="inline-block rounded px-3 py-1 text-xs font-medium text-white"
-                      style={{ backgroundColor: 'var(--theme-primary)' }}
-                    >
-                      Primary
-                    </span>
-                    <span
-                      className="inline-block rounded px-3 py-1 text-xs font-medium text-white"
-                      style={{ backgroundColor: 'var(--theme-secondary)' }}
-                    >
-                      Secondary
-                    </span>
-                    <span
-                      className="inline-block rounded border px-3 py-1 text-xs font-medium"
-                      style={{
-                        backgroundColor: 'var(--theme-accent)',
-                        color: 'var(--theme-primary)',
-                      }}
-                    >
-                      Accent
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Confirm & Generate */}
-        {step === 3 && (
-          <div className="max-w-xl">
-            <h2 className="mb-4 text-lg font-semibold text-gray-800">Confirm & Generate</h2>
-
-            {error && (
-              <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Template</span>
-                <span className="font-medium">
-                  {templateType ? COMMUNITY_TYPE_DISPLAY_NAMES[templateType] : '—'}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Prospect Name</span>
-                <span className="font-medium">{prospectName}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Primary Color</span>
-                <span className="flex items-center gap-2 font-mono text-xs">
-                  <span
-                    className="inline-block h-4 w-4 rounded"
-                    style={{ backgroundColor: branding.primaryColor }}
                   />
-                  {branding.primaryColor}
-                </span>
+                </div>
+                <div>
+                  <label
+                    htmlFor="notes"
+                    className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]"
+                  >
+                    Internal Notes
+                    <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">
+                      (optional)
+                    </span>
+                  </label>
+                  <textarea
+                    id="notes"
+                    value={config.notes}
+                    onChange={(e) =>
+                      setConfig((prev) => ({ ...prev, notes: e.target.value }))
+                    }
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Internal notes about this prospect..."
+                    className={cn(
+                      'w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)]',
+                      'px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:border-[var(--interactive-primary)]',
+                      'resize-none',
+                    )}
+                  />
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Fonts</span>
-                <span className="font-medium text-xs">
-                  {branding.fontHeading} / {branding.fontBody}
-                </span>
-              </div>
-            </div>
+            </CollapsibleSection>
 
-            {/* Optional fields */}
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  CRM Link <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  type="url"
-                  value={externalCrmUrl}
-                  onChange={(e) => setExternalCrmUrl(e.target.value)}
-                  placeholder="https://crm.example.com/deal/123"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Notes <span className="text-gray-400">(optional)</span>
-                </label>
-                <textarea
-                  value={prospectNotes}
-                  onChange={(e) => setProspectNotes(e.target.value)}
-                  maxLength={2000}
-                  rows={3}
-                  placeholder="Internal notes about this prospect..."
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-3">
+            {/* CTA */}
+            <div className="pt-2">
               <button
-                onClick={() => setStep(2)}
-                className="rounded-md border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                type="button"
+                onClick={() => setStep('preview')}
+                disabled={!config.prospectName.trim()}
+                className={cn(
+                  'h-[40px] w-full rounded-[10px] bg-[var(--interactive-primary)] text-sm font-semibold text-white',
+                  'transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:ring-offset-2',
+                  'disabled:opacity-40 disabled:cursor-not-allowed',
+                  'hover:opacity-90',
+                )}
               >
-                Back
-              </button>
-              <button
-                onClick={handleGenerate}
-                className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Generate Demo
+                Preview Demo →
               </button>
             </div>
           </div>
         )}
 
-        {/* Creating state */}
-        {step === 'creating' && (
-          <div className="flex flex-col items-center py-16">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-            <p className="mt-4 text-sm text-gray-500">
-              Generating demo for {prospectName}...
-            </p>
-            <p className="mt-1 text-xs text-gray-400">This may take 10-15 seconds</p>
-          </div>
-        )}
-
-        {/* Done state */}
-        {step === 'done' && result && (
-          <div className="max-w-xl">
-            <div className="rounded-lg border border-green-200 bg-green-50 p-6">
-              <h2 className="text-lg font-semibold text-green-900">
-                Demo created for {prospectName}
-              </h2>
-              <p className="mt-1 text-sm text-green-700">
-                The demo community is ready with sample data.
-              </p>
-
-              <div className="mt-4 space-y-2">
-                <Link
-                  href={result.previewUrl}
-                  className="block rounded-md bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Open Split-Screen Preview
-                </Link>
-                <Link
-                  href={result.mobilePreviewUrl}
-                  className="block rounded-md border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Open Mobile Preview
-                </Link>
-              </div>
-
-              <div className="mt-4 flex gap-3">
-                <button
-                  onClick={() => {
-                    setStep(1);
-                    setTemplateType(null);
-                    setProspectName('');
-                    setBranding(DEFAULT_BRANDING);
-                    setExternalCrmUrl('');
-                    setProspectNotes('');
-                    setError(null);
-                    setResult(null);
-                  }}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                >
-                  Create Another
-                </button>
-                <button
-                  onClick={() => router.push('/demo')}
-                  className="text-sm font-medium text-gray-500 hover:text-gray-700"
-                >
-                  View All Demos
-                </button>
-              </div>
-            </div>
+        {/* Preview step — placeholder, to be implemented in Task 11 */}
+        {step !== 'configure' && (
+          <div className="rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-card)] px-6 py-10 text-center text-[var(--text-secondary)]">
+            Preview step — coming in Task 11
           </div>
         )}
       </div>
