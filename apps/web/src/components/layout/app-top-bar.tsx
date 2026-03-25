@@ -59,11 +59,11 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
           <button
             type="button"
             onClick={onSearchOpen}
-            className="flex h-10 w-full items-center gap-2 rounded-[var(--radius-md)] border border-edge bg-surface-page px-3 text-sm text-content-placeholder transition-colors duration-quick hover:border-edge-strong"
+            className="flex h-10 w-full items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-page px-3.5 text-sm text-content-placeholder transition-colors duration-quick hover:border-edge-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             aria-label="Search"
           >
             <Search size={16} aria-hidden="true" />
-            <span>Search documents, residents...</span>
+            <span>Search documents, meetings, residents...</span>
           </button>
         </div>
       </div>
