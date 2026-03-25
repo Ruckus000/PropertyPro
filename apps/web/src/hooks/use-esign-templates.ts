@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { EsignTemplateRecord } from '@/lib/services/esign-service';
+import { requestJson } from '@/lib/api/request-json';
 
 export const ESIGN_TEMPLATE_KEYS = {
   all: ['esign-templates'] as const,
@@ -10,21 +11,6 @@ export const ESIGN_TEMPLATE_KEYS = {
   detail: (communityId: number, id: number) =>
     [...ESIGN_TEMPLATE_KEYS.all, 'detail', communityId, id] as const,
 };
-
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
-  const json = (await response.json()) as {
-    data?: T;
-    error?: { message?: string };
-  };
-  if (!response.ok) {
-    throw new Error(json.error?.message ?? 'Request failed');
-  }
-  if (json.data === undefined) {
-    throw new Error('Missing response payload');
-  }
-  return json.data;
-}
 
 export function useEsignTemplates(
   communityId: number,
