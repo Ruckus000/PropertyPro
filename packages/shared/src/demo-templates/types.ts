@@ -6,17 +6,17 @@ import type { CommunityType } from '..';
  */
 export const DEMO_TEMPLATE_IDS = [
   'condo-public-civic-glass',
-  'condo-public-coastal-light',
-  'condo-public-modern-slate',
-  'condo-mobile-civic-glass',
-  'condo-mobile-coastal-light',
-  'condo-mobile-modern-slate',
-  'hoa-public-garden-grove',
-  'hoa-public-neighborhood-classic',
-  'hoa-mobile-garden-grove',
-  'hoa-mobile-neighborhood-classic',
-  'apartment-public-urban-loft',
-  'apartment-mobile-urban-loft',
+  'condo-public-coastal-welcome',
+  'condo-mobile-resident-bulletin',
+  'condo-mobile-concierge-snapshot',
+  'hoa-public-neighborhood-hub',
+  'hoa-public-board-transparency',
+  'hoa-mobile-community-pulse',
+  'hoa-mobile-board-brief',
+  'apartment-public-resident-services',
+  'apartment-public-maintenance-first',
+  'apartment-mobile-tenant-essentials',
+  'apartment-mobile-service-snapshot',
 ] as const;
 
 /** A valid demo template identifier. */
