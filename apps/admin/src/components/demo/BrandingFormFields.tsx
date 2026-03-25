@@ -7,7 +7,7 @@
  * wizard (where no demoId exists yet). When communityId is omitted the logo is
  * stored as a local blob URL; the actual upload happens after the demo is created.
  */
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { Loader2, Upload, X } from 'lucide-react';
 import { ALLOWED_FONTS, THEME_PRESETS, presetToBranding } from '@propertypro/theme';
 
@@ -65,6 +65,15 @@ export function BrandingFormFields({
   onError,
 }: BrandingFormFieldsProps) {
   const logoObjectUrlRef = useRef<string | null>(null);
+
+  // Revoke object URL on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (logoObjectUrlRef.current) {
+        URL.revokeObjectURL(logoObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   // Derive the preview URL: if logoPath is a blob URL (wizard case) use it directly.
   const logoPreviewUrl = value.logoPath.startsWith('blob:') ? value.logoPath : null;

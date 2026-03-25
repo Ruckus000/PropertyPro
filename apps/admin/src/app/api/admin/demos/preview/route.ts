@@ -37,11 +37,11 @@ export async function POST(request: NextRequest) {
   // provided. Resolve each field to a defined string or omit branding entirely.
   const branding = rawBranding
     ? {
-        primaryColor: rawBranding.primaryColor ?? '',
-        secondaryColor: rawBranding.secondaryColor ?? '',
-        accentColor: rawBranding.accentColor ?? '',
-        fontHeading: rawBranding.fontHeading ?? '',
-        fontBody: rawBranding.fontBody ?? '',
+        primaryColor: rawBranding.primaryColor ?? '#2563EB',
+        secondaryColor: rawBranding.secondaryColor ?? '#1E40AF',
+        accentColor: rawBranding.accentColor ?? '#DBEAFE',
+        fontHeading: rawBranding.fontHeading ?? 'Inter',
+        fontBody: rawBranding.fontBody ?? 'Inter',
       }
     : undefined;
 

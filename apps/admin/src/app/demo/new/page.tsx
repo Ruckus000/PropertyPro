@@ -306,7 +306,16 @@ function PreviewStep({
       const res = await fetch('/api/admin/demos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({
+          templateType: config.communityType,
+          prospectName: config.prospectName,
+          branding: config.branding,
+          publicTemplateId: config.publicTemplateId,
+          mobileTemplateId: config.mobileTemplateId,
+          contentStrategy: config.contentStrategy,
+          externalCrmUrl: config.crmUrl || undefined,
+          prospectNotes: config.notes || undefined,
+        }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error.message ?? 'Generation failed');
