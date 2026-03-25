@@ -10,7 +10,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SignaturePad from 'signature_pad';
 import { Button } from '@propertypro/ui';
-import { X, Undo2, Trash2, Pencil, Type, Upload } from 'lucide-react';
+import { Undo2, Trash2, Pencil, Type, Upload } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 export interface SignatureCaptureProps {
   mode: 'signature' | 'initials';
@@ -150,167 +158,191 @@ export function SignatureCapture({
     (activeTab === 'upload' && !uploadPreview);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onCancel}
-        aria-hidden
-      />
-
-      {/* Panel — full height on mobile, centered modal on desktop */}
-      <div className="relative z-10 bg-surface-card rounded-t-2xl md:rounded-2xl w-full md:max-w-lg h-[85vh] md:h-auto md:max-h-[80vh] flex flex-col overflow-hidden shadow-xl">
+    <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
+      {/*
+       * Override DialogContent defaults:
+       * - Remove default padding/gap (p-0, gap-0) — inner layout owns spacing
+       * - Remove default centering transform on mobile — align to bottom instead
+       * - Mobile: full-width, 85vh, rounded top only, slide from bottom
+       * - Desktop (md+): centered modal, max-w-lg, full rounding, max-h-[80vh]
+       */}
+      <DialogContent
+        className={cn(
+          // Reset shadcn defaults
+          'p-0 gap-0',
+          // Layout
+          'flex flex-col overflow-hidden',
+          // Mobile: bottom sheet
+          'top-auto bottom-0 left-0 right-0 translate-x-0 translate-y-0',
+          'w-full h-[85vh]',
+          'rounded-t-2xl rounded-b-none',
+          // Desktop: centered modal
+          'md:top-1/2 md:bottom-auto md:left-1/2 md:right-auto',
+          'md:translate-x-[-50%] md:translate-y-[-50%]',
+          'md:max-w-lg md:h-auto md:max-h-[80vh]',
+          'md:rounded-2xl',
+        )}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h2 className="text-lg font-semibold text-content">{title}</h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="p-1 rounded-full hover:bg-surface-muted text-content-disabled hover:text-content-secondary"
-            aria-label="Close"
+        <DialogHeader className="flex-row items-center justify-between px-5 py-4 border-b space-y-0">
+          <DialogTitle className="text-lg font-semibold text-content">
+            {title}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Tabs — underline style matching original design */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(val) => setActiveTab(val as TabId)}
+          className="flex flex-col flex-1 overflow-hidden"
+        >
+          <TabsList
+            className={cn(
+              // Override pill-style defaults with underline row
+              'h-auto w-full rounded-none bg-transparent p-0',
+              'border-b px-5',
+              'justify-start gap-0',
+            )}
           >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b px-5">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-quick ${
-                  isActive
-                    ? 'border-interactive text-content-link'
-                    : 'border-transparent text-content-tertiary hover:text-content-secondary'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tab content */}
-        <div className="flex-1 overflow-auto p-5">
-          {/* Use cached value */}
-          {cachedValue && (
-            <div className="mb-4 p-3 bg-surface-hover rounded-md border border-edge">
-              <p className="text-xs text-content-tertiary mb-2">
-                Use your previous {mode}:
-              </p>
-              <div className="flex items-center gap-3">
-                <img
-                  src={cachedValue}
-                  alt={`Previous ${mode}`}
-                  className="h-12 border rounded bg-surface-card"
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => onCapture(cachedValue)}
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className={cn(
+                    // Override shadcn trigger defaults
+                    'rounded-none bg-transparent shadow-none px-4 py-2.5 text-sm font-medium',
+                    'border-b-2 -mb-px',
+                    'text-content-tertiary hover:text-content-secondary',
+                    'data-[state=active]:border-interactive data-[state=active]:text-content-link data-[state=active]:bg-transparent data-[state=active]:shadow-none',
+                    'data-[state=inactive]:border-transparent',
+                    'transition-colors duration-quick',
+                  )}
                 >
-                  Use previous
-                </Button>
-              </div>
-            </div>
-          )}
+                  <Icon className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                  {tab.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
 
-          {activeTab === 'draw' && (
-            <div>
-              <div className="border-2 border-dashed border-edge-strong rounded-md overflow-hidden bg-surface-card">
-                <canvas
-                  ref={canvasRef}
-                  className="w-full"
-                  style={{ height: 200, touchAction: 'none' }}
-                />
-              </div>
-              <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleUndo}
-                >
-                  <Undo2 className="h-4 w-4 mr-1" />
-                  Undo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleClear}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Clear
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'type' && (
-            <div>
-              <input
-                type="text"
-                value={typedText}
-                onChange={(e) => setTypedText(e.target.value)}
-                placeholder={
-                  mode === 'initials' ? 'Enter your initials' : 'Type your full name'
-                }
-                className="w-full border border-edge-strong rounded-md px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent"
-                maxLength={mode === 'initials' ? 5 : 100}
-                autoFocus
-              />
-              {typedText.trim() && (
-                <div className="mt-4 p-4 bg-surface-card border-2 border-dashed border-edge-strong rounded-md flex items-center justify-center min-h-[80px]">
-                  <span
-                    style={{
-                      fontFamily: CURSIVE_FONT_STACK,
-                      fontSize: mode === 'initials' ? '48px' : '36px',
-                      color: '#000',
-                    }}
-                  >
-                    {typedText}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'upload' && (
-            <div>
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-edge-strong rounded-md cursor-pointer hover:bg-surface-hover transition-colors duration-quick">
-                {uploadPreview ? (
+          {/* Tab content panels */}
+          <div className="flex-1 overflow-auto p-5">
+            {/* Use cached value */}
+            {cachedValue && (
+              <div className="mb-4 p-3 bg-surface-hover rounded-md border border-edge">
+                <p className="text-xs text-content-tertiary mb-2">
+                  Use your previous {mode}:
+                </p>
+                <div className="flex items-center gap-3">
                   <img
-                    src={uploadPreview}
-                    alt="Uploaded signature"
-                    className="max-h-32 max-w-full object-contain p-2"
+                    src={cachedValue}
+                    alt={`Previous ${mode}`}
+                    className="h-12 border rounded bg-surface-card"
                   />
-                ) : (
-                  <div className="text-center">
-                    <Upload className="h-8 w-8 mx-auto text-content-disabled mb-2" />
-                    <p className="text-sm text-content-tertiary">
-                      Click to upload PNG or JPG
-                    </p>
-                    <p className="text-xs text-content-disabled mt-1">Max 2 MB</p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => onCapture(cachedValue)}
+                  >
+                    Use previous
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <TabsContent value="draw" className="mt-0">
+              <div>
+                <div className="border-2 border-dashed border-edge-strong rounded-md overflow-hidden bg-surface-card">
+                  <canvas
+                    ref={canvasRef}
+                    className="w-full"
+                    style={{ height: 200, touchAction: 'none' }}
+                  />
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleUndo}
+                  >
+                    <Undo2 className="h-4 w-4 mr-1" aria-hidden="true" />
+                    Undo
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleClear}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" aria-hidden="true" />
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="type" className="mt-0">
+              <div>
+                <input
+                  type="text"
+                  value={typedText}
+                  onChange={(e) => setTypedText(e.target.value)}
+                  placeholder={
+                    mode === 'initials' ? 'Enter your initials' : 'Type your full name'
+                  }
+                  className="w-full border border-edge-strong rounded-md px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent"
+                  maxLength={mode === 'initials' ? 5 : 100}
+                  autoFocus
+                />
+                {typedText.trim() && (
+                  <div className="mt-4 p-4 bg-surface-card border-2 border-dashed border-edge-strong rounded-md flex items-center justify-center min-h-[80px]">
+                    <span
+                      style={{
+                        fontFamily: CURSIVE_FONT_STACK,
+                        fontSize: mode === 'initials' ? '48px' : '36px',
+                        color: '#000',
+                      }}
+                    >
+                      {typedText}
+                    </span>
                   </div>
                 )}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-              {uploadError && (
-                <p className="mt-2 text-sm text-status-danger">{uploadError}</p>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="upload" className="mt-0">
+              <div>
+                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-edge-strong rounded-md cursor-pointer hover:bg-surface-hover transition-colors duration-quick">
+                  {uploadPreview ? (
+                    <img
+                      src={uploadPreview}
+                      alt="Uploaded signature"
+                      className="max-h-32 max-w-full object-contain p-2"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 mx-auto text-content-disabled mb-2" aria-hidden="true" />
+                      <p className="text-sm text-content-tertiary">
+                        Click to upload PNG or JPG
+                      </p>
+                      <p className="text-xs text-content-disabled mt-1">Max 2 MB</p>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+                {uploadError && (
+                  <p className="mt-2 text-sm text-status-danger" role="alert">{uploadError}</p>
+                )}
+              </div>
+            </TabsContent>
+          </div>
+        </Tabs>
 
         {/* Footer */}
         <div className="border-t px-5 py-4 flex gap-3">
@@ -329,8 +361,8 @@ export function SignatureCapture({
             Confirm
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
