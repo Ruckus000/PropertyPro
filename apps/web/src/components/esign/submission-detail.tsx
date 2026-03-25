@@ -8,6 +8,16 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card } from '@propertypro/ui';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ESIGN_STATUS_CONFIG, EVENT_ICONS } from './esign-status-config';
 import type { EsignStatusConfigEntry } from './esign-status-config';
 import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
@@ -89,12 +99,11 @@ export function SubmissionDetail({
   const cancelMutation = useCancelEsignSubmission(communityId);
   const remindMutation = useSendEsignReminder(communityId);
   const [currentPage, setCurrentPage] = useState(0);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const handleCancel = useCallback(async () => {
-    if (!confirm('Cancel this signing request? All pending signatures will be voided.')) {
-      return;
-    }
     await cancelMutation.mutateAsync(submissionId);
+    setCancelDialogOpen(false);
   }, [submissionId, cancelMutation]);
 
   const copySigningUrl = useCallback(
@@ -371,7 +380,7 @@ export function SubmissionDetail({
               <Button
                 variant="ghost"
                 className="text-status-danger hover:text-status-danger hover:bg-status-danger-bg"
-                onClick={handleCancel}
+                onClick={() => setCancelDialogOpen(true)}
                 disabled={cancelMutation.isPending}
               >
                 <Ban className="h-4 w-4 mr-1" />
@@ -379,6 +388,27 @@ export function SubmissionDetail({
               </Button>
             </div>
           )}
+
+          <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel signing request?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  All pending signatures will be voided. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Go back</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-status-danger hover:bg-status-danger/90"
+                  onClick={handleCancel}
+                  disabled={cancelMutation.isPending}
+                >
+                  {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Request'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {data.downloadUrl && (
             <Button
