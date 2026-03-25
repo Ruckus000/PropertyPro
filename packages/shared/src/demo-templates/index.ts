@@ -1,5 +1,16 @@
 import type { CommunityType } from '..';
 import { condoPublicCivicGlass } from './condo-public-civic-glass';
+import { condoPublicCoastalWelcome } from './condo-public-coastal-welcome';
+import { condoMobileResidentBulletin } from './condo-mobile-resident-bulletin';
+import { condoMobileConciergeSnapshot } from './condo-mobile-concierge-snapshot';
+import { hoaPublicNeighborhoodHub } from './hoa-public-neighborhood-hub';
+import { hoaPublicBoardTransparency } from './hoa-public-board-transparency';
+import { hoaMobileCommunityPulse } from './hoa-mobile-community-pulse';
+import { hoaMobileBoardBrief } from './hoa-mobile-board-brief';
+import { apartmentPublicResidentServices } from './apartment-public-resident-services';
+import { apartmentPublicMaintenanceFirst } from './apartment-public-maintenance-first';
+import { apartmentMobileTenantEssentials } from './apartment-mobile-tenant-essentials';
+import { apartmentMobileServiceSnapshot } from './apartment-mobile-service-snapshot';
 import type { DemoTemplateDefinition, DemoTemplateId, TemplateVariant } from './types';
 import { DEMO_TEMPLATE_IDS } from './types';
 
@@ -8,6 +19,17 @@ export * from './types';
 /** All registered demo templates. */
 export const ALL_TEMPLATES: DemoTemplateDefinition[] = [
   condoPublicCivicGlass,
+  condoPublicCoastalWelcome,
+  condoMobileResidentBulletin,
+  condoMobileConciergeSnapshot,
+  hoaPublicNeighborhoodHub,
+  hoaPublicBoardTransparency,
+  hoaMobileCommunityPulse,
+  hoaMobileBoardBrief,
+  apartmentPublicResidentServices,
+  apartmentPublicMaintenanceFirst,
+  apartmentMobileTenantEssentials,
+  apartmentMobileServiceSnapshot,
 ];
 
 /**
