@@ -46,26 +46,26 @@ export const condoMobileResidentBulletin: DemoTemplateDefinition = {
     ),
     React.createElement('p', { style: styles.sectionLabel }, 'Pinned'),
     React.createElement('div', { style: styles.feedItemPinned },
-      React.createElement('p', { style: styles.feedTagPinned }, '📌 Important'),
+      React.createElement('p', { style: styles.feedTagPinned }, 'Important'),
       React.createElement('p', { style: styles.feedTitle }, 'Annual Meeting — Save the Date'),
       React.createElement('p', { style: styles.feedBody }, 'The Annual Owner Meeting is scheduled for next month. All residents are encouraged to attend.'),
       React.createElement('p', { style: styles.feedMeta }, 'Board of Directors · 2 days ago')
     ),
     React.createElement('p', { style: styles.sectionLabel }, 'Latest Updates'),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedTag }, '🔧 Maintenance'),
+      React.createElement('p', { style: styles.feedTag }, 'Maintenance'),
       React.createElement('p', { style: styles.feedTitle }, 'Pool Resurfacing — Complete'),
       React.createElement('p', { style: styles.feedBody }, 'The pool deck resurfacing project has been completed. The pool is now open for residents.'),
       React.createElement('p', { style: styles.feedMeta }, 'Property Management · 1 day ago')
     ),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedTag }, '📄 Documents'),
+      React.createElement('p', { style: styles.feedTag }, 'Documents'),
       React.createElement('p', { style: styles.feedTitle }, 'Q3 Financial Report Posted'),
       React.createElement('p', { style: styles.feedBody }, 'The third-quarter financial statements are now available in the document library.'),
       React.createElement('p', { style: styles.feedMeta }, 'Treasurer · 3 days ago')
     ),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedTag }, '📢 Reminder'),
+      React.createElement('p', { style: styles.feedTag }, 'Reminder'),
       React.createElement('p', { style: styles.feedTitle }, 'Guest Parking Policy Update'),
       React.createElement('p', { style: styles.feedBody }, 'A reminder that guest parking is limited to 48 hours. Please register your guests at the office.'),
       React.createElement('p', { style: styles.feedMeta }, 'Management · 5 days ago')
@@ -73,19 +73,15 @@ export const condoMobileResidentBulletin: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📰'),
         React.createElement('span', null, 'Bulletin')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📅'),
         React.createElement('span', null, 'Meetings')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Docs')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Profile')
       )
     )

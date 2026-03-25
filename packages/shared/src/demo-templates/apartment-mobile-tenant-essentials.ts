@@ -81,7 +81,7 @@ export const apartmentMobileTenantEssentials: DemoTemplateDefinition = {
     ),
     React.createElement('p', { style: styles.sectionLabel }, 'Active Requests'),
     React.createElement('div', { style: styles.feedItemUrgent },
-      React.createElement('p', { style: styles.feedTypeUrgent }, '❄️ HVAC'),
+      React.createElement('p', { style: styles.feedTypeUrgent }, 'HVAC'),
       React.createElement('p', { style: styles.feedTitle }, 'AC not cooling properly'),
       React.createElement('p', { style: styles.feedBody }, 'Technician scheduled for Thursday between 10am–2pm.'),
       React.createElement('div', { style: styles.feedStatusRow },
@@ -90,7 +90,7 @@ export const apartmentMobileTenantEssentials: DemoTemplateDefinition = {
       )
     ),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedType }, '🚰 Plumbing'),
+      React.createElement('p', { style: styles.feedType }, 'Plumbing'),
       React.createElement('p', { style: styles.feedTitle }, 'Bathroom faucet dripping'),
       React.createElement('p', { style: styles.feedBody }, 'Work order completed. Washer replaced.'),
       React.createElement('div', { style: styles.feedStatusRow },
@@ -101,19 +101,15 @@ export const apartmentMobileTenantEssentials: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItemActive },
-        React.createElement('span', { style: styles.navIcon }, '🏠'),
         React.createElement('span', null, 'Home')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '🔧'),
         React.createElement('span', null, 'Requests')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Lease')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Account')
       )
     )

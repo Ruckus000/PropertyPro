@@ -64,7 +64,7 @@ export const apartmentMobileServiceSnapshot: DemoTemplateDefinition = {
       )
     ),
     React.createElement('div', { style: styles.activeWidget },
-      React.createElement('span', { style: styles.activeWidgetIcon }, '❄️'),
+      React.createElement('span', { style: styles.activeWidgetIcon }, 'AC'),
       React.createElement('div', { style: styles.activeWidgetBody },
         React.createElement('p', { style: styles.activeWidgetTitle }, 'AC not cooling — Open Ticket'),
         React.createElement('p', { style: styles.activeWidgetSub }, 'Technician visit: Thu 10am–2pm')
@@ -74,22 +74,22 @@ export const apartmentMobileServiceSnapshot: DemoTemplateDefinition = {
     React.createElement('p', { style: styles.sectionLabel }, 'Request a Service'),
     React.createElement('div', { style: styles.grid },
       React.createElement('div', { style: styles.serviceCardHighlight },
-        React.createElement('div', { style: styles.serviceIconWrapHL }, '🔧'),
+        React.createElement('div', { style: styles.serviceIconWrapHL }, 'Fix'),
         React.createElement('p', { style: styles.serviceLabel }, 'Maintenance'),
         React.createElement('p', { style: styles.serviceSubHL }, 'Repairs & fixes')
       ),
       React.createElement('div', { style: styles.serviceCard },
-        React.createElement('div', { style: styles.serviceIconWrap }, '🐛'),
+        React.createElement('div', { style: styles.serviceIconWrap }, 'Bug'),
         React.createElement('p', { style: styles.serviceLabel }, 'Pest Control'),
         React.createElement('p', { style: styles.serviceSub }, 'Schedule inspection')
       ),
       React.createElement('div', { style: styles.serviceCard },
-        React.createElement('div', { style: styles.serviceIconWrap }, '🔑'),
+        React.createElement('div', { style: styles.serviceIconWrap }, 'Key'),
         React.createElement('p', { style: styles.serviceLabel }, 'Locksmith'),
         React.createElement('p', { style: styles.serviceSub }, 'Key & lock help')
       ),
       React.createElement('div', { style: styles.serviceCard },
-        React.createElement('div', { style: styles.serviceIconWrap }, '📦'),
+        React.createElement('div', { style: styles.serviceIconWrap }, 'Pkg'),
         React.createElement('p', { style: styles.serviceLabel }, 'Move Services'),
         React.createElement('p', { style: styles.serviceSub }, 'Elevator & dock booking')
       )
@@ -112,19 +112,15 @@ export const apartmentMobileServiceSnapshot: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '🏠'),
         React.createElement('span', null, 'Home')
       ),
       React.createElement('div', { style: styles.navItemActive },
-        React.createElement('span', { style: styles.navIcon }, '🔧'),
         React.createElement('span', null, 'Services')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Lease')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Account')
       )
     )

@@ -85,27 +85,21 @@ export const apartmentPublicMaintenanceFirst: DemoTemplateDefinition = {
       React.createElement('h3', { style: styles.sectionTitle }, 'Submit a Request'),
       React.createElement('div', { style: styles.requestTypes },
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '🚰'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'Plumbing')
         ),
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '⚡'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'Electrical')
         ),
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '❄️'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'HVAC')
         ),
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '🔑'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'Locks & Doors')
         ),
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '🐛'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'Pest Control')
         ),
         React.createElement('div', { style: styles.requestType },
-          React.createElement('div', { style: styles.requestTypeIcon }, '📦'),
           React.createElement('p', { style: styles.requestTypeLabel }, 'Other')
         )
       ),

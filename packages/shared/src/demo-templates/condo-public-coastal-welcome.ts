@@ -63,22 +63,18 @@ export const condoPublicCoastalWelcome: DemoTemplateDefinition = {
       React.createElement('p', { style: styles.welcomeText }, 'At ${communityName}, we believe great communities are built on connection, care, and communication. Discover everything your home has to offer.'),
       React.createElement('div', { style: styles.cardRow },
         React.createElement('div', { style: styles.card },
-          React.createElement('div', { style: styles.cardIcon }, '🏊'),
           React.createElement('p', { style: styles.cardTitle }, 'Amenities'),
           React.createElement('p', { style: styles.cardDesc }, 'Pool, gym, and common spaces for every resident.')
         ),
         React.createElement('div', { style: styles.card },
-          React.createElement('div', { style: styles.cardIcon }, '📋'),
           React.createElement('p', { style: styles.cardTitle }, 'Resources'),
           React.createElement('p', { style: styles.cardDesc }, 'Rules, forms, and documents at your fingertips.')
         ),
         React.createElement('div', { style: styles.card },
-          React.createElement('div', { style: styles.cardIcon }, '🗓️'),
           React.createElement('p', { style: styles.cardTitle }, 'Events'),
           React.createElement('p', { style: styles.cardDesc }, 'Community gatherings and board meeting schedules.')
         ),
         React.createElement('div', { style: styles.card },
-          React.createElement('div', { style: styles.cardIcon }, '💬'),
           React.createElement('p', { style: styles.cardTitle }, 'Connect'),
           React.createElement('p', { style: styles.cardDesc }, 'Reach property management and your board easily.')
         )

@@ -78,22 +78,18 @@ export const condoPublicCivicGlass: DemoTemplateDefinition = {
       React.createElement('h3', { style: styles.sectionTitle }, 'Community Features'),
       React.createElement('div', { style: styles.featureGrid },
         React.createElement('div', { style: styles.featureCard },
-          React.createElement('div', { style: styles.featureIcon }, '📄'),
           React.createElement('p', { style: styles.featureTitle }, 'Document Library'),
           React.createElement('p', { style: styles.featureDesc }, 'Access board minutes, budgets, and governing docs.')
         ),
         React.createElement('div', { style: styles.featureCard },
-          React.createElement('div', { style: styles.featureIcon }, '📅'),
           React.createElement('p', { style: styles.featureTitle }, 'Meeting Schedule'),
           React.createElement('p', { style: styles.featureDesc }, 'Stay informed about upcoming board and owner meetings.')
         ),
         React.createElement('div', { style: styles.featureCard },
-          React.createElement('div', { style: styles.featureIcon }, '📢'),
           React.createElement('p', { style: styles.featureTitle }, 'Announcements'),
           React.createElement('p', { style: styles.featureDesc }, 'Official community notices and updates from the board.')
         ),
         React.createElement('div', { style: styles.featureCard },
-          React.createElement('div', { style: styles.featureIcon }, '✅'),
           React.createElement('p', { style: styles.featureTitle }, 'Compliance Tracker'),
           React.createElement('p', { style: styles.featureDesc }, 'Florida §718 compliance status at a glance.')
         )

@@ -71,32 +71,26 @@ export const apartmentPublicResidentServices: DemoTemplateDefinition = {
       React.createElement('p', { style: styles.servicesSectionSub }, 'Full-service living — all managed through your resident portal'),
       React.createElement('div', { style: styles.serviceGrid },
         React.createElement('div', { style: styles.serviceCardTop },
-          React.createElement('div', { style: styles.serviceIcon }, '🔧'),
           React.createElement('p', { style: styles.serviceTitle }, 'Maintenance'),
           React.createElement('p', { style: styles.serviceDesc }, 'Submit and track work orders online. Fast response guaranteed.')
         ),
         React.createElement('div', { style: styles.serviceCard },
-          React.createElement('div', { style: styles.serviceIcon }, '📦'),
           React.createElement('p', { style: styles.serviceTitle }, 'Package Tracking'),
           React.createElement('p', { style: styles.serviceDesc }, 'Get notified when packages arrive at the mail room.')
         ),
         React.createElement('div', { style: styles.serviceCard },
-          React.createElement('div', { style: styles.serviceIcon }, '🚗'),
           React.createElement('p', { style: styles.serviceTitle }, 'Parking'),
           React.createElement('p', { style: styles.serviceDesc }, 'Manage your vehicle registration and guest passes.')
         ),
         React.createElement('div', { style: styles.serviceCard },
-          React.createElement('div', { style: styles.serviceIcon }, '🏋️'),
           React.createElement('p', { style: styles.serviceTitle }, 'Amenities'),
           React.createElement('p', { style: styles.serviceDesc }, 'Reserve the gym, pool, and community spaces online.')
         ),
         React.createElement('div', { style: styles.serviceCard },
-          React.createElement('div', { style: styles.serviceIcon }, '📄'),
           React.createElement('p', { style: styles.serviceTitle }, 'Lease Portal'),
           React.createElement('p', { style: styles.serviceDesc }, 'View your lease, renewal options, and documents anytime.')
         ),
         React.createElement('div', { style: styles.serviceCard },
-          React.createElement('div', { style: styles.serviceIcon }, '💬'),
           React.createElement('p', { style: styles.serviceTitle }, 'Contact Office'),
           React.createElement('p', { style: styles.serviceDesc }, 'Message management directly — quick response times.')
         )

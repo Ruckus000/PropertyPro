@@ -69,17 +69,14 @@ export const hoaPublicBoardTransparency: DemoTemplateDefinition = {
       ),
       React.createElement('div', { style: styles.featureVisual },
         React.createElement('div', { style: styles.docRow },
-          React.createElement('span', { style: styles.docIcon }, '📋'),
           React.createElement('span', { style: styles.docName }, 'CC&Rs 2024'),
           React.createElement('span', { style: styles.docDate }, 'Jan 2024')
         ),
         React.createElement('div', { style: styles.docRow },
-          React.createElement('span', { style: styles.docIcon }, '📊'),
           React.createElement('span', { style: styles.docName }, 'Annual Budget'),
           React.createElement('span', { style: styles.docDate }, 'Feb 2025')
         ),
         React.createElement('div', { style: styles.docRow },
-          React.createElement('span', { style: styles.docIcon }, '📝'),
           React.createElement('span', { style: styles.docName }, 'Board Minutes — Feb'),
           React.createElement('span', { style: styles.docDate }, 'Mar 2025')
         )

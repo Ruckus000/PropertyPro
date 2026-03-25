@@ -113,19 +113,15 @@ export const hoaMobileBoardBrief: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItemActive },
-        React.createElement('span', { style: styles.navIcon }, '📋'),
         React.createElement('span', null, 'Board')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📅'),
         React.createElement('span', null, 'Meetings')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Docs')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Account')
       )
     )

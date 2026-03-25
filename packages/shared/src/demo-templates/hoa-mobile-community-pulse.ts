@@ -64,7 +64,7 @@ export const hoaMobileCommunityPulse: DemoTemplateDefinition = {
     ),
     React.createElement('p', { style: styles.sectionLabel }, 'Upcoming Events'),
     React.createElement('div', { style: styles.feedItemEvent },
-      React.createElement('p', { style: styles.feedTypeEvent }, '🌿 Community Event'),
+      React.createElement('p', { style: styles.feedTypeEvent }, 'Community Event'),
       React.createElement('p', { style: styles.feedTitle }, 'Spring Cleanup Day'),
       React.createElement('p', { style: styles.feedBody }, 'Help us beautify the neighborhood! Supplies provided. Rain date: April 12.'),
       React.createElement('p', { style: styles.feedMeta }, 'April 5 · 9:00 AM · Park Entrance'),
@@ -72,13 +72,13 @@ export const hoaMobileCommunityPulse: DemoTemplateDefinition = {
     ),
     React.createElement('p', { style: styles.sectionLabel }, 'Community News'),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedType }, '📢 Announcement'),
+      React.createElement('p', { style: styles.feedType }, 'Announcement'),
       React.createElement('p', { style: styles.feedTitle }, 'Speed Bumps Approved for Oak Lane'),
       React.createElement('p', { style: styles.feedBody }, 'The board voted to install traffic calming on Oak Lane following resident petitions.'),
       React.createElement('p', { style: styles.feedMeta }, 'Board Decision · 2 days ago')
     ),
     React.createElement('div', { style: styles.feedItem },
-      React.createElement('p', { style: styles.feedType }, '🔧 Maintenance'),
+      React.createElement('p', { style: styles.feedType }, 'Maintenance'),
       React.createElement('p', { style: styles.feedTitle }, 'Irrigation System Serviced'),
       React.createElement('p', { style: styles.feedBody }, 'Common area irrigation has been repaired and recalibrated for the spring season.'),
       React.createElement('p', { style: styles.feedMeta }, 'Property Manager · 4 days ago')
@@ -86,19 +86,15 @@ export const hoaMobileCommunityPulse: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItemActive },
-        React.createElement('span', { style: styles.navIcon }, '📡'),
         React.createElement('span', null, 'Pulse')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '🗓️'),
         React.createElement('span', null, 'Events')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Docs')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Account')
       )
     )

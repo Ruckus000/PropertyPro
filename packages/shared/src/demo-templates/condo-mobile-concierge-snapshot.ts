@@ -57,22 +57,18 @@ export const condoMobileConciergeSnapshot: DemoTemplateDefinition = {
     React.createElement('p', { style: styles.sectionLabel }, 'Quick Access'),
     React.createElement('div', { style: styles.grid },
       React.createElement('div', { style: styles.cardAccent },
-        React.createElement('div', { style: styles.cardIconWrap }, '🔧'),
         React.createElement('p', { style: styles.cardLabel }, 'Maintenance'),
         React.createElement('p', { style: styles.cardSub }, 'Submit a request')
       ),
       React.createElement('div', { style: styles.card },
-        React.createElement('div', { style: styles.cardIconWrap }, '📄'),
         React.createElement('p', { style: styles.cardLabel }, 'Documents'),
         React.createElement('p', { style: styles.cardSub }, '12 files available')
       ),
       React.createElement('div', { style: styles.card },
-        React.createElement('div', { style: styles.cardIconWrap }, '📅'),
         React.createElement('p', { style: styles.cardLabel }, 'Meetings'),
         React.createElement('p', { style: styles.cardSub }, 'Next: Tue 7pm')
       ),
       React.createElement('div', { style: styles.card },
-        React.createElement('div', { style: styles.cardIconWrap }, '💬'),
         React.createElement('p', { style: styles.cardLabel }, 'Messages'),
         React.createElement('p', { style: styles.cardSub }, '2 unread')
       )
@@ -95,19 +91,15 @@ export const condoMobileConciergeSnapshot: DemoTemplateDefinition = {
     React.createElement('div', { style: { height: '64px' } }),
     React.createElement('nav', { style: styles.bottomNav },
       React.createElement('div', { style: styles.navItemActive },
-        React.createElement('span', { style: styles.navIcon }, '🏠'),
         React.createElement('span', null, 'Home')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '🔧'),
         React.createElement('span', null, 'Requests')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '📄'),
         React.createElement('span', null, 'Docs')
       ),
       React.createElement('div', { style: styles.navItem },
-        React.createElement('span', { style: styles.navIcon }, '👤'),
         React.createElement('span', null, 'Account')
       )
     )
