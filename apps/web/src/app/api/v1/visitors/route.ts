@@ -158,8 +158,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const rawHostUnitId = searchParams.get('hostUnitId');
   const hostUnitId = rawHostUnitId ? parsePositiveInt(rawHostUnitId, 'hostUnitId') : undefined;
   const onlyActive = searchParams.get('active') === 'true';
-  const guestType = searchParams.get('guestType') ?? undefined;
-  const status = searchParams.get('status') ?? undefined;
+  const validGuestTypes = new Set(['one_time', 'recurring', 'permanent', 'vendor']);
+  const validStatuses = new Set(['expected', 'checked_in', 'checked_out', 'expired', 'overstayed', 'revoked', 'revoked_on_site']);
+  const rawGuestType = searchParams.get('guestType');
+  const rawStatus = searchParams.get('status');
+  const guestType = rawGuestType && validGuestTypes.has(rawGuestType) ? rawGuestType : undefined;
+  const status = rawStatus && validStatuses.has(rawStatus) ? rawStatus : undefined;
 
   let allowedUnitIds: number[] | undefined;
   if (isResidentRole(membership.role)) {

@@ -11,6 +11,7 @@ import {
   type VisitorListItem,
 } from '@/hooks/use-visitors';
 import { fetchDeniedMatches, type DeniedMatchItem } from '@/hooks/use-denied-visitors';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { DataTable } from '@/components/shared/data-table';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -62,7 +63,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
   const [revokeTarget, setRevokeTarget] = useState<VisitorListItem | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
 
-  const { data: visitors, isLoading } = useVisitors(
+  const { data: visitors, isLoading, isError } = useVisitors(
     communityId,
     guestTypeFilter === 'all' ? undefined : { guestType: guestTypeFilter },
   );
@@ -95,11 +96,16 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
 
   const handleCheckIn = useCallback(
     async (visitor: VisitorListItem) => {
-      const matches = await fetchDeniedMatches(
-        communityId,
-        visitor.visitorName,
-        visitor.vehiclePlate,
-      );
+      let matches: DeniedMatchItem[] = [];
+      try {
+        matches = await fetchDeniedMatches(
+          communityId,
+          visitor.visitorName,
+          visitor.vehiclePlate,
+        );
+      } catch {
+        // Denied-match check is best-effort — proceed with check-in on failure
+      }
 
       if (matches.length > 0) {
         setPendingMatches(matches);
@@ -180,6 +186,9 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
             </Button>
           </div>
 
+          {isError ? (
+            <AlertBanner status="danger" title="We couldn't load visitors. Please try again." />
+          ) : (
           <div className="overflow-x-auto">
             <DataTable
               columns={columns}
@@ -197,6 +206,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
               }
             />
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="denied">

@@ -9,6 +9,17 @@ import {
   useUpdateDeniedVisitor,
   type DeniedVisitorListItem,
 } from '@/hooks/use-denied-visitors';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/shared/data-table';
@@ -103,14 +114,34 @@ export function DeniedVisitorsTab({ communityId }: DeniedVisitorsTabProps) {
           >
             {row.original.isActive ? 'Deactivate' : 'Reactivate'}
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-status-danger hover:text-status-danger"
-            onClick={() => void deleteDeniedVisitor.mutateAsync(row.original.id)}
-          >
-            Delete
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-status-danger hover:text-status-danger"
+              >
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete denied-entry record?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will remove {row.original.fullName} from the denied list.
+                  They will no longer be flagged during check-in.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => void deleteDeniedVisitor.mutateAsync(row.original.id)}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       ),
     },

@@ -755,6 +755,24 @@ export async function revokeVisitorPassesForUser(
       inArray(visitorLog.guestType, ['recurring', 'permanent']),
     ),
   );
+
+  if (result.length > 0) {
+    const revokedIds = result.map((row) => (row as unknown as { id: number }).id);
+    await logAuditEvent({
+      userId: 'system',
+      communityId,
+      action: 'update',
+      resourceType: 'visitor_log',
+      resourceId: revokedIds.join(','),
+      newValues: { revokedAt: new Date(), revokedByUserId: null },
+      metadata: {
+        transition: 'cascade_revoke',
+        reason: `Resident ${userId} removed from community`,
+        count: result.length,
+      },
+    });
+  }
+
   return result.length;
 }
 

@@ -547,13 +547,6 @@
       "when": 1774560000000,
       "tag": "0117_visitor_system_upgrade",
       "breakpoints": true
-    },
-    {
-      "idx": 118,
-      "version": "7",
-      "when": 1774563600000,
-      "tag": "0118_visitor_user_fk_alignment",
-      "breakpoints": true
     }
   ]
 }
