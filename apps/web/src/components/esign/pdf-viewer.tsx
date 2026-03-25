@@ -211,13 +211,13 @@ export function PdfViewer({
   if (error) {
     return (
       <div
-        className={`flex flex-col items-center justify-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12 ${className ?? ''}`}
+        className={`flex flex-col items-center justify-center gap-4 rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
       >
-        <p className="text-sm text-[var(--status-danger)]">{error}</p>
+        <p className="text-sm text-status-danger">{error}</p>
         <button
           type="button"
           onClick={() => void loadDocument()}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--interactive-primary-hover)] transition-colors"
+          className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover transition-colors"
         >
           <RefreshCw className="size-4" />
           Retry
@@ -229,11 +229,11 @@ export function PdfViewer({
   if (loading) {
     return (
       <div
-        className={`flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12 ${className ?? ''}`}
+        className={`flex items-center justify-center rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
       >
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
-          <p className="text-sm text-[var(--text-tertiary)]">Loading PDF...</p>
+          <Loader2 className="size-8 animate-spin text-content-tertiary" />
+          <p className="text-sm text-content-tertiary">Loading PDF...</p>
         </div>
       </div>
     );
@@ -268,12 +268,12 @@ export function PdfViewer({
             type="button"
             onClick={() => onPageChange(Math.max(0, currentPage - 1))}
             disabled={currentPage === 0}
-            className="inline-flex items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Previous page"
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="text-sm text-[var(--text-secondary)] tabular-nums">
+          <span className="text-sm text-content-secondary tabular-nums">
             Page {currentPage + 1} of {totalPages}
           </span>
           <button
@@ -282,7 +282,7 @@ export function PdfViewer({
               onPageChange(Math.min(totalPages - 1, currentPage + 1))
             }
             disabled={currentPage >= totalPages - 1}
-            className="inline-flex items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Next page"
           >
             <ChevronRight className="size-4" />
