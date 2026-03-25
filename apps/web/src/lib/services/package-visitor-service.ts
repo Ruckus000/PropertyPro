@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   packageLog,
   visitorLog,
+  deniedVisitors,
   createScopedClient,
   logAuditEvent,
   userRoles,
@@ -720,4 +721,195 @@ export async function revokeVisitorPassesForUser(
     ),
   );
   return result.length;
+}
+
+// ---------------------------------------------------------------------------
+// Denied Visitors
+// ---------------------------------------------------------------------------
+
+export interface DeniedVisitorRow {
+  [key: string]: unknown;
+  id: number;
+  communityId: number;
+  fullName: string;
+  reason: string;
+  deniedByUserId: string | null;
+  vehiclePlate: string | null;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeniedMatchResult {
+  [key: string]: unknown;
+  id: number;
+  fullName: string;
+  vehiclePlate: string | null;
+  reason: string;
+  isActive: boolean;
+}
+
+export interface CreateDeniedVisitorInput {
+  fullName: string;
+  reason: string;
+  vehiclePlate?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateDeniedVisitorInput {
+  fullName?: string;
+  reason?: string;
+  vehiclePlate?: string | null;
+  notes?: string | null;
+  isActive?: boolean;
+}
+
+export async function createDeniedVisitor(
+  communityId: number,
+  actorUserId: string,
+  input: CreateDeniedVisitorInput,
+  requestId: string | null,
+): Promise<DeniedVisitorRow> {
+  const scoped = createScopedClient(communityId);
+  const [created] = await scoped.insert(deniedVisitors, {
+    communityId,
+    fullName: input.fullName,
+    reason: input.reason,
+    deniedByUserId: actorUserId,
+    vehiclePlate: input.vehiclePlate ?? null,
+    notes: input.notes ?? null,
+  });
+
+  if (!created) {
+    throw new Error('Failed to create denied visitor entry');
+  }
+
+  const row = created as unknown as DeniedVisitorRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'create',
+    resourceType: 'denied_visitors',
+    resourceId: String(row.id),
+    newValues: row,
+    metadata: { requestId },
+  });
+
+  return row;
+}
+
+export async function listDeniedVisitors(
+  communityId: number,
+  onlyActive?: boolean,
+): Promise<DeniedVisitorRow[]> {
+  const scoped = createScopedClient(communityId);
+  const additionalWhere =
+    onlyActive !== undefined ? eq(deniedVisitors.isActive, onlyActive) : undefined;
+  const rows = await scoped
+    .selectFrom<DeniedVisitorRow>(deniedVisitors, {}, additionalWhere)
+    .orderBy(desc(deniedVisitors.createdAt));
+
+  return rows;
+}
+
+export async function updateDeniedVisitor(
+  communityId: number,
+  deniedId: number,
+  actorUserId: string,
+  input: UpdateDeniedVisitorInput,
+  requestId: string | null,
+): Promise<DeniedVisitorRow> {
+  const scoped = createScopedClient(communityId);
+  const existing = await scoped.selectFrom<DeniedVisitorRow>(
+    deniedVisitors,
+    {},
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!existing[0]) throw new NotFoundError('Denied visitor entry not found');
+
+  const [updated] = await scoped.update(
+    deniedVisitors,
+    { ...input, updatedAt: new Date() },
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!updated) throw new NotFoundError('Denied visitor entry not found');
+
+  const row = updated as unknown as DeniedVisitorRow;
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'update',
+    resourceType: 'denied_visitors',
+    resourceId: String(deniedId),
+    oldValues: existing[0],
+    newValues: row,
+    metadata: { requestId },
+  });
+
+  return row;
+}
+
+export async function softDeleteDeniedVisitor(
+  communityId: number,
+  deniedId: number,
+  actorUserId: string,
+  requestId: string | null,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  const existing = await scoped.selectFrom<DeniedVisitorRow>(
+    deniedVisitors,
+    {},
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  if (!existing[0]) throw new NotFoundError('Denied visitor entry not found');
+
+  await scoped.update(
+    deniedVisitors,
+    { deletedAt: new Date(), updatedAt: new Date() },
+    eq(deniedVisitors.id, deniedId),
+  );
+
+  await logAuditEvent({
+    userId: actorUserId,
+    communityId,
+    action: 'delete',
+    resourceType: 'denied_visitors',
+    resourceId: String(deniedId),
+    oldValues: existing[0],
+    metadata: { requestId },
+  });
+}
+
+export async function matchDeniedVisitors(
+  communityId: number,
+  name: string | null,
+  plate: string | null,
+): Promise<DeniedMatchResult[]> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<DeniedMatchResult>(
+    deniedVisitors,
+    {
+      id: deniedVisitors.id,
+      fullName: deniedVisitors.fullName,
+      vehiclePlate: deniedVisitors.vehiclePlate,
+      reason: deniedVisitors.reason,
+      isActive: deniedVisitors.isActive,
+    },
+    eq(deniedVisitors.isActive, true),
+  );
+
+  const nameNorm = name?.toLowerCase().trim() ?? null;
+  const plateNorm = plate?.toUpperCase().trim() ?? null;
+
+  return rows.filter((row) => {
+    if (nameNorm && row.fullName.toLowerCase().trim() === nameNorm) return true;
+    if (plateNorm && row.vehiclePlate?.toUpperCase().trim() === plateNorm) return true;
+    return false;
+  });
 }
