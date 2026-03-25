@@ -67,9 +67,10 @@ Wire to `createMutation` payload.
    If `fullName` is null or empty, fall back to the user's email address for `senderName`.
 2. After batch signer INSERT (see 4c), if `sendEmail: true`, loop through created signers
    and call `sendEmail()` with `EsignInvitationEmail` template
-3. Email props (required): `signerName`, `senderName` (from user lookup), `documentName`,
-   `signingUrl` (constructed from slug). Optional: `expiresAt` (pass `undefined` if null,
-   not `null`), `messageBody` (pass `undefined` if not provided).
+3. Email props (required): `signerName` (if signer has no `name`, fall back to their email
+   address), `senderName` (from user lookup), `documentName`, `signingUrl` (constructed
+   from slug). Optional: `expiresAt` (pass `undefined` if null, not `null`), `messageBody`
+   (pass `undefined` if not provided).
 4. Email failure for one signer must NOT abort the submission — wrap each send in try/catch,
    log failures, continue
 
@@ -122,6 +123,7 @@ where(and(
   lt(esignSubmissions.expiresAt, new Date())
 ))
 // Step 2: Compute effectiveStatus via getEffectiveSubmissionStatus (preserves single source of truth)
+// Return rows with effectiveStatus: 'expired' (same shape as the no-filter path)
 ```
 
 **No filter** (default): fetch all rows, compute `effectiveStatus` for each (backward-compatible).
@@ -139,9 +141,10 @@ Replace custom tab buttons (lines 44-69) with shadcn `Tabs` / `TabsList` / `Tabs
 `TabsContent`. Provides `role="tablist"`, `role="tab"`, `aria-selected`, arrow-key navigation.
 
 **Note:** The "Templates" tab is really navigation (shows a "Go to Templates" CTA card, not
-inline content). This is a pre-existing UX oddity. The Tabs swap still improves keyboard nav
-and ARIA for the "Documents" tab which IS a real tab. Redesigning the Templates tab into a
-nav link would be ideal but is out of scope for this remediation.
+inline content). Exclude it from the `Tabs` component entirely — render it as a standalone
+nav link (`<Link>` styled as a tab) alongside the `TabsList`. This avoids an empty
+`role="tabpanel"` that would violate ARIA semantics. The `Tabs` component wraps only the
+"Documents" tab which has real inline content.
 
 ### 3b. shadcn Tabs for SignatureCapture internal tabs
 
