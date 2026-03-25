@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
+import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -98,6 +99,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </p>
             </Link>
           </div>
+        </div>
+      )}
+      {membership.isAdmin && (
+        <div>
+          <h2 className="mb-2 text-xl font-semibold">Support Access</h2>
+          <p className="mb-4 text-sm text-gray-600">
+            Control whether PropertyPro support staff can access this community for troubleshooting.
+          </p>
+          <SupportAccessSettings />
         </div>
       )}
     </div>
