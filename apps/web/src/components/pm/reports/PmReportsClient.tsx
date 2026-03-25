@@ -9,6 +9,7 @@ import { ComplianceReport } from './ComplianceReport';
 import { OccupancyReport } from './OccupancyReport';
 import { ViolationReport } from './ViolationReport';
 import { DelinquencyReport } from './DelinquencyReport';
+import { PageHeader } from '@/components/shared/page-header';
 import type { ReportType } from '@/hooks/use-pm-reports';
 
 interface Community {
@@ -39,7 +40,9 @@ export function PmReportsClient({ communities }: PmReportsClientProps) {
 
   return (
     <div className="space-y-6">
-      {/* Filters — page title handled by AppTopBar */}
+      <PageHeader title="Reports" description="Portfolio analytics & reports" />
+
+      {/* Filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <ReportFilters communities={communities} />
       </div>

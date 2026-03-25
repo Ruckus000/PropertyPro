@@ -11,6 +11,7 @@ import { DeadlineRibbon } from "./deadline-ribbon";
 import { ComplianceOnboarding } from "./compliance-onboarding";
 import { ComplianceActivityFeed } from "./compliance-activity-feed";
 import { ComplianceScoreRing, getScoreTier } from "./compliance-score-ring";
+import { PageHeader } from "@/components/shared/page-header";
 import { FadeIn } from "@/components/motion";
 import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
 import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
@@ -383,6 +384,8 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      <PageHeader title="Compliance" description="Statutory requirements" />
+
       {/* ── Hero Metric ── */}
       <HeroMetric
         statusCounts={statusCounts}
