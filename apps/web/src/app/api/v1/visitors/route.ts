@@ -21,6 +21,10 @@ import {
   listVisitorsForCommunity,
 } from '@/lib/services/package-visitor-service';
 
+const createVisitorCommunitySchema = z.object({
+  communityId: z.number().int().positive(),
+});
+
 const createVisitorSchema = z
   .object({
     communityId: z.number().int().positive(),
@@ -54,13 +58,6 @@ const createVisitorSchema = z
           code: z.ZodIssueCode.custom,
           path: ['expectedArrival'],
           message: 'expectedArrival is required for one-time passes',
-        });
-      }
-      if (data.expectedDurationMinutes == null) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['expectedDurationMinutes'],
-          message: 'expectedDurationMinutes is required for one-time passes',
         });
       }
     }
@@ -195,19 +192,25 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const body: unknown = await req.json();
-  const parsed = createVisitorSchema.safeParse(body);
+  const scope = createVisitorCommunitySchema.safeParse(body);
+  if (!scope.success) {
+    throw new ValidationError('Invalid visitor payload', {
+      fields: formatZodErrors(scope.error),
+    });
+  }
 
+  const communityId = parseCommunityIdFromBody(req, scope.data.communityId);
+  const membership = await requireCommunityMembership(communityId, actorUserId);
+
+  await requireVisitorLoggingEnabled(membership);
+  requireVisitorsWritePermission(membership);
+
+  const parsed = createVisitorSchema.safeParse(body);
   if (!parsed.success) {
     throw new ValidationError('Invalid visitor payload', {
       fields: formatZodErrors(parsed.error),
     });
   }
-
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  await requireVisitorLoggingEnabled(membership);
-  requireVisitorsWritePermission(membership);
 
   const scoped = createScopedClient(communityId);
   if (isResidentRole(membership.role)) {
