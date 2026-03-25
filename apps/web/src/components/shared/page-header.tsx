@@ -1,18 +1,16 @@
 /**
- * PageHeader — Standardized page header below AppTopBar.
+ * PageHeader — Standardized page header with title, description, and actions.
  *
- * AppTopBar owns the h1 page title. This component renders:
- * - Optional subtitle/description
- * - Optional action buttons
- * - Optional breadcrumb area
- *
- * Does NOT render an h1 to avoid double-heading issues.
+ * Renders the page-level h1 heading. Used at the top of content areas
+ * below AppTopBar to establish page identity and provide actions.
  */
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** Page title — rendered as h1 */
+  title: string;
   /** Subtitle or description text */
   description?: React.ReactNode;
   /** Action buttons (right-aligned on desktop) */
@@ -22,6 +20,7 @@ interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function PageHeader({
+  title,
   description,
   actions,
   breadcrumb,
@@ -42,6 +41,9 @@ export function PageHeader({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-content">
+            {title}
+          </h1>
           {description && (
             <p className="text-sm text-content-secondary">{description}</p>
           )}
