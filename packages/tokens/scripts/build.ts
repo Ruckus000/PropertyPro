@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { primitiveColors } from "../src/primitives";
-import { tokenDefinitions, toCssValue } from "../src/semantic";
+import { tokenDefinitions, toCssValue, type TokenRef } from "../src/semantic";
 
 // ─── camelCase → kebab-case ───────────────────────────────────────────────────
 
@@ -134,8 +134,8 @@ function buildSemanticBlock(): string {
   lines.push("  /* Status */");
   const statusEntries = Object.entries(t.status);
   for (let i = 0; i < statusEntries.length; i++) {
-    const [variant, faces] = statusEntries[i];
-    for (const [face, ref] of Object.entries(faces)) {
+    const [variant, faces] = statusEntries[i]!;
+    for (const [face, ref] of Object.entries(faces as Record<string, TokenRef>)) {
       let varName: string;
       switch (face) {
         case "foreground":

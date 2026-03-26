@@ -3,11 +3,11 @@ import { primitiveColors } from './primitives';
 type ColorScale = keyof typeof primitiveColors;
 type ColorStep<S extends ColorScale> = keyof (typeof primitiveColors)[S] & number;
 
-/** Plain reference to a primitive color — step is type-constrained to valid keys */
-export type PrimitiveRef<S extends ColorScale = ColorScale> = {
+/** Plain reference to a primitive color */
+export type PrimitiveRef = {
   kind: 'primitive';
-  scale: S;
-  step: ColorStep<S>;
+  scale: ColorScale;
+  step: number;
 };
 
 /** Theme-overridable reference with CSS var fallback chain */
@@ -24,7 +24,8 @@ export type TokenRef = PrimitiveRef | ThemeRef;
 /** Resolve to hex — always returns the concrete fallback value */
 export function toHex(ref: TokenRef): string {
   const prim = ref.kind === 'theme' ? ref.fallback : ref;
-  return primitiveColors[prim.scale][prim.step as ColorStep<typeof prim.scale>] as string;
+  const scale = primitiveColors[prim.scale] as Record<number, string>;
+  return scale[prim.step]!;
 }
 
 /** Resolve to CSS value — preserves var() indirection and theme fallbacks */
@@ -38,7 +39,7 @@ export function toCssValue(ref: TokenRef): string {
 
 // --- Helper to reduce boilerplate ---
 
-function prim<S extends ColorScale>(scale: S, step: ColorStep<S>): PrimitiveRef<S> {
+function prim<S extends ColorScale>(scale: S, step: ColorStep<S>): PrimitiveRef {
   return { kind: 'primitive', scale, step };
 }
 
