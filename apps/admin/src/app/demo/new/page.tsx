@@ -109,7 +109,9 @@ export default function DemoNewPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [basicsTrigger, setBasicsTrigger] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // ------ Preview fetching with debounce ------
 
@@ -149,13 +151,18 @@ export default function DemoNewPage() {
 
   // Navigate to next step, marking current as completed
   const goNext = useCallback(() => {
+    if (step === 'basics' && !config.prospectName.trim()) {
+      setBasicsTrigger(prev => prev + 1);
+      return;
+    }
     const currentIndex = STEP_ORDER.indexOf(step);
     const nextStep = STEP_ORDER[currentIndex + 1];
     if (currentIndex < STEP_ORDER.length - 1 && nextStep) {
       setCompletedSteps((prev) => new Set(prev).add(step));
       setStep(nextStep);
+      contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [step]);
+  }, [step, config.prospectName]);
 
   // Navigate to previous step
   const goBack = useCallback(() => {
@@ -163,6 +170,7 @@ export default function DemoNewPage() {
     const prevStep = STEP_ORDER[currentIndex - 1];
     if (currentIndex > 0 && prevStep) {
       setStep(prevStep);
+      contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [step]);
 
@@ -209,6 +217,35 @@ export default function DemoNewPage() {
   const previewEmphasis = step === 'mobile' ? 'mobile' as const : step === 'public-site' ? 'public' as const : 'both' as const;
   const previewEmpty = !config.prospectName.trim();
 
+  // Computed error steps for stepper
+  const errorSteps = new Set<string>();
+  if (completedSteps.has('basics') && !config.prospectName.trim()) {
+    errorSteps.add('basics');
+  }
+
+  // Enter key handler — advance on single-line inputs only
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+        e.preventDefault();
+        goNext();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [goNext]);
+
+  // Warn before leaving if wizard has progress
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (config.prospectName.trim() || step !== 'basics') {
+        e.preventDefault();
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [config.prospectName, step]);
+
   return (
     <AdminLayout>
       <ResizableSplit
@@ -235,18 +272,23 @@ export default function DemoNewPage() {
                   steps={WIZARD_STEPS}
                   currentStep={step}
                   completedSteps={completedSteps}
+                  errorSteps={errorSteps}
                   onStepClick={goToStep}
                 />
               </div>
             )}
 
             {/* Scrollable step content */}
-            <div className="flex-1 overflow-y-auto px-6 pb-4">
+            <div ref={contentRef} className="flex-1 overflow-y-auto px-6 pb-4">
+              <div aria-live="polite" className="sr-only">
+                {`Step ${STEP_ORDER.indexOf(step) + 1} of ${STEP_ORDER.length}: ${WIZARD_STEPS.find(s => s.id === step)?.label}`}
+              </div>
               {step === 'basics' && (
                 <BasicsStep
                   config={config}
                   onConfigChange={(updater) => setConfig((prev) => updater(prev))}
                   onCommunityTypeChange={handleCommunityTypeChange}
+                  triggerValidation={basicsTrigger}
                 />
               )}
 
