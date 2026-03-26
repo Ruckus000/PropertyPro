@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { NavRail } from "../../src/components/NavRail";
-import type { NavRailItem } from "../../src/components/NavRail";
+import type { NavRailItem, NavRailSection } from "../../src/components/NavRail";
 
 function TestIcon({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
   return (
@@ -27,6 +27,49 @@ const defaultItems: NavRailItem[] = [
     badgeVariant: "danger",
   },
   { id: "settings", label: "Settings", icon: TestIcon },
+];
+
+const sectionItems: NavRailSection[] = [
+  {
+    label: null,
+    items: [{ id: "dashboard", label: "Dashboard", icon: TestIcon }],
+  },
+  {
+    label: "Community",
+    items: [
+      { id: "announcements", label: "Announcements", icon: TestIcon, badge: 2 },
+      { id: "meetings", label: "Meetings", icon: TestIcon },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [{ id: "governance", label: "Governance", icon: TestIcon }],
+  },
+];
+
+const itemsWithChildren: NavRailSection[] = [
+  {
+    label: null,
+    items: [
+      {
+        id: "announcements",
+        label: "Announcements",
+        icon: TestIcon,
+        href: "/announcements",
+        badge: 2,
+        children: [
+          { id: "announcements-all", label: "All announcements", href: "/announcements" },
+          {
+            id: "announcements-drafts",
+            label: "Drafts",
+            href: "/announcements/drafts",
+            badge: 1,
+          },
+        ],
+      },
+      { id: "meetings", label: "Meetings", icon: TestIcon, href: "/meetings" },
+    ],
+  },
 ];
 
 function renderNavRail(overrides: Partial<React.ComponentProps<typeof NavRail>> = {}) {
@@ -63,6 +106,17 @@ describe("NavRail", () => {
     it("renders explicit dark classes on nav", () => {
       renderNavRail();
       expect(screen.getByRole("navigation").className).toContain("dark:bg-gray-900");
+    });
+
+    it("uses nav semantic tokens for item treatments", () => {
+      renderNavRail();
+
+      const activeItem = screen.getByLabelText("Dashboard");
+      const inactiveItem = screen.getByLabelText("Documents");
+
+      expect(activeItem.className).toContain("bg-[var(--nav-bg-active)]");
+      expect(inactiveItem.className).toContain("text-[var(--nav-text-inactive)]");
+      expect(inactiveItem.className).toContain("hover:bg-[var(--nav-bg-hover)]");
     });
   });
 
@@ -145,6 +199,49 @@ describe("NavRail", () => {
     });
   });
 
+  describe("Section-based rendering", () => {
+    it("renders section labels for labeled sections when expanded", () => {
+      renderNavRail({
+        items: undefined,
+        sections: sectionItems,
+      });
+
+      expect(screen.getByText("Community")).toBeTruthy();
+      expect(screen.getByText("Admin")).toBeTruthy();
+    });
+
+    it("does not render a label for null-label sections", () => {
+      renderNavRail({
+        items: undefined,
+        sections: sectionItems,
+      });
+
+      const labels = document.querySelectorAll('[data-testid="section-label"]');
+      expect(labels).toHaveLength(2);
+    });
+
+    it("renders dividers between sections", () => {
+      renderNavRail({
+        items: undefined,
+        sections: sectionItems,
+      });
+
+      const dividers = document.querySelectorAll('[data-testid="section-divider"]');
+      expect(dividers).toHaveLength(2);
+    });
+
+    it("hides section labels when collapsed", () => {
+      renderNavRail({
+        items: undefined,
+        sections: sectionItems,
+        expanded: false,
+      });
+
+      expect(screen.queryByText("Community")).toBeNull();
+      expect(screen.queryByText("Admin")).toBeNull();
+    });
+  });
+
   describe("Badge behavior", () => {
     it("shows badge count when expanded", () => {
       renderNavRail({ expanded: true });
@@ -155,6 +252,94 @@ describe("NavRail", () => {
       renderNavRail({ expanded: false });
       const compliance = screen.getByLabelText("Compliance");
       expect(compliance.querySelector(".size-2.rounded-full")).toBeTruthy();
+    });
+  });
+
+  describe("Children and disclosure", () => {
+    it("renders a chevron button for items with children", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "meetings",
+      });
+
+      const chevron = screen.getByLabelText("Expand Announcements");
+      expect(chevron).toBeTruthy();
+      expect(chevron.tagName).toBe("BUTTON");
+      expect(chevron.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("expands children when chevron is clicked", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "meetings",
+      });
+
+      const chevron = screen.getByLabelText("Expand Announcements");
+      fireEvent.click(chevron);
+
+      expect(chevron.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByText("All announcements")).toBeTruthy();
+      expect(screen.getByText("Drafts")).toBeTruthy();
+    });
+
+    it("renders the parent row as a link, not a button", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "meetings",
+      });
+
+      const parentLink = screen.getByText("Announcements").closest("a");
+      expect(parentLink).toBeTruthy();
+      expect(parentLink?.getAttribute("href")).toBe("/announcements");
+    });
+
+    it("gives the parent a lighter treatment when a child is active", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "announcements-drafts",
+      });
+
+      const parentRow = screen.getByText("Announcements").closest('[data-testid="nav-item"]');
+      expect(parentRow?.className).not.toContain("bg-[var(--nav-bg-active)]");
+      expect(parentRow?.className).toContain("text-[var(--nav-text-active)]");
+    });
+
+    it("auto-expands the parent when a child is active", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "announcements-drafts",
+      });
+
+      expect(screen.getByText("Drafts")).toBeTruthy();
+      const draftsItem = screen.getByText("Drafts").closest("[aria-current]");
+      expect(draftsItem?.getAttribute("aria-current")).toBe("page");
+    });
+
+    it("hides children when the sidebar is collapsed", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "announcements-drafts",
+        expanded: false,
+      });
+
+      expect(screen.queryByText("All announcements")).toBeNull();
+      expect(screen.queryByText("Drafts")).toBeNull();
+    });
+
+    it("does not render a chevron for items without children", () => {
+      renderNavRail({
+        items: undefined,
+        sections: itemsWithChildren,
+        activeView: "meetings",
+      });
+
+      expect(screen.queryByLabelText("Expand Meetings")).toBeNull();
     });
   });
 
@@ -173,6 +358,20 @@ describe("NavRail", () => {
       const onToggle = vi.fn();
       renderNavRail({ expanded: false, onToggle });
       expect(screen.getByLabelText("Expand sidebar")).toBeTruthy();
+    });
+
+    it('shows "Collapse" text when expanded', () => {
+      const onToggle = vi.fn();
+      renderNavRail({ onToggle });
+
+      expect(screen.getByText("Collapse")).toBeTruthy();
+    });
+
+    it('hides the "Collapse" text when collapsed', () => {
+      const onToggle = vi.fn();
+      renderNavRail({ expanded: false, onToggle });
+
+      expect(screen.queryByText("Collapse")).toBeNull();
     });
 
     it("is omitted when onToggle is undefined", () => {
