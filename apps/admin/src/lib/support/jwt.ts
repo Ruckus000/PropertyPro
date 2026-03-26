@@ -1,7 +1,7 @@
 /**
  * JWT signing utility for support access sessions.
  *
- * Signs a short-lived token (1 hour) that the admin app issues when a
+ * Signs a short-lived token (SUPPORT_SESSION_MAX_TTL_HOURS) that the admin app issues when a
  * support session is created. The token is verified by the web app's
  * support-access middleware to grant a scoped impersonation session.
  *
@@ -34,7 +34,7 @@ function getSecret(): Uint8Array {
 type SignPayload = Omit<SupportSessionJwtPayload, 'exp' | 'iat'>;
 
 /**
- * Sign a support-access JWT valid for 1 hour.
+ * Sign a support-access JWT valid for SUPPORT_SESSION_MAX_TTL_HOURS hours (currently 30 min).
  * Uses RFC 8693 `act` claim to identify the impersonating admin.
  */
 export async function signSupportToken(
