@@ -175,7 +175,8 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           {/* Drawer */}
           <div className="relative z-10 h-full overflow-y-auto">
             <AppSidebar
-              collapsible={false}
+              expandedOverride={true}
+              showCollapseToggle={false}
               onNavigate={closeMobileNav}
               communityId={community?.id ?? null}
               communityName={community?.name ?? null}

@@ -1,9 +1,9 @@
 /**
  * Navigation item configuration for the authenticated app shell.
  *
- * Items remain the canonical source of truth for routing, gating, and
- * active-state matching. Section groupings are derived from this list so
- * the sidebar can render the new section model without duplicating config.
+ * Items are the canonical source of truth for routing, gating, and
+ * active-state matching. NAV_SECTIONS defines the visual grouping
+ * (null/Community/Management/Admin) consumed by AppSidebar → NavRail.
  */
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -60,8 +60,6 @@ export interface NavItemConfig {
   roles?: readonly CommunityRole[];
   /** Only show when this community feature is enabled. */
   featureKey?: keyof CommunityFeatures;
-  /** Navigation group for visual separation. */
-  group: 'main' | 'admin';
   /** Pathname prefixes used for active-state matching. */
   matchPrefixes: readonly string[];
 }
@@ -78,7 +76,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     href: (cid) => `/dashboard?communityId=${cid}`,
-    group: 'main',
     matchPrefixes: ['/dashboard'],
   },
   {
@@ -86,7 +83,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Documents',
     icon: FileText,
     href: (cid) => `/communities/${cid}/documents`,
-    group: 'main',
     matchPrefixes: ['/documents'],
   },
   {
@@ -95,7 +91,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Calendar,
     href: (cid) => `/communities/${cid}/meetings`,
     featureKey: 'hasMeetings',
-    group: 'main',
     matchPrefixes: ['/meetings'],
   },
   {
@@ -103,7 +98,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Announcements',
     icon: Megaphone,
     href: (cid) => `/announcements?communityId=${cid}`,
-    group: 'main',
     matchPrefixes: ['/announcements'],
   },
   {
@@ -113,7 +107,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/maintenance/submit?communityId=${cid}`,
     children: ['maintenance-inbox'],
     featureKey: 'hasMaintenanceRequests',
-    group: 'main',
     matchPrefixes: ['/maintenance/submit'],
   },
   {
@@ -123,7 +116,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/dashboard/leases?communityId=${cid}`,
     children: ['move-in-out'],
     featureKey: 'hasLeaseTracking',
-    group: 'main',
     matchPrefixes: ['/dashboard/leases'],
   },
   {
@@ -132,7 +124,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Package,
     href: (cid) => `/dashboard/packages?communityId=${cid}`,
     featureKey: 'hasPackageLogging',
-    group: 'main',
     matchPrefixes: ['/dashboard/packages'],
   },
   {
@@ -141,7 +132,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/visitors?communityId=${cid}`,
     featureKey: 'hasVisitorLogging',
-    group: 'main',
     matchPrefixes: ['/dashboard/visitors'],
   },
   {
@@ -152,7 +142,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     children: ['assessments', 'finance'],
     roles: FINANCE_READ_NAV_ROLES,
     featureKey: 'hasFinance',
-    group: 'main',
     matchPrefixes: ['/payments'],
   },
   {
@@ -162,7 +151,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations/report?communityId=${cid}`,
     children: ['violations-inbox'],
     featureKey: 'hasViolations',
-    group: 'main',
     matchPrefixes: ['/violations/report'],
   },
 
@@ -174,7 +162,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/communities/${cid}/compliance`,
     roles: ADMIN_ROLES,
     featureKey: 'hasCompliance',
-    group: 'admin',
     matchPrefixes: ['/compliance'],
   },
   {
@@ -183,7 +170,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/residents?communityId=${cid}`,
     roles: ADMIN_ROLES,
-    group: 'admin',
     matchPrefixes: ['/dashboard/residents'],
   },
   {
@@ -193,7 +179,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/maintenance/inbox?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasMaintenanceRequests',
-    group: 'admin',
     matchPrefixes: ['/maintenance/inbox'],
   },
   {
@@ -203,7 +188,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/contracts?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasCompliance',
-    group: 'admin',
     matchPrefixes: ['/contracts'],
   },
   {
@@ -213,7 +197,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/esign?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasEsign',
-    group: 'admin',
     matchPrefixes: ['/esign'],
   },
   {
@@ -223,7 +206,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations/inbox?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasViolations',
-    group: 'admin',
     matchPrefixes: ['/violations/inbox'],
   },
   {
@@ -233,7 +215,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/dashboard/move-in-out?communityId=${cid}`,
     featureKey: 'hasLeaseTracking',
     roles: ADMIN_ROLES,
-    group: 'admin',
     matchPrefixes: ['/dashboard/move-in-out'],
   },
   {
@@ -242,7 +223,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: History,
     href: (cid) => `/audit-trail?communityId=${cid}`,
     roles: ADMIN_ROLES,
-    group: 'admin',
     matchPrefixes: ['/audit-trail'],
   },
   {
@@ -252,7 +232,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/communities/${cid}/assessments`,
     roles: ADMIN_ROLES,
     featureKey: 'hasFinance',
-    group: 'admin',
     matchPrefixes: ['/assessments'],
   },
   {
@@ -262,7 +241,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/communities/${cid}/finance`,
     roles: ADMIN_ROLES,
     featureKey: 'hasFinance',
-    group: 'admin',
     matchPrefixes: ['/finance'],
   },
 ];
@@ -313,7 +291,6 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Communities',
     icon: Building2,
     href: () => '/pm/dashboard/communities',
-    group: 'main',
     matchPrefixes: ['/pm/dashboard'],
   },
   {
@@ -321,7 +298,6 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Branding',
     icon: Paintbrush,
     href: () => '/pm/settings/branding',
-    group: 'main',
     matchPrefixes: ['/pm/settings'],
   },
   {
@@ -329,7 +305,6 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Reports',
     icon: BarChart3,
     href: () => '/pm/reports',
-    group: 'main',
     matchPrefixes: ['/pm/reports'],
   },
 ];

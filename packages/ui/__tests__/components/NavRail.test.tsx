@@ -472,18 +472,14 @@ describe("NavRail", () => {
       renderSectionNavRail({ expanded: false });
 
       const labels = screen.queryAllByTestId("section-label");
-      for (const label of labels) {
-        expect(label.className).toContain("opacity-0");
-      }
+      expect(labels).toHaveLength(0);
     });
 
     it("shows section labels when expanded", () => {
       renderSectionNavRail({ expanded: true });
 
       const labels = screen.getAllByTestId("section-label");
-      for (const label of labels) {
-        expect(label.className).toContain("opacity-100");
-      }
+      expect(labels.length).toBeGreaterThan(0);
     });
 
     it("still renders badge counts in section mode", () => {

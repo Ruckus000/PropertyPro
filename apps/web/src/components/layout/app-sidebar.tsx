@@ -34,6 +34,10 @@ interface AppSidebarProps {
   userName: string | null;
   plan: string | null;
   collapsible?: boolean;
+  /** When provided, forces expanded state regardless of sidebar context. */
+  expandedOverride?: boolean;
+  /** When false, hides the collapse toggle button independently of collapsible. */
+  showCollapseToggle?: boolean;
   onNavigate?: () => void;
 }
 
@@ -56,12 +60,15 @@ export function AppSidebar({
   userName,
   plan,
   collapsible = true,
+  expandedOverride,
+  showCollapseToggle,
   onNavigate,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { expanded, toggleExpanded } = useSidebar();
   const [upgradePrompt, setUpgradePrompt] = useState<{ planName: string } | null>(null);
-  const resolvedExpanded = collapsible ? expanded : true;
+  const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
+  const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
@@ -186,7 +193,7 @@ export function AppSidebar({
           }
         }}
         expanded={resolvedExpanded}
-        onToggle={collapsible ? toggleExpanded : undefined}
+        onToggle={resolvedShowToggle ? toggleExpanded : undefined}
         header={header}
         footer={footer}
         renderLink={({ href, className, children, onClick, ...props }) => (
