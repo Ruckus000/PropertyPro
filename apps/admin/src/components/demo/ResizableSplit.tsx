@@ -25,22 +25,23 @@ export function ResizableSplit({
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
-  const [ratio, setRatio] = useState<number>(() => {
-    if (storageKey && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(storageKey);
-        if (stored !== null) {
-          const parsed = parseFloat(stored);
-          if (!Number.isNaN(parsed) && parsed >= minLeft && parsed <= maxLeft) {
-            return parsed;
-          }
+  const [ratio, setRatio] = useState<number>(defaultRatio);
+
+  // Hydrate from localStorage after mount to avoid SSR mismatch
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored !== null) {
+        const parsed = parseFloat(stored);
+        if (!Number.isNaN(parsed) && parsed >= minLeft && parsed <= maxLeft) {
+          setRatio(parsed);
         }
-      } catch {
-        // localStorage unavailable
       }
+    } catch {
+      // localStorage unavailable
     }
-    return defaultRatio;
-  });
+  }, [storageKey, minLeft, maxLeft]);
 
   const clampRatio = useCallback(
     (value: number) => Math.min(maxLeft, Math.max(minLeft, value)),
@@ -141,7 +142,7 @@ export function ResizableSplit({
         tabIndex={0}
         className={cn(
           'flex h-full w-1.5 flex-shrink-0 cursor-col-resize flex-col items-center justify-center gap-1',
-          'hover:bg-[var(--interactive-primary)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)]',
+          'hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)]',
           'transition-colors',
         )}
         style={{ borderLeft: '1px solid var(--border-default)', borderRight: '1px solid var(--border-default)' }}

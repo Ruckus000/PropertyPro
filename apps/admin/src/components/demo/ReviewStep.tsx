@@ -28,7 +28,7 @@ export interface ReviewStepProps {
   onEditStep: (stepId: string) => void;
 }
 
-export default function ReviewStep({ config, onEditStep }: ReviewStepProps) {
+export function ReviewStep({ config, onEditStep }: ReviewStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -37,9 +37,6 @@ export default function ReviewStep({ config, onEditStep }: ReviewStepProps) {
 
   const publicTemplate = getTemplateById(
     config.publicTemplateId as Parameters<typeof getTemplateById>[0],
-  );
-  const mobileTemplate = getTemplateById(
-    config.mobileTemplateId as Parameters<typeof getTemplateById>[0],
   );
   const strategy = getStrategyById(config.contentStrategy);
 
@@ -122,16 +119,6 @@ export default function ReviewStep({ config, onEditStep }: ReviewStepProps) {
               {publicTemplate?.name ?? config.publicTemplateId}
             </div>
           </div>
-
-          {/* Mobile Template */}
-          <div>
-            <div className="text-[10px] text-[var(--text-tertiary,var(--text-secondary))]">
-              Mobile Template
-            </div>
-            <div className="text-sm font-medium text-[var(--text-primary)]">
-              {mobileTemplate?.name ?? config.mobileTemplateId}
-            </div>
-          </div>
         </div>
 
         {/* Quick-edit chips */}
@@ -149,13 +136,6 @@ export default function ReviewStep({ config, onEditStep }: ReviewStepProps) {
             className="text-[10px] text-[var(--text-secondary)] bg-[var(--surface-subtle,#f1f5f9)] px-2.5 py-1 rounded-[6px] cursor-pointer hover:bg-[var(--surface-muted)]"
           >
             Change Public Template
-          </button>
-          <button
-            type="button"
-            onClick={() => onEditStep('mobile')}
-            className="text-[10px] text-[var(--text-secondary)] bg-[var(--surface-subtle,#f1f5f9)] px-2.5 py-1 rounded-[6px] cursor-pointer hover:bg-[var(--surface-muted)]"
-          >
-            Change Mobile Template
           </button>
         </div>
       </div>

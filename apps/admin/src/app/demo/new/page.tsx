@@ -3,7 +3,7 @@
 /**
  * Demo Generator Wizard — side-by-side configurator layout.
  *
- * Steps: Basics → Public Site → Mobile → Review
+ * Steps: Basics → Public Site → Review
  * Left panel: header + PillStepper + step content + WizardFooter
  * Right panel: live PreviewPanel with debounced fetch
  */
@@ -22,17 +22,16 @@ import { PillStepper, type PillStep } from '@/components/demo/PillStepper';
 import { ResizableSplit } from '@/components/demo/ResizableSplit';
 import { PreviewPanel } from '@/components/demo/PreviewPanel';
 import { PreviewModal } from '@/components/demo/PreviewModal';
-import ReviewStep from '@/components/demo/ReviewStep';
+import { ReviewStep } from '@/components/demo/ReviewStep';
 import { WizardFooter } from '@/components/demo/WizardFooter';
 import { BasicsStep } from '@/components/demo/BasicsStep';
 import { PublicSiteStep } from '@/components/demo/PublicSiteStep';
-import { MobileStep } from '@/components/demo/MobileStep';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type WizardStep = 'basics' | 'public-site' | 'mobile' | 'preview';
+type WizardStep = 'basics' | 'public-site' | 'preview';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,17 +63,15 @@ function getInitialConfig(communityType: CommunityType = 'condo_718') {
 
 const WIZARD_STEPS: PillStep[] = [
   { id: 'basics', label: 'Basics' },
-  { id: 'public-site', label: 'Public' },
-  { id: 'mobile', label: 'Mobile' },
+  { id: 'public-site', label: 'Public Site' },
   { id: 'preview', label: 'Review' },
 ];
 
-const STEP_ORDER: WizardStep[] = ['basics', 'public-site', 'mobile', 'preview'];
+const STEP_ORDER: WizardStep[] = ['basics', 'public-site', 'preview'];
 
 const NEXT_LABELS: Record<string, string> = {
   basics: 'Next: Choose Template',
-  'public-site': 'Next: Mobile Template',
-  mobile: 'Preview Demo',
+  'public-site': 'Review & Create',
   preview: 'Create Demo',
 };
 
@@ -93,7 +90,7 @@ export default function DemoNewPage() {
   const [generateError, setGenerateError] = useState('');
 
   // Preview state
-  const [previewHtml, setPreviewHtml] = useState<{ publicHtml: string; mobileHtml: string } | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -121,7 +118,7 @@ export default function DemoNewPage() {
       .then(res => res.json())
       .then(data => {
         if (data.error) throw new Error(data.error.message ?? 'Preview failed');
-        setPreviewHtml(data);
+        setPreviewHtml(data.publicHtml ?? null);
       })
       .catch((err: Error) => setPreviewError(err.message))
       .finally(() => setPreviewLoading(false));
@@ -133,7 +130,7 @@ export default function DemoNewPage() {
     debounceRef.current = setTimeout(fetchPreview, 500);
     return () => clearTimeout(debounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.prospectName, config.communityType, config.publicTemplateId, config.mobileTemplateId, JSON.stringify(config.branding)]);
+  }, [config.prospectName, config.communityType, config.publicTemplateId, JSON.stringify(config.branding)]);
 
   // ------ Navigation ------
 
@@ -220,11 +217,6 @@ export default function DemoNewPage() {
   const isNextDisabled =
     step === 'basics' && !config.prospectName.trim();
 
-  // Always show footer
-  const showFooter = true;
-
-  // Preview emphasis based on current step
-  const previewEmphasis = step === 'mobile' ? 'mobile' as const : step === 'public-site' ? 'public' as const : 'both' as const;
   const previewEmpty = !config.prospectName.trim();
 
   // Computed error steps for stepper
@@ -331,17 +323,6 @@ export default function DemoNewPage() {
                   />
                 )}
 
-                {step === 'mobile' && (
-                  <MobileStep
-                    prospectName={config.prospectName}
-                    communityType={config.communityType}
-                    selectedTemplateId={config.mobileTemplateId}
-                    onSelect={(id: DemoTemplateId) =>
-                      setConfig((prev) => ({ ...prev, mobileTemplateId: id }))
-                    }
-                  />
-                )}
-
                 {step === 'preview' && (
                   <ReviewStep config={config} onEditStep={goToStep} />
                 )}
@@ -349,28 +330,24 @@ export default function DemoNewPage() {
             </div>
 
             {/* Sticky footer */}
-            {showFooter && (
-              <WizardFooter
-                onBack={goBack}
-                onNext={step === 'preview' ? handleGenerate : goNext}
-                nextLabel={NEXT_LABELS[step] ?? 'Next'}
-                nextDisabled={isNextDisabled}
-                showBack={step !== 'basics'}
-                onCancel={() => router.push('/demo')}
-                loading={step === 'preview' ? generating : false}
-              />
-            )}
+            <WizardFooter
+              onBack={goBack}
+              onNext={step === 'preview' ? handleGenerate : goNext}
+              nextLabel={NEXT_LABELS[step] ?? 'Next'}
+              nextDisabled={isNextDisabled}
+              showBack={step !== 'basics'}
+              onCancel={() => router.push('/demo')}
+              loading={step === 'preview' ? generating : false}
+            />
           </div>
         }
         right={
           <PreviewPanel
-            publicHtml={previewHtml?.publicHtml ?? null}
-            mobileHtml={previewHtml?.mobileHtml ?? null}
+            publicHtml={previewHtml}
             loading={previewLoading}
             error={previewError}
             onRetry={fetchPreview}
             onExpand={() => setModalOpen(true)}
-            emphasis={previewEmphasis}
             empty={previewEmpty}
             emptyMessage="Enter a community name to see a preview"
           />
@@ -379,8 +356,7 @@ export default function DemoNewPage() {
       <PreviewModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        publicHtml={previewHtml?.publicHtml ?? null}
-        mobileHtml={previewHtml?.mobileHtml ?? null}
+        publicHtml={previewHtml}
       />
     </AdminLayout>
   );
