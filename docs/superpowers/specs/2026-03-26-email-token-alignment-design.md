@@ -277,6 +277,23 @@ The build script imports `primitiveColors`, `tokenDefinitions`, and `toCssValue`
 
 The naming map from token definition keys to CSS var names is defined in `build.ts` as a lookup, not derived by convention, so we can match the existing CSS exactly (e.g., `surface.card` → `--surface-card`, not `--surface-default`).
 
+**Flattening rules for `build.ts`:**
+
+| Token path | CSS var pattern | Example |
+|------------|----------------|---------|
+| `text.{name}` | `--text-{name}` | `text.primary` → `--text-primary` |
+| `surface.{name}` | `--surface-{name}` | `surface.card` → `--surface-card` |
+| `border.{name}` | `--border-{name}` | `border.default` → `--border-default` |
+| `brandAccent` | `--brand-accent` | (standalone token) |
+| `interactive.{name}` | `--interactive-{cssName}` | `interactive.primary` → `--interactive-primary` |
+| `interactive.primaryHover` | `--interactive-primary-hover` | (camelCase → kebab-case) |
+| `interactive.primaryActive` | `--interactive-primary-active` | (camelCase → kebab-case) |
+| `interactive.subtleHover` | `--interactive-subtle-hover` | (camelCase → kebab-case) |
+| `status.{variant}.foreground` | `--status-{variant}` | `status.success.foreground` → `--status-success` |
+| `status.{variant}.background` | `--status-{variant}-bg` | `status.success.background` → `--status-success-bg` |
+| `status.{variant}.border` | `--status-{variant}-border` | `status.success.border` → `--status-success-border` |
+| `status.{variant}.subtle` | `--status-{variant}-subtle` | `status.success.subtle` → `--status-success-subtle` |
+
 ### 4. Email Entry: `src/email.ts`
 
 Resolves all semantic tokens to hex using the same `toHex()` resolver. This is a hand-authored source file (not generated).
@@ -386,6 +403,7 @@ export const semanticColors = {
     muted: "var(--surface-muted)",
     elevated: "var(--surface-elevated)",
     sunken: "var(--surface-sunken)",
+    hover: "var(--surface-hover)",
     inverse: "var(--surface-inverse)",
     inverseSubtle: "var(--surface-inverse-subtle)",
   },
@@ -461,7 +479,7 @@ export function getStatusColors(status: StatusVariant) {
 
 **`packages/ui/src/styles/tokens.css`** — The color sections (primitive colors lines 8-54 and semantic colors lines 130-208) are replaced with content inlined from `@propertypro/tokens/styles.css` during the UI build step. Non-color sections (spacing, radius, typography, motion, focus, elevation, responsive density, focus styles, reduced motion) remain hand-authored in this file.
 
-**Build integration:** Add a `prebuild` script in `packages/ui/package.json` that reads `@propertypro/tokens/styles.css` and splices the color declarations into `tokens.css`, replacing the existing color sections. This is a simple string replacement bounded by the existing section comment markers (`/* Colors */` and `/* Spacing */`).
+**Build integration:** Add a `prebuild` script in `packages/ui/package.json` that reads `@propertypro/tokens/styles.css` and splices the color declarations into `tokens.css`, replacing the existing color section. The splice boundaries use prefix matching against the current comment markers: start after `/* Colors */` (line 8), end before `/* Spacing` (line 56, actual text is `/* Spacing (4px base unit) */`). The prefix match avoids breaking if the parenthetical changes.
 
 ### 6. Consumer Migration: `packages/email`
 
