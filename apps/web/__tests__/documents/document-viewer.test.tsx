@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('@/components/pdf/pdf-viewer', () => ({
-  PdfViewer: ({ pdfUrl }: { pdfUrl?: string }) => (
-    <div data-testid="pdf-viewer">{pdfUrl}</div>
+  PdfViewer: ({ pdfUrl, scale }: { pdfUrl?: string; scale?: number }) => (
+    <div data-testid="pdf-viewer">
+      {pdfUrl}
+      {scale ? `|scale:${scale}` : ''}
+    </div>
   ),
 }));
 
@@ -54,6 +57,69 @@ describe('DocumentViewer', () => {
       'href',
       '/api/v1/documents/5/download?communityId=9&attachment=true',
     );
+  });
+
+  it('opens an expanded modal preview with size controls and multiple close paths', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          url: 'https://storage.example.com/packet.pdf',
+          fileName: 'packet.pdf',
+          mimeType: 'application/pdf',
+          fileSize: 1024,
+        },
+      }),
+    }));
+
+    render(
+      <DocumentViewer
+        communityId={9}
+        document={{
+          id: 10,
+          title: 'Annual Packet',
+          description: null,
+          fileName: 'packet.pdf',
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+          categoryId: 1,
+          createdAt: '2026-03-25T12:00:00.000Z',
+          uploadedBy: null,
+        }}
+      />,
+    );
+
+    await screen.findByTestId('pdf-viewer');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Annual Packet' });
+    expect(dialog).toHaveAttribute('data-preview-size', 'large');
+    expect(screen.getByRole('button', { name: 'Close' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Increase preview size' }));
+    expect(dialog).toHaveAttribute('data-preview-size', 'full');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease preview size' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease preview size' }));
+    expect(dialog).toHaveAttribute('data-preview-size', 'standard');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Annual Packet' })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }));
+    await screen.findByRole('dialog', { name: 'Annual Packet' });
+
+    const overlay = screen.getByTestId('document-preview-modal-overlay');
+    fireEvent.pointerDown(overlay);
+    fireEvent.mouseUp(overlay);
+    fireEvent.click(overlay);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Annual Packet' })).not.toBeInTheDocument();
+    });
   });
 
   it('keeps the signed-url flow for images', async () => {
