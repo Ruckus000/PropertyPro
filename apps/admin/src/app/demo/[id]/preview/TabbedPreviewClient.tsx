@@ -75,6 +75,8 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
+    // Edit drawer is only available on the public website tab.
+    if (!isPublicWebsiteTab(key)) setDrawerOpen(false);
   };
 
   const [convertOpen, setConvertOpen] = useState(false);
@@ -263,8 +265,8 @@ export function TabbedPreviewClient({
           );
         })}
 
-        {/* Floating Edit Button — available on all tabs */}
-        <button
+        {/* Floating Edit Button — only available on Public Website tab */}
+        {isPublicWebsiteTab(activeTab) && <button
           type="button"
           onClick={() => setDrawerOpen((prev) => !prev)}
           className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
@@ -273,7 +275,7 @@ export function TabbedPreviewClient({
           title={drawerOpen ? 'Close editor' : 'Edit demo'}
         >
           {drawerOpen ? <X size={20} /> : <Pencil size={20} />}
-        </button>
+        </button>}
       </div>
 
       {/* Edit Drawer */}
