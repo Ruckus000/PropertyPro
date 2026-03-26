@@ -21,7 +21,7 @@ import {
   useSubmitSignature,
   useDeclineSigning,
 } from '@/hooks/use-esign-signing';
-import { PdfViewer } from '@/components/esign/pdf-viewer';
+import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { SignatureCapture } from '@/components/esign/signature-capture';
 import {
   Lock,

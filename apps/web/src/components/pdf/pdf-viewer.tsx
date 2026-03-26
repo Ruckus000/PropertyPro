@@ -28,10 +28,6 @@ async function loadPdfJs(): Promise<PdfJsModule> {
   return pdfjs;
 }
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface PageDimension {
   width: number;
   height: number;
@@ -52,12 +48,8 @@ export interface PdfViewerProps {
   onDocumentLoad: (meta: DocumentMeta) => void;
   scale?: number;
   className?: string;
-  children?: ReactNode; // overlay slot for field markers
+  children?: ReactNode;
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function PdfViewer({
   pdfUrl,
@@ -84,26 +76,21 @@ export function PdfViewer({
     height: 0,
   });
 
-  // -----------------------------------------------------------------------
-  // Load PDF document
-  // -----------------------------------------------------------------------
   const loadDocument = useCallback(async () => {
     if (!pdfUrl && !pdfData) return;
     setLoading(true);
     setError(null);
+
     try {
       const pdfjs = await loadPdfJs();
-      // Copy pdfData so the original ArrayBuffer isn't detached when PDF.js
-      // transfers it to its worker thread via postMessage.
       const source = pdfData ? { data: pdfData.slice() } : pdfUrl!;
       const loadingTask = pdfjs.getDocument(source);
       const pdf = await loadingTask.promise;
       pdfDocRef.current = pdf;
       setTotalPages(pdf.numPages);
 
-      // Collect page dimensions
       const dimensions: PageDimension[] = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
+      for (let i = 1; i <= pdf.numPages; i += 1) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1 });
         dimensions.push({ width: viewport.width, height: viewport.height });
@@ -128,37 +115,35 @@ export function PdfViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfUrl, pdfData]);
 
-  // -----------------------------------------------------------------------
-  // Render current page
-  // -----------------------------------------------------------------------
   useEffect(() => {
-    const pdf = pdfDocRef.current;
-    const canvas = canvasRef.current;
-    if (!pdf || !canvas || loading || error) return;
+    if (!pdfDocRef.current || !canvasRef.current || loading || error) return;
 
     let cancelled = false;
 
     async function renderPage() {
-      // Cancel any in-flight render
+      const pdf = pdfDocRef.current;
+      const canvas = canvasRef.current;
+      if (!pdf || !canvas) return;
+
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
         renderTaskRef.current = null;
       }
 
       try {
-        const page = await pdf!.getPage(currentPage + 1); // pdfjs is 1-indexed
+        const page = await pdf.getPage(currentPage + 1);
         const viewport = page.getViewport({ scale });
         const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
-        const canvasContext = canvas!.getContext('2d');
+        const canvasContext = canvas.getContext('2d');
 
         if (!canvasContext) {
           throw new Error('PDF preview could not acquire a rendering context');
         }
 
-        canvas!.width = Math.floor(viewport.width * dpr);
-        canvas!.height = Math.floor(viewport.height * dpr);
-        canvas!.style.width = `${viewport.width}px`;
-        canvas!.style.height = `${viewport.height}px`;
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
 
         setCanvasDimensions({
           width: viewport.width,
@@ -179,17 +164,15 @@ export function PdfViewer({
           renderTaskRef.current = null;
         }
       } catch (err) {
-        // RenderingCancelled is expected when switching pages quickly
         if (
           err instanceof Error &&
           err.message.includes('Rendering cancelled')
         ) {
           return;
         }
+
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Failed to render page',
-          );
+          setError(err instanceof Error ? err.message : 'Failed to render page');
         }
       }
     }
@@ -205,10 +188,6 @@ export function PdfViewer({
     };
   }, [currentPage, scale, loading, error]);
 
-  // -----------------------------------------------------------------------
-  // Render
-  // -----------------------------------------------------------------------
-
   if (error) {
     return (
       <div
@@ -218,7 +197,7 @@ export function PdfViewer({
         <button
           type="button"
           onClick={() => void loadDocument()}
-          className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover transition-colors"
+          className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
         >
           <RefreshCw className="size-4" />
           Retry
@@ -232,20 +211,18 @@ export function PdfViewer({
       <div
         className={`rounded-lg border border-edge-subtle bg-surface-card p-4 ${className ?? ''}`}
       >
-        <Skeleton className="w-full aspect-[8.5/11] rounded-sm" />
+        <Skeleton className="aspect-[8.5/11] w-full rounded-sm" />
       </div>
     );
   }
 
   return (
     <div className={`flex flex-col items-center gap-3 ${className ?? ''}`}>
-      {/* Canvas + overlay wrapper */}
       <div ref={containerRef} className="relative inline-block">
         <canvas
           ref={canvasRef}
           className="rounded-sm shadow-e1"
         />
-        {/* Overlay slot for field markers */}
         {children && canvasDimensions.width > 0 && (
           <div
             className="absolute inset-0"
@@ -259,7 +236,6 @@ export function PdfViewer({
         )}
       </div>
 
-      {/* Page navigation */}
       {totalPages > 1 && (
         <div className="flex items-center gap-3">
           <button
@@ -271,14 +247,12 @@ export function PdfViewer({
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="text-sm text-content-secondary tabular-nums">
+          <span className="tabular-nums text-sm text-content-secondary">
             Page {currentPage + 1} of {totalPages}
           </span>
           <button
             type="button"
-            onClick={() =>
-              onPageChange(Math.min(totalPages - 1, currentPage + 1))
-            }
+            onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
             disabled={currentPage >= totalPages - 1}
             className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Next page"

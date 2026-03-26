@@ -35,9 +35,16 @@ interface EsignTemplateRow {
   source_document_path: string | null;
 }
 
+interface SeededDocumentRow {
+  slug: string;
+  document_id: number;
+  document_title: string;
+  file_path: string;
+}
+
 interface StorageCheckResult {
   slug: string;
-  templateName: string;
+  itemName: string;
   sourcePath: string | null;
   storageStatus: 'PASS' | 'FAIL';
   storageMessage: string;
@@ -61,6 +68,76 @@ function summarizeError(error: unknown): string {
   }
 
   return String(error);
+}
+
+async function verifyStorageObject(
+  admin: ReturnType<typeof createAdminClient>,
+  slug: string,
+  itemName: string,
+  sourcePath: string | null,
+): Promise<StorageCheckResult> {
+  if (!sourcePath) {
+    return {
+      slug,
+      itemName,
+      sourcePath: null,
+      storageStatus: 'FAIL',
+      storageMessage: 'Missing storage path',
+    };
+  }
+
+  const folder = sourcePath.slice(
+    0,
+    Math.max(sourcePath.lastIndexOf('/'), 0),
+  );
+  const fileName = sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
+
+  const { data: listing, error: listError } = await admin.storage
+    .from('documents')
+    .list(folder, { limit: 100, search: fileName });
+
+  if (listError) {
+    return {
+      slug,
+      itemName,
+      sourcePath,
+      storageStatus: 'FAIL',
+      storageMessage: `List failed: ${listError.message}`,
+    };
+  }
+
+  const listed = (listing ?? []).some((file) => file.name === fileName);
+  if (!listed) {
+    return {
+      slug,
+      itemName,
+      sourcePath,
+      storageStatus: 'FAIL',
+      storageMessage: 'Object missing from storage listing',
+    };
+  }
+
+  const { data: fileData, error: downloadError } = await admin.storage
+    .from('documents')
+    .download(sourcePath);
+
+  if (downloadError || !fileData) {
+    return {
+      slug,
+      itemName,
+      sourcePath,
+      storageStatus: 'FAIL',
+      storageMessage: `Download failed: ${downloadError?.message ?? 'No data returned'}`,
+    };
+  }
+
+  return {
+    slug,
+    itemName,
+    sourcePath,
+    storageStatus: 'PASS',
+    storageMessage: 'Listed and downloadable',
+  };
 }
 
 async function run(): Promise<number> {
@@ -109,6 +186,10 @@ async function run(): Promise<number> {
         on d.community_id = c.id
         and d.deleted_at is null
       where c.slug in (${DEMO_SLUGS[0]}, ${DEMO_SLUGS[1]}, ${DEMO_SLUGS[2]})
+        and (
+          d.file_path like 'transparency/%'
+          or d.file_path like 'demo/%'
+        )
       group by c.slug
       order by c.slug
     `;
@@ -126,6 +207,24 @@ async function run(): Promise<number> {
         and et.status = 'active'
       where c.slug in (${DEMO_SLUGS[0]}, ${DEMO_SLUGS[1]}, ${DEMO_SLUGS[2]})
       order by c.slug, et.id
+    `;
+
+    const seededDocumentRows = await sql<SeededDocumentRow[]>`
+      select
+        c.slug,
+        d.id as document_id,
+        d.title as document_title,
+        d.file_path
+      from communities c
+      join documents d
+        on d.community_id = c.id
+        and d.deleted_at is null
+      where c.slug in (${DEMO_SLUGS[0]}, ${DEMO_SLUGS[1]}, ${DEMO_SLUGS[2]})
+        and (
+          d.file_path like 'transparency/%'
+          or d.file_path like 'demo/%'
+        )
+      order by c.slug, d.id
     `;
 
     const categoryBySlug = new Map(categoryRows.map((row) => [row.slug, row]));
@@ -176,7 +275,7 @@ async function run(): Promise<number> {
       ),
     );
 
-    console.log('\nDocument Category Null Check');
+    console.log('\nSeeded Document Category Null Check');
     console.log(
       formatTable(
         ['slug', 'expected_docs_without_category', 'actual_docs_without_category', 'total_docs', 'status'],
@@ -229,93 +328,88 @@ async function run(): Promise<number> {
     const storageChecks: StorageCheckResult[] = [];
     for (const slug of DEMO_SLUGS) {
       for (const row of esignRowsBySlug.get(slug) ?? []) {
-        if (!row.source_document_path) {
-          storageChecks.push({
-            slug,
-            templateName: row.template_name,
-            sourcePath: null,
-            storageStatus: 'FAIL',
-            storageMessage: 'Missing source_document_path',
-          });
-          continue;
-        }
-
-        const folder = row.source_document_path.slice(
-          0,
-          Math.max(row.source_document_path.lastIndexOf('/'), 0),
-        );
-        const fileName = row.source_document_path.slice(
-          row.source_document_path.lastIndexOf('/') + 1,
-        );
-
-        const { data: listing, error: listError } = await admin.storage
-          .from('documents')
-          .list(folder, { limit: 100, search: fileName });
-
-        if (listError) {
-          failures.push(
-            `${slug}: failed to list storage for ${row.template_name}: ${listError.message}.`,
-          );
-          storageChecks.push({
-            slug,
-            templateName: row.template_name,
-            sourcePath: row.source_document_path,
-            storageStatus: 'FAIL',
-            storageMessage: `List failed: ${listError.message}`,
-          });
-          continue;
-        }
-
-        const listed = (listing ?? []).some((file) => file.name === fileName);
-        if (!listed) {
-          failures.push(
-            `${slug}: storage object missing for ${row.template_name} at ${row.source_document_path}.`,
-          );
-          storageChecks.push({
-            slug,
-            templateName: row.template_name,
-            sourcePath: row.source_document_path,
-            storageStatus: 'FAIL',
-            storageMessage: 'Object missing from storage listing',
-          });
-          continue;
-        }
-
-        const { data: fileData, error: downloadError } = await admin.storage
-          .from('documents')
-          .download(row.source_document_path);
-
-        if (downloadError || !fileData) {
-          failures.push(
-            `${slug}: failed to download source PDF for ${row.template_name}: ${downloadError?.message ?? 'No data returned'}.`,
-          );
-          storageChecks.push({
-            slug,
-            templateName: row.template_name,
-            sourcePath: row.source_document_path,
-            storageStatus: 'FAIL',
-            storageMessage: `Download failed: ${downloadError?.message ?? 'No data returned'}`,
-          });
-          continue;
-        }
-
-        storageChecks.push({
+        const check = await verifyStorageObject(
+          admin,
           slug,
-          templateName: row.template_name,
-          sourcePath: row.source_document_path,
-          storageStatus: 'PASS',
-          storageMessage: 'Listed and downloadable',
-        });
+          row.template_name,
+          row.source_document_path,
+        );
+        storageChecks.push(check);
+
+        if (check.storageStatus === 'FAIL') {
+          failures.push(
+            `${slug}: e-sign storage check failed for ${row.template_name} at ${row.source_document_path ?? 'missing'} (${check.storageMessage}).`,
+          );
+        }
       }
     }
 
     console.log('\nE-Sign Storage Check');
     console.log(
       formatTable(
-        ['slug', 'template_name', 'source_path', 'storage_status', 'details'],
+        ['slug', 'item_name', 'source_path', 'storage_status', 'details'],
         storageChecks.map((row) => [
           row.slug,
-          row.templateName,
+          row.itemName,
+          row.sourcePath ?? 'missing',
+          row.storageStatus,
+          row.storageMessage,
+        ]),
+      ),
+    );
+
+    const seededDocsBySlug = new Map<string, SeededDocumentRow[]>();
+    for (const row of seededDocumentRows) {
+      const list = seededDocsBySlug.get(row.slug) ?? [];
+      list.push(row);
+      seededDocsBySlug.set(row.slug, list);
+    }
+
+    const seededDocumentCountRows: string[][] = DEMO_SLUGS.map((slug) => {
+      const rows = seededDocsBySlug.get(slug) ?? [];
+      const status = rows.length > 0 ? 'PASS' : 'FAIL';
+
+      if (rows.length === 0) {
+        failures.push(`${slug}: expected at least one seeded document storage row, got 0.`);
+      }
+
+      return [slug, String(rows.length), status];
+    });
+
+    console.log('\nSeeded Document Coverage');
+    console.log(
+      formatTable(
+        ['slug', 'seeded_document_rows', 'status'],
+        seededDocumentCountRows,
+      ),
+    );
+
+    const seededDocumentChecks: StorageCheckResult[] = [];
+    for (const slug of DEMO_SLUGS) {
+      for (const row of seededDocsBySlug.get(slug) ?? []) {
+        const check = await verifyStorageObject(
+          admin,
+          slug,
+          row.document_title,
+          row.file_path,
+        );
+        seededDocumentChecks.push(check);
+
+        if (check.storageStatus === 'FAIL') {
+          failures.push(
+            `${slug}: seeded document storage check failed for ${row.document_title} at ${row.file_path} (${check.storageMessage}).`,
+          );
+        }
+      }
+    }
+
+    console.log('\nSeeded Document Storage Check');
+    console.log(
+      formatTable(
+        ['slug', 'item_name', 'source_path', 'storage_status', 'details'],
+        seededDocumentChecks.map((row) => [
+          row.slug,
+          row.itemName,
           row.sourcePath ?? 'missing',
           row.storageStatus,
           row.storageMessage,

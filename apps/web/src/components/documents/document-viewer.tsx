@@ -1,7 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import {
+  isImageMimeType,
+  isPdfMimeType,
+  isPreviewableMimeType,
+  loadDocumentPreview,
+  type DocumentPreviewResult,
+} from '@/lib/documents/document-preview-loader';
 import type { DocumentListItem } from './document-list';
 
 interface DocumentViewerProps {
@@ -17,55 +25,65 @@ export function DocumentViewer({
   onClose,
   onViewVersions,
 }: DocumentViewerProps) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DocumentPreviewResult>({ state: 'idle' });
+  const [currentPage, setCurrentPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
+
   const downloadHref = document
     ? `/api/v1/documents/${document.id}/download?communityId=${communityId}&attachment=true`
     : '#';
+  const canPreview = document ? isPreviewableMimeType(document.mimeType) : false;
+  const isPdf = document ? isPdfMimeType(document.mimeType) : false;
+  const isImage = document ? isImageMimeType(document.mimeType) : false;
+  const showDownloadAction = Boolean(document) && (!canPreview || preview.state === 'ready');
+
+  const retryPreview = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     if (!document) {
-      setPreviewUrl(null);
-      setError(null);
-      setIsLoading(false);
+      setPreview({ state: 'idle' });
       return;
     }
 
-    const isPdf = document.mimeType.includes('pdf');
-    const isImage = document.mimeType.includes('image');
-
-    if (!isPdf && !isImage) {
-      setPreviewUrl(null);
-      setError(null);
-      setIsLoading(false);
+    if (!isPreviewableMimeType(document.mimeType)) {
+      setPreview({ state: 'unsupported_type' });
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    let cancelled = false;
+    setPreview({ state: 'loading' });
 
-    if (isPdf) {
-      setPreviewUrl(`/api/v1/documents/${document.id}/preview?communityId=${communityId}`);
-      return;
-    }
-
-    fetch(`/api/v1/documents/${document.id}/download?communityId=${communityId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load document');
-        return res.json();
-      })
-      .then((json: { data: { url: string } }) => {
-        setPreviewUrl(json.data.url);
+    void loadDocumentPreview(document.id, communityId, document.mimeType)
+      .then((result) => {
+        if (!cancelled) {
+          setPreview(result);
+        }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load document');
-        setPreviewUrl(null);
-      })
-      .finally(() => {
-        setIsLoading(false);
+        if (!cancelled) {
+          setPreview({
+            state: 'storage_unavailable',
+            message: err instanceof Error
+              ? err.message
+              : 'We could not load the document preview.',
+          });
+        }
       });
-  }, [document, communityId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [document, communityId, reloadToken]);
+
+  useEffect(() => {
+    if (!document) {
+      return;
+    }
+
+    setCurrentPage(0);
+  }, [document?.id]);
 
   if (!document) {
     return (
@@ -90,10 +108,6 @@ export function DocumentViewer({
     );
   }
 
-  const isPdf = document.mimeType.includes('pdf');
-  const isImage = document.mimeType.includes('image');
-  const canPreview = isPdf || isImage;
-
   return (
     <div className="flex h-full flex-col rounded-md border border-edge bg-surface-card">
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
@@ -111,12 +125,14 @@ export function DocumentViewer({
               Version History
             </button>
           )}
-          <a
-            href={downloadHref}
-            className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover"
-          >
-            Download
-          </a>
+          {showDownloadAction && (
+            <a
+              href={downloadHref}
+              className="rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-white hover:bg-interactive-hover"
+            >
+              Download
+            </a>
+          )}
           {onClose && (
             <button
               type="button"
@@ -137,61 +153,75 @@ export function DocumentViewer({
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        {isLoading && (
+        {preview.state === 'loading' && (
           <div className="flex h-full items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
           </div>
         )}
 
-        {error && (
+        {preview.state === 'file_missing' && (
           <div className="flex h-full flex-col justify-center">
             <AlertBanner
               status="warning"
               title="Preview unavailable"
-              description={error}
+              description="This document record exists, but the backing file is missing from storage. Re-upload the file if you need it restored."
+            />
+          </div>
+        )}
+
+        {preview.state === 'storage_unavailable' && (
+          <div className="flex h-full flex-col justify-center">
+            <AlertBanner
+              status="warning"
+              title="Preview unavailable"
+              description={preview.message}
               action={(
-                <a
-                  href={downloadHref}
+                <button
+                  type="button"
+                  onClick={retryPreview}
                   className="rounded-md border border-status-warning px-3 py-1.5 text-sm font-medium"
                 >
-                  Download
-                </a>
+                  Retry
+                </button>
               )}
             />
           </div>
         )}
 
-        {!error && canPreview && previewUrl && (
+        {preview.state === 'ready' && (
           <>
             {isPdf && (
               <div className="h-full">
-                <iframe
-                  src={previewUrl}
-                  className="h-full w-full rounded border border-edge"
-                  style={{ visibility: isLoading ? 'hidden' : 'visible' }}
-                  title={document.title}
-                  onLoad={() => setIsLoading(false)}
-                  onError={() => {
-                    setPreviewUrl(null);
-                    setIsLoading(false);
-                    setError('We could not load the PDF preview. You can still download the file.');
+                <PdfViewer
+                  pdfUrl={preview.url}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onDocumentLoad={({ totalPages }) => {
+                    setCurrentPage((page) => Math.min(page, Math.max(totalPages - 1, 0)));
                   }}
+                  scale={1}
                 />
               </div>
             )}
             {isImage && (
               <div className="flex h-full items-center justify-center">
                 <img
-                  src={previewUrl}
+                  src={preview.url}
                   alt={document.title}
                   className="max-h-full max-w-full object-contain"
+                  onError={() => {
+                    setPreview({
+                      state: 'storage_unavailable',
+                      message: 'We could not load the image preview. Please try again.',
+                    });
+                  }}
                 />
               </div>
             )}
           </>
         )}
 
-        {!isLoading && !error && !canPreview && (
+        {preview.state === 'unsupported_type' && (
           <div className="flex h-full flex-col items-center justify-center">
             <svg
               className="h-16 w-16 text-content-disabled"

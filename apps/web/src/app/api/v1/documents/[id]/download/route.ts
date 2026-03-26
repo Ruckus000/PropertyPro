@@ -5,7 +5,7 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { AppError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { resolveLibraryDocumentRequest } from '@/lib/documents/library-document-resolver';
 
@@ -13,6 +13,28 @@ const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
   attachment: z.enum(['true', 'false']).optional(),
 });
+
+async function createDocumentSignedUrl(filePath: string): Promise<string> {
+  try {
+    return await createPresignedDownloadUrl('documents', filePath, 3600);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.toLowerCase().includes('object not found')) {
+      throw new AppError(
+        'Document file is missing from storage',
+        500,
+        'DOCUMENT_FILE_MISSING',
+      );
+    }
+
+    throw new AppError(
+      'Document storage is temporarily unavailable',
+      503,
+      'DOCUMENT_STORAGE_UNAVAILABLE',
+    );
+  }
+}
 
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
   if (!context?.params) {
@@ -47,12 +69,8 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
 
   const filePath = doc['filePath'] as string;
   const fileName = doc['fileName'] as string;
+  const signedUrl = await createDocumentSignedUrl(filePath);
 
-  // Generate presigned download URL (valid for 1 hour)
-  const signedUrl = await createPresignedDownloadUrl('documents', filePath, 3600);
-
-  // Fire-and-forget: access logging must never block document viewing.
-  // Placed after URL generation so a failed presign doesn't leave a false-positive audit entry.
   logAuditEvent({
     userId,
     action: 'document_accessed',
@@ -67,12 +85,10 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     // Swallow audit failures for reads — never block document viewing
   });
 
-  // If attachment=true, redirect directly to download (triggers browser download)
   if (attachment === 'true') {
     return NextResponse.redirect(signedUrl);
   }
 
-  // Otherwise, return the URL for client-side use (preview, etc.)
   return NextResponse.json({
     data: {
       url: signedUrl,

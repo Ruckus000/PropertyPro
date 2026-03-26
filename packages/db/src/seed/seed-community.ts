@@ -59,7 +59,7 @@ type CanonicalRole = SeedUserConfig['role'];
 
 type WizardType = 'condo' | 'apartment';
 
-type DemoDocumentCategoryKey =
+export type DemoDocumentCategoryKey =
   | 'declaration'
   | 'rules'
   | 'inspection_reports'
@@ -70,10 +70,121 @@ type DemoDocumentCategoryKey =
   | 'community_handbook'
   | 'move_in_out_docs';
 
+export type SeededDocumentCategoryIds = Record<DemoDocumentCategoryKey, number | undefined>;
+
 interface DemoCategoryDefinition {
   key: DemoDocumentCategoryKey;
   name: string;
   description: string;
+}
+
+function sanitizePdfText(value: string): string {
+  return value
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+function buildSeedPlaceholderPdf(
+  title: string,
+  summary: string,
+  storagePath: string,
+): Uint8Array {
+  const safeTitle = sanitizePdfText(title).slice(0, 96);
+  const safeSummary = sanitizePdfText(summary).slice(0, 110);
+  const safePath = sanitizePdfText(storagePath).slice(0, 110);
+  const stream = [
+    'BT',
+    '/F1 18 Tf',
+    '48 736 Td',
+    `(${safeTitle || 'Seeded Document'}) Tj`,
+    '/F1 11 Tf',
+    '0 -28 Td',
+    '(Seeded demo document placeholder.) Tj',
+    '0 -18 Td',
+    `(${safeSummary || 'PropertyPro seeded demo content.'}) Tj`,
+    '0 -18 Td',
+    `(${safePath}) Tj`,
+    'ET',
+    '',
+  ].join('\n');
+
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n',
+    `4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}endstream\nendobj\n`,
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+
+  for (const object of objects) {
+    offsets.push(pdf.length);
+    pdf += object;
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+  pdf += `startxref\n${xrefOffset}\n%%EOF\n`;
+
+  return new TextEncoder().encode(pdf);
+}
+
+export async function ensureSeededDocumentStorage(
+  storagePath: string,
+  title: string,
+  summary: string,
+): Promise<number> {
+  const pdfBytes = buildSeedPlaceholderPdf(title, summary, storagePath);
+  const admin = createAdminClient();
+
+  const { error } = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`Failed to upload seeded document PDF: ${error.message}`);
+  }
+
+  const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
+  const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
+  const { data: listing, error: listError } = await admin.storage
+    .from('documents')
+    .list(storageFolder, { limit: 100, search: storageFileName });
+
+  if (listError) {
+    throw new Error(
+      `Failed to verify seeded document PDF listing: ${listError.message}`,
+    );
+  }
+
+  const listed = (listing ?? []).some((file) => file.name === storageFileName);
+  if (!listed) {
+    throw new Error(
+      `Seeded document PDF upload was not visible in storage listing for ${storagePath}`,
+    );
+  }
+
+  const { data: downloadedFile, error: downloadError } = await admin.storage
+    .from('documents')
+    .download(storagePath);
+
+  if (downloadError || !downloadedFile) {
+    throw new Error(
+      `Failed to verify seeded document PDF download: ${downloadError?.message ?? 'No data returned'}`,
+    );
+  }
+
+  return pdfBytes.byteLength;
 }
 
 function getDefaultPassword(): string {
@@ -544,12 +655,12 @@ function getDemoCategoryDefinitions(
   ];
 }
 
-async function seedDocumentCategories(
+export async function seedDocumentCategories(
   communityId: number,
   communityType: 'condo_718' | 'hoa_720' | 'apartment',
-): Promise<Record<DemoDocumentCategoryKey, number | undefined>> {
+): Promise<SeededDocumentCategoryIds> {
   const definitions = getDemoCategoryDefinitions(communityType);
-  const categoryIds: Record<DemoDocumentCategoryKey, number | undefined> = {
+  const categoryIds: SeededDocumentCategoryIds = {
     declaration: undefined,
     rules: undefined,
     inspection_reports: undefined,
@@ -610,6 +721,9 @@ async function seedRegistryDocument(
   searchText: string,
   categoryId: number | null = null,
 ): Promise<number> {
+  const filePath = `demo/${communityId}/${seedKey}/${fileName}`;
+  const fileSize = await ensureSeededDocumentStorage(filePath, title, searchText);
+
   const registryEntityId = await lookupRegistry('document', seedKey);
   if (registryEntityId) {
     const id = Number(registryEntityId);
@@ -618,9 +732,9 @@ async function seedRegistryDocument(
       .set({
         title,
         fileName,
-        filePath: `demo/${communityId}/${seedKey}/${fileName}`,
+        filePath,
         mimeType: 'application/pdf',
-        fileSize: 1024,
+        fileSize,
         searchText,
         categoryId,
         updatedAt: new Date(),
@@ -643,9 +757,9 @@ async function seedRegistryDocument(
         .set({
           title,
           fileName,
-          filePath: `demo/${communityId}/${seedKey}/${fileName}`,
+          filePath,
           mimeType: 'application/pdf',
-          fileSize: 1024,
+          fileSize,
           searchText,
           categoryId,
           updatedAt: new Date(),
@@ -662,9 +776,9 @@ async function seedRegistryDocument(
       communityId,
       title,
       fileName,
-      filePath: `demo/${communityId}/${seedKey}/${fileName}`,
+      filePath,
       mimeType: 'application/pdf',
-      fileSize: 1024,
+      fileSize,
       searchText,
       categoryId,
     })

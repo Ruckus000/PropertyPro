@@ -19,9 +19,12 @@ import {
 } from '@propertypro/db';
 import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import {
+  ensureSeededDocumentStorage,
   ensureNotificationPreference,
   seedCommunity,
+  seedDocumentCategories,
   seedRoles,
+  type SeededDocumentCategoryIds,
   type SeedCommunityConfig,
   type SeedCommunityResult,
   type SeedUserConfig,
@@ -173,7 +176,14 @@ async function upsertDocument(
   title: string,
   uploadedBy: string,
   postedAt: Date,
+  categoryId: number | null,
 ): Promise<number> {
+  const fileSize = await ensureSeededDocumentStorage(
+    filePath,
+    title,
+    `${title} (demo transparency seed)`,
+  );
+
   const existing = await db
     .select({ id: documents.id })
     .from(documents)
@@ -193,9 +203,10 @@ async function upsertDocument(
         title,
         description: `${title} (demo transparency seed)`,
         fileName: filePath.split('/').at(-1) ?? `${title}.pdf`,
-        fileSize: 1024,
+        fileSize,
         mimeType: 'application/pdf',
         uploadedBy,
+        categoryId,
         createdAt: postedAt,
         updatedAt: postedAt,
       })
@@ -211,9 +222,10 @@ async function upsertDocument(
       description: `${title} (demo transparency seed)`,
       filePath,
       fileName: filePath.split('/').at(-1) ?? `${title}.pdf`,
-      fileSize: 1024,
+      fileSize,
       mimeType: 'application/pdf',
       uploadedBy,
+      categoryId,
       createdAt: postedAt,
       updatedAt: postedAt,
     })
@@ -224,6 +236,32 @@ async function upsertDocument(
   }
 
   return created.id;
+}
+
+function getTransparencyCategoryId(
+  templateKey: string,
+  categoryIds: SeededDocumentCategoryIds,
+): number | null {
+  switch (templateKey) {
+    case '718_declaration':
+    case '718_bylaws':
+    case '718_articles':
+    case '720_governing_docs':
+    case '720_articles':
+      return categoryIds.declaration ?? categoryIds.rules ?? null;
+    case '718_minutes_rolling_12m':
+    case '720_minutes_rolling_12m':
+      return categoryIds.meeting_minutes ?? categoryIds.announcements ?? null;
+    case '720_meeting_notices':
+      return categoryIds.announcements ?? categoryIds.meeting_minutes ?? null;
+    case '718_insurance':
+    case '718_inspection_reports':
+    case '718_sirs':
+    case '720_insurance':
+      return categoryIds.inspection_reports ?? categoryIds.rules ?? null;
+    default:
+      return categoryIds.rules ?? categoryIds.declaration ?? null;
+  }
 }
 
 async function setChecklistDocument(
@@ -297,6 +335,7 @@ async function seedTransparencyDemoData(
   slug: DemoCommunitySlug,
   uploadedBy: string,
 ): Promise<void> {
+  const categoryIds = await seedDocumentCategories(communityId, communityType);
   const template = getComplianceTemplate(communityType);
   if (template.length === 0) {
     return;
@@ -328,6 +367,7 @@ async function seedTransparencyDemoData(
       `${item.title} (${slug})`,
       uploadedBy,
       postedAt,
+      getTransparencyCategoryId(item.templateKey, categoryIds),
     );
 
     await setChecklistDocument(communityId, item.templateKey, documentId, postedAt);
@@ -343,6 +383,7 @@ async function seedTransparencyDemoData(
         `Board Minutes ${monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`,
         uploadedBy,
         monthDate,
+        categoryIds.meeting_minutes ?? categoryIds.announcements ?? null,
       );
     }
   }

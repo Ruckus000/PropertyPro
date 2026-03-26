@@ -231,6 +231,7 @@ export function DocumentLibrary({
                     id: version.id,
                     fileName: version.fileName,
                     fileSize: version.fileSize,
+                    mimeType: version.mimeType,
                     createdAt: version.createdAt,
                   });
                   setViewMode('viewer');

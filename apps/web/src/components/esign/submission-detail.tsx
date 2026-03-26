@@ -26,7 +26,7 @@ import {
   useCancelEsignSubmission,
   useSendEsignReminder,
 } from '@/hooks/use-esign-submissions';
-import { PdfViewer } from '@/components/esign/pdf-viewer';
+import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import type {
   EsignSignerRecord,
   EsignEventRecord,

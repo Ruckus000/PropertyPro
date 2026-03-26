@@ -35,7 +35,7 @@ import { FieldPalette } from '@/components/esign/field-palette';
 
 // pdfjs-dist has top-level side effects that crash during SSR — skip SSR entirely
 const PdfViewer = dynamic(
-  () => import('@/components/esign/pdf-viewer').then((m) => m.PdfViewer),
+  () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
   { ssr: false, loading: () => <div className="flex items-center justify-center p-12"><div className="text-sm text-[var(--text-tertiary)]">Loading PDF viewer...</div></div> },
 );
 

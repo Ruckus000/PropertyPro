@@ -158,6 +158,12 @@ test.describe('Library documents (board admin → tenant)', () => {
     await expect(rulesTab).toBeVisible({ timeout: 60_000 });
     await rulesTab.click();
 
+    const seededDoc = page.getByText('Sunset Condos Annual Budget').first();
+    await expect(seededDoc).toBeVisible();
+    await seededDoc.click();
+    await expect(page.locator('canvas').first()).toBeVisible();
+    await expect(page.locator('iframe')).toHaveCount(0);
+
     await page.getByRole('button', { name: /Upload Document/i }).first().click();
 
     await page.setInputFiles('input[type="file"][accept]', FIXTURE_PDF);
@@ -178,6 +184,9 @@ test.describe('Library documents (board admin → tenant)', () => {
 
     await expect(page.getByText('Uploading...')).toBeHidden({ timeout: 120_000 });
     await expect(page.getByText(uniqueTitle)).toBeVisible();
+    await page.getByText(uniqueTitle).click();
+    await expect(page.locator('canvas').first()).toBeVisible();
+    await expect(page.locator('iframe')).toHaveCount(0);
 
     await loginAs(page, 'tenant', { communitySlug: SUNSET_CONDOS_SLUG });
     await page.goto(`/mobile/documents?communityId=${communityId}`, {
