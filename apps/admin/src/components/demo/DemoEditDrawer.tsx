@@ -10,7 +10,7 @@
  * The branding context panel above the code editor always shows current
  * branding values, updating automatically when branding is changed.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { X, Loader2 } from 'lucide-react';
 import { BrandingEditSection } from './BrandingEditSection';
@@ -56,6 +56,19 @@ const DEFAULT_BRANDING: BrandingInfo = {
   fontBody: 'Inter',
   communityName: 'Community',
 };
+
+const DEFAULT_DRAWER_WIDTH = 640;
+const MIN_DRAWER_WIDTH = 480;
+const VIEWPORT_GUTTER = 120;
+
+function clampDrawerWidth(width: number, maxWidth: number): number {
+  return Math.min(Math.max(width, MIN_DRAWER_WIDTH), Math.max(MIN_DRAWER_WIDTH, maxWidth));
+}
+
+function getMaxDrawerWidth(): number {
+  if (typeof window === 'undefined') return DEFAULT_DRAWER_WIDTH;
+  return Math.max(MIN_DRAWER_WIDTH, window.innerWidth - VIEWPORT_GUTTER);
+}
 
 // ---------------------------------------------------------------------------
 // Build default JSX with actual branding values baked in
@@ -294,10 +307,14 @@ export function DemoEditDrawer({
   onSaved,
   previewTab = 'public',
 }: DemoEditDrawerProps) {
-  const showTemplateTab = previewTab !== 'admin';
+  const showTemplateTab = previewTab === 'public';
   const templateVariant = previewTab === 'mobile' ? 'mobile' : 'public';
   const [activeTab, setActiveTab] = useState<DrawerTab>(showTemplateTab ? 'template' : 'branding');
   const [branding, setBranding] = useState<BrandingInfo>({ ...DEFAULT_BRANDING, communityName: prospectName });
+  const [drawerWidth, setDrawerWidth] = useState(DEFAULT_DRAWER_WIDTH);
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const pointerMoveHandlerRef = useRef<((event: PointerEvent) => void) | null>(null);
+  const pointerUpHandlerRef = useRef<(() => void) | null>(null);
   // Switch to branding tab when Page Template tab is hidden (admin tab only)
   useEffect(() => {
     if (previewTab === 'admin' && activeTab === 'template') {
@@ -337,6 +354,64 @@ export function DemoEditDrawer({
     }
   }, [isOpen, fetchBranding]);
 
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setDrawerWidth((prev) => clampDrawerWidth(prev, getMaxDrawerWidth()));
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, []);
+
+  const finishResize = useCallback(() => {
+    dragStateRef.current = null;
+    document.body.style.userSelect = '';
+  }, []);
+
+  const detachResizeListeners = useCallback(() => {
+    if (pointerMoveHandlerRef.current) {
+      window.removeEventListener('pointermove', pointerMoveHandlerRef.current);
+      pointerMoveHandlerRef.current = null;
+    }
+    if (pointerUpHandlerRef.current) {
+      window.removeEventListener('pointerup', pointerUpHandlerRef.current);
+      pointerUpHandlerRef.current = null;
+    }
+  }, []);
+
+  const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    detachResizeListeners();
+    dragStateRef.current = { startX: event.clientX, startWidth: drawerWidth };
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      const delta = drag.startX - moveEvent.clientX;
+      const nextWidth = drag.startWidth + delta;
+      setDrawerWidth(clampDrawerWidth(nextWidth, getMaxDrawerWidth()));
+    };
+
+    const handlePointerUp = () => {
+      detachResizeListeners();
+      finishResize();
+    };
+
+    pointerMoveHandlerRef.current = handlePointerMove;
+    pointerUpHandlerRef.current = handlePointerUp;
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [detachResizeListeners, drawerWidth, finishResize]);
+
+  useEffect(() => {
+    return () => {
+      detachResizeListeners();
+      finishResize();
+    };
+  }, [detachResizeListeners, finishResize]);
+
   // When branding is saved, refetch to update the context panel
   const handleBrandingSaved = useCallback(() => {
     fetchBranding();
@@ -355,10 +430,22 @@ export function DemoEditDrawer({
 
       {/* Drawer panel — wider to accommodate code editor */}
       <div
-        className={`fixed right-0 top-0 z-50 flex h-full w-[640px] max-w-full flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ${
+        className={`fixed right-0 top-0 z-50 flex h-full max-w-full flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
+        style={{ width: drawerWidth }}
       >
+        <div
+          role="separator"
+          aria-label="Resize edit demo drawer"
+          aria-orientation="vertical"
+          data-testid="drawer-resize-handle"
+          onPointerDown={handleResizePointerDown}
+          onDoubleClick={() => setDrawerWidth(DEFAULT_DRAWER_WIDTH)}
+          className="absolute left-0 top-0 h-full w-2 -translate-x-1 cursor-col-resize"
+        >
+          <div className="ml-auto h-full w-px bg-transparent transition-colors hover:bg-blue-300" />
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
           <div>

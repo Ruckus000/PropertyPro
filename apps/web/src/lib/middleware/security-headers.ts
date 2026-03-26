@@ -32,7 +32,7 @@ function getAdminOrigins(): string {
     return 'http://localhost:* http://127.0.0.1:*';
   }
 
-  return 'https://admin.propertyprofl.com';
+  return 'https://pm.propertyprofl.com https://admin.propertyprofl.com';
 }
 
 /**
