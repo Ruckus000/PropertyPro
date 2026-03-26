@@ -21,6 +21,7 @@ import { ForbiddenError } from '@/lib/api/errors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { resolveStripePrice } from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 // ---------------------------------------------------------------------------
 // CORS — admin app runs on a different origin
@@ -158,6 +159,15 @@ export const POST = withErrorHandler(
         customerEmail,
         customerName,
       },
+    });
+
+    // 5. Emit conversion_initiated event (awaited best-effort)
+    await emitConversionEvent({
+      demoId: demo.id,
+      communityId: demo.communityId,
+      eventType: 'conversion_initiated',
+      source: 'admin_app',
+      dedupeKey: `demo:${demo.id}:conversion_initiated:${session.id}`,
     });
 
     return NextResponse.json(

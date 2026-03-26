@@ -100,6 +100,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/documents/route.ts'),
   // Phase 2C: Branding settings — communities is root tenant table
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/pm/settings/branding/page.tsx'),
+  // Conversion event emission — global analytics table, not community-scoped
+  resolve(repoRoot, 'apps/web/src/lib/services/conversion-events.ts'),
   // Demo lifecycle: landing page, entry, conversion, expiry cron, session helper
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/page.tsx'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts'),

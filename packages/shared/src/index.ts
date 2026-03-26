@@ -107,3 +107,4 @@ export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, i
 export * from './demo-templates';
 export * from './demo-content-strategies';
 export * from './support-access';
+export * from './demo/lifecycle';

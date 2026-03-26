@@ -233,6 +233,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Emit demo_created conversion event (awaited best-effort)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (createAdminClient() as any).from('conversion_events').insert({
+      demo_id: demoInstance.id,
+      community_id: seedResult.communityId,
+      event_type: 'demo_created',
+      source: 'admin_app',
+      dedupe_key: `demo:${demoInstance.id}:created`,
+      occurred_at: new Date().toISOString(),
+      metadata: {},
+    });
+  } catch (err) {
+    console.warn('[demos/POST] Failed to emit demo_created event:', err);
+  }
+
   // Compile and store site_blocks when template IDs are provided
   if (publicTemplateId !== undefined || mobileTemplateId !== undefined) {
     const communityId = seedResult.communityId;

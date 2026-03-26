@@ -16,6 +16,7 @@ import { and, eq, isNull } from '@propertypro/db/filters';
 import { communities, demoInstances, users, userRoles } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { emitConversionEvent } from './conversion-events';
 
 // ---------------------------------------------------------------------------
 // Main entry point — called from webhook handler
@@ -23,6 +24,8 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 export async function handleDemoConversion(
   session: Stripe.Checkout.Session,
+  stripeEventId: string,
+  eventCreatedEpoch: number,
 ): Promise<void> {
   const { demoId, communityId, planId, customerEmail, customerName } =
     extractMetadata(session);
@@ -41,13 +44,25 @@ export async function handleDemoConversion(
         : (session.subscription as { id: string } | null)?.id ?? null,
   });
 
-  // Step 2: If this was the first conversion, ban demo auth users
+  // Step 2: Emit checkout_completed event (awaited best-effort)
+  await emitConversionEvent({
+    demoId: Number(demoId),
+    communityId: Number(communityId),
+    eventType: 'checkout_completed',
+    source: 'stripe_webhook',
+    dedupeKey: `stripe:${stripeEventId}`,
+    occurredAt: new Date(eventCreatedEpoch * 1000),
+    stripeEventId,
+    metadata: { planId },
+  });
+
+  // Step 3: If this was the first conversion, ban demo auth users
   if (converted) {
     await banDemoUsers(Number(demoId));
   }
 
-  // Step 3: Create founding user (independently idempotent)
-  await ensureFoundingUser(Number(communityId), customerEmail, customerName);
+  // Step 4: Create founding user (independently idempotent)
+  await ensureFoundingUser(Number(demoId), Number(communityId), customerEmail, customerName);
 
   console.info(
     `[demo-conversion] completed for demo=${demoId} community=${communityId} converted=${converted}`,
@@ -177,6 +192,7 @@ async function banDemoUsers(demoId: number): Promise<void> {
  * from a previous partial run), reuses it.
  */
 async function ensureFoundingUser(
+  demoId: number,
   communityId: number,
   email: string,
   name: string,
@@ -267,6 +283,16 @@ async function ensureFoundingUser(
       },
     ])
     .onConflictDoNothing();
+
+  // Emit founding_user_created event (awaited best-effort)
+  await emitConversionEvent({
+    demoId,
+    communityId,
+    eventType: 'founding_user_created',
+    source: 'stripe_webhook',
+    dedupeKey: `demo:${demoId}:founding_user`,
+    userId,
+  });
 
   // Send magic link so the founding user can set their password
   try {
