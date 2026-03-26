@@ -24,11 +24,11 @@ const {
   getCommunityPublicInfoMock: vi.fn(),
 }));
 
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+vi.mock('@/lib/request/page-auth-context', () => ({
+  requirePageAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
-vi.mock('@/lib/api/community-membership', () => ({
-  requireCommunityMembership: requireCommunityMembershipMock,
+vi.mock('@/lib/request/page-community-context', () => ({
+  requirePageCommunityMembership: requireCommunityMembershipMock,
 }));
 vi.mock('@/lib/dashboard/load-dashboard-data', () => ({
   loadDashboardData: loadDashboardDataMock,
