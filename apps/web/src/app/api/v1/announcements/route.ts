@@ -15,6 +15,7 @@ import {
   createScopedClient,
   type Announcement,
   announcements,
+  communities,
   logAuditEvent,
   users,
 } from '@propertypro/db';
@@ -35,6 +36,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { applyDemoAnnouncementProvenancePolicy } from '@/lib/announcements/demo-announcement-provenance';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -92,12 +94,36 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireCommunityMembership(communityId, userId);
 
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(announcements);
+  const [rows, communityRows] = await Promise.all([
+    scoped.query(announcements),
+    scoped.selectFrom(
+      communities,
+      {
+        id: communities.id,
+        isDemo: communities.isDemo,
+        trialEndsAt: communities.trialEndsAt,
+        demoExpiresAt: communities.demoExpiresAt,
+      },
+      eq(communities.id, communityId),
+    ),
+  ]);
+  const community = communityRows[0];
+  const visibleRows = community
+    ? await applyDemoAnnouncementProvenancePolicy(
+        {
+          id: Number(community['id']),
+          isDemo: Boolean(community['isDemo']),
+          trialEndsAt: (community['trialEndsAt'] as Date | null | undefined) ?? null,
+          demoExpiresAt: (community['demoExpiresAt'] as Date | null | undefined) ?? null,
+        },
+        rows as Announcement[],
+      )
+    : [];
 
   // Filter out archived unless requested, then sort: pinned first, then by publishedAt desc
   const filtered = includeArchived
-    ? rows
-    : rows.filter((r) => r['archivedAt'] == null);
+    ? visibleRows
+    : visibleRows.filter((r) => r['archivedAt'] == null);
 
   const sorted = (filtered as Announcement[]).sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;

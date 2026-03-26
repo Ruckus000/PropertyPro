@@ -12,7 +12,7 @@ const {
   deleteAssessmentForCommunityMock,
   generateAssessmentLineItemsForCommunityMock,
   createPaymentIntentForLineItemMock,
-  findActorUnitIdMock,
+  listActorUnitIdsForFinanceMock,
   waiveLateFeesForUnitMock,
   startConnectOnboardingMock,
   completeConnectOnboardingMock,
@@ -30,7 +30,7 @@ const {
   deleteAssessmentForCommunityMock: vi.fn(),
   generateAssessmentLineItemsForCommunityMock: vi.fn(),
   createPaymentIntentForLineItemMock: vi.fn(),
-  findActorUnitIdMock: vi.fn(),
+  listActorUnitIdsForFinanceMock: vi.fn(),
   waiveLateFeesForUnitMock: vi.fn(),
   startConnectOnboardingMock: vi.fn(),
   completeConnectOnboardingMock: vi.fn(),
@@ -78,7 +78,7 @@ vi.mock('@/lib/services/finance-service', () => ({
   deleteAssessmentForCommunity: deleteAssessmentForCommunityMock,
   generateAssessmentLineItemsForCommunity: generateAssessmentLineItemsForCommunityMock,
   createPaymentIntentForLineItem: createPaymentIntentForLineItemMock,
-  findActorUnitId: findActorUnitIdMock,
+  listActorUnitIdsForFinance: listActorUnitIdsForFinanceMock,
   waiveLateFeesForUnit: waiveLateFeesForUnitMock,
   startConnectOnboarding: startConnectOnboardingMock,
   completeConnectOnboarding: completeConnectOnboardingMock,
@@ -138,7 +138,7 @@ describe('WS66 finance mutation routes', () => {
       amountCents: 25000,
       currency: 'usd',
     });
-    findActorUnitIdMock.mockResolvedValue(91);
+    listActorUnitIdsForFinanceMock.mockResolvedValue([91]);
     waiveLateFeesForUnitMock.mockResolvedValue({ waivedCount: 1, waivedAmountCents: 500 });
     startConnectOnboardingMock.mockResolvedValue({
       onboardingUrl: 'https://connect.stripe.test/onboard',
@@ -269,7 +269,7 @@ describe('WS66 finance mutation routes', () => {
 
     expect(response.status).toBe(200);
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
-    expect(findActorUnitIdMock).toHaveBeenCalledWith(communityId, 'user-finance-1');
+    expect(listActorUnitIdsForFinanceMock).toHaveBeenCalledWith(communityId, 'user-finance-1');
     expect(createPaymentIntentForLineItemMock).toHaveBeenCalledWith(
       communityId,
       expect.objectContaining({
@@ -277,6 +277,111 @@ describe('WS66 finance mutation routes', () => {
         allowedUnitId: 91,
       }),
     );
+  });
+
+  it('requires explicit unitId for multi-unit owner payment intents', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+      communityType: 'condo_718',
+    });
+    listActorUnitIdsForFinanceMock.mockResolvedValueOnce([91, 92]);
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        lineItemId: 88,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects rent_obligation intents for non-apartment communities', async () => {
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        payableType: 'rent_obligation',
+        payableId: 77,
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects lineItemId with rent_obligation payloads', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President',
+      permissions: { resources: { finances: { read: true, write: true } } },
+      communityType: 'apartment',
+    });
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        payableType: 'rent_obligation',
+        payableId: 77,
+        lineItemId: 12,
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+  });
+
+  it('allows apartment tenants to create rent_obligation intents for their own unit obligations', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+      communityType: 'apartment',
+    });
+    listActorUnitIdsForFinanceMock.mockResolvedValueOnce([93]);
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        payableType: 'rent_obligation',
+        payableId: 77,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(createPaymentIntentForLineItemMock).toHaveBeenCalledWith(
+      communityId,
+      expect.objectContaining({
+        lineItemId: 77,
+        payableId: 77,
+        payableType: 'rent_obligation',
+        allowedUnitId: 93,
+      }),
+    );
+  });
+
+  it('requires explicit unitId for multi-unit apartment tenant rent payment intents', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+      communityType: 'apartment',
+    });
+    listActorUnitIdsForFinanceMock.mockResolvedValueOnce([93, 94]);
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        payableType: 'rent_obligation',
+        payableId: 77,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
   });
 
   it('guards delinquency waive and connect onboarding mutations', async () => {

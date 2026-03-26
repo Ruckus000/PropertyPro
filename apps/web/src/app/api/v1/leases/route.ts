@@ -113,6 +113,99 @@ function coerceLeaseRecord(row: Record<string, unknown>): LeaseRecord {
   };
 }
 
+type LeaseLikeRow = {
+  id: number;
+  unitId: number;
+  residentId: string;
+  startDate: string;
+  endDate: string | null;
+  status: string;
+  previousLeaseId: number | null;
+};
+
+function parseIsoDateOnly(value: string, fieldName: string): Date {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ValidationError(`${fieldName} must be a valid date in YYYY-MM-DD format`);
+  }
+  return parsed;
+}
+
+function isFirstDayOfMonth(value: string): boolean {
+  return value.endsWith('-01');
+}
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date.getTime());
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+function dateRangesOverlap(
+  startA: Date,
+  endA: Date | null,
+  startB: Date,
+  endB: Date | null,
+): boolean {
+  const aEnd = endA ?? new Date('9999-12-31T00:00:00.000Z');
+  const bEnd = endB ?? new Date('9999-12-31T00:00:00.000Z');
+  return startA <= bEnd && startB <= aEnd;
+}
+
+function validateLeaseDateWindow(startDate: string, endDate: string | null): void {
+  if (!isFirstDayOfMonth(startDate)) {
+    throw new ValidationError('Lease startDate must be the first day of the month (YYYY-MM-01)');
+  }
+  const start = parseIsoDateOnly(startDate, 'startDate');
+  if (endDate) {
+    const end = parseIsoDateOnly(endDate, 'endDate');
+    if (end <= start) {
+      throw new ValidationError('endDate must be after startDate');
+    }
+  }
+}
+
+function ensureNoUnitLeaseOverlap(
+  candidate: { id?: number; unitId: number; startDate: string; endDate: string | null },
+  existingLeases: LeaseLikeRow[],
+): void {
+  const candidateStart = parseIsoDateOnly(candidate.startDate, 'startDate');
+  const candidateEnd = candidate.endDate ? parseIsoDateOnly(candidate.endDate, 'endDate') : null;
+  const overlaps = existingLeases.some((existing) => {
+    if (candidate.id !== undefined && existing.id === candidate.id) return false;
+    if (existing.unitId !== candidate.unitId) return false;
+    if (existing.status === 'terminated') return false;
+    const existingStart = parseIsoDateOnly(existing.startDate, 'startDate');
+    const existingEnd = existing.endDate ? parseIsoDateOnly(existing.endDate, 'endDate') : null;
+    return dateRangesOverlap(candidateStart, candidateEnd, existingStart, existingEnd);
+  });
+  if (overlaps) {
+    throw new ValidationError('Lease period overlaps an existing lease for this unit');
+  }
+}
+
+function ensureRenewalContinuity(
+  candidate: { unitId: number; residentId: string; startDate: string; previousLeaseId: number },
+  previousLease: LeaseLikeRow,
+): void {
+  if (previousLease.unitId !== candidate.unitId) {
+    throw new ValidationError('Renewal lease must use the same unit as the previous lease');
+  }
+  if (previousLease.residentId !== candidate.residentId) {
+    throw new ValidationError('Renewal lease must use the same resident as the previous lease');
+  }
+  if (!previousLease.endDate) {
+    throw new ValidationError('Previous lease must have an endDate before creating a renewal');
+  }
+
+  const previousEndDate = parseIsoDateOnly(previousLease.endDate, 'previousLease.endDate');
+  const expectedStartDate = addDays(previousEndDate, 1);
+  const actualStartDate = parseIsoDateOnly(candidate.startDate, 'startDate');
+  if (actualStartDate.getTime() !== expectedStartDate.getTime()) {
+    throw new ValidationError('Renewal lease startDate must be the day after the previous lease endDate');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // GET — List leases for a community with optional filters
 // ---------------------------------------------------------------------------
@@ -208,6 +301,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!unit) {
     throw new ValidationError('Unit not found in this community');
   }
+  const unitRentAmount = (unit['rentAmount'] as string | null) ?? null;
 
   // Validate resident has a tenant (non-owner resident) role in this community
   const roleRows = await scoped.query(userRoles);
@@ -218,15 +312,41 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Resident must have a tenant role in this community');
   }
 
+  validateLeaseDateWindow(payload.startDate, payload.endDate ?? null);
+
+  const existingLeaseRows = await scoped.query(leases);
+  const existingLeases = existingLeaseRows as unknown as LeaseLikeRow[];
+  ensureNoUnitLeaseOverlap(
+    {
+      unitId: payload.unitId,
+      startDate: payload.startDate,
+      endDate: payload.endDate ?? null,
+    },
+    existingLeases,
+  );
+
+  const effectiveRentAmount = payload.rentAmount ?? unitRentAmount;
+
   // Handle renewal logic
   let previousLeaseId = payload.previousLeaseId ?? null;
-  if (payload.isRenewal && previousLeaseId) {
+  if (payload.isRenewal || previousLeaseId !== null) {
+    if (!previousLeaseId) {
+      throw new ValidationError('previousLeaseId is required when creating a renewal lease');
+    }
     // Verify the previous lease exists in this community
-    const existingLeases = await scoped.query(leases);
-    const previousLease = existingLeases.find((row) => row['id'] === previousLeaseId);
+    const previousLease = existingLeases.find((row) => row.id === previousLeaseId);
     if (!previousLease) {
       throw new ValidationError('Previous lease not found in this community');
     }
+    ensureRenewalContinuity(
+      {
+        unitId: payload.unitId,
+        residentId: payload.residentId,
+        startDate: payload.startDate,
+        previousLeaseId,
+      },
+      previousLease,
+    );
 
     // Mark the previous lease as 'renewed'
     await scoped.update(leases, { status: 'renewed' }, eq(leases.id, previousLeaseId));
@@ -248,7 +368,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     residentId: payload.residentId,
     startDate: payload.startDate,
     endDate: payload.endDate ?? null,
-    rentAmount: payload.rentAmount ?? null,
+    rentAmount: effectiveRentAmount,
     status: payload.status ?? 'active',
     previousLeaseId,
     notes: payload.notes ?? null,
@@ -270,7 +390,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       residentId: payload.residentId,
       startDate: payload.startDate,
       endDate: payload.endDate ?? null,
-      rentAmount: payload.rentAmount ?? null,
+      rentAmount: effectiveRentAmount,
       status: payload.status ?? 'active',
       previousLeaseId,
     },
@@ -343,6 +463,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     newValues['status'] = fields.status;
   }
   if (fields.endDate !== undefined) {
+    validateLeaseDateWindow((existing['startDate'] as string) ?? '', fields.endDate);
     updateData['endDate'] = fields.endDate;
     oldValues['endDate'] = existing['endDate'];
     newValues['endDate'] = fields.endDate;
@@ -360,6 +481,41 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   if (Object.keys(updateData).length === 0) {
     throw new ValidationError('No fields to update');
+  }
+
+  const allRows = await scoped.query(leases);
+  const allLeases = allRows as unknown as LeaseLikeRow[];
+  const candidateEndDate =
+    fields.endDate !== undefined ? fields.endDate : ((existing['endDate'] as string | null) ?? null);
+  ensureNoUnitLeaseOverlap(
+    {
+      id,
+      unitId: existing['unitId'] as number,
+      startDate: existing['startDate'] as string,
+      endDate: candidateEndDate,
+    },
+    allLeases,
+  );
+
+  const renewalLease = allLeases.find((row) => row.previousLeaseId === id);
+  if (renewalLease && candidateEndDate) {
+    ensureRenewalContinuity(
+      {
+        unitId: renewalLease.unitId,
+        residentId: renewalLease.residentId,
+        startDate: renewalLease.startDate,
+        previousLeaseId: id,
+      },
+      {
+        id,
+        unitId: existing['unitId'] as number,
+        residentId: existing['residentId'] as string,
+        startDate: existing['startDate'] as string,
+        endDate: candidateEndDate,
+        status: (existing['status'] as string) ?? 'active',
+        previousLeaseId: (existing['previousLeaseId'] as number | null) ?? null,
+      },
+    );
   }
 
   const [updated] = await scoped.update(leases, updateData, eq(leases.id, id));

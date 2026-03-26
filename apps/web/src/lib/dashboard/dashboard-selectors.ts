@@ -1,5 +1,6 @@
 import type { Announcement, Meeting } from '@propertypro/db';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
+import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
 
 export interface DashboardAnnouncement {
   id: number;
@@ -53,7 +54,7 @@ export function selectUpcomingMeetings(rows: Meeting[]): DashboardMeeting[] {
     .slice(0, 5)
     .map((row) => ({
       id: row.id,
-      title: row.title,
+      title: formatMeetingTitle(row.title),
       meetingType: row.meetingType,
       startsAt: new Date(row.startsAt).toISOString(),
       location: row.location,

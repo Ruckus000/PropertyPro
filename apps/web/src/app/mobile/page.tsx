@@ -116,6 +116,8 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       role={membership!.role}
       presetKey={membership!.presetKey}
       hasCompliance={features.hasCompliance}
+      hasFinance={features.hasFinance}
+      hasMaintenanceRequests={features.hasMaintenanceRequests}
       hasMeetings={features.hasMeetings}
       announcementCount={data.announcements.length}
       openMaintenanceCount={data.openMaintenanceCount}

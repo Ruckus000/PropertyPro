@@ -19,10 +19,10 @@ import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/
 // ---------------------------------------------------------------------------
 // Suggested / Getting Started item IDs (mirrored from desktop palette)
 // ---------------------------------------------------------------------------
-const RESIDENT_SUGGESTIONS = ['page-documents', 'action-submit-maintenance', 'setting-notifications'] as const;
-const ADMIN_SUGGESTIONS = ['action-upload-document', 'action-post-announcement', 'page-compliance'] as const;
-const GETTING_STARTED_RESIDENT = ['page-documents', 'action-submit-maintenance', 'setting-notifications'] as const;
-const GETTING_STARTED_ADMIN = ['action-upload-document', 'page-residents', 'action-schedule-meeting'] as const;
+const RESIDENT_SUGGESTIONS = ['page-payments', 'page-documents', 'action-submit-maintenance'] as const;
+const ADMIN_SUGGESTIONS = ['page-payments', 'page-compliance', 'action-post-announcement'] as const;
+const GETTING_STARTED_RESIDENT = ['page-payments', 'page-documents', 'action-submit-maintenance'] as const;
+const GETTING_STARTED_ADMIN = ['page-compliance', 'page-payments', 'action-schedule-meeting'] as const;
 const RECENT_THRESHOLD = 3;
 
 function isAdmin(role: AnyCommunityRole | null): boolean {
@@ -167,7 +167,7 @@ export function MobileSearchContent({ communityId, role, features }: MobileSearc
         {/* No results */}
         {noResults && (
           <div className="px-4 py-12 text-center text-sm text-content-tertiary">
-            No results found. Try different keywords.
+            No results found. Try different keywords for pages available to your role.
           </div>
         )}
 

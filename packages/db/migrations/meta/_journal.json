@@ -586,8 +586,22 @@
     {
       "idx": 123,
       "version": "7",
-      "when": 1774653600000,
+      "when": 1774780000000,
       "tag": "0123_support_access_service_role_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1774790000000,
+      "tag": "0124_apartment_rent_obligations_and_lease_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1774800000000,
+      "tag": "0125_ledger_rent_payable_contract",
       "breakpoints": true
     }
   ]

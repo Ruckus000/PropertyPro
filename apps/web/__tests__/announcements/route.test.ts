@@ -10,6 +10,7 @@ const {
   logAuditEventMock,
   queueAnnouncementDeliveryMock,
   announcementsTableMock,
+  communitiesTableMock,
   usersTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
@@ -21,6 +22,12 @@ const {
   queueAnnouncementDeliveryMock: vi.fn().mockResolvedValue(3),
   announcementsTableMock: {
     id: Symbol('announcements.id'),
+  },
+  communitiesTableMock: {
+    id: Symbol('communities.id'),
+    isDemo: Symbol('communities.isDemo'),
+    trialEndsAt: Symbol('communities.trialEndsAt'),
+    demoExpiresAt: Symbol('communities.demoExpiresAt'),
   },
   usersTableMock: Symbol('users'),
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -36,6 +43,7 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   announcements: announcementsTableMock,
+  communities: communitiesTableMock,
   users: usersTableMock,
   logAuditEvent: logAuditEventMock,
 }));
@@ -88,6 +96,7 @@ describe('p1-17 announcements route', () => {
         }
         return [];
       }),
+      selectFrom: vi.fn().mockResolvedValue([]),
       insert: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue([]),
     });
@@ -123,6 +132,7 @@ describe('p1-17 announcements route', () => {
 
     createScopedClientMock.mockReturnValue({
       query,
+      selectFrom: vi.fn().mockResolvedValue([{ id: 42, isDemo: false, trialEndsAt: null, demoExpiresAt: null }]),
       insert: vi.fn(),
       update: vi.fn(),
     });
@@ -156,6 +166,7 @@ describe('p1-17 announcements route', () => {
 
     createScopedClientMock.mockReturnValue({
       query,
+      selectFrom: vi.fn().mockResolvedValue([{ id: 42, isDemo: false, trialEndsAt: null, demoExpiresAt: null }]),
       insert: vi.fn(),
       update: vi.fn(),
     });
@@ -194,6 +205,7 @@ describe('p1-17 announcements route', () => {
         }
         return [];
       }),
+      selectFrom: vi.fn().mockResolvedValue([]),
       insert,
       update: vi.fn(),
     });
@@ -252,6 +264,7 @@ describe('p1-17 announcements route', () => {
         }
         return [];
       }),
+      selectFrom: vi.fn().mockResolvedValue([]),
       insert: vi.fn().mockResolvedValue([
         {
           id: 4,

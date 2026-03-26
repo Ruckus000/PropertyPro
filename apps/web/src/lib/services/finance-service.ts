@@ -7,16 +7,18 @@ import {
   createScopedClient,
   financeStripeWebhookEvents,
   getUnitLedgerBalance,
+  leases,
   listLedgerEntries,
   logAuditEvent,
   postLedgerEntry,
+  rentObligations,
+  rentPayments,
   stripeConnectedAccounts,
   units,
   users,
-  userRoles,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
-import type { LedgerEntryType } from '@propertypro/shared';
+import type { LedgerEntryType, StripePayableMetadata, PayableType } from '@propertypro/shared';
 import {
   type PaymentFeePolicy,
   DEFAULT_FEE_POLICY,
@@ -109,10 +111,71 @@ export interface UpdateAssessmentInput {
 }
 
 export interface CreatePaymentIntentInput {
+  payableId?: number;
+  payableType?: 'assessment_line_item' | 'rent_obligation';
   lineItemId: number;
   actorUserId: string;
   allowedUnitId?: number;
   requestId?: string | null;
+}
+
+interface PayableRecord {
+  payableType: PayableType;
+  payableId: number;
+  payableSourceType: 'assessment' | 'rent';
+  payableSourceId: string;
+  communityId: number;
+  unitId: number;
+  amountCents: number;
+  status: PayableStatus;
+  paidAt: Date | null;
+  paymentIntentId: string | null;
+  assessmentId: number | null;
+  leaseId: number | null;
+  dueDate: string;
+  lateFeeCents: number;
+}
+
+type PayableStatus = AssessmentLineItemStatus | 'partially_paid';
+
+interface RentObligationRecord {
+  [key: string]: unknown;
+  id: number;
+  leaseId: number;
+  communityId: number;
+  unitId: number;
+  dueDate: string;
+  amountCents: number;
+  status: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'waived';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface PaymentHistoryRecord {
+  payableType: PayableType;
+  payableId: number;
+  payableSourceType: 'assessment' | 'rent';
+  payableSourceId: string;
+  unitId: number;
+  amountCents: number;
+  dueDate: string;
+  status: PayableStatus;
+  paidAt: Date | null;
+  assessmentId: number | null;
+  leaseId: number | null;
+  lateFeeCents: number;
+}
+
+interface PayableMetadata {
+  communityId: number;
+  payableType: PayableType;
+  payableId: number;
+  payableSourceType: 'assessment' | 'rent';
+  payableSourceId: string;
+  unitId: number;
+  userId: string;
+  baseAmountCents: number;
+  convenienceFeeCents: number;
 }
 
 const VALID_ASSESSMENT_FREQUENCIES: readonly AssessmentFrequency[] = [
@@ -170,6 +233,16 @@ function isUniqueConstraintError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === '23505';
 }
 
+function isMissingRelationError(err: unknown): boolean {
+  const directCode = typeof err === 'object' && err !== null && 'code' in err
+    ? (err as { code?: string }).code
+    : undefined;
+  const causeCode = typeof err === 'object' && err !== null && 'cause' in err
+    ? ((err as { cause?: { code?: string } }).cause?.code)
+    : undefined;
+  return directCode === '42P01' || causeCode === '42P01';
+}
+
 function parseMetadataInt(metadata: Record<string, string>, key: string): number | null {
   const raw = metadata[key];
   if (!raw) return null;
@@ -181,6 +254,40 @@ function parseMetadataInt(metadata: Record<string, string>, key: string): number
 function parseMetadataString(metadata: Record<string, string>, key: string): string | null {
   const raw = metadata[key];
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
+function parsePayableType(metadata: Record<string, string>): PayableType | null {
+  const payableType = parseMetadataString(metadata, 'payableType');
+  if (payableType === 'assessment_line_item' || payableType === 'rent_obligation') {
+    return payableType;
+  }
+  // Backward compatibility for pre-contract payment intents.
+  const legacyLineItemId = parseMetadataInt(metadata, 'lineItemId');
+  if (legacyLineItemId) {
+    return 'assessment_line_item';
+  }
+  return null;
+}
+
+function parsePayableId(metadata: Record<string, string>, payableType: PayableType): number | null {
+  const payableId = parseMetadataInt(metadata, 'payableId');
+  if (payableId) return payableId;
+
+  // Backward compatibility for assessment-only metadata.
+  if (payableType === 'assessment_line_item') {
+    return parseMetadataInt(metadata, 'lineItemId');
+  }
+
+  return null;
+}
+
+function toLegacyMetadata(payable: PayableRecord): Record<string, string> {
+  if (payable.payableType === 'assessment_line_item') {
+    return {
+      lineItemId: String(payable.payableId),
+    };
+  }
+  return {};
 }
 
 function computeDueDate(
@@ -477,6 +584,84 @@ export async function getCommunityFeePolicy(communityId: number): Promise<Paymen
   return DEFAULT_FEE_POLICY;
 }
 
+async function getAssessmentPayableById(
+  communityId: number,
+  payableId: number,
+): Promise<PayableRecord | null> {
+  const scoped = createScopedClient(communityId);
+  const [lineItem] = await scoped.selectFrom<AssessmentLineItemRecord>(
+    assessmentLineItems,
+    {},
+    eq(assessmentLineItems.id, payableId),
+  );
+  if (!lineItem) return null;
+
+  return {
+    payableType: 'assessment_line_item',
+    payableId: lineItem.id,
+    payableSourceType: 'assessment',
+    payableSourceId: String(lineItem.id),
+    communityId,
+    unitId: lineItem.unitId,
+    amountCents: lineItem.amountCents,
+    status: lineItem.status,
+    paidAt: lineItem.paidAt,
+    paymentIntentId: lineItem.paymentIntentId,
+    assessmentId: lineItem.assessmentId,
+    leaseId: null,
+    dueDate: lineItem.dueDate,
+    lateFeeCents: lineItem.lateFeeCents,
+  };
+}
+
+async function getRentPayableById(
+  communityId: number,
+  payableId: number,
+): Promise<PayableRecord | null> {
+  const scoped = createScopedClient(communityId);
+  let rentRows: RentObligationRecord[];
+  try {
+    rentRows = await scoped.selectFrom<RentObligationRecord>(
+      rentObligations,
+      {},
+      eq(rentObligations.id, payableId),
+    );
+  } catch (err) {
+    if (isMissingRelationError(err)) return null;
+    throw err;
+  }
+  const [obligation] = rentRows;
+  if (!obligation) return null;
+
+  return {
+    payableType: 'rent_obligation',
+    payableId: obligation.id,
+    payableSourceType: 'rent',
+    payableSourceId: String(obligation.id),
+    communityId,
+    unitId: obligation.unitId,
+    amountCents: obligation.amountCents,
+    status: obligation.status,
+    paidAt: obligation.status === 'paid' ? obligation.updatedAt : null,
+    paymentIntentId: null,
+    assessmentId: null,
+    leaseId: obligation.leaseId,
+    dueDate: obligation.dueDate,
+    lateFeeCents: 0,
+  };
+}
+
+async function getPayableById(
+  communityId: number,
+  payableType: PayableType,
+  payableId: number,
+): Promise<PayableRecord | null> {
+  if (payableType === 'assessment_line_item') {
+    return getAssessmentPayableById(communityId, payableId);
+  }
+  return getRentPayableById(communityId, payableId);
+}
+
 /**
  * Pre-flight guard: verify that the given actor is the user who created the PI.
  * Used by the update-intent route to prevent cross-owner PI manipulation.
@@ -568,25 +753,28 @@ export interface CreatePaymentIntentResult {
   feePolicy: PaymentFeePolicy;
 }
 
-export async function createPaymentIntentForLineItem(
+async function createPaymentIntentForPayable(
   communityId: number,
-  input: CreatePaymentIntentInput,
+  input: {
+    payableType: PayableType;
+    payableId: number;
+    actorUserId: string;
+    allowedUnitId?: number;
+    requestId?: string | null;
+  },
 ): Promise<CreatePaymentIntentResult> {
-  const scoped = createScopedClient(communityId);
-  const [lineItem] = await scoped.selectFrom<AssessmentLineItemRecord>(
-    assessmentLineItems,
-    {},
-    eq(assessmentLineItems.id, input.lineItemId),
-  );
-
-  if (!lineItem) {
-    throw new NotFoundError('Assessment line item not found');
+  const payable = await getPayableById(communityId, input.payableType, input.payableId);
+  if (!payable) {
+    if (input.payableType === 'assessment_line_item') {
+      throw new NotFoundError('Assessment line item not found');
+    }
+    throw new NotFoundError('Payable item not found');
   }
-  if (input.allowedUnitId !== undefined && lineItem.unitId !== input.allowedUnitId) {
-    throw new ForbiddenError('You can only pay line items for your own unit');
+  if (input.allowedUnitId !== undefined && payable.unitId !== input.allowedUnitId) {
+    throw new ForbiddenError('You can only pay payables for your own unit');
   }
-  if (lineItem.status === 'paid') {
-    throw new UnprocessableEntityError('This line item is already paid');
+  if (payable.status === 'paid' || payable.status === 'waived') {
+    throw new UnprocessableEntityError('This payable is not payable in its current state');
   }
 
   const connectAccount = await requireConnectAccount(communityId);
@@ -595,25 +783,32 @@ export async function createPaymentIntentForLineItem(
   }
 
   const stripe = getStripeClient();
-  const amountCents = lineItem.amountCents + lineItem.lateFeeCents;
+  const amountCents = payable.amountCents + payable.lateFeeCents;
   if (amountCents <= 0) {
-    throw new BadRequestError('Line item amount must be greater than zero');
+    throw new BadRequestError('Payable amount must be greater than zero');
   }
 
   const feePolicy = await getCommunityFeePolicy(communityId);
+
+  const stripeMetadataBase: StripePayableMetadata = {
+    communityId: String(communityId),
+    payableType: input.payableType,
+    payableId: String(payable.payableId),
+    payableSourceType: payable.payableSourceType,
+    payableSourceId: payable.payableSourceId,
+    unitId: String(payable.unitId),
+    userId: input.actorUserId,
+    baseAmountCents: String(amountCents),
+    convenienceFeeCents: '0',
+    ...toLegacyMetadata(payable),
+  };
+  const stripeMetadata: Stripe.MetadataParam = { ...stripeMetadataBase };
 
   const intent = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: 'usd',
     payment_method_types: ['card', 'us_bank_account'],
-    metadata: {
-      communityId: String(communityId),
-      lineItemId: String(lineItem.id),
-      unitId: String(lineItem.unitId),
-      userId: input.actorUserId,
-      baseAmountCents: String(amountCents),
-      convenienceFeeCents: '0',
-    },
+    metadata: stripeMetadata,
     transfer_data: {
       destination: connectAccount.stripeAccountId,
     },
@@ -623,24 +818,29 @@ export async function createPaymentIntentForLineItem(
     throw new Error('Stripe did not return a client_secret for PaymentIntent');
   }
 
-  await scoped.update(
-    assessmentLineItems,
-    { paymentIntentId: intent.id },
-    eq(assessmentLineItems.id, lineItem.id),
-  );
+  const scoped = createScopedClient(communityId);
+  if (payable.payableType === 'assessment_line_item') {
+    await scoped.update(
+      assessmentLineItems,
+      { paymentIntentId: intent.id },
+      eq(assessmentLineItems.id, payable.payableId),
+    );
+  }
 
   await logAuditEvent({
     userId: input.actorUserId,
     action: 'update',
-    resourceType: 'assessment_line_item',
-    resourceId: String(lineItem.id),
+    resourceType: payable.payableType === 'rent_obligation' ? 'rent_obligation' : 'assessment_line_item',
+    resourceId: String(payable.payableId),
     communityId,
     oldValues: {
-      paymentIntentId: lineItem.paymentIntentId,
+      paymentIntentId: payable.paymentIntentId,
     },
     newValues: {
       paymentIntentId: intent.id,
       amountCents,
+      payableType: input.payableType,
+      payableId: payable.payableId,
     },
     metadata: { requestId: input.requestId ?? null },
   });
@@ -656,23 +856,83 @@ export async function createPaymentIntentForLineItem(
   };
 }
 
+export async function createPaymentIntentForLineItem(
+  communityId: number,
+  input: CreatePaymentIntentInput,
+): Promise<CreatePaymentIntentResult> {
+  const payableType = input.payableType ?? 'assessment_line_item';
+  const payableId = input.payableId ?? input.lineItemId;
+
+  return createPaymentIntentForPayable(communityId, {
+    payableType,
+    payableId,
+    actorUserId: input.actorUserId,
+    allowedUnitId: input.allowedUnitId,
+    requestId: input.requestId,
+  });
+}
+
 export async function listPaymentHistoryForCommunity(
   communityId: number,
   unitId?: number,
-): Promise<AssessmentLineItemRecord[]> {
+): Promise<PaymentHistoryRecord[]> {
   const scoped = createScopedClient(communityId);
-  const whereClause = unitId !== undefined
+  const assessmentWhereClause = unitId !== undefined
     ? and(eq(assessmentLineItems.unitId, unitId), eq(assessmentLineItems.status, 'paid'))
     : eq(assessmentLineItems.status, 'paid');
 
-  const rows = await scoped
-    .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, whereClause)
+  const assessmentRows = await scoped
+    .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentWhereClause)
     .orderBy(desc(assessmentLineItems.paidAt), desc(assessmentLineItems.id));
 
-  return rows.map((row) => ({
-    ...row,
+  const rentWhereClause = unitId !== undefined
+    ? and(eq(rentObligations.unitId, unitId), eq(rentObligations.status, 'paid'))
+    : eq(rentObligations.status, 'paid');
+  let rentRows: RentObligationRecord[] = [];
+  try {
+    rentRows = await scoped
+      .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhereClause)
+      .orderBy(desc(rentObligations.updatedAt), desc(rentObligations.id));
+  } catch (err) {
+    if (!isMissingRelationError(err)) {
+      throw err;
+    }
+  }
+
+  const assessmentHistory: PaymentHistoryRecord[] = assessmentRows.map((row) => ({
+    payableType: 'assessment_line_item',
+    payableId: row.id,
+    payableSourceType: 'assessment',
+    payableSourceId: String(row.id),
+    unitId: row.unitId,
+    amountCents: row.amountCents,
+    dueDate: row.dueDate,
     status: assertLineItemStatus(row.status),
+    paidAt: row.paidAt,
+    assessmentId: row.assessmentId,
+    leaseId: null,
+    lateFeeCents: row.lateFeeCents,
   }));
+  const rentHistory: PaymentHistoryRecord[] = rentRows.map((row) => ({
+    payableType: 'rent_obligation',
+    payableId: row.id,
+    payableSourceType: 'rent',
+    payableSourceId: String(row.id),
+    unitId: row.unitId,
+    amountCents: row.amountCents,
+    dueDate: row.dueDate,
+    status: row.status,
+    paidAt: row.updatedAt,
+    assessmentId: null,
+    leaseId: row.leaseId,
+    lateFeeCents: 0,
+  }));
+
+  return [...assessmentHistory, ...rentHistory].sort((a, b) => {
+    const aTime = a.paidAt ? a.paidAt.getTime() : 0;
+    const bTime = b.paidAt ? b.paidAt.getTime() : 0;
+    return bTime - aTime;
+  });
 }
 
 export async function buildUnitStatement(
@@ -684,7 +944,12 @@ export async function buildUnitStatement(
   unitId: number;
   balanceCents: number;
   ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
-  lineItems: AssessmentLineItemRecord[];
+  lineItems: Array<{
+    dueDate: string;
+    status: PayableStatus;
+    amountCents: number;
+    lateFeeCents: number;
+  }>;
 }> {
   const scoped = createScopedClient(communityId);
   const lineItemFilters = [eq(assessmentLineItems.unitId, unitId)];
@@ -697,9 +962,28 @@ export async function buildUnitStatement(
   }
 
   const lineItemsWhere = lineItemFilters.length === 1 ? lineItemFilters[0] : and(...lineItemFilters);
-  const lineItems = await scoped
+  const assessmentRows = await scoped
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, lineItemsWhere)
     .orderBy(asc(assessmentLineItems.dueDate), asc(assessmentLineItems.id));
+
+  const rentFilters = [eq(rentObligations.unitId, unitId)];
+  if (startDate !== undefined) {
+    rentFilters.push(gte(rentObligations.dueDate, startDate));
+  }
+  if (endDate !== undefined) {
+    rentFilters.push(lte(rentObligations.dueDate, endDate));
+  }
+  const rentWhere = rentFilters.length === 1 ? rentFilters[0] : and(...rentFilters);
+  let rentRows: RentObligationRecord[] = [];
+  try {
+    rentRows = await scoped
+      .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
+      .orderBy(asc(rentObligations.dueDate), asc(rentObligations.id));
+  } catch (err) {
+    if (!isMissingRelationError(err)) {
+      throw err;
+    }
+  }
 
   const ledgerEntriesForUnit = await listLedgerEntries(scoped, {
     unitId,
@@ -713,7 +997,20 @@ export async function buildUnitStatement(
     unitId,
     balanceCents,
     ledgerEntries: ledgerEntriesForUnit,
-    lineItems: lineItems.map((row) => ({ ...row, status: assertLineItemStatus(row.status) })),
+    lineItems: [
+      ...assessmentRows.map((row) => ({
+        dueDate: row.dueDate,
+        status: assertLineItemStatus(row.status),
+        amountCents: row.amountCents,
+        lateFeeCents: row.lateFeeCents,
+      })),
+      ...rentRows.map((row) => ({
+        dueDate: row.dueDate,
+        status: row.status,
+        amountCents: row.amountCents,
+        lateFeeCents: 0,
+      })),
+    ].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
   };
 }
 
@@ -1106,7 +1403,7 @@ async function sendPaymentConfirmationEmail(
   communityId: number,
   payerUserId: string,
   amountCents: number,
-  lineItem: AssessmentLineItemRecord,
+  lineItem: Pick<AssessmentLineItemRecord, 'assessmentId' | 'unitId' | 'dueDate'>,
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
 
@@ -1170,11 +1467,12 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   const freshIntent = await stripe.paymentIntents.retrieve(stripePaymentIntent.id);
   const metadata = freshIntent.metadata ?? {};
   const communityId = parseMetadataInt(metadata, 'communityId');
-  const lineItemId = parseMetadataInt(metadata, 'lineItemId');
+  const payableType = parsePayableType(metadata);
+  const payableId = payableType ? parsePayableId(metadata, payableType) : null;
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
 
-  if (!communityId || !lineItemId || !unitId || !payerUserId) {
+  if (!communityId || !payableType || !payableId || !unitId || !payerUserId) {
     return;
   }
 
@@ -1204,26 +1502,29 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     }
   }
 
-  const scoped = createScopedClient(communityId);
-  const lineItemRows = await scoped.selectFrom<AssessmentLineItemRecord>(
-    assessmentLineItems,
-    {},
-    eq(assessmentLineItems.id, lineItemId),
-  );
-  const lineItem = lineItemRows[0];
-  if (!lineItem) {
+  const payable = await getPayableById(communityId, payableType, payableId);
+  if (!payable) {
     return;
   }
 
-  await scoped.update(
-    assessmentLineItems,
-    {
-      status: 'paid',
-      paidAt: new Date(),
-      paymentIntentId: freshIntent.id,
-    },
-    eq(assessmentLineItems.id, lineItemId),
-  );
+  const scoped = createScopedClient(communityId);
+  if (payable.payableType === 'assessment_line_item') {
+    await scoped.update(
+      assessmentLineItems,
+      {
+        status: 'paid',
+        paidAt: new Date(),
+        paymentIntentId: freshIntent.id,
+      },
+      eq(assessmentLineItems.id, payable.payableId),
+    );
+  } else {
+    await scoped.update(
+      rentObligations,
+      { status: 'paid' },
+      eq(rentObligations.id, payable.payableId),
+    );
+  }
 
   const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
   const paymentMethod = parseMetadataString(metadata, 'paymentMethod') as 'card' | 'us_bank_account' | null;
@@ -1232,20 +1533,38 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   await postLedgerEntry(scoped, {
     entryType: 'payment',
     amountCents: -Math.abs(paymentAmount),
-    description: `Payment received for line item #${lineItemId}`,
+    description: `Payment received for payable #${payable.payableId}`,
     sourceType: 'payment',
     sourceId: freshIntent.id,
     unitId,
     userId: payerUserId,
     metadata: {
-      lineItemId,
-      assessmentId: lineItem.assessmentId ?? undefined,
+      payableType,
+      payableId,
+      payableSourceType: payable.payableSourceType,
+      payableSourceId: payable.payableSourceId,
+      lineItemId: payable.payableId,
+      assessmentLineItemId: payable.payableId,
+      assessmentId: payable.assessmentId ?? undefined,
       stripePaymentIntentId: freshIntent.id,
       stripeFeeActualCents,
       paymentMethod: paymentMethod ?? undefined,
     },
     createdByUserId: payerUserId,
   });
+
+  if (payable.payableType === 'rent_obligation' && payable.leaseId) {
+    await scoped.insert(rentPayments, {
+      leaseId: payable.leaseId,
+      obligationId: payable.payableId,
+      unitId,
+      residentId: payerUserId,
+      amountCents: paymentAmount,
+      paymentMethod: paymentMethod ?? null,
+      externalReference: freshIntent.id,
+      notes: 'Recorded via Stripe webhook',
+    });
+  }
 
   // Post a separate convenience fee ledger entry when the owner paid a fee
   if (convenienceFeeCents > 0) {
@@ -1258,7 +1577,12 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
       unitId,
       userId: payerUserId,
       metadata: {
-        lineItemId,
+        payableType,
+        payableId,
+        payableSourceType: payable.payableSourceType,
+        payableSourceId: payable.payableSourceId,
+        lineItemId: payable.payableId,
+        assessmentLineItemId: payable.payableId,
         stripePaymentIntentId: freshIntent.id,
         convenienceFeeCents,
         paymentMethod: paymentMethod ?? undefined,
@@ -1270,7 +1594,11 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   await markMatchingViolationFinePaid(communityId, unitId, paymentAmount, payerUserId);
 
   // Fire-and-forget payment confirmation email — never block webhook processing
-  sendPaymentConfirmationEmail(communityId, payerUserId, paymentAmount, lineItem).catch(() => {
+  sendPaymentConfirmationEmail(communityId, payerUserId, paymentAmount, {
+    assessmentId: payable.assessmentId,
+    unitId: payable.unitId,
+    dueDate: payable.dueDate,
+  }).catch(() => {
     // Swallowed intentionally — email failure must not block webhook
   });
 }
@@ -1285,10 +1613,11 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
 
   const metadata = paymentIntent?.metadata ?? {};
   const communityId = parseMetadataInt(metadata, 'communityId');
-  const lineItemId = parseMetadataInt(metadata, 'lineItemId');
+  const payableType = parsePayableType(metadata);
+  const payableId = payableType ? parsePayableId(metadata, payableType) : null;
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
-  if (!communityId || !lineItemId || !unitId || !payerUserId) {
+  if (!communityId || !payableType || !payableId || !unitId || !payerUserId) {
     return;
   }
 
@@ -1297,16 +1626,11 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const scoped = createScopedClient(communityId);
-  const lineItemRows = await scoped.selectFrom<AssessmentLineItemRecord>(
-    assessmentLineItems,
-    {},
-    eq(assessmentLineItems.id, lineItemId),
-  );
-  const lineItem = lineItemRows[0];
-  if (!lineItem) {
+  const payable = await getPayableById(communityId, payableType, payableId);
+  if (!payable) {
     return;
   }
+  const scoped = createScopedClient(communityId);
 
   // Use the event snapshot for deterministic behavior — not the fresh retrieve,
   // which may include refunds from concurrent events.
@@ -1344,17 +1668,25 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  // Only reset line item status AFTER validating the refund amount — avoid modifying
+  // Only reset payable status AFTER validating the refund amount — avoid modifying
   // state if the event data is corrupt.
   if (isFullRefund) {
-    await scoped.update(
-      assessmentLineItems,
-      {
-        status: 'pending',
-        paidAt: null,
-      },
-      eq(assessmentLineItems.id, lineItem.id),
-    );
+    if (payable.payableType === 'assessment_line_item') {
+      await scoped.update(
+        assessmentLineItems,
+        {
+          status: 'pending',
+          paidAt: null,
+        },
+        eq(assessmentLineItems.id, payable.payableId),
+      );
+    } else {
+      await scoped.update(
+        rentObligations,
+        { status: 'pending' },
+        eq(rentObligations.id, payable.payableId),
+      );
+    }
   }
 
   const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
@@ -1362,18 +1694,36 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
   await postLedgerEntry(scoped, {
     entryType: 'refund',
     amountCents: Math.abs(incrementalRefundCents),
-    description: `Refund posted for line item #${lineItemId}.`,
+    description: `Refund posted for payable #${payable.payableId}.`,
     sourceType: 'payment',
     sourceId: charge.id,
     unitId,
     userId: payerUserId,
     metadata: {
-      lineItemId,
-      assessmentId: lineItem.assessmentId ?? undefined,
+      payableType,
+      payableId,
+      payableSourceType: payable.payableSourceType,
+      payableSourceId: payable.payableSourceId,
+      lineItemId: payable.payableId,
+      assessmentLineItemId: payable.payableId,
+      assessmentId: payable.assessmentId ?? undefined,
       stripeChargeId: charge.id,
     },
     createdByUserId: payerUserId,
   });
+
+  if (payable.payableType === 'rent_obligation' && payable.leaseId) {
+    await scoped.insert(rentPayments, {
+      leaseId: payable.leaseId,
+      obligationId: payable.payableId,
+      unitId,
+      residentId: payerUserId,
+      amountCents: -Math.abs(incrementalRefundCents),
+      paymentMethod: paymentIntent?.payment_method_types?.[0] ?? null,
+      externalReference: charge.id,
+      notes: `Refund reversal recorded via Stripe webhook (${event.id})`,
+    });
+  }
 
   // Reverse the convenience fee ledger entry on full refund so the owner's
   // balance doesn't show a phantom fee charge.
@@ -1381,13 +1731,18 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     await postLedgerEntry(scoped, {
       entryType: 'adjustment',
       amountCents: -convenienceFeeCents,
-      description: `Convenience fee reversal for refunded payment (line item #${lineItemId})`,
+      description: `Convenience fee reversal for refunded payment (payable #${payable.payableId})`,
       sourceType: 'payment',
       sourceId: charge.id,
       unitId,
       userId: payerUserId,
       metadata: {
-        lineItemId,
+        payableType,
+        payableId,
+        payableSourceType: payable.payableSourceType,
+        payableSourceId: payable.payableSourceId,
+        lineItemId: payable.payableId,
+        assessmentLineItemId: payable.payableId,
         stripeChargeId: charge.id,
         convenienceFeeCents,
         reason: 'full_refund_fee_reversal',
@@ -1413,6 +1768,8 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
 
   const metadata = paymentIntent?.metadata ?? {};
   const communityId = parseMetadataInt(metadata, 'communityId');
+  const payableType = parsePayableType(metadata);
+  const payableId = payableType ? parsePayableId(metadata, payableType) : null;
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
   if (!communityId || !unitId || !payerUserId) {
@@ -1434,6 +1791,9 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
     unitId,
     userId: payerUserId,
     metadata: {
+      payableType: payableType ?? undefined,
+      payableId: payableId ?? undefined,
+      lineItemId: payableType === 'assessment_line_item' ? payableId ?? undefined : undefined,
       stripeChargeId: chargeId,
       notes: `Dispute reason: ${freshDispute.reason}`,
     },
@@ -1490,6 +1850,15 @@ export async function findActorUnitId(
   const scoped = createScopedClient(communityId);
   const unitIds = await listActorUnitIds(scoped, actorUserId);
   return unitIds[0] ?? null;
+}
+
+export async function listActorUnitIdsForFinance(
+  communityId: number,
+  actorUserId: string,
+): Promise<number[]> {
+  const scoped = createScopedClient(communityId);
+  const unitIds = await listActorUnitIds(scoped, actorUserId);
+  return [...unitIds].sort((a, b) => a - b);
 }
 
 export function resolveStatementDateRange(

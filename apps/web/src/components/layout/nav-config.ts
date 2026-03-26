@@ -40,6 +40,15 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 
+const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
+  'owner',
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+];
+
 export interface NavItemConfig {
   id: string;
   label: string;
@@ -131,6 +140,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Payments',
     icon: CreditCard,
     href: (cid) => `/communities/${cid}/payments`,
+    roles: FINANCE_READ_NAV_ROLES,
     featureKey: 'hasFinance',
     group: 'main',
     matchPrefixes: ['/payments'],

@@ -5,7 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { findActorUnitId, getLedgerBalanceForUnit } from '@/lib/services/finance-service';
+import { getLedgerBalanceForUnit, listActorUnitIdsForFinance } from '@/lib/services/finance-service';
 
 async function parseUnitId(
   context?: { params: Promise<Record<string, string>> },
@@ -29,14 +29,14 @@ export const GET = withErrorHandler(async (
 
   let unitId = requestedUnitId;
   if (membership.role === 'resident' && membership.isUnitOwner) {
-    const actorUnitId = await findActorUnitId(communityId, actorUserId);
-    if (!actorUnitId) {
+    const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
+    if (actorUnitIds.length === 0) {
       throw new ForbiddenError('No unit association found for this owner');
     }
-    if (actorUnitId !== requestedUnitId) {
+    if (!actorUnitIds.includes(requestedUnitId)) {
       throw new ForbiddenError('Owners can only access balance for their own unit');
     }
-    unitId = actorUnitId;
+    unitId = requestedUnitId;
   } else {
     requireFinanceReadPermission(membership);
   }

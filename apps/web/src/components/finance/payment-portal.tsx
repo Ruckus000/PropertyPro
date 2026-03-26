@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
@@ -9,13 +10,15 @@ import { formatDateOnly } from '@/lib/utils/format-date';
 
 /* ─────── Types ─────── */
 
+type LineItemStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
+
 interface LineItem {
   id: number;
   assessmentId: number | null;
   unitId: number;
   amountCents: number;
   dueDate: string;
-  status: 'pending' | 'paid' | 'overdue' | 'waived';
+  status: LineItemStatus;
   paidAt: string | null;
   paymentIntentId: string | null;
   lateFeeCents: number;
@@ -38,11 +41,11 @@ interface StatementData {
 
 interface PaymentPortalProps {
   communityId: number;
-  userId: string;
   userRole: string;
-  isUnitOwner: boolean;
   /** Required for non-owner roles; owners' unitId is resolved server-side. */
   unitId?: number;
+  actorUnits?: Array<{ id: number; label: string }>;
+  requiresExplicitUnitSelection?: boolean;
 }
 
 /* ─────── Helpers ─────── */
@@ -57,12 +60,20 @@ function formatCents(cents: number): string {
 /** @deprecated Use formatDateOnly from @/lib/utils/format-date */
 const formatDate = formatDateOnly;
 
-const STATUS_STYLES: Record<string, string> = {
+const STATUS_STYLES: Record<LineItemStatus, string> = {
   pending: 'bg-status-warning-bg text-status-warning',
+  partially_paid: 'bg-status-info-bg text-status-info',
   overdue: 'bg-status-danger-bg text-status-danger',
   paid: 'bg-status-success-bg text-status-success',
   waived: 'bg-surface-muted text-content-secondary',
 };
+
+function formatStatusLabel(status: LineItemStatus): string {
+  if (status === 'partially_paid') {
+    return 'Partially paid';
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 
 /* ─────── Fetch ─────── */
 
@@ -84,13 +95,25 @@ async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
 
 /* ─────── Component ─────── */
 
-export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unitId }: PaymentPortalProps) {
+export function PaymentPortal({
+  communityId,
+  userRole,
+  unitId,
+  actorUnits = [],
+  requiresExplicitUnitSelection = false,
+}: PaymentPortalProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [payingLineItem, setPayingLineItem] = useState<LineItem | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const hasMultipleUnits = actorUnits.length > 1;
+  const canLoadData = !requiresExplicitUnitSelection;
 
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['payment-portal', communityId, unitId],
     queryFn: () => fetchStatement(communityId, unitId),
+    enabled: canLoadData,
     staleTime: 30_000,
     retry: false,
   });
@@ -100,6 +123,29 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
     queryFn: () => fetchFeePolicy(communityId),
     staleTime: 60_000,
   });
+
+  const handleUnitChange = (nextUnitId: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('unitId', String(nextUnitId));
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  if (requiresExplicitUnitSelection) {
+    return (
+      <div className="space-y-4">
+        <AlertBanner
+          status="warning"
+          title="Select a unit to continue."
+          description="Choose which unit's payments, history, and statements you want to view."
+        />
+        <UnitSelectCard
+          actorUnits={actorUnits}
+          selectedUnitId={unitId}
+          onSelect={handleUnitChange}
+        />
+      </div>
+    );
+  }
 
   if (isPending) {
     return (
@@ -133,13 +179,23 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
 
   if (!data) return null;
 
-  const unpaidItems = data.lineItems.filter((li) => li.status === 'pending' || li.status === 'overdue');
+  const unpaidItems = data.lineItems.filter(
+    (li) => li.status === 'pending' || li.status === 'partially_paid' || li.status === 'overdue',
+  );
   const paidItems = data.lineItems.filter((li) => li.status === 'paid');
   const totalDueCents = unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
   const overdueCount = unpaidItems.filter((li) => li.status === 'overdue').length;
 
   return (
     <div className="space-y-6">
+      {hasMultipleUnits && (
+        <UnitSelectCard
+          actorUnits={actorUnits}
+          selectedUnitId={unitId}
+          onSelect={handleUnitChange}
+        />
+      )}
+
       {/* Balance Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
@@ -195,7 +251,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
         <UpcomingAssessments
           items={unpaidItems}
           onPay={setPayingLineItem}
-          canPay={isUnitOwner || userRole !== 'resident'}
+          canPay={true}
           feePolicy={feePolicy}
         />
       )}
@@ -214,6 +270,46 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
           }}
         />
       )}
+    </div>
+  );
+}
+
+function UnitSelectCard({
+  actorUnits,
+  selectedUnitId,
+  onSelect,
+}: {
+  actorUnits: Array<{ id: number; label: string }>;
+  selectedUnitId?: number;
+  onSelect: (unitId: number) => void;
+}) {
+  if (actorUnits.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-edge bg-surface-card p-4">
+      <label htmlFor="payments-unit-select" className="block text-sm font-medium text-content">
+        Unit
+      </label>
+      <p className="mt-1 text-xs text-content-tertiary">
+        Payments, statements, and exports are shown for the selected unit.
+      </p>
+      <select
+        id="payments-unit-select"
+        className="mt-3 w-full rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus:outline-none focus:ring-1 focus:ring-interactive"
+        value={selectedUnitId ?? ''}
+        onChange={(event) => onSelect(Number(event.target.value))}
+      >
+        <option value="" disabled>
+          Select a unit
+        </option>
+        {actorUnits.map((unit) => (
+          <option key={unit.id} value={unit.id}>
+            {unit.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -333,8 +429,8 @@ function UpcomingAssessments({
               <tr key={item.id} className="hover:bg-surface-hover">
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[item.status] || ''}`}>
-                    {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[item.status]}`}>
+                    {formatStatusLabel(item.status)}
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">{formatCents(item.amountCents)}</td>

@@ -56,7 +56,7 @@ import { GET, POST, PATCH, DELETE } from '../../src/app/api/v1/leases/route';
 function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
   const query = vi.fn().mockImplementation(async (table: unknown) => {
     if (table === unitsTableMock) {
-      return [{ id: 10, communityId: 42, unitNumber: '101' }];
+      return [{ id: 10, communityId: 42, unitNumber: '101', rentAmount: '1500.00' }];
     }
     if (table === userRolesTableMock) {
       return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
@@ -518,11 +518,101 @@ describe('p2-37 leases route', () => {
       expect(json.error.message).toContain('tenant role');
     });
 
+    it('rejects lease start date that is not first of month', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'POST',
+        body: JSON.stringify({
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2026-01-15',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toContain('first day of the month');
+    });
+
+    it('rejects overlapping lease periods for same unit', async () => {
+      const query = vi.fn().mockImplementation(async (table: unknown) => {
+        if (table === unitsTableMock) return [{ id: 10, communityId: 42, rentAmount: '1500.00' }];
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
+        if (table === leasesTableMock) {
+          return [{ id: 11, communityId: 42, unitId: 10, residentId: 'u1', startDate: '2026-01-01', endDate: '2026-12-31', status: 'active', previousLeaseId: null }];
+        }
+        return [];
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'POST',
+        body: JSON.stringify({
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2026-06-01',
+          endDate: '2027-05-31',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toContain('overlaps an existing lease');
+    });
+
+    it('allows lease create with explicit rentAmount even when unit rent differs', async () => {
+      const query = vi.fn().mockImplementation(async (table: unknown) => {
+        if (table === unitsTableMock) return [{ id: 10, communityId: 42, rentAmount: '1800.00' }];
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
+        if (table === leasesTableMock) return [];
+        return [];
+      });
+      const insert = vi.fn().mockResolvedValue([
+        {
+          id: 77,
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+          rentAmount: '1500.00',
+          status: 'active',
+          previousLeaseId: null,
+        },
+      ]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query, insert }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'POST',
+        body: JSON.stringify({
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+          rentAmount: '1500.00',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(201);
+      expect(insert).toHaveBeenCalledWith(
+        leasesTableMock,
+        expect.objectContaining({ rentAmount: '1500.00' }),
+      );
+    });
+
     it('handles renewal: marks previous lease as renewed and links', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
         if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
-        if (table === leasesTableMock) return [{ id: 50, communityId: 42, status: 'active' }];
+        if (table === leasesTableMock) return [{ id: 50, communityId: 42, status: 'active', unitId: 10, residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', startDate: '2026-01-01', endDate: '2026-12-31', previousLeaseId: null }];
         return [];
       });
       const update = vi.fn().mockResolvedValue([{ id: 50, status: 'renewed' }]);
@@ -578,6 +668,35 @@ describe('p2-37 leases route', () => {
         }),
       );
     });
+
+    it('rejects renewal when startDate is not contiguous with previous lease endDate', async () => {
+      const query = vi.fn().mockImplementation(async (table: unknown) => {
+        if (table === unitsTableMock) return [{ id: 10, communityId: 42, rentAmount: '1500.00' }];
+        if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
+        if (table === leasesTableMock) return [{ id: 50, communityId: 42, status: 'active', unitId: 10, residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', startDate: '2026-01-01', endDate: '2026-12-31', previousLeaseId: null }];
+        return [];
+      });
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'POST',
+        body: JSON.stringify({
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2027-02-01',
+          endDate: '2027-12-31',
+          isRenewal: true,
+          previousLeaseId: 50,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toContain('day after the previous lease endDate');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -588,7 +707,7 @@ describe('p2-37 leases route', () => {
     it('updates lease status and logs audit', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === leasesTableMock) {
-          return [{ id: 1, communityId: 42, status: 'active', endDate: '2026-12-31', rentAmount: '1500.00', notes: null }];
+          return [{ id: 1, communityId: 42, unitId: 10, residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', startDate: '2026-01-01', status: 'active', endDate: '2026-12-31', rentAmount: '1500.00', previousLeaseId: null, notes: null }];
         }
         return [];
       });
@@ -649,6 +768,31 @@ describe('p2-37 leases route', () => {
 
       const res = await PATCH(req);
       expect(res.status).toBe(400);
+    });
+
+    it('allows lease rentAmount changes through PATCH', async () => {
+      const query = vi.fn().mockImplementation(async (table: unknown) => {
+        if (table === leasesTableMock) {
+          return [{ id: 1, communityId: 42, unitId: 10, residentId: 'u1', startDate: '2026-01-01', endDate: '2026-12-31', status: 'active', rentAmount: '1500.00', previousLeaseId: null, notes: null }];
+        }
+        return [];
+      });
+      const update = vi.fn().mockResolvedValue([{ id: 1, rentAmount: '1600.00' }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ query, update }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: 1, communityId: 42, rentAmount: '1600.00' }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await PATCH(req);
+      expect(res.status).toBe(200);
+      expect(update).toHaveBeenCalledWith(
+        leasesTableMock,
+        expect.objectContaining({ rentAmount: '1600.00' }),
+        expect.any(Object),
+      );
     });
   });
 
