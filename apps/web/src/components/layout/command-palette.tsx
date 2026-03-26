@@ -72,7 +72,7 @@ function getCommandItems(
 
   // Quick actions
   const actionItems: CommandItem[] = [
-    { id: 'action-upload', label: 'Upload Document', icon: Upload, href: `/communities/${cid}/documents?communityId=${cid}`, group: 'action', keywords: 'add file' },
+    { id: 'action-upload', label: 'Upload Document', icon: Upload, href: `/communities/${cid}/documents`, group: 'action', keywords: 'add file' },
     { id: 'action-maintenance', label: 'Submit Maintenance Request', icon: Wrench, href: `/maintenance/submit?communityId=${cid}`, group: 'action', keywords: 'new repair' },
   ];
 

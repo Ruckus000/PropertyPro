@@ -1,7 +1,7 @@
 import { communities, createScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { MeetingsPageShell } from '@/components/meetings/meetings-page-shell';
 

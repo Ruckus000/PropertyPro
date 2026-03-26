@@ -278,6 +278,49 @@ describe('p1-22 session middleware', () => {
     expect(getUserMock).toHaveBeenCalledTimes(2);
   });
 
+  it('reuses middleware-authenticated null session without calling getUser again', async () => {
+    createMiddlewareClientMock.mockResolvedValueOnce({
+      supabase: {
+        auth: {
+          getUser: getUserMock,
+        },
+      },
+      response: NextResponse.next(),
+      user: null,
+      authChecked: true,
+    });
+
+    const response = await middleware(request('http://localhost:3000/dashboard'));
+
+    expect(response.status).toBe(307);
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
+  it('reuses middleware-authenticated user on auth pages without a second getUser call', async () => {
+    createMiddlewareClientMock.mockResolvedValueOnce({
+      supabase: {
+        auth: {
+          getUser: getUserMock,
+        },
+      },
+      response: NextResponse.next(),
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        email_confirmed_at: '2026-02-11T21:00:00.000Z',
+        user_metadata: {
+          full_name: 'User Example',
+        },
+      },
+      authChecked: true,
+    });
+
+    const response = await middleware(request('http://localhost:3000/auth/login'));
+
+    expect(response.status).toBe(307);
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
   it('redirects authenticated users on root domain auth pages to /select-community (no tenant context)', async () => {
     getUserMock.mockResolvedValue({
       data: {

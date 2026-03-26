@@ -5,7 +5,7 @@
  * for the filter dropdown, then renders the PmReportsClient.
  */
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { isPmAdminInAnyCommunity, listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 import { PmReportsClient } from '@/components/pm/reports/PmReportsClient';
 

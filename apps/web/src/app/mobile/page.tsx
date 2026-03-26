@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic';
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getPublishedTemplate } from '@/lib/api/site-template';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';

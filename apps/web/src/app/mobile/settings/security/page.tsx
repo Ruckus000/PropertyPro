@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic';
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { requireAuthenticatedUser } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { MobileSecurityContent } from '@/components/mobile/MobileSecurityContent';
 
 export default async function MobileSecurityPage() {

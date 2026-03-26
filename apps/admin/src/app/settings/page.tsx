@@ -1,7 +1,7 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { PlatformSettings } from '@/components/settings/PlatformSettings';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ interface PlatformAdminRow {
 }
 
 export default async function SettingsPage() {
-  const currentAdmin = await requirePlatformAdmin();
+  const currentAdmin = await requireAdminPageSession();
   const db = createAdminClient();
 
   // Fetch platform admins with emails

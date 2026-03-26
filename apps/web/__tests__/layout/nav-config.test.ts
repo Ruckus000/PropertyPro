@@ -109,6 +109,19 @@ describe('getVisibleItems', () => {
   });
 });
 
+describe('nav href generation', () => {
+  it('uses canonical community-scoped paths for primary finance screens', () => {
+    const byId = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+
+    expect(byId.get('documents')?.href(42)).toBe('/communities/42/documents');
+    expect(byId.get('meetings')?.href(42)).toBe('/communities/42/meetings');
+    expect(byId.get('payments')?.href(42)).toBe('/communities/42/payments');
+    expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
+    expect(byId.get('assessments')?.href(42)).toBe('/communities/42/assessments');
+    expect(byId.get('finance')?.href(42)).toBe('/communities/42/finance');
+  });
+});
+
 describe('getActiveItemId', () => {
   it('matches dashboard pathname', () => {
     expect(getActiveItemId(NAV_ITEMS, '/dashboard')).toBe('dashboard');
@@ -118,6 +131,12 @@ describe('getActiveItemId', () => {
   it('matches documents pathname', () => {
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/documents')).toBe('documents');
     expect(getActiveItemId(NAV_ITEMS, '/documents')).toBe('documents');
+  });
+
+  it('matches canonical finance paths', () => {
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/payments')).toBe('payments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/assessments')).toBe('assessments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance')).toBe('finance');
   });
 
   it('matches maintenance paths distinctly', () => {
