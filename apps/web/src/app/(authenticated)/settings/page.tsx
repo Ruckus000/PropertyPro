@@ -107,7 +107,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <p className="mb-4 text-sm text-gray-600">
             Control whether PropertyPro support staff can access this community for troubleshooting.
           </p>
-          <SupportAccessSettings />
+          <SupportAccessSettings communityId={context.communityId} />
         </div>
       )}
     </div>

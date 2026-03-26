@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
+import {
+  getSupportCookieRootDomain,
+  isLocalSupportHostname,
+  SUPPORT_SESSION_COOKIE,
+} from '@propertypro/shared';
 
 interface Member {
-  user_id: string;
+  userId: string;
   email: string;
   role: string;
 }
@@ -62,16 +66,16 @@ export function StartSessionDialog({
       }
 
       const token: string = data.token;
-      // Derive root domain for cross-subdomain cookie (supports any TLD/staging)
       const hostname = window.location.hostname;
-      const parts = hostname.split('.');
-      const rootDomain = parts.length >= 2 ? parts.slice(-2).join('.') : '';
-      const cookieDomain = hostname === 'localhost' || !rootDomain ? '' : `; domain=.${rootDomain}`;
+      const rootDomain = getSupportCookieRootDomain(hostname);
+      const isLocalHost = isLocalSupportHostname(hostname);
+      const cookieDomain = rootDomain ? `; domain=.${rootDomain}` : '';
+      const secureAttribute = isLocalHost ? '' : '; Secure';
 
-      document.cookie = `${SUPPORT_SESSION_COOKIE}=${token}; path=/; max-age=3600; SameSite=Lax; Secure${cookieDomain}`;
+      document.cookie = `${SUPPORT_SESSION_COOKIE}=${token}; path=/; max-age=3600; SameSite=Lax${secureAttribute}${cookieDomain}`;
 
-      const tenantUrl = hostname === 'localhost'
-        ? `http://localhost:3000/dashboard?communityId=${communityId}`
+      const tenantUrl = isLocalHost || !rootDomain
+        ? `http://${hostname}:3000/dashboard?communityId=${communityId}`
         : `https://${communitySlug}.${rootDomain}/dashboard`;
 
       window.open(tenantUrl, '_blank');
@@ -133,7 +137,7 @@ export function StartSessionDialog({
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
+                <option key={m.userId} value={m.userId}>
                   {m.email} ({m.role})
                 </option>
               ))}

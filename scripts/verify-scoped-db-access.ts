@@ -142,6 +142,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts'),
   // Support access consent — uses createAdminClient for cross-community consent/log queries
   resolve(repoRoot, 'apps/web/src/app/api/v1/settings/support-access/route.ts'),
+  // Support impersonation middleware — validates active support sessions with service-role access
+  resolve(repoRoot, 'apps/web/src/lib/support/impersonation.ts'),
+  // Auth helper hydrates the effective support-session actor from the users table
+  resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

@@ -18,7 +18,7 @@ interface SupportSession {
 }
 
 interface Member {
-  user_id: string;
+  userId: string;
   email: string;
   role: string;
 }
@@ -56,7 +56,13 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
       }
 
       setSessions(sessionsData.sessions ?? []);
-      setMembers(membersData.members ?? []);
+      setMembers(
+        (membersData.members ?? []).map((member: { userId: string; email: string; role: string }) => ({
+          userId: member.userId,
+          email: member.email,
+          role: member.role,
+        })),
+      );
     } catch {
       setError('Network error');
     } finally {

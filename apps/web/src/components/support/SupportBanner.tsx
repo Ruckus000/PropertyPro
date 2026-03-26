@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, X } from 'lucide-react';
-import { SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
+import {
+  getSupportCookieRootDomain,
+  SUPPORT_SESSION_COOKIE,
+} from '@propertypro/shared';
 
 export function SupportBanner() {
   const [visible, setVisible] = useState(false);
@@ -20,11 +23,9 @@ export function SupportBanner() {
 
   const handleEndSession = () => {
     // Clear the support session cookie
-    // Derive root domain for cookie clearing (supports any TLD/staging)
     const hostname = window.location.hostname;
-    const parts = hostname.split('.');
-    const rootDomain = parts.length >= 2 ? parts.slice(-2).join('.') : '';
-    const cookieDomain = hostname === 'localhost' || !rootDomain ? '' : `; domain=.${rootDomain}`;
+    const rootDomain = getSupportCookieRootDomain(hostname);
+    const cookieDomain = rootDomain ? `; domain=.${rootDomain}` : '';
     document.cookie = `${SUPPORT_SESSION_COOKIE}=; path=/; max-age=0; SameSite=Lax${cookieDomain}`;
     setVisible(false);
     router.push('/dashboard');

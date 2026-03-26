@@ -2,7 +2,7 @@
  * Client Workspace page.
  *
  * Shows community overview with tab navigation (Overview, Members, Compliance, Settings).
- * Returns 404 if the community doesn't exist or is a demo.
+ * Returns 404 if the community doesn't exist.
  */
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
@@ -55,7 +55,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
     .single();
 
   const communityParse = CommunityRowSchema.safeParse(communityResult.data);
-  if (!communityParse.success || communityParse.data.is_demo) {
+  if (!communityParse.success) {
     notFound();
   }
   const community = communityParse.data;

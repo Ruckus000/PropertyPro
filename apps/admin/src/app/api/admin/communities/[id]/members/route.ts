@@ -36,7 +36,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const db = createAdminClient();
 
-  // Verify community exists and is not a demo
+  // Verify community exists
   const { data: community } = await db
     .from('communities')
     .select('id, is_demo')
@@ -44,7 +44,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .is('deleted_at', null)
     .single();
 
-  if (!community || (community as Record<string, unknown>).is_demo) {
+  if (!community) {
     return NextResponse.json(
       { error: { code: 'NOT_FOUND', message: 'Community not found' } },
       { status: 404 },

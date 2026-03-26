@@ -15,7 +15,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { resolveCommunityContext, SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
 import {
-  parseImpersonationCookie,
+  resolveActiveSupportSession,
   isReadOnlyBlocked,
 } from './lib/support/impersonation';
 import {
@@ -691,7 +691,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Invalid/expired cookies are cleared. Valid sessions inject headers for downstream use.
   const supportCookieValue = request.cookies.get(SUPPORT_SESSION_COOKIE)?.value;
   if (supportCookieValue) {
-    const supportSession = await parseImpersonationCookie(supportCookieValue);
+    const currentCommunityId = Number(forwardedHeaders.get(COMMUNITY_ID_HEADER));
+    const supportSession = await resolveActiveSupportSession(supportCookieValue, {
+      expectedCommunityId:
+        Number.isInteger(currentCommunityId) && currentCommunityId > 0
+          ? currentCommunityId
+          : null,
+    });
 
     if (!supportSession) {
       // Cookie is invalid or expired — clear it
@@ -729,6 +735,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
 
     // Stamp support session headers for downstream route handlers
+    forwardedHeaders.set(USER_ID_HEADER, supportSession.sub);
     forwardedHeaders.set('x-support-session', '1');
     forwardedHeaders.set('x-support-admin-id', supportSession.act.sub);
     forwardedHeaders.set('x-support-session-id', String(supportSession.session_id));

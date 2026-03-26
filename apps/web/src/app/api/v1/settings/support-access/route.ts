@@ -8,10 +8,20 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ConsentToggleSchema } from '@propertypro/shared';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { logAuditEvent } from '@propertypro/db';
+import { z } from 'zod';
+
+const communityIdQuerySchema = z.coerce.number().int().positive();
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
+  const { searchParams } = new URL(req.url);
+  const parsedCommunityId = communityIdQuerySchema.safeParse(searchParams.get('communityId'));
+
+  if (!parsedCommunityId.success) {
+    throw new ValidationError('Invalid or missing communityId query parameter');
+  }
+
+  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
 
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'settings', 'read');
@@ -46,16 +56,16 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
-
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'settings', 'write');
 
   const body = await req.json();
   const parsed = ConsentToggleSchema.safeParse(body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues[0]?.message ?? 'Invalid request body');
   }
+
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const membership = await requireCommunityMembership(communityId, userId);
+  requirePermission(membership, 'settings', 'write');
 
   const { enabled } = parsed.data;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

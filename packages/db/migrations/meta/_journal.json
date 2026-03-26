@@ -582,6 +582,13 @@
       "when": 1774770000000,
       "tag": "0122_trial_ends_at",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1774653600000,
+      "tag": "0123_support_access_service_role_grants",
+      "breakpoints": true
     }
   ]
 }
