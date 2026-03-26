@@ -14,6 +14,9 @@ export { primitiveColors } from './primitives';
  * branding.accentColor.
  */
 export const emailColors = {
+  // ── Legacy tokens (v1) — kept for backwards compat / tests ────────────
+  // Prefer the v2 zinc-based tokens below for new code.
+
   // Text
   textPrimary:     toHex(t.text.primary),        // #111827
   textSecondary:   toHex(t.text.secondary),       // #4B5563
