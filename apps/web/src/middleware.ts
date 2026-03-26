@@ -85,6 +85,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
   { path: '/api/v1/auth/confirm-verification', method: 'POST' },
   { path: '/api/v1/internal/expire-demos', method: 'POST' },
+  // Readiness check: Bearer-token-authenticated, deployment validation [Demo Conversion]
+  { path: '/api/v1/internal/readiness', method: 'GET' },
   // Self-service resident signup: public submit + OTP verify (no session required)
   { path: '/api/v1/access-requests', method: 'POST' },
   { path: '/api/v1/access-requests/verify', method: 'POST' },
