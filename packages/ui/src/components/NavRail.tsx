@@ -26,7 +26,8 @@ export type NavRailSection = {
 };
 
 export interface NavRailProps {
-  items: NavRailItem[];
+  /** @deprecated Use sections instead */
+  items?: NavRailItem[];
   activeView: string;
   onViewChange: (viewId: string) => void;
   expanded: boolean;
@@ -108,7 +109,7 @@ export function NavRail({
 
   // Normalize into sections: sectionsProp takes precedence, else wrap items in a single section
   const sections: NavRailSection[] = useMemo(
-    () => sectionsProp ?? [{ label: null, items }],
+    () => sectionsProp ?? [{ label: null, items: items ?? [] }],
     [sectionsProp, items],
   );
 
@@ -293,7 +294,7 @@ export function NavRail({
                 {sectionIndex > 0 && (
                   <div
                     data-testid="section-divider"
-                    className="mx-2 my-2 h-px bg-white/10 dark:bg-gray-800"
+                    className="mx-2 my-2 h-px bg-[var(--nav-border-divider)] dark:bg-gray-800"
                     aria-hidden="true"
                   />
                 )}

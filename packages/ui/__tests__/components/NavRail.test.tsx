@@ -209,7 +209,6 @@ describe("NavRail", () => {
       overrides: Partial<React.ComponentProps<typeof NavRail>> = {},
     ) {
       const props = {
-        items: [],
         sections: SECTION_DATA,
         activeView: "dashboard",
         onViewChange: vi.fn(),
