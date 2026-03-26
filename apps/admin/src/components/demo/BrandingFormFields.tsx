@@ -168,21 +168,21 @@ export function BrandingFormFields({
     <div className="space-y-4">
       {/* Theme Presets */}
       <div>
-        <p className="mb-2 text-xs font-medium text-gray-500">Quick Presets</p>
+        <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">Quick Presets</p>
         <div className="grid grid-cols-3 gap-1.5">
           {THEME_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"
               onClick={() => handlePresetClick(preset.id)}
-              className="group rounded border border-gray-200 p-2 text-left transition-colors hover:border-blue-400 hover:bg-blue-50/40"
+              className="group rounded border border-[var(--border-default)] p-2 text-left transition-colors hover:border-[var(--interactive-primary)] hover:bg-[var(--interactive-subtle)]"
             >
               <div className="mb-1 flex gap-0.5">
                 <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: preset.primaryColor }} />
                 <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: preset.secondaryColor }} />
                 <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: preset.accentColor }} />
               </div>
-              <p className="truncate text-xs text-gray-600">{preset.name}</p>
+              <p className="truncate text-xs text-[var(--text-secondary)]">{preset.name}</p>
             </button>
           ))}
         </div>
@@ -190,7 +190,7 @@ export function BrandingFormFields({
 
       {/* Colors */}
       <div>
-        <p className="mb-2 text-xs font-medium text-gray-500">Brand Colors</p>
+        <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">Brand Colors</p>
         <div className="space-y-3">
           {([
             ['primaryColor', 'Primary'] as const,
@@ -202,17 +202,17 @@ export function BrandingFormFields({
                 type="color"
                 value={value[key]}
                 onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded border border-gray-200 p-0.5"
+                className="h-8 w-8 cursor-pointer rounded border border-[var(--border-default)] p-0.5"
               />
               <div className="flex-1">
-                <label className="block text-xs text-gray-500">{label}</label>
+                <label className="block text-xs text-[var(--text-secondary)]">{label}</label>
                 <input
                   type="text"
                   value={value[key]}
                   onChange={(e) => handleFieldChange(key, e.target.value)}
                   pattern="^#[0-9a-fA-F]{6}$"
                   maxLength={7}
-                  className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full rounded border border-[var(--border-strong)] px-2 py-1 font-mono text-xs focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--interactive-primary)]"
                 />
               </div>
             </div>
@@ -222,18 +222,18 @@ export function BrandingFormFields({
 
       {/* Fonts */}
       <div>
-        <p className="mb-2 text-xs font-medium text-gray-500">Typography</p>
+        <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">Typography</p>
         <div className="space-y-3">
           {([
             ['fontHeading', 'Heading Font'] as const,
             ['fontBody', 'Body Font'] as const,
           ]).map(([key, label]) => (
             <div key={key}>
-              <label className="block text-xs text-gray-500 mb-1">{label}</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">{label}</label>
               <select
                 value={value[key]}
                 onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded border border-[var(--border-strong)] px-2 py-1.5 text-xs focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--interactive-primary)]"
               >
                 {ALLOWED_FONTS.map((font) => (
                   <option key={font} value={font}>{font}</option>
@@ -246,7 +246,7 @@ export function BrandingFormFields({
 
       {/* Logo */}
       <div>
-        <p className="mb-2 text-xs font-medium text-gray-500">Logo</p>
+        <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">Logo</p>
         {hasLogo ? (
           <div className="flex items-center gap-3">
             {logoPreviewUrl && (
@@ -254,11 +254,11 @@ export function BrandingFormFields({
               <img
                 src={logoPreviewUrl}
                 alt="Logo"
-                className="h-12 w-12 rounded border border-gray-200 object-cover"
+                className="h-12 w-12 rounded border border-[var(--border-default)] object-cover"
               />
             )}
             <div className="flex flex-col gap-1">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[var(--text-secondary)]">
                 {communityId !== undefined && value.logoPath.startsWith('blob:')
                   ? <><Loader2 size={10} className="inline animate-spin mr-1" />Uploading...</>
                   : 'Logo uploaded'}
@@ -266,16 +266,16 @@ export function BrandingFormFields({
               <button
                 type="button"
                 onClick={handleRemoveLogo}
-                className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
+                className="inline-flex items-center gap-1 text-xs text-[var(--status-danger)] hover:opacity-80"
               >
                 <X size={12} /> Remove
               </button>
             </div>
           </div>
         ) : (
-          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/30">
-            <Upload size={16} className="text-gray-400" />
-            <span className="text-xs text-gray-500">
+          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border-2 border-dashed border-[var(--border-strong)] p-4 transition-colors hover:border-[var(--interactive-primary)] hover:bg-[var(--interactive-subtle)]">
+            <Upload size={16} className="text-[var(--text-disabled)]" />
+            <span className="text-xs text-[var(--text-secondary)]">
               PNG, JPEG, or WebP &middot; max 5 MB
             </span>
             <input

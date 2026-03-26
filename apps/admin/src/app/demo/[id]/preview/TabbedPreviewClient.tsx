@@ -59,7 +59,7 @@ export function TabbedPreviewClient({
 
   const tabs: TabDef[] = [
     { key: 'public', label: 'Public Website', url: publicUrl },
-    { key: 'mobile', label: 'Mobile App', url: mobileUrl },
+    { key: 'mobile', label: 'Tenant Portal', url: mobileUrl },
     { key: 'admin', label: 'Admin Dashboard', url: adminUrl },
   ];
 

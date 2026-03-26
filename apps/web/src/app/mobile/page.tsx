@@ -15,6 +15,7 @@ import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/brand
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
+import { TenantDashboardMockup } from '@/components/mobile/TenantDashboardMockup';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 interface PageProps {
@@ -82,12 +83,21 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     );
   }
 
-  // No published template — preview shows placeholder, auth'd shows dashboard
+  // No published template — preview shows branded mockup, auth'd shows real dashboard
   if (isPreview) {
+    const [branding, community] = await Promise.all([
+      getBrandingForCommunity(communityId),
+      getCommunityPublicInfo(communityId),
+    ]);
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-content-secondary">No mobile template published yet. Use the edit drawer to create one.</p>
-      </div>
+      <TenantDashboardMockup
+        communityName={community?.name ?? 'Community'}
+        primaryColor={branding?.primaryColor ?? '#2563EB'}
+        secondaryColor={branding?.secondaryColor ?? '#1E40AF'}
+        accentColor={branding?.accentColor ?? '#DBEAFE'}
+        fontHeading={branding?.fontHeading ?? 'Inter'}
+        fontBody={branding?.fontBody ?? 'Inter'}
+      />
     );
   }
 
