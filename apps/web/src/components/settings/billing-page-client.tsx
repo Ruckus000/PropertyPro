@@ -113,10 +113,12 @@ export function BillingPageClient({
 
   async function openPortal() {
     if (portalPending) return;
+    setPortalPending(true);
     const confirmed = await triggerReauth();
     if (confirmed) {
-      setPortalPending(true);
       router.push(portalUrl);
+    } else {
+      setPortalPending(false);
     }
   }
 
@@ -156,7 +158,8 @@ export function BillingPageClient({
               <button
                 type="button"
                 onClick={openPortal}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-[10px] bg-status-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+                disabled={portalPending}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-[10px] bg-status-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Update Payment Method
                 <ExternalLink size={14} aria-hidden="true" />
@@ -197,7 +200,8 @@ export function BillingPageClient({
               <button
                 type="button"
                 onClick={openPortal}
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary"
+                disabled={portalPending}
+                className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Manage Subscription
                 <ExternalLink size={14} aria-hidden="true" />
@@ -225,18 +229,21 @@ export function BillingPageClient({
           <div className="grid gap-3 sm:grid-cols-3">
             <QuickLink
               onClick={openPortal}
+              disabled={portalPending}
               icon={FileText}
               label="View Invoices"
               description="See past invoices and receipts"
             />
             <QuickLink
               onClick={openPortal}
+              disabled={portalPending}
               icon={CreditCard}
               label="Update Payment Method"
               description="Change your card or bank account"
             />
             <QuickLink
               onClick={openPortal}
+              disabled={portalPending}
               icon={XCircle}
               label="Cancel Subscription"
               description="Cancel with a 30-day grace period"
@@ -262,11 +269,13 @@ export function BillingPageClient({
 
 function QuickLink({
   onClick,
+  disabled,
   icon: Icon,
   label,
   description,
 }: {
   onClick: () => void;
+  disabled?: boolean;
   icon: React.ElementType;
   label: string;
   description: string;
@@ -275,7 +284,8 @@ function QuickLink({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-start gap-3 rounded-[10px] border border-edge p-4 text-left transition-colors hover:bg-surface-secondary"
+      disabled={disabled}
+      className="flex w-full items-start gap-3 rounded-[10px] border border-edge p-4 text-left transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
     >
       <Icon size={18} className="mt-0.5 shrink-0 text-content-secondary" aria-hidden="true" />
       <div>

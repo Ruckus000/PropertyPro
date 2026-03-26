@@ -660,8 +660,9 @@ function DangerZoneSection() {
               type="button"
               disabled={confirmText !== 'DELETE' || requestDeletion.isPending}
               onClick={async () => {
-                // Close the dialog before triggering reauth so the outer dialog
-                // doesn't outlive the reauth promise and end up in a stale state.
+                // Reset stale error state, then close the dialog before triggering
+                // reauth so the outer dialog doesn't outlive the reauth promise.
+                requestDeletion.reset();
                 setDialogOpen(false);
                 setConfirmText('');
                 const confirmed = await triggerReauth();
