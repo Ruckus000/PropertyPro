@@ -78,14 +78,26 @@ describe('requireFreshReauth', () => {
       code: 'REAUTH_REQUIRED',
     });
   });
+
+  it('throws ReauthRequiredError when token is malformed (not a JWT)', async () => {
+    vi.mocked(cookies).mockResolvedValue({
+      get: (name: string) => (name === 'pp-reauth' ? { name, value: 'not-a-jwt' } : undefined),
+    } as ReturnType<typeof cookies> extends Promise<infer T> ? T : never);
+
+    await expect(requireFreshReauth(USER_ID)).rejects.toMatchObject({
+      code: 'REAUTH_REQUIRED',
+    });
+  });
 });
 
 describe('mintReauthCookie', () => {
-  it('returns a cookie with correct name and maxAge', async () => {
+  it('returns a cookie with correct attributes', async () => {
     const cookie = await mintReauthCookie(USER_ID);
     expect(cookie.name).toBe('pp-reauth');
     expect(cookie.httpOnly).toBe(true);
     expect(cookie.sameSite).toBe('lax');
     expect(cookie.maxAge).toBe(900);
+    expect(cookie.path).toBe('/');
+    expect(cookie.secure).toBe(false); // test env, not production
   });
 });
