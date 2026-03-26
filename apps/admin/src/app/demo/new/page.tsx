@@ -31,7 +31,7 @@ import { PublicSiteStep } from '@/components/demo/PublicSiteStep';
 // Types
 // ---------------------------------------------------------------------------
 
-type WizardStep = 'basics' | 'public-site' | 'preview';
+type WizardStep = 'basics' | 'public-site' | 'review';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,10 +64,10 @@ function getInitialConfig(communityType: CommunityType = 'condo_718') {
 const WIZARD_STEPS: PillStep[] = [
   { id: 'basics', label: 'Basics' },
   { id: 'public-site', label: 'Public Site' },
-  { id: 'preview', label: 'Review' },
+  { id: 'review', label: 'Review' },
 ];
 
-const STEP_ORDER: WizardStep[] = ['basics', 'public-site', 'preview'];
+const STEP_ORDER: WizardStep[] = ['basics', 'public-site', 'review'];
 
 const NEXT_LABELS: Record<string, string> = {
   basics: 'Next: Choose Template',
@@ -225,16 +225,12 @@ export default function DemoNewPage() {
     errorSteps.add('basics');
   }
 
-  // Enter key handler — advance on single-line inputs only
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
-        e.preventDefault();
-        goNext();
-      }
+  // Enter key handler — scoped to left panel, advance on single-line inputs only
+  const handlePanelKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+      e.preventDefault();
+      goNext();
     }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [goNext]);
 
   // Warn before leaving if wizard has progress
@@ -254,7 +250,7 @@ export default function DemoNewPage() {
         storageKey="demo-wizard-split"
         className="h-[calc(100vh-64px)]"
         left={
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full" onKeyDown={handlePanelKeyDown}>
             {/* Header */}
             <div className="px-6 pt-6 pb-0">
               <Link
@@ -284,7 +280,7 @@ export default function DemoNewPage() {
                 {`Step ${STEP_ORDER.indexOf(step) + 1} of ${STEP_ORDER.length}: ${WIZARD_STEPS.find(s => s.id === step)?.label}`}
               </div>
 
-              {generateError && step === 'preview' && (
+              {generateError && step === 'review' && (
                 <div role="alert" className="rounded-[10px] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 mb-4 text-sm text-[var(--text-primary)]">
                   {generateError}
                 </div>
@@ -323,7 +319,7 @@ export default function DemoNewPage() {
                   />
                 )}
 
-                {step === 'preview' && (
+                {step === 'review' && (
                   <ReviewStep config={config} onEditStep={goToStep} />
                 )}
               </div>
@@ -332,12 +328,12 @@ export default function DemoNewPage() {
             {/* Sticky footer */}
             <WizardFooter
               onBack={goBack}
-              onNext={step === 'preview' ? handleGenerate : goNext}
+              onNext={step === 'review' ? handleGenerate : goNext}
               nextLabel={NEXT_LABELS[step] ?? 'Next'}
               nextDisabled={isNextDisabled}
               showBack={step !== 'basics'}
               onCancel={() => router.push('/demo')}
-              loading={step === 'preview' ? generating : false}
+              loading={step === 'review' ? generating : false}
             />
           </div>
         }

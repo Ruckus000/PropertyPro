@@ -20,7 +20,7 @@ describe('demo preview clients', () => {
     );
 
     expect(html).toContain('Public Website');
-    expect(html).toContain('Mobile App');
+    expect(html).toContain('Tenant Portal');
     expect(html).toContain('Admin Dashboard');
   });
 
