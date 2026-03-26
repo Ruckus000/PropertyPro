@@ -14,6 +14,7 @@ import {
 } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const generateSchema = z.object({
   communityId: z.number().int().positive(),
@@ -46,6 +47,7 @@ export const POST = withErrorHandler(async (
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);

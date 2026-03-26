@@ -7,7 +7,7 @@
  * Two HTML forms POST to /api/v1/demo/[slug]/enter with a hidden `role`
  * field so role selection works without client-side JavaScript.
  */
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
@@ -71,6 +71,11 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
 
   if (!instance) {
     notFound();
+  }
+
+  // Post-conversion redirect: demo converted → show success page instead of dead-end entry form
+  if (!instance.isDemo) {
+    redirect(`/demo/${slug}/converted`);
   }
 
   const isExpired =

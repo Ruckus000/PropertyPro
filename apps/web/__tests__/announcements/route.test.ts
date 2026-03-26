@@ -72,6 +72,8 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, POST } from '../../src/app/api/v1/announcements/route';
 
 describe('p1-17 announcements route', () => {

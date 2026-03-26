@@ -31,6 +31,8 @@ export interface PageShellContext {
   subscriptionStatus: string | null;
   freeAccessExpiresAt: Date | null;
   isDemo: boolean;
+  trialEndsAt: Date | null;
+  demoExpiresAt: Date | null;
 }
 
 const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
@@ -44,6 +46,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
     };
   }
 
@@ -63,6 +67,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
     };
   }
 
@@ -78,6 +84,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
     };
   }
 
@@ -95,6 +103,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
     };
   }
 
@@ -111,6 +121,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
     subscriptionStatus: match.subscriptionStatus ?? null,
     freeAccessExpiresAt: match.freeAccessExpiresAt ?? null,
     isDemo: match.isDemo,
+    trialEndsAt: match.trialEndsAt ?? null,
+    demoExpiresAt: match.demoExpiresAt ?? null,
   };
 });
 

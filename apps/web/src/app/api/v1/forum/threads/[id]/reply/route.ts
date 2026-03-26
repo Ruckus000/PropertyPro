@@ -11,6 +11,7 @@ import {
   requireCommunityBoardEnabled,
   requirePollWritePermission,
 } from '@/lib/polls/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { createForumReplyForCommunity } from '@/lib/services/polls-service';
 
 const createReplySchema = z.object({
@@ -34,6 +35,7 @@ export const POST = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);

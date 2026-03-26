@@ -24,6 +24,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -88,6 +89,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // Create document records in each community using Promise.allSettled
   const results = await Promise.allSettled(
     communityIds.map(async (communityId): Promise<DocumentResult> => {
+      await assertNotDemoGrace(communityId);
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
       const scoped = createScopedClient(communityId);
       let createdCount = 0;

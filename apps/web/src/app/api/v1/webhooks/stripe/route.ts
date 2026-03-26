@@ -31,6 +31,7 @@ import {
 } from '@/lib/services/payment-alert-scheduler';
 import { runProvisioning } from '@/lib/services/provisioning-service';
 import { processFinanceStripeEvent } from '@/lib/services/finance-service';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,13 +61,14 @@ function isUniqueConstraintError(err: unknown): boolean {
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
   eventId: string,
+  eventCreatedEpoch: number,
 ): Promise<void> {
   const demoId = session.metadata?.demoId;
   const signupRequestId = session.metadata?.signupRequestId;
 
   if (demoId) {
     const { handleDemoConversion } = await import('@/lib/services/demo-conversion');
-    await handleDemoConversion(session);
+    await handleDemoConversion(session, eventId, eventCreatedEpoch);
     return;
   }
 
@@ -313,6 +315,25 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
     .where(eq(communities.stripeSubscriptionId, subscriptionId));
 }
 
+async function handleCheckoutSessionExpired(
+  session: Stripe.Checkout.Session,
+  eventId: string,
+  eventCreatedEpoch: number,
+): Promise<void> {
+  const demoId = session.metadata?.demoId;
+  if (!demoId) return; // Only track demo-related checkout expirations
+
+  await emitConversionEvent({
+    demoId: Number(demoId),
+    communityId: session.metadata?.communityId ? Number(session.metadata.communityId) : null,
+    eventType: 'checkout_session_expired',
+    source: 'stripe_webhook',
+    dedupeKey: `stripe:${eventId}`,
+    occurredAt: new Date(eventCreatedEpoch * 1000),
+    stripeEventId: eventId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Event router
 // ---------------------------------------------------------------------------
@@ -320,7 +341,10 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
 async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'checkout.session.completed':
-      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id);
+      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id, event.created);
+      break;
+    case 'checkout.session.expired':
+      await handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session, event.id, event.created);
       break;
     case 'customer.subscription.updated':
       await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);

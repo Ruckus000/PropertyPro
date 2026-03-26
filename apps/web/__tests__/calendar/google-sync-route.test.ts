@@ -60,6 +60,8 @@ vi.mock('@/lib/finance/request', () => ({
   parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST } from '../../src/app/api/v1/calendar/google/sync/route';
 
 describe('Google Calendar sync route', () => {

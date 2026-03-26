@@ -84,6 +84,8 @@ vi.mock('@/lib/utils/timezone', () => ({
   resolveTimezone: vi.fn().mockReturnValue('America/New_York'),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 // ---------------------------------------------------------------------------
 // Meetings endpoint — representative Zod-validated POST route
 // ---------------------------------------------------------------------------

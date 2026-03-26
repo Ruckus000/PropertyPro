@@ -12,6 +12,7 @@ import {
   requirePollWritePermission,
   requirePollsEnabled,
 } from '@/lib/polls/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { createPollForCommunity, listPollsForCommunity } from '@/lib/services/polls-service';
 
 const createPollSchema = z.object({
@@ -58,6 +59,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requirePollsEnabled(membership);

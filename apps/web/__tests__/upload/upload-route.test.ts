@@ -25,6 +25,8 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST } from '../../src/app/api/v1/upload/route';
 
 describe('p1-11 upload presign route', () => {

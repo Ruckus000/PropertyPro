@@ -23,6 +23,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo } from '@/lib/services/image-processor';
 
 const PRESIGN_TTL_SECONDS = 60 * 60; // 1 hour for logo read
@@ -90,6 +91,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   } = parseResult.data;
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   if (membership.role !== 'pm_admin') {
     throw new ForbiddenError('Only property managers can update branding settings');

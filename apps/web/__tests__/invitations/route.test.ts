@@ -58,6 +58,8 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST, PATCH } from '../../src/app/api/v1/invitations/route';
 
 describe('p1-20 invitation auth flow', () => {

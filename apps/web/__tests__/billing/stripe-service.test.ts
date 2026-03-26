@@ -28,6 +28,10 @@ const {
   dbUpdateMock,
   dbSetMock,
   dbWhereMock,
+  dbSelectMock,
+  dbSelectFromMock,
+  dbSelectWhereMock,
+  dbSelectLimitMock,
 } = vi.hoisted(() => {
   const checkoutSessionsCreateMock = vi.fn();
   const checkoutSessionsRetrieveMock = vi.fn();
@@ -38,7 +42,12 @@ const {
   const dbWhereMock = vi.fn();
   const dbSetMock = vi.fn(() => ({ where: dbWhereMock }));
   const dbUpdateMock = vi.fn(() => ({ set: dbSetMock }));
-  const createUnscopedClientMock = vi.fn(() => ({ update: dbUpdateMock }));
+  // select chain for resolveStripePrice: db.select().from().where().limit()
+  const dbSelectLimitMock = vi.fn();
+  const dbSelectWhereMock = vi.fn(() => ({ limit: dbSelectLimitMock }));
+  const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
+  const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
+  const createUnscopedClientMock = vi.fn(() => ({ update: dbUpdateMock, select: dbSelectMock }));
 
   const eqMock = vi.fn((...args: unknown[]) => ({ op: 'eq', args }));
   const pendingSignupsTable = { signupRequestId: 'signupRequestId_col' };
@@ -55,6 +64,10 @@ const {
     dbUpdateMock,
     dbSetMock,
     dbWhereMock,
+    dbSelectMock,
+    dbSelectFromMock,
+    dbSelectWhereMock,
+    dbSelectLimitMock,
   };
 });
 
@@ -83,10 +96,12 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@propertypro/db', () => ({
   pendingSignups: pendingSignupsTable,
+  stripePrices: { stripePriceId: 'stripePriceId_col', planId: 'planId_col', communityType: 'communityType_col', billingInterval: 'billingInterval_col' },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
+  and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -108,11 +123,14 @@ describe('stripe-service', () => {
     dbWhereMock.mockResolvedValue(undefined);
     dbSetMock.mockReturnValue({ where: dbWhereMock });
     dbUpdateMock.mockReturnValue({ set: dbSetMock });
-    createUnscopedClientMock.mockReturnValue({ update: dbUpdateMock });
+    createUnscopedClientMock.mockReturnValue({ update: dbUpdateMock, select: dbSelectMock });
+    dbSelectLimitMock.mockResolvedValue([{ stripePriceId: 'price_test_abc' }]);
+    dbSelectWhereMock.mockReturnValue({ limit: dbSelectLimitMock });
+    dbSelectFromMock.mockReturnValue({ where: dbSelectWhereMock });
+    dbSelectMock.mockReturnValue({ from: dbSelectFromMock });
 
     // Default env
     process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
-    process.env.STRIPE_PRICE_COMPLIANCE_BASIC = 'price_test_abc';
   });
 
   // -----------------------------------------------------------------------
@@ -130,7 +148,7 @@ describe('stripe-service', () => {
       const result = await createEmbeddedCheckoutSession(
         'req_001',
         'condo_718',
-        'compliance_basic',
+        'essentials',
         'sunset-condos',
         'owner@example.com',
         'https://app.example.com',
@@ -152,7 +170,7 @@ describe('stripe-service', () => {
         metadata: {
           signupRequestId: 'req_001',
           communityType: 'condo_718',
-          selectedPlan: 'compliance_basic',
+          selectedPlan: 'essentials',
           candidateSlug: 'sunset-condos',
         },
       });
@@ -180,7 +198,7 @@ describe('stripe-service', () => {
         createEmbeddedCheckoutSession(
           'req_002',
           'condo_718',
-          'compliance_basic',
+          'essentials',
           'sunset-condos',
           'owner@example.com',
           'https://app.example.com',
@@ -200,7 +218,7 @@ describe('stripe-service', () => {
         createEmbeddedCheckoutSession(
           'req_003',
           'condo_718',
-          'compliance_basic',
+          'essentials',
           'sunset-condos',
           'owner@example.com',
           'https://app.example.com',
@@ -210,8 +228,8 @@ describe('stripe-service', () => {
       );
     });
 
-    it('throws when price env var not configured', async () => {
-      delete process.env.STRIPE_PRICE_COMPLIANCE_BASIC;
+    it('throws when stripe_prices row not found in DB', async () => {
+      dbSelectLimitMock.mockResolvedValue([]); // No row found
 
       const { createEmbeddedCheckoutSession } = await importService();
 
@@ -219,13 +237,13 @@ describe('stripe-service', () => {
         createEmbeddedCheckoutSession(
           'req_004',
           'condo_718',
-          'compliance_basic',
+          'essentials',
           'sunset-condos',
           'owner@example.com',
           'https://app.example.com',
         ),
       ).rejects.toThrow(
-        'Stripe Price ID not configured for plan "compliance_basic"',
+        /no stripe price configured/i,
       );
     });
   });

@@ -11,6 +11,7 @@ import {
   requirePollReadPermission,
   requirePollWritePermission,
 } from '@/lib/polls/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { createForumThreadForCommunity, listForumThreadsForCommunity } from '@/lib/services/polls-service';
 
 const createThreadSchema = z.object({
@@ -58,6 +59,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireCommunityBoardEnabled(membership);

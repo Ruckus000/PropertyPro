@@ -27,6 +27,7 @@ import {
 } from '@/lib/meetings/meeting-response';
 import { queueNotification } from '@/lib/services/notification-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const meetingTypeSchema = z.enum([
   'board',
@@ -162,6 +163,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = (await req.json()) as Record<string, unknown>;
   const action = typeof body.action === 'string' ? body.action : 'create';
   const communityId = parseCommunityIdFromBody(req, body);
+  await assertNotDemoGrace(communityId);
   const normalizedBody = { ...body, communityId, action };
 
   const actorUserId = await requireAuthenticatedUserId();

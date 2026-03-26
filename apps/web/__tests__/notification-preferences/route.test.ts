@@ -35,6 +35,8 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn((col: unknown, value: unknown) => ({ col, value })),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, PATCH } from '../../src/app/api/v1/notification-preferences/route';
 
 describe('p1-26 notification-preferences route', () => {

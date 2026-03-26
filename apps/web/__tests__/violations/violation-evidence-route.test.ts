@@ -32,6 +32,8 @@ vi.mock('@/lib/documents/create-uploaded-document', () => ({
   createUploadedDocument: createUploadedDocumentMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST } from '../../src/app/api/v1/violations/evidence/route';
 
 describe('violation evidence route', () => {

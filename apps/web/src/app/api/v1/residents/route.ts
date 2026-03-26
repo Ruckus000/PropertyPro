@@ -43,6 +43,7 @@ import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-servi
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -183,6 +184,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { email, fullName, phone, role, unitId, isUnitOwner, presetKey } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
@@ -306,6 +308,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const {
     userId,
     fullName,
@@ -460,6 +463,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { userId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);

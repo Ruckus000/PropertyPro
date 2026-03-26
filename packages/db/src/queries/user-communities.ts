@@ -18,6 +18,8 @@ export interface UserCommunityRow {
   subscriptionPlan: string | null;
   freeAccessExpiresAt: Date | null;
   isDemo: boolean;
+  trialEndsAt: Date | null;
+  demoExpiresAt: Date | null;
 }
 
 /**
@@ -44,6 +46,8 @@ export async function findUserCommunitiesUnscoped(
       subscriptionPlan: communities.subscriptionPlan,
       freeAccessExpiresAt: communities.freeAccessExpiresAt,
       isDemo: communities.isDemo,
+      trialEndsAt: communities.trialEndsAt,
+      demoExpiresAt: communities.demoExpiresAt,
     })
     .from(userRoles)
     .innerJoin(communities, eq(communities.id, userRoles.communityId))

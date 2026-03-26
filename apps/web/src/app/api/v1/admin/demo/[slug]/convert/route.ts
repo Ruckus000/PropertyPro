@@ -19,6 +19,9 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { ForbiddenError } from '@/lib/api/errors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { resolveStripePrice } from '@/lib/services/stripe-service';
+import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 // ---------------------------------------------------------------------------
 // CORS — admin app runs on a different origin
@@ -100,6 +103,7 @@ export const POST = withErrorHandler(
         id: demoInstances.id,
         communityId: demoInstances.seededCommunityId,
         communityName: communities.name,
+        communityType: communities.communityType,
         isDemo: communities.isDemo,
         demoExpiresAt: communities.demoExpiresAt,
       })
@@ -131,14 +135,13 @@ export const POST = withErrorHandler(
       });
     }
 
-    // 3. Resolve Stripe price ID from env
-    const envKey = `STRIPE_PRICE_${planId.toUpperCase()}`;
-    const priceId = process.env[envKey];
-    if (!priceId) {
-      throw new ValidationError(`No Stripe price configured for plan: ${planId}`, {
-        planId: `Price not configured for plan ${planId}`,
+    // 3. Validate plan for community type + resolve price from DB
+    if (!isPlanAvailableForCommunityType(demo.communityType, planId)) {
+      throw new ValidationError('This plan is not available for this community type', {
+        planId: 'Invalid plan for community type',
       });
     }
+    const priceId = await resolveStripePrice(planId, demo.communityType, 'month');
 
     // 4. Create Stripe checkout session
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -156,6 +159,15 @@ export const POST = withErrorHandler(
         customerEmail,
         customerName,
       },
+    });
+
+    // 5. Emit conversion_initiated event (awaited best-effort)
+    await emitConversionEvent({
+      demoId: demo.id,
+      communityId: demo.communityId,
+      eventType: 'conversion_initiated',
+      source: 'admin_app',
+      dedupeKey: `demo:${demo.id}:conversion_initiated:${session.id}`,
     });
 
     return NextResponse.json(

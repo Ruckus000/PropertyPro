@@ -8,6 +8,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { ValidationError } from '@/lib/api/errors';
 import { requireFinanceAdminWrite, requireFinanceEnabled } from '@/lib/finance/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { getCommunityFeePolicy } from '@/lib/services/finance-service';
 
 const getSchema = z.object({
@@ -51,6 +52,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId, feePolicy } = parseResult.data;
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requireFinanceEnabled(membership);
   requireFinanceAdminWrite(membership);

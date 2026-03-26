@@ -50,6 +50,8 @@ vi.mock('@propertypro/shared', async () => {
   };
 });
 
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+
 import { GET, POST } from '../../src/app/api/v1/compliance/route';
 
 describe('p1-09 compliance route', () => {

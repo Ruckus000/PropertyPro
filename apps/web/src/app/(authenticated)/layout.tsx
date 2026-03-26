@@ -33,7 +33,13 @@ export default async function AuthenticatedLayout({
   }
 
   const features = shellContext.features;
-  const demoInfo = detectDemoInfo(shellContext.isDemo, user?.email ?? null);
+  const demoInfo = detectDemoInfo(
+    shellContext.isDemo,
+    user?.email ?? null,
+    shellContext.trialEndsAt,
+    shellContext.demoExpiresAt,
+    community?.type ?? 'condo_718',
+  );
 
   const branding = community ? await getPageShellBranding(community.id) : null;
   const theme = community

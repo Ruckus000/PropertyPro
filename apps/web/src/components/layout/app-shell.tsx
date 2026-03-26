@@ -26,7 +26,7 @@ import { AppTopBar } from './app-top-bar';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
-import { DemoBanner } from '@/components/demo/DemoBanner';
+import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 
@@ -262,10 +262,14 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
       )}
 
       {demoInfo && (
-        <DemoBanner
+        <DemoTrialBanner
           isDemoMode={demoInfo.isDemoMode}
           currentRole={demoInfo.currentRole}
           slug={demoInfo.slug}
+          status={demoInfo.status}
+          trialEndsAt={demoInfo.trialEndsAt}
+          demoExpiresAt={demoInfo.demoExpiresAt}
+          communityType={demoInfo.communityType}
         />
       )}
     </div>

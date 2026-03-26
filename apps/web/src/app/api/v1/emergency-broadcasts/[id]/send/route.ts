@@ -13,6 +13,7 @@ import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { executeBroadcast } from '@/lib/services/emergency-broadcast-service';
 import { z } from 'zod';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const sendSchema = z.object({
   communityId: z.number().int().positive(),
@@ -35,6 +36,7 @@ export const POST = withErrorHandler(
     }
 
     const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'emergency_broadcasts', 'write');
 

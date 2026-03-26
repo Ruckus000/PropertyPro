@@ -15,6 +15,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { denyAccessRequest } from '@/lib/services/access-request-service';
 
 const denySchema = z.object({
@@ -30,6 +31,7 @@ export const POST = withErrorHandler(
     const { id } = await params;
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'residents', 'write');
 

@@ -38,6 +38,7 @@ vi.mock('@propertypro/db', () => ({
     id: 'communities.id',
     isDemo: 'communities.isDemo',
     demoExpiresAt: 'communities.demoExpiresAt',
+    trialEndsAt: 'communities.trialEndsAt',
     deletedAt: 'communities.deletedAt',
   },
   demoInstances: {
@@ -55,15 +56,22 @@ vi.mock('@propertypro/db', () => ({
   },
 }));
 
+vi.mock('@/lib/services/conversion-events', () => ({
+  emitConversionEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@propertypro/db/filters', () => ({
   and: (...args: unknown[]) => ({ and: args }),
   eq: (col: unknown, val: unknown) => ({ eq: [col, val] }),
   isNull: (col: unknown) => ({ isNull: col }),
   lt: (col: unknown, val: unknown) => ({ lt: [col, val] }),
+  gt: (col: unknown, val: unknown) => ({ gt: [col, val] }),
   inArray: (col: unknown, vals: unknown) => ({ inArray: [col, vals] }),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ sql: strings.join('') }),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 // ---------------------------------------------------------------------------
 // Imports (after mocks are in place)
 // ---------------------------------------------------------------------------
@@ -93,6 +101,7 @@ function resetDbMocks() {
  * Build a mock DB client and admin client for the expire-demos route.
  *
  * The route performs:
+ * 0. select().from().innerJoin().where() — find demos entering grace
  * 1. select().from().innerJoin().where() — find expired demos
  * 2. For each expired: update().set().where() — soft-delete community
  * 3. For each expired: update().set().where() — soft-delete demo instance
@@ -106,29 +115,27 @@ function buildMocks(
 ) {
   resetDbMocks();
 
-  // --- select chain (step 1): find expired demos ---
-  // update chain for soft-deletes (steps 2 & 3): .update().set().where()
-  // update chain for access requests (step 5): .update().set().where().returning()
+  // Use separate where mocks for select chains vs update chains
+  const mockSelectWhere = vi.fn();
+  const mockUpdateWhere = vi.fn();
 
-  // We'll track call order to distinguish the select-where from update-where calls
-  let selectWhereResolved = false;
-
-  mockDbReturning.mockResolvedValue(expiredAccessRequests);
-  mockDbWhere.mockImplementation(() => {
-    if (!selectWhereResolved) {
-      // First .where() is from the select chain
-      selectWhereResolved = true;
-      return Promise.resolve(expiredDemos);
-    }
-    // Subsequent .where() calls are from update chains
-    return { returning: mockDbReturning };
+  // Select chains: first call = grace detection (empty), second call = expired demos
+  let selectWhereCallCount = 0;
+  mockSelectWhere.mockImplementation(() => {
+    selectWhereCallCount++;
+    if (selectWhereCallCount === 1) return Promise.resolve([]); // grace query — no demos in grace
+    return Promise.resolve(expiredDemos);
   });
 
-  mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+  // Update chains: community/demo soft-deletes and access request expiry
+  mockDbReturning.mockResolvedValue(expiredAccessRequests);
+  mockUpdateWhere.mockReturnValue({ returning: mockDbReturning });
+
+  mockDbInnerJoin.mockReturnValue({ where: mockSelectWhere });
   mockDbFrom.mockReturnValue({ innerJoin: mockDbInnerJoin });
   mockDbSelect.mockReturnValue({ from: mockDbFrom });
 
-  mockDbSet.mockReturnValue({ where: mockDbWhere });
+  mockDbSet.mockReturnValue({ where: mockUpdateWhere });
   mockDbUpdate.mockReturnValue({ set: mockDbSet });
 
   const db = {
@@ -194,8 +201,8 @@ describe('expire-demos cron route', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; expiredRequests: number } };
-    expect(json.data).toEqual({ expired: 0, expiredRequests: 0 });
+    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
+    expect(json.data).toEqual({ expired: 0, graceDetected: 0, expiredRequests: 0 });
 
     // The access request expiry update always runs (1 call), but no community/demo soft-deletes
     expect(mockDbUpdate).toHaveBeenCalledTimes(1);
@@ -218,7 +225,7 @@ describe('expire-demos cron route', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; expiredRequests: number } };
+    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
     expect(json.data.expired).toBe(1);
     expect(json.data.expiredRequests).toBe(2);
 
@@ -241,20 +248,22 @@ describe('expire-demos cron route', () => {
 
     resetDbMocks();
 
-    let selectWhereResolved = false;
-    mockDbReturning.mockResolvedValue([]);
-    mockDbWhere.mockImplementation(() => {
-      if (!selectWhereResolved) {
-        selectWhereResolved = true;
-        return Promise.resolve([expiredDemo]);
-      }
-      return { returning: mockDbReturning };
+    const localSelectWhere = vi.fn();
+    const localUpdateWhere = vi.fn();
+    let localSelectCount = 0;
+    localSelectWhere.mockImplementation(() => {
+      localSelectCount++;
+      if (localSelectCount === 1) return Promise.resolve([]); // grace query
+      return Promise.resolve([expiredDemo]); // expired query
     });
 
-    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+    mockDbReturning.mockResolvedValue([]);
+    localUpdateWhere.mockReturnValue({ returning: mockDbReturning });
+
+    mockDbInnerJoin.mockReturnValue({ where: localSelectWhere });
     mockDbFrom.mockReturnValue({ innerJoin: mockDbInnerJoin });
     mockDbSelect.mockReturnValue({ from: mockDbFrom });
-    mockDbSet.mockReturnValue({ where: mockDbWhere });
+    mockDbSet.mockReturnValue({ where: localUpdateWhere });
     mockDbUpdate.mockReturnValue({ set: mockDbSet });
 
     // First ban call fails, second succeeds
@@ -274,7 +283,7 @@ describe('expire-demos cron route', () => {
     // Route should still return 200 — ban failure is non-fatal
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; expiredRequests: number } };
+    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
     expect(json.data.expired).toBe(1);
 
     // Both ban attempts were made despite the first failing

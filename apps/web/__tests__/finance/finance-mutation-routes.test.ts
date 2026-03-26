@@ -86,6 +86,8 @@ vi.mock('@/lib/services/finance-service', () => ({
   getConnectStatus: getConnectStatusMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST as assessmentsPost } from '../../src/app/api/v1/assessments/route';
 import { PATCH as assessmentPatch, DELETE as assessmentDelete } from '../../src/app/api/v1/assessments/[id]/route';
 import { POST as assessmentGeneratePost } from '../../src/app/api/v1/assessments/[id]/generate/route';

@@ -13,6 +13,7 @@ import {
   requireAmenitiesWritePermission,
 } from '@/lib/work-orders/common';
 import { createAmenityForCommunity, listAmenitiesForCommunity } from '@/lib/services/work-orders-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const bookingRulesSchema = z.object({
   minDurationMinutes: z.number().int().positive().optional(),
@@ -55,6 +56,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireAmenitiesEnabled(membership);

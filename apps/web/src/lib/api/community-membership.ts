@@ -28,6 +28,10 @@ export interface CommunityMembership {
   state: string | null;
   /** Whether this community is a demo instance. */
   isDemo: boolean;
+  /** When the demo trial period ends. Null for non-demo communities. */
+  trialEndsAt: Date | null;
+  /** When the demo expires (hard lockout). Null for non-demo communities. */
+  demoExpiresAt: Date | null;
 }
 
 /**
@@ -117,5 +121,7 @@ export async function requireCommunityMembership(
     city: typeof community['city'] === 'string' ? community['city'] : null,
     state: typeof community['state'] === 'string' ? community['state'] : null,
     isDemo: community['isDemo'] === true,
+    trialEndsAt: community['trialEndsAt'] instanceof Date ? community['trialEndsAt'] : null,
+    demoExpiresAt: community['demoExpiresAt'] instanceof Date ? community['demoExpiresAt'] : null,
   };
 }

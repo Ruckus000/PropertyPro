@@ -56,6 +56,8 @@ export const communities = pgTable('communities', {
   isDemo: boolean('is_demo').notNull().default(false),
   /** Admin: reserved for future auto-expiry. Demos persist until manually deleted. */
   demoExpiresAt: timestamp('demo_expires_at', { withTimezone: true }),
+  /** Demo lifecycle: when full-feature trial access ends. Grace period = trial_ends_at → demo_expires_at. */
+  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   /** Phase 3: Optional custom domain for the community's public site. */
   customDomain: text('custom_domain'),
   /** Phase 3: When the community's public site was last published. */

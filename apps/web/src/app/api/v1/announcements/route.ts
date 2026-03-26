@@ -32,6 +32,7 @@ import {
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
@@ -121,6 +122,7 @@ export const POST = withErrorHandler(
         throw new ValidationError('communityId must be a positive integer');
       }
       const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+      await assertNotDemoGrace(communityId);
 
       const userId = await requireAuthenticatedUserId();
       const membership = await requireCommunityMembership(communityId, userId);

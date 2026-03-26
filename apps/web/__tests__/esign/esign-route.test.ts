@@ -108,6 +108,8 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
   requirePlanFeature: vi.fn().mockResolvedValue(undefined),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 // ---------------------------------------------------------------------------
 // Import routes after mocks
 // ---------------------------------------------------------------------------

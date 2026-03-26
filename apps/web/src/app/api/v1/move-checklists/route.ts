@@ -6,6 +6,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createMoveChecklist,
   listMoveChecklists,
@@ -61,6 +62,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { communityId } = parseResult.data;
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   if (!isAdminRole(membership.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

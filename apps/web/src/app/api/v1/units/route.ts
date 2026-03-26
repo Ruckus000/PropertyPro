@@ -29,6 +29,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -116,6 +117,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'units', 'write');
@@ -190,6 +192,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -287,6 +290,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { unitId } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
