@@ -1,0 +1,1382 @@
+<!--
+================================================================================
+PROPERTYPO FLORIDA — EMAIL TEMPLATE GALLERY
+================================================================================
+This file contains all 28 email templates rendered as inline-styled HTML.
+Open in a browser to visually review, or paste into Claude for redesign work.
+
+================================================================================
+DESIGN CRITIQUE & PRIORITY RECOMMENDATIONS FOR REDESIGN
+================================================================================
+
+1. FIX textDisabled CONTRAST RATIO (P0 - Accessibility failure)
+   Current: #9CA3AF on #FFFFFF = ~2.9:1 contrast ratio. FAILS WCAG AA.
+   Used for: footers, fine print, timestamps, meeting table labels.
+   Fix: Use at minimum #6B7280 (~4.6:1) for anything that conveys meaning.
+
+2. CREATE SHARED COMPONENTS (P1 - Maintainability)
+   Currently headingStyle, textStyle, buttonStyle, smallTextStyle, alertBoxStyle are
+   COPY-PASTED across all 28 templates with minor variations.
+   Extract into shared components: <EmailHeading>, <EmailButton variant>, <AlertBox variant="danger|warning|info|success">.
+   This makes future design changes a single-file edit.
+
+3. DIFFERENTIATE EMAIL TYPES VISUALLY (P1 - User experience)
+   Every email looks nearly identical: blue header bar, heading, text, button, footer.
+   Recipients can't distinguish email type at a glance.
+   Solutions:
+   - Use distinct header treatments per category (colored accent line, icon, or subheading)
+   - Emergency/danger emails should use red header accent, not blue
+   - Success emails (payment received, esign completed) should use green accent elements
+   - The compliance alert template is the strongest design — model others after it
+
+4. MATCH BUTTON COLOR TO CONTEXT (P1)
+   Payment Failed has a red alert box but then uses blue CTA button — mismatch.
+   Emergency alerts have no CTA at all — should they?
+   Assessment Due uses amber button (good contextual match).
+   Subscription Expiry Warning uses red button (good).
+   Be consistent: danger actions = red button, standard actions = accent/blue, success = green.
+
+5. DROP INCONSISTENT ITALIC ON FINE PRINT (P2)
+   Some templates use fontStyle:"italic" on smallTextStyle, others don't.
+   No clear rule for when fine print is italic. Either all or none. Recommendation: drop italic — it reads as less trustworthy.
+
+6. FIX BUTTON TOP MARGIN (P2)
+   All buttons use margin:"8px 0 24px 0" — 8px top gap is tight when body text is directly above.
+   Standardize to 16px 0 24px 0 for better breathing room.
+
+7. ADD VISUAL WARMTH AND PERSONALITY (P2)
+   - The "Hi [Name]," greeting takes same visual weight as body text — make lighter or remove
+   - No icons or illustrations anywhere — add contextual icons (document icon, clock, warning triangle)
+   - Header-to-content transition is abrupt — consider subtle gradient or shadow
+   - Footer feels disconnected from header — add subtle background or accent line
+
+8. CONSOLIDATE ALERT BOX PATTERNS (P2)
+   Three different styles: left-border-only (compliance), full-border+rounded (emergency), bordered cards (digest).
+   Consolidate into one AlertBox component with variants.
+
+9. INCREASE HEADING SIZE FOR URGENT EMAILS (P3)
+   Every template uses fontSize:"24px" — emergency alerts don't feel more urgent than welcome.
+   Use 28px+ for emergency/critical headings.
+
+10. MEETING TABLE LABELS TOO FAINT (P3)
+    Labels use textDisabled (#9CA3AF) — these are key information the recipient needs.
+    Should use textSecondary (#4B5563) at minimum.
+
+================================================================================
+TOKEN COLOR SYSTEM
+================================================================================
+
+CURRENT TOKEN VALUES:
+Text:
+  textPrimary:     #111827 (gray-900)
+  textSecondary:   #4B5563 (gray-600)
+  textTertiary:    #4B5563 (gray-600)
+  textDisabled:    #9CA3AF (gray-400) — FAILS WCAG AA contrast on white
+  textInverse:     #FFFFFF
+  textBrand:       #2563EB (blue-600)
+  textLink:        #2563EB (blue-600)
+
+Surfaces:
+  surfacePage:     #F9FAFB (gray-50)
+  surfaceCard:     #FFFFFF
+  surfaceMuted:    #F3F4F6 (gray-100)
+
+Borders:
+  borderDefault:   #E5E7EB (gray-200)
+  borderStrong:    #D1D5DB (gray-300)
+
+Interactive:
+  interactivePrimary:      #2563EB (blue-600) — overridden by branding.accentColor
+  interactivePrimaryHover: #1D4ED8 (blue-700)
+
+Status:
+  success: fg=#047857, bg=#ECFDF5, border=#A7F3D0
+  warning: fg=#B45309, bg=#FFFBEB, border=#FDE68A
+  danger:  fg=#B91C1C, bg=#FEF2F2, border=#FECACA
+  info:    fg=#1D4ED8, bg=#EFF6FF, border=#BFDBFE
+  neutral: fg=#4B5563, bg=#F3F4F6, border=#E5E7EB
+
+Primitive colors used directly in some templates:
+  red-600: #DC2626, red-900: #7F1D1D
+  amber-500: #F59E0B, amber-600: #D97706
+  orange-600: #EA580C, orange-700: #C2410C
+  gray-800: #1F2937
+
+================================================================================
+SHARED LAYOUT STRUCTURE & COMPONENT ARCHITECTURE
+================================================================================
+
+LAYOUT ARCHITECTURE (email-layout.tsx):
+- Body: surfacePage (#F9FAFB) background, system font stack
+- Container: max-width 600px, centered, white (#FFFFFF) background, 8px radius, overflow hidden
+- Header: accentColor background (defaults to #2563EB), 24px padding, centered
+  - Optional logo (48x48, 4px radius)
+  - Community name in white, 20px bold
+- Content: 32px top/bottom padding, 24px left/right padding
+- HR divider: borderDefault color, 0 24px margins
+- Footer: 16px 24px padding, centered
+  - Copyright line (textDisabled, 12px)
+  - "Powered by PropertyPro Florida" (textDisabled, 12px)
+  - Optional custom footer text (textSecondary, 12px, italic)
+
+BRANDING SYSTEM:
+- CommunityBranding: { communityName, logoUrl?, accentColor?, customEmailFooter? }
+- accentColor flows into header background and CTA button background
+- Each community can have a different accent color
+
+SHARED STYLE OBJECTS (copy-pasted across templates):
+  headingStyle:   { fontSize: "24px", fontWeight: "bold", color: "#111827", margin: "0 0 16px 0", lineHeight: "1.3" }
+  textStyle:      { fontSize: "16px", color: "#111827", lineHeight: "1.6", margin: "0 0 16px 0" }
+  buttonStyle:    { backgroundColor: accentColor, color: "#FFFFFF", padding: "12px 24px", borderRadius: "6px", textDecoration: "none", fontWeight: "600", fontSize: "16px", display: "inline-block", margin: "8px 0 24px 0" }
+  smallTextStyle: { fontSize: "13px", color: "#9CA3AF", lineHeight: "1.5", margin: "0" }
+  alertBoxStyle:  varies per template (no single shared pattern)
+
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropertyPro Florida — Email Template Gallery (28 Templates)</title>
+<style>
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: #E5E7EB;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  .gallery-header {
+    max-width: 700px;
+    margin: 0 auto 40px;
+    text-align: center;
+  }
+  .gallery-header h1 {
+    font-size: 28px;
+    color: #111827;
+    margin: 0 0 8px;
+  }
+  .gallery-header p {
+    font-size: 14px;
+    color: #4B5563;
+    margin: 0;
+  }
+  .template-section {
+    max-width: 700px;
+    margin: 0 auto 48px;
+  }
+  .template-label {
+    background: #1F2937;
+    color: #FFFFFF;
+    padding: 10px 16px;
+    border-radius: 8px 8px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .template-label .category {
+    color: #9CA3AF;
+    font-weight: 400;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .template-wrapper {
+    background: #F9FAFB;
+    padding: 32px;
+    border-radius: 0 0 8px 8px;
+    border: 1px solid #E5E7EB;
+    border-top: none;
+  }
+  .toc {
+    max-width: 700px;
+    margin: 0 auto 48px;
+    background: #FFFFFF;
+    border-radius: 8px;
+    padding: 24px 32px;
+    border: 1px solid #E5E7EB;
+  }
+  .toc h2 {
+    font-size: 18px;
+    color: #111827;
+    margin: 0 0 16px;
+  }
+  .toc-category {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4B5563;
+    margin: 16px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .toc a {
+    display: block;
+    font-size: 14px;
+    color: #2563EB;
+    text-decoration: none;
+    padding: 3px 0;
+  }
+  .toc a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<div class="gallery-header">
+  <h1>PropertyPro Florida — Email Template Gallery</h1>
+  <p>28 templates &middot; All using Sunset Condos branding &middot; Accent: #2563EB</p>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <div class="toc-category">Auth / Account (5)</div>
+  <a href="#welcome-email">1. Welcome Email</a>
+  <a href="#signup-verification">2. Signup Verification</a>
+  <a href="#password-reset">3. Password Reset</a>
+  <a href="#otp-verification">4. OTP Verification</a>
+  <a href="#invitation-email">5. Invitation Email</a>
+  <div class="toc-category">Access Requests (3)</div>
+  <a href="#access-request-pending">6. Access Request Pending</a>
+  <a href="#access-request-approved">7. Access Request Approved</a>
+  <a href="#access-request-denied">8. Access Request Denied</a>
+  <div class="toc-category">Notifications (5)</div>
+  <a href="#announcement-email">9. Announcement Email</a>
+  <a href="#document-posted">10. Document Posted</a>
+  <a href="#maintenance-update">11. Maintenance Update</a>
+  <a href="#meeting-notice">12. Meeting Notice</a>
+  <a href="#notification-digest">13. Notification Digest</a>
+  <div class="toc-category">Compliance (1)</div>
+  <a href="#compliance-alert">14. Compliance Alert</a>
+  <div class="toc-category">Emergency (1)</div>
+  <a href="#emergency-alert">15. Emergency Alert</a>
+  <div class="toc-category">E-Sign (3)</div>
+  <a href="#esign-invitation">16. E-Sign Invitation</a>
+  <a href="#esign-reminder">17. E-Sign Reminder</a>
+  <a href="#esign-completed">18. E-Sign Completed</a>
+  <div class="toc-category">Finance / Billing (5)</div>
+  <a href="#assessment-due">19. Assessment Due Reminder</a>
+  <a href="#payment-received">20. Payment Received</a>
+  <a href="#payment-failed">21. Payment Failed</a>
+  <a href="#subscription-canceled">22. Subscription Canceled</a>
+  <a href="#subscription-expiry">23. Subscription Expiry Warning</a>
+  <div class="toc-category">Free Access (2)</div>
+  <a href="#free-access-expiring">24. Free Access Expiring</a>
+  <a href="#free-access-expired">25. Free Access Expired</a>
+  <div class="toc-category">Account Lifecycle (3)</div>
+  <a href="#deletion-initiated">26. Deletion Initiated</a>
+  <a href="#deletion-executed">27. Deletion Executed</a>
+  <a href="#account-recovered">28. Account Recovered</a>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 1. WELCOME EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="welcome-email">
+<div class="template-label">
+  <span>1. welcome-email</span>
+  <span class="category">Auth / Account</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Welcome to PropertyPro</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Welcome to your community portal! Your account has been created for Sunset Condos. You can now access important documents, meeting notices, and community announcements all in one place.</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Get started by logging in to explore your portal and update your profile.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Log in to your portal</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you did not create this account, please disregard this email or contact your community manager.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 2. SIGNUP VERIFICATION EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="signup-verification">
+<div class="template-label">
+  <span>2. signup-verification-email</span>
+  <span class="category">Auth / Account</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Verify your email</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Thanks for signing up! Please verify your email address to continue setting up your account. Once verified, you'll be able to proceed to checkout and activate your community portal.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Verify Email</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">Your checkout session will remain locked until your email is verified. This link expires in 24 hours.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 3. PASSWORD RESET EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="password-reset">
+<div class="template-label">
+  <span>3. password-reset-email</span>
+  <span class="category">Auth / Account</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Password Reset</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">We received a request to reset the password for your account. Click the button below to choose a new password.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Reset Password</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">This link will expire in 60 minutes. If you didn't request a password reset, you can safely ignore this email.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 4. OTP VERIFICATION -->
+<!-- ======================================================================== -->
+<div class="template-section" id="otp-verification">
+<div class="template-label">
+  <span>4. otp-verification</span>
+  <span class="category">Auth / Account</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Your Verification Code</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your verification code is:</p>
+    <div style="background-color:#F3F4F6;border-radius:8px;padding:20px;text-align:center;margin:0 0 16px 0;">
+      <span style="font-size:32px;font-weight:bold;color:#111827;letter-spacing:8px;font-family:monospace;">847291</span>
+    </div>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">This code will expire in 10 minutes.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you didn't request this code, please ignore this email. Someone may have entered your email address by mistake.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 5. INVITATION EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="invitation-email">
+<div class="template-label">
+  <span>5. invitation-email</span>
+  <span class="category">Auth / Account</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">You're Invited!</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">You've been invited to join Sunset Condos as a <strong>Unit Owner</strong>. Accept this invitation to access your community portal, view documents, and stay updated on announcements.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Accept Invitation</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">This invitation expires in 7 days. If you weren't expecting this, please disregard this email.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 6. ACCESS REQUEST PENDING -->
+<!-- ======================================================================== -->
+<div class="template-section" id="access-request-pending">
+<div class="template-label">
+  <span>6. access-request-pending</span>
+  <span class="category">Access Requests</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">New Resident Access Request</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">A new access request has been submitted and requires your review.</p>
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#111827;margin:0 0 8px;"><strong>Name:</strong> Carlos Rivera</p>
+      <p style="font-size:14px;color:#111827;margin:0 0 8px;"><strong>Email:</strong> carlos.rivera@email.com</p>
+      <p style="font-size:14px;color:#111827;margin:0 0 8px;"><strong>Unit:</strong> 304-B</p>
+      <p style="font-size:14px;color:#111827;margin:0;"><strong>Requested Role:</strong> Unit Owner</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Review Request</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">You are receiving this because you are an administrator of Sunset Condos.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 7. ACCESS REQUEST APPROVED -->
+<!-- ======================================================================== -->
+<div class="template-section" id="access-request-approved">
+<div class="template-label">
+  <span>7. access-request-approved</span>
+  <span class="category">Access Requests</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Access Request Approved</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Carlos,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Great news! Your access request for Sunset Condos has been approved. You now have full access to the community portal as a Unit Owner.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Log In</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you have any questions, contact your community manager.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 8. ACCESS REQUEST DENIED -->
+<!-- ======================================================================== -->
+<div class="template-section" id="access-request-denied">
+<div class="template-label">
+  <span>8. access-request-denied</span>
+  <span class="category">Access Requests</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Update on Your Access Request</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Carlos,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Unfortunately, your access request for Sunset Condos was not approved at this time.</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;"><strong>Reason:</strong> We were unable to verify your residency at the listed unit. Please contact the management office with proof of ownership or lease agreement.</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">If you believe this was a mistake, please reach out to your community administrator directly.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">This is an automated message from your community portal.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 9. ANNOUNCEMENT EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="announcement-email">
+<div class="template-label">
+  <span>9. announcement-email</span>
+  <span class="category">Notifications</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">New Announcement</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">A new announcement has been posted to your community portal.</p>
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:16px;font-weight:bold;color:#111827;margin:0 0 8px;">Pool Maintenance Schedule Update</p>
+      <p style="font-size:14px;color:#111827;line-height:1.5;margin:0 0 8px;">The community pool will be closed for resurfacing from March 15-22. During this time, residents may use the fitness center pool at Palm Shores HOA under our reciprocal agreement.</p>
+      <p style="font-size:13px;color:#9CA3AF;margin:0;">Posted by Linda Chen, CAM</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">View in Portal</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">You are receiving this because you are a member of Sunset Condos.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 10. DOCUMENT POSTED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="document-posted">
+<div class="template-label">
+  <span>10. document-posted-email</span>
+  <span class="category">Notifications</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">New Document Posted</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">A new document has been posted to your community portal.</p>
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:16px;font-weight:bold;color:#111827;margin:0 0 8px;">2025 Annual Budget Report</p>
+      <p style="font-size:14px;color:#4B5563;margin:0 0 4px;"><strong>Category:</strong> Financial Reports</p>
+      <p style="font-size:14px;color:#4B5563;margin:0;"><strong>Uploaded by:</strong> Linda Chen, CAM</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">View Document</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">Per Florida Statute &sect;718.111(12)(g), associations with 25 or more units must maintain a website with required documents available to owners.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 11. MAINTENANCE UPDATE EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="maintenance-update">
+<div class="template-label">
+  <span>11. maintenance-update-email</span>
+  <span class="category">Notifications</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Maintenance Request Update</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">There's an update on your maintenance request.</p>
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:16px;font-weight:bold;color:#111827;margin:0 0 12px;">Leaking Faucet — Unit 201-A Kitchen</p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:4px 0;font-size:14px;color:#9CA3AF;width:120px;">Previous Status</td>
+          <td style="padding:4px 0;"><span style="background-color:#FFFBEB;color:#B45309;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">In Progress</span></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;font-size:14px;color:#9CA3AF;width:120px;">New Status</td>
+          <td style="padding:4px 0;"><span style="background-color:#ECFDF5;color:#047857;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">Completed</span></td>
+        </tr>
+      </table>
+      <p style="font-size:14px;color:#4B5563;margin:12px 0 0 0;"><strong>Notes:</strong> Faucet cartridge replaced. Please check and let us know if the issue persists.</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">View Request</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">You are receiving this because you submitted this maintenance request.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 12. MEETING NOTICE EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="meeting-notice">
+<div class="template-label">
+  <span>12. meeting-notice-email</span>
+  <span class="category">Notifications</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Meeting Notice</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">You are hereby notified of an upcoming meeting for Sunset Condos.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px 0;">
+      <tr>
+        <td style="padding:8px 0;font-size:14px;color:#9CA3AF;width:100px;vertical-align:top;">Meeting</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;font-weight:600;">Annual Budget Meeting</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;font-size:14px;color:#9CA3AF;width:100px;vertical-align:top;">Type</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;">Owner Meeting</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;font-size:14px;color:#9CA3AF;width:100px;vertical-align:top;">Date</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;">April 15, 2026</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;font-size:14px;color:#9CA3AF;width:100px;vertical-align:top;">Time</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;">7:00 PM EDT</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;font-size:14px;color:#9CA3AF;width:100px;vertical-align:top;">Location</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;">Community Clubhouse, 2nd Floor</td>
+      </tr>
+    </table>
+    <p style="font-size:14px;margin:0 0 16px 0;"><a href="#" style="color:#2563EB;text-decoration:none;font-weight:600;">View Meeting Agenda</a></p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">Per Florida Statute &sect;718.112, notice of owner meetings must be provided at least 14 days in advance.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 13. NOTIFICATION DIGEST EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="notification-digest">
+<div class="template-label">
+  <span>13. notification-digest-email</span>
+  <span class="category">Notifications</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Weekly Notification Digest</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Here's a summary of what happened at Sunset Condos this week.</p>
+
+    <!-- Digest Item 1 -->
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 12px 0;">
+      <p style="font-size:15px;font-weight:bold;color:#111827;margin:0 0 4px;">New Document: Q1 Financial Statement</p>
+      <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 8px;">The Q1 2026 financial statement has been posted to the documents section.</p>
+      <a href="#" style="font-size:13px;color:#2563EB;text-decoration:none;font-weight:600;">View update</a>
+    </div>
+
+    <!-- Digest Item 2 -->
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 12px 0;">
+      <p style="font-size:15px;font-weight:bold;color:#111827;margin:0 0 4px;">Maintenance Update: Elevator Repair</p>
+      <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 8px;">Elevator B repair has been completed and is now operational.</p>
+      <a href="#" style="font-size:13px;color:#2563EB;text-decoration:none;font-weight:600;">View update</a>
+    </div>
+
+    <!-- Digest Item 3 -->
+    <div style="background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:bold;color:#111827;margin:0 0 4px;">Upcoming Meeting: Board Meeting</p>
+      <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 8px;">A board meeting is scheduled for March 28, 2026 at 6:00 PM.</p>
+      <a href="#" style="font-size:13px;color:#2563EB;text-decoration:none;font-weight:600;">View update</a>
+    </div>
+
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Open Community Portal</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">You can manage your notification preferences in the portal settings.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 14. COMPLIANCE ALERT EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="compliance-alert">
+<div class="template-label">
+  <span>14. compliance-alert-email</span>
+  <span class="category">Compliance</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 12px 0;line-height:1.3;">Compliance Alert</h1>
+    <div style="display:inline-block;background-color:#FEF2F2;color:#B91C1C;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 16px 0;">CRITICAL</div>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">A compliance issue requires your immediate attention.</p>
+    <div style="background-color:#F9FAFB;border-left:4px solid #B91C1C;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:16px;font-weight:bold;color:#111827;margin:0 0 8px;">Missing Required Document: Annual Financial Report</p>
+      <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 8px;">The 2025 Annual Financial Report has not been posted to the portal. This document is required under Florida statute and must be made available to all unit owners.</p>
+      <p style="font-size:14px;font-weight:bold;color:#B91C1C;margin:0;">Due: March 31, 2026</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">View Compliance Dashboard</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">Per Florida Statute &sect;718.111(12)(g), required documents must be posted within 30 days of creation or receipt.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 15. EMERGENCY ALERT EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="emergency-alert">
+<div class="template-label">
+  <span>15. emergency-alert-email</span>
+  <span class="category">Emergency</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <!-- EMERGENCY BANNER -->
+    <div style="background-color:#DC2626;border-radius:6px;padding:12px 16px;text-align:center;margin:0 0 20px 0;">
+      <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:2px;">EMERGENCY</span>
+    </div>
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Building Evacuation &mdash; Gas Leak Detected</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">An emergency has been reported at Sunset Condos that requires your immediate attention. Please read the following information carefully.</p>
+    <div style="background-color:#FEF2F2;border-left:4px solid #DC2626;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;color:#111827;line-height:1.6;margin:0 0 8px;">A gas leak has been detected on the 3rd floor of Building A. The fire department has been notified and is en route.</p>
+      <p style="font-size:15px;color:#111827;line-height:1.6;margin:0 0 8px;"><strong>Please evacuate the building immediately using the stairwells. Do not use elevators.</strong></p>
+      <p style="font-size:15px;color:#111827;line-height:1.6;margin:0;">Proceed to the designated assembly point in the south parking lot. Management will provide updates as the situation develops.</p>
+    </div>
+    <p style="font-size:13px;color:#9CA3AF;margin:0 0 16px 0;">Alert issued: March 26, 2026 at 2:47 PM EDT</p>
+    <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 16px 0;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">This is an emergency notification from Sunset Condos. You cannot unsubscribe from emergency alerts.</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 16. E-SIGN INVITATION EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="esign-invitation">
+<div class="template-label">
+  <span>16. esign-invitation-email</span>
+  <span class="category">E-Sign</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Signature Requested</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">You have been requested to sign a document for Sunset Condos.</p>
+    <div style="background-color:#F9FAFB;border-radius:6px;padding:12px 16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:600;color:#111827;margin:0;">Pool Usage Liability Waiver 2026</p>
+    </div>
+    <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 16px 0;font-style:italic;">Message from sender: "Please review and sign by end of week so we can finalize the pool season preparations. Thanks!"</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Review &amp; Sign Document</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0 0 8px;">This signature request expires on April 10, 2026.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you were not expecting this request, you can safely ignore this email.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 17. E-SIGN REMINDER EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="esign-reminder">
+<div class="template-label">
+  <span>17. esign-reminder-email</span>
+  <span class="category">E-Sign</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Signature Reminder</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">This is reminder #2 that a document is awaiting your signature.</p>
+    <div style="background-color:#FFFBEB;border-left:4px solid #D97706;padding:12px 16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:600;color:#111827;margin:0;">Pool Usage Liability Waiver 2026</p>
+    </div>
+    <p style="font-size:14px;font-weight:bold;color:#B45309;margin:0 0 16px 0;">This document expires on April 10, 2026. Please sign before the deadline.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Sign Now</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you have already signed this document, please disregard this reminder.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 18. E-SIGN COMPLETED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="esign-completed">
+<div class="template-label">
+  <span>18. esign-completed-email</span>
+  <span class="category">E-Sign</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">All Signatures Collected</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Linda,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">All required signatures have been collected for the following document:</p>
+    <div style="background-color:#ECFDF5;border-left:4px solid #047857;padding:12px 16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:600;color:#111827;margin:0;">Pool Usage Liability Waiver 2026</p>
+    </div>
+    <div style="background-color:#F9FAFB;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#4B5563;margin:0 0 6px;"><strong>Community:</strong> Sunset Condos</p>
+      <p style="font-size:14px;color:#4B5563;margin:0 0 6px;"><strong>Signers:</strong> Maria Garcia, Carlos Rivera, James Wilson</p>
+      <p style="font-size:14px;color:#4B5563;margin:0;"><strong>Completed:</strong> March 26, 2026</p>
+    </div>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">The signed document is now available in the community portal.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">This is an automated notification. The completed document will be stored in your document repository.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 19. ASSESSMENT DUE REMINDER -->
+<!-- ======================================================================== -->
+<div class="template-section" id="assessment-due">
+<div class="template-label">
+  <span>19. assessment-due-reminder</span>
+  <span class="category">Finance / Billing</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Assessment Due Reminder</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">This is a reminder that your quarterly assessment of <strong>$1,250.00</strong> for Unit 201-A is due on <strong>April 1, 2026</strong>.</p>
+    <div style="background-color:#FFFBEB;border-left:4px solid #D97706;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#B45309;line-height:1.5;margin:0;">Please pay before the due date to avoid late fees. A $25.00 late fee will be applied after April 15, 2026.</p>
+    </div>
+    <a href="#" style="background-color:#D97706;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Pay Now</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">If you have already submitted payment, please disregard this notice. Payments may take 2-3 business days to process.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 20. ASSESSMENT PAYMENT RECEIVED -->
+<!-- ======================================================================== -->
+<div class="template-section" id="payment-received">
+<div class="template-label">
+  <span>20. assessment-payment-received</span>
+  <span class="category">Finance / Billing</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Payment Received</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your payment has been successfully processed. Here are the details:</p>
+    <div style="background-color:#ECFDF5;border-left:4px solid #047857;padding:16px;margin:0 0 16px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#4B5563;width:160px;">Assessment</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;font-weight:600;">Q2 2026 Quarterly</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#4B5563;">Amount Paid</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;font-weight:600;">$1,250.00</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#4B5563;">Date</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;">March 25, 2026</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#4B5563;">Remaining Balance</td>
+          <td style="padding:6px 0;font-size:14px;color:#047857;font-weight:600;">$0.00</td>
+        </tr>
+      </table>
+    </div>
+    <a href="#" style="background-color:#047857;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">View Payment History</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">This serves as your payment confirmation. Please retain for your records.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 21. PAYMENT FAILED -->
+<!-- ======================================================================== -->
+<div class="template-section" id="payment-failed">
+<div class="template-label">
+  <span>21. payment-failed</span>
+  <span class="category">Finance / Billing</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Payment Failed</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">We were unable to process your payment of <strong>$1,250.00</strong> for the Q2 2026 quarterly assessment. The charge was declined by your payment provider.</p>
+    <div style="background-color:#FEF2F2;border-left:4px solid #DC2626;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#7F1D1D;line-height:1.5;margin:0;">Please update your payment method or try a different card to avoid late fees. Your assessment balance remains <strong>$1,250.00</strong>.</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Update Payment Method</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">If you believe this is an error, please contact your bank or credit card company for more information.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 22. SUBSCRIPTION CANCELED -->
+<!-- ======================================================================== -->
+<div class="template-section" id="subscription-canceled">
+<div class="template-label">
+  <span>22. subscription-canceled</span>
+  <span class="category">Finance / Billing</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Subscription Canceled</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your PropertyPro subscription for Sunset Condos has been canceled. Your portal will remain active during the grace period.</p>
+    <div style="background-color:#FFFBEB;border-left:4px solid #D97706;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:bold;color:#111827;margin:0 0 8px;">30-Day Grace Period</p>
+      <p style="font-size:14px;color:#B45309;line-height:1.5;margin:0;">Your community portal will remain accessible until <strong>April 25, 2026</strong>. After this date, residents will lose access to the portal and all stored documents. You can reactivate your subscription at any time during this period.</p>
+    </div>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Reactivate Subscription</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">If you have questions about your subscription, please contact support@propertyprofl.com.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 23. SUBSCRIPTION EXPIRY WARNING -->
+<!-- ======================================================================== -->
+<div class="template-section" id="subscription-expiry">
+<div class="template-label">
+  <span>23. subscription-expiry-warning</span>
+  <span class="category">Finance / Billing</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Final Warning: Access Expiring Soon</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your PropertyPro subscription grace period is ending in <strong>3 days</strong>. After <strong>April 25, 2026</strong>, your community portal will be deactivated.</p>
+    <div style="background-color:#FEF2F2;border-left:4px solid #DC2626;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:15px;font-weight:bold;color:#111827;margin:0 0 8px;">What happens after expiry</p>
+      <p style="font-size:14px;color:#7F1D1D;line-height:1.5;margin:0 0 4px;">&#8226; All residents will lose access to the community portal</p>
+      <p style="font-size:14px;color:#7F1D1D;line-height:1.5;margin:0 0 4px;">&#8226; Documents and meeting records will be archived</p>
+      <p style="font-size:14px;color:#7F1D1D;line-height:1.5;margin:0;">&#8226; Your community may fall out of compliance with Florida statutes</p>
+    </div>
+    <a href="#" style="background-color:#DC2626;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Reactivate Now</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;font-style:italic;">If you need assistance, contact support@propertyprofl.com.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 24. FREE ACCESS EXPIRING EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="free-access-expiring">
+<div class="template-label">
+  <span>24. free-access-expiring-email</span>
+  <span class="category">Free Access</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Your Free Access Is Ending Soon</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your complimentary access to PropertyPro for Sunset Condos expires in <strong>7 days</strong> (April 2, 2026). To continue using the community portal without interruption, subscribe before your access ends.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Subscribe Now</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">After your free access ends, you will have a limited grace period before the portal is deactivated.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 25. FREE ACCESS EXPIRED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="free-access-expired">
+<div class="template-label">
+  <span>25. free-access-expired-email</span>
+  <span class="category">Free Access</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Your Free Access Has Ended</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Admin,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your free access to PropertyPro for Sunset Condos has expired. You have <strong>30 days</strong> remaining in your grace period before the portal is deactivated. Subscribe now to maintain uninterrupted access for your residents.</p>
+    <a href="#" style="background-color:#2563EB;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Subscribe to Keep Access</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">After the grace period, all community data will be archived and the portal will be deactivated.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 26. ACCOUNT DELETION INITIATED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="deletion-initiated">
+<div class="template-label">
+  <span>26. account-deletion-initiated-email</span>
+  <span class="category">Account Lifecycle</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Account Deletion Initiated</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">We've received your request to delete your account. Here's what happens next:</p>
+    <div style="background-color:#FFFBEB;border-left:4px solid #B45309;border-radius:8px;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#111827;line-height:1.6;margin:0 0 12px;"><strong>1. Cooling-off period (7 days)</strong><br>Your account remains active. You can cancel the deletion at any time during this period.</p>
+      <p style="font-size:14px;color:#111827;line-height:1.6;margin:0 0 12px;"><strong>2. Recovery window (23 days)</strong><br>Your account will be deactivated but your data is preserved. Contact support to recover.</p>
+      <p style="font-size:14px;color:#111827;line-height:1.6;margin:0;"><strong>3. Permanent purge (after 30 days)</strong><br>All personal data is permanently deleted and cannot be recovered.</p>
+    </div>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Changed your mind? You can cancel this request right now.</p>
+    <a href="#" style="background-color:#DC2626;color:#FFFFFF;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;margin:8px 0 24px 0;">Cancel Deletion Request</a>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you did not request this deletion, please cancel immediately and change your password.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 27. ACCOUNT DELETION EXECUTED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="deletion-executed">
+<div class="template-label">
+  <span>27. account-deletion-executed-email</span>
+  <span class="category">Account Lifecycle</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Your Account Has Been Deleted</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Your account with Sunset Condos has been deactivated as part of your deletion request. Your personal data will be permanently removed after the recovery window ends.</p>
+    <div style="background-color:#F3F4F6;border-left:4px solid #9CA3AF;padding:16px;margin:0 0 16px 0;">
+      <p style="font-size:14px;color:#111827;line-height:1.5;margin:0 0 4px;"><strong>Recovery window:</strong> 23 days remaining</p>
+      <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0;">If you change your mind, contact support@propertyprofl.com before <strong>April 25, 2026</strong> to restore your account and data.</p>
+    </div>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">If you need assistance or believe this was done in error, please reach out to our support team.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">Thank you for being a part of the Sunset Condos community. We're sorry to see you go.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+<!-- ======================================================================== -->
+<!-- 28. ACCOUNT RECOVERED EMAIL -->
+<!-- ======================================================================== -->
+<div class="template-section" id="account-recovered">
+<div class="template-label">
+  <span>28. account-recovered-email</span>
+  <span class="category">Account Lifecycle</span>
+</div>
+<div class="template-wrapper">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<tr><td align="center" style="padding:24px;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#2563EB;padding:24px;text-align:center;">
+    <span style="color:#FFFFFF;font-size:20px;font-weight:bold;">Sunset Condos</span>
+  </td></tr>
+  <tr><td style="padding:32px 24px;">
+    <h1 style="font-size:24px;font-weight:bold;color:#111827;margin:0 0 16px 0;line-height:1.3;">Your Account Has Been Restored</h1>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Hi Maria,</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Good news — your account with Sunset Condos has been successfully restored. The deletion request has been canceled.</p>
+    <p style="font-size:16px;color:#111827;line-height:1.6;margin:0 0 16px 0;">Everything is back to normal. Your documents, settings, and community access have all been fully restored. You can log in and pick up right where you left off.</p>
+    <p style="font-size:13px;color:#9CA3AF;line-height:1.5;margin:0;">If you did not authorize this recovery, please contact support@propertyprofl.com immediately and change your password.</p>
+  </td></tr>
+  <tr><td><hr style="border:none;border-top:1px solid #E5E7EB;margin:0 24px;"></td></tr>
+  <tr><td style="padding:16px 24px;text-align:center;">
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 4px;">&copy; 2026 Sunset Condos. All rights reserved.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0;">Powered by PropertyPro Florida</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</div>
+</div>
+
+
+</body>
+</html>
