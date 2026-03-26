@@ -10,6 +10,7 @@ import {
   Hr,
 } from "@react-email/components";
 import type { CommunityBranding } from "../types";
+import { emailColors } from "@propertypro/tokens/email";
 
 interface EmailLayoutProps {
   branding: CommunityBranding;
@@ -22,7 +23,7 @@ export function EmailLayout({
   previewText,
   children,
 }: EmailLayoutProps) {
-  const accent = branding.accentColor ?? "#2563eb";
+  const accent = branding.accentColor ?? emailColors.interactivePrimary;
 
   return (
     <Html>
@@ -68,7 +69,7 @@ export function EmailLayout({
 }
 
 const bodyStyle: React.CSSProperties = {
-  backgroundColor: "#f6f9fc",
+  backgroundColor: emailColors.surfacePage,
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   margin: 0,
@@ -78,7 +79,7 @@ const bodyStyle: React.CSSProperties = {
 const containerStyle: React.CSSProperties = {
   maxWidth: "600px",
   margin: "0 auto",
-  backgroundColor: "#ffffff",
+  backgroundColor: emailColors.surfaceCard,
   borderRadius: "8px",
   overflow: "hidden",
 };
@@ -97,7 +98,7 @@ const logoStyle: React.CSSProperties = {
 };
 
 const communityNameStyle: React.CSSProperties = {
-  color: "#ffffff",
+  color: emailColors.textInverse,
   fontSize: "20px",
   fontWeight: "bold",
   margin: 0,
@@ -108,7 +109,7 @@ const contentStyle: React.CSSProperties = {
 };
 
 const hrStyle: React.CSSProperties = {
-  borderColor: "#e5e7eb",
+  borderColor: emailColors.borderDefault,
   margin: "0 24px",
 };
 
@@ -118,13 +119,13 @@ const footerStyle: React.CSSProperties = {
 };
 
 const footerTextStyle: React.CSSProperties = {
-  color: "#9ca3af",
+  color: emailColors.textDisabled,
   fontSize: "12px",
   margin: "4px 0",
 };
 
 const customFooterTextStyle: React.CSSProperties = {
-  color: "#6b7280",
+  color: emailColors.textSecondary,
   fontSize: "12px",
   margin: "8px 0 0 0",
   fontStyle: "italic",
