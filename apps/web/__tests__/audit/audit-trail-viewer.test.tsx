@@ -76,4 +76,29 @@ describe('AuditTrailViewer', () => {
       expect(container?.textContent).toContain('#10');
     });
   });
+
+  it('renders system-generated entries without a user id', async () => {
+    fetchMock.mockResolvedValue(
+      makeAuditResponse([
+        {
+          id: 2,
+          userId: null,
+          communityId: 42,
+          action: 'update',
+          resourceType: 'visitor_log',
+          resourceId: '11',
+          oldValues: null,
+          newValues: { checkedOutAt: '2026-03-26T12:00:00Z' },
+          metadata: { transition: 'auto_checkout' },
+          createdAt: '2026-03-26T12:00:00Z',
+        },
+      ]),
+    );
+
+    render(<AuditTrailViewer communityId={42} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('By: System')).toBeDefined();
+    });
+  });
 });

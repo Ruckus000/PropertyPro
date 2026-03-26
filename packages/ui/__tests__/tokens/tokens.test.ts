@@ -200,6 +200,11 @@ describe("P0-01 Design Tokens", () => {
       expect(semanticColors.surface.inverse).toBe("var(--surface-inverse)");
     });
 
+    it("defines the warm page surface primitive and references it from the semantic token", () => {
+      expect(cssContent).toContain("--surface-page-warm: #F5F5F4");
+      expect(cssContent).toContain("--surface-page: var(--surface-page-warm)");
+    });
+
     it("border colors reference correct CSS variables", () => {
       expect(semanticColors.border.default).toBe("var(--border-default)");
       expect(semanticColors.border.subtle).toBe("var(--border-subtle)");

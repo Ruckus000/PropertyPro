@@ -76,7 +76,7 @@ interface AppShellProps {
 }
 
 function ShellInner({ children, user, community, role, features, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
-  const { expanded, mobileOpen, setMobileOpen } = useSidebar();
+  const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
 
@@ -175,6 +175,8 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           {/* Drawer */}
           <div className="relative z-10 h-full overflow-y-auto">
             <AppSidebar
+              collapsible={false}
+              onNavigate={closeMobileNav}
               communityId={community?.id ?? null}
               communityName={community?.name ?? null}
               communityType={community?.type ?? null}
@@ -186,7 +188,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
             <button
               type="button"
               onClick={closeMobileNav}
-              className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
+              className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
               aria-label="Close navigation"
             >
               <X size={18} />

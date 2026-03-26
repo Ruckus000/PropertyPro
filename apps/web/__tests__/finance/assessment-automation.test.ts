@@ -195,7 +195,7 @@ describe('assessment-automation-service', () => {
       expect(summary.totalInserted).toBe(4);
       expect(summary.totalSkipped).toBe(0);
       expect(summary.errors).toBe(0);
-      expect(generateAssessmentLineItemsForCommunity).toHaveBeenCalledWith(1, 5, 'system');
+      expect(generateAssessmentLineItemsForCommunity).toHaveBeenCalledWith(1, 5, null);
     });
 
     it('skips assessments that already have line items for current period (idempotency)', async () => {

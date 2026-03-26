@@ -760,7 +760,7 @@ export async function revokeVisitorPassesForUser(
   if (result.length > 0) {
     const revokedIds = result.map((row) => (row as unknown as { id: number }).id);
     await logAuditEvent({
-      userId: 'system',
+      userId: null,
       communityId,
       action: 'update',
       resourceType: 'visitor_log',

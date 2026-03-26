@@ -11,13 +11,15 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Building, Lock } from 'lucide-react';
-import { NavRail, type NavRailItem } from '@propertypro/ui';
+import { NavRail, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import { toInitials, resolvePlanId, type AnyCommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
 import {
   NAV_ITEMS,
+  NAV_SECTIONS,
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  type NavSection,
   type NavItemWithGateStatus,
 } from './nav-config';
 import { useSidebar } from './sidebar-context';
@@ -31,6 +33,8 @@ interface AppSidebarProps {
   features: CommunityFeatures | null;
   userName: string | null;
   plan: string | null;
+  collapsible?: boolean;
+  onNavigate?: () => void;
 }
 
 /** Wraps an icon component with a small lock badge overlay for plan-locked items. */
@@ -51,10 +55,13 @@ export function AppSidebar({
   features,
   userName,
   plan,
+  collapsible = true,
+  onNavigate,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { expanded, toggleExpanded } = useSidebar();
   const [upgradePrompt, setUpgradePrompt] = useState<{ planName: string } | null>(null);
+  const resolvedExpanded = collapsible ? expanded : true;
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
@@ -63,37 +70,70 @@ export function AppSidebar({
     ? PM_NAV_ITEMS.map((i) => ({ ...i, planLocked: false, upgradePlanName: null }))
     : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId);
 
-  // Find where main group ends and admin group starts
-  const mainItems = allVisible.filter((i) => i.group === 'main');
-  const adminItems = allVisible.filter((i) => i.group === 'admin');
+  const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
+  const baseSections: readonly NavSection[] = isPmContext
+    ? [{ label: null, items: PM_NAV_ITEMS }]
+    : NAV_SECTIONS;
+  const childParentById = new Map<string, string>();
 
-  // Map to NavRailItem format with hrefs
-  const orderedItems = [...mainItems, ...adminItems];
-  const navRailItems: NavRailItem[] = orderedItems.map((item) => ({
+  for (const section of baseSections) {
+    for (const item of section.items) {
+      for (const childId of item.children ?? []) {
+        childParentById.set(childId, item.id);
+      }
+    }
+  }
+
+  const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => ({
     id: item.id,
     label: item.planLocked ? `${item.label} (Upgrade)` : item.label,
     icon: item.planLocked
       ? (props: { size?: number }) => <LockedIcon Icon={item.icon} />
       : item.icon,
     href: item.planLocked ? undefined : (communityId ? item.href(communityId) : undefined),
-  }));
+    ariaHasPopup: item.planLocked ? 'dialog' : undefined,
+  });
 
-  const activeId = getActiveItemId(orderedItems, pathname) ?? '';
+  const navRailSections: NavRailSection[] = baseSections
+    .map((section) => ({
+      label: section.label,
+      items: section.items.flatMap((item) => {
+        const parentId = childParentById.get(item.id);
+        if (parentId && visibleById.has(parentId)) {
+          return [];
+        }
 
-  // Group separator between main and admin sections
-  const groupSeparatorIndex = mainItems.length;
-  const showGroupSeparator = adminItems.length > 0 && mainItems.length > 0;
+        const visibleItem = visibleById.get(item.id);
+        if (!visibleItem) {
+          return [];
+        }
 
-  const groupSeparator = showGroupSeparator ? (
-    <div className="my-1 px-3">
-      <div className="border-t border-white/10 dark:border-surface-inverse" />
-      <span
-        className={`mt-2 block text-xs font-semibold uppercase tracking-wider text-white/60 transition-opacity duration-quick dark:text-content-tertiary ${expanded ? 'opacity-100' : 'opacity-0'}`}
-      >
-        Admin
-      </span>
-    </div>
-  ) : undefined;
+        const childItems = (item.children ?? []).flatMap((childId) => {
+          const childItem = visibleById.get(childId);
+          if (!childItem || childItem.planLocked || !communityId) {
+            return [];
+          }
+
+          return [
+            {
+              id: childItem.id,
+              label: childItem.label,
+              href: childItem.href(communityId),
+            },
+          ];
+        });
+
+        return [
+          {
+            ...toNavRailItem(visibleItem),
+            ...(childItems.length > 0 ? { children: childItems } : {}),
+          },
+        ];
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  const activeId = getActiveItemId(allVisible, pathname) ?? '';
 
   // Brand header
   const header = (
@@ -102,7 +142,7 @@ export function AppSidebar({
         <Building size={20} color="white" />
       </div>
       <div
-        className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${expanded ? 'opacity-100' : 'opacity-0'}`}
+        className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
       >
         <span className="text-[15px] font-semibold text-white">PropertyPro</span>
         {communityName && (
@@ -120,7 +160,7 @@ export function AppSidebar({
           {toInitials(userName)}
         </div>
         <div
-          className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${expanded ? 'opacity-100' : 'opacity-0'}`}
+          className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
         >
           <span className="truncate text-xs font-medium text-white">{userName}</span>
           {role && (
@@ -136,22 +176,30 @@ export function AppSidebar({
   return (
     <>
       <NavRail
-        items={navRailItems}
+        sections={navRailSections}
         activeView={activeId}
         onViewChange={(id) => {
-          const clickedItem = orderedItems.find((i) => i.id === id);
+          const clickedItem = visibleById.get(id);
           if (clickedItem?.planLocked && clickedItem.upgradePlanName) {
             setUpgradePrompt({ planName: clickedItem.upgradePlanName });
+            onNavigate?.();
           }
         }}
-        expanded={expanded}
-        onToggle={toggleExpanded}
+        expanded={resolvedExpanded}
+        onToggle={collapsible ? toggleExpanded : undefined}
         header={header}
         footer={footer}
-        groupSeparator={groupSeparator}
-        groupSeparatorAfterIndex={groupSeparatorIndex}
-        renderLink={({ href, className, children, ...props }) => (
-          <Link key={href} href={href} className={className} {...props}>
+        renderLink={({ href, className, children, onClick, ...props }) => (
+          <Link
+            key={href}
+            href={href}
+            className={className}
+            onClick={() => {
+              onClick?.();
+              onNavigate?.();
+            }}
+            {...props}
+          >
             {children}
           </Link>
         )}
