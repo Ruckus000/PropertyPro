@@ -94,6 +94,8 @@ vi.mock('@/lib/api/errors', () => ({
   },
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 // ---------------------------------------------------------------------------
 // Import routes after mocks
 // ---------------------------------------------------------------------------

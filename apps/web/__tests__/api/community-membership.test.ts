@@ -59,6 +59,8 @@ describe('requireCommunityMembership', () => {
       city: null,
       state: null,
       isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
     });
   });
 

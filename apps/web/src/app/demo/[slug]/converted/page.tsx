@@ -10,6 +10,8 @@
  * content (email, community-type next steps). Without valid session, shows
  * generic content only — prevents data leak from public URL.
  */
+export const dynamic = 'force-dynamic';
+
 import { notFound } from 'next/navigation';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';

@@ -121,6 +121,8 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST } from '../../src/app/api/v1/meetings/route';
 
 describe('meeting creation triggers notification', () => {

@@ -50,6 +50,8 @@ vi.mock('@sentry/nextjs', () => ({
   captureException: vi.fn(),
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, POST } from '../../src/app/api/v1/emergency-broadcasts/route';
 import { POST as sendPOST } from '../../src/app/api/v1/emergency-broadcasts/[id]/send/route';
 import { POST as cancelPOST } from '../../src/app/api/v1/emergency-broadcasts/[id]/cancel/route';

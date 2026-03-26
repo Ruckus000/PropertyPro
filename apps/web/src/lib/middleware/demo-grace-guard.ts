@@ -7,12 +7,12 @@
  *
  * Uses createUnscopedClient() because `communities` is in
  * RLS_GLOBAL_TABLE_EXCLUSIONS.
+ *
+ * NOTE: imports are lazy (inside the function) to avoid triggering
+ * DATABASE_URL initialization at module load time, which breaks unit
+ * tests that mock route dependencies without setting DATABASE_URL.
  */
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { computeDemoStatus } from '@propertypro/shared';
-import { AppError } from '@/lib/api/errors/AppError';
 
 /**
  * Asserts that the given community is NOT in demo grace period.
@@ -23,6 +23,12 @@ import { AppError } from '@/lib/api/errors/AppError';
  * Non-demo communities short-circuit immediately.
  */
 export async function assertNotDemoGrace(communityId: number): Promise<void> {
+  // Lazy imports to avoid triggering DB connection at module load time
+  const { createUnscopedClient } = await import('@propertypro/db/unsafe');
+  const { communities } = await import('@propertypro/db');
+  const { eq } = await import('@propertypro/db/filters');
+  const { AppError } = await import('@/lib/api/errors/AppError');
+
   const db = createUnscopedClient();
   const rows = await db
     .select({

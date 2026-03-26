@@ -60,6 +60,8 @@ vi.mock('@/lib/finance/request', () => ({
   parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { DELETE } from '../../src/app/api/v1/calendar/google/disconnect/route';
 
 describe('Google Calendar disconnect route', () => {

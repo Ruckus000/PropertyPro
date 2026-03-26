@@ -52,6 +52,8 @@ vi.mock('file-type', () => ({
   fileTypeFromBuffer: fileTypeFromBufferMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, PATCH } from '../../src/app/api/v1/pm/branding/route';
 
 const PM_MEMBERSHIP = { role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin', communityId: 1, userId: 'pm-1', communityType: 'condo_718' };
