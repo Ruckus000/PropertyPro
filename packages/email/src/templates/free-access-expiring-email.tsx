@@ -1,5 +1,8 @@
-import { Button, Heading, Text } from '@react-email/components';
+import { Heading, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import * as styles from '../components/shared-styles';
 import type { BaseEmailProps } from '../types';
 
 export interface FreeAccessExpiringEmailProps extends BaseEmailProps {
@@ -26,64 +29,28 @@ export function FreeAccessExpiringEmail({
         previewText ??
         `Your free access to ${communityName} ends in ${dayLabel}`
       }
+      accentColor={emailColors.accentWarning}
     >
-      <Heading as="h1" style={headingStyle}>
-        Your Free Access Is Ending Soon
+      <Heading as="h1" style={styles.heading}>
+        Free access ending soon
       </Heading>
 
-      <Text style={textStyle}>Hi {recipientName},</Text>
+      <Text style={styles.body}>Hi {recipientName},</Text>
 
-      <Text style={textStyle}>
+      <Text style={styles.body}>
         Your free access to <strong>{communityName}</strong> ends in{' '}
         <strong>{dayLabel}</strong>. Subscribe now to continue uninterrupted
         access to your community portal.
       </Text>
 
-      <Button style={buttonStyle(branding.accentColor)} href={subscribeUrl}>
-        Subscribe Now
-      </Button>
+      <EmailButton href={subscribeUrl} variant="default">
+        Subscribe now
+      </EmailButton>
 
-      <Text style={smallTextStyle}>
-        If you have questions about our subscription plans, reply to this email
-        and we will be happy to help.
+      <Text style={styles.smallSpaced}>
+        After the free access period ends, a 30-day grace period begins before
+        your account is locked. Subscribe at any time to keep access.
       </Text>
     </EmailLayout>
   );
 }
-
-// ── Styles ─────────────────────────────────────────────────────────────────
-
-const headingStyle: React.CSSProperties = {
-  fontSize: '24px',
-  fontWeight: 'bold',
-  color: '#111827',
-  margin: '0 0 16px 0',
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: '16px',
-  color: '#374151',
-  lineHeight: '24px',
-  margin: '0 0 16px 0',
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? '#2563eb',
-    color: '#ffffff',
-    padding: '12px 24px',
-    borderRadius: '6px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    textDecoration: 'none',
-    display: 'inline-block',
-    margin: '8px 0 24px 0',
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: '14px',
-  color: '#6b7280',
-  lineHeight: '20px',
-  margin: '0',
-};

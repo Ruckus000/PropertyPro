@@ -1,6 +1,8 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text } from '@react-email/components';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface WelcomeEmailProps extends BaseEmailProps {
   primaryContactName: string;
@@ -22,56 +24,21 @@ export function WelcomeEmail({
         previewText ?? `Welcome to PropertyPro — your ${communityName} portal is ready`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        Welcome to PropertyPro
+      <Heading as="h1" style={styles.heading}>
+        Welcome to your community portal
       </Heading>
-      <Text style={textStyle}>Hi {primaryContactName},</Text>
-      <Text style={textStyle}>
+      <Text style={styles.body}>Hi {primaryContactName},</Text>
+      <Text style={styles.body}>
         Your community portal for <strong>{communityName}</strong> has been set
         up and is ready to use. You can now log in to manage documents, meetings,
         announcements, and compliance requirements.
       </Text>
-      <Button style={buttonStyle(branding.accentColor)} href={loginUrl}>
-        Log in to your portal
-      </Button>
-      <Text style={smallTextStyle}>
+      <div style={styles.buttonSection}>
+        <EmailButton href={loginUrl}>Log in to your portal</EmailButton>
+      </div>
+      <Text style={styles.smallSpaced}>
         If you have questions, reply to this email or contact PropertyPro support.
       </Text>
     </EmailLayout>
   );
 }
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0 0 16px 0",
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: "#374151",
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: "#6b7280",
-  lineHeight: "20px",
-  margin: "0",
-};

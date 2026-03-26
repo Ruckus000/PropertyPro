@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "@propertypro/db",
     "@propertypro/email",
     "@propertypro/theme",
+    "@propertypro/tokens",
   ],
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",

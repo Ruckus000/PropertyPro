@@ -374,6 +374,9 @@ importers:
 
   packages/email:
     dependencies:
+      '@propertypro/tokens':
+        specifier: workspace:*
+        version: link:../tokens
       '@react-email/components':
         specifier: ^1.0.7
         version: 1.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -422,8 +425,26 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
+  packages/tokens:
+    devDependencies:
+      tsup:
+        specifier: ^8.3.0
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@22.19.10)(jiti@1.21.7)(jsdom@28.1.0)(terser@5.46.0)(tsx@4.21.0)
+
   packages/ui:
     dependencies:
+      '@propertypro/tokens':
+        specifier: workspace:*
+        version: link:../tokens
       react:
         specifier: ^19.0.0
         version: 19.2.4

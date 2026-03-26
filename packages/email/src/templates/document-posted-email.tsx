@@ -1,6 +1,10 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text, Section } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface DocumentPostedEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -27,30 +31,45 @@ export function DocumentPostedEmail({
         `${branding.communityName}: New document posted`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        New Document Posted
+      <Heading as="h1" style={styles.heading}>
+        New document posted
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        A new document has been posted at{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        A new document has been posted at{' '}
         <strong>{branding.communityName}</strong>.
       </Text>
 
-      <div style={documentBoxStyle}>
-        <Text style={documentTitleStyle}>{documentTitle}</Text>
-        {documentCategory && (
-          <Text style={categoryStyle}>
-            Category: <strong>{documentCategory}</strong>
-          </Text>
-        )}
-        <Text style={uploadedByStyle}>Uploaded by {uploadedByName}</Text>
-      </div>
+      <EmailCard>
+        <p style={cardTitleStyle}>{documentTitle}</p>
+        <table
+          width="100%"
+          cellPadding={0}
+          cellSpacing={0}
+          style={{ borderCollapse: 'collapse', marginTop: '8px' }}
+        >
+          <tbody>
+            {documentCategory && (
+              <tr>
+                <td style={metaLabelCell}>Category</td>
+                <td style={metaValueCell}>{documentCategory}</td>
+              </tr>
+            )}
+            <tr>
+              <td style={metaLabelCell}>Uploaded by</td>
+              <td style={metaValueCell}>{uploadedByName}</td>
+            </tr>
+          </tbody>
+        </table>
+      </EmailCard>
 
-      <Button style={buttonStyle(branding.accentColor)} href={portalUrl}>
-        View Document
-      </Button>
+      <Section style={styles.buttonSection}>
+        <EmailButton href={portalUrl} variant="default">
+          View document
+        </EmailButton>
+      </Section>
 
-      <Text style={smallTextStyle}>
+      <Text style={styles.smallSpaced}>
         Per Florida Statute &sect;718.111(12)(g), association documents must be
         available to unit owners through the association&apos;s website.
       </Text>
@@ -58,65 +77,19 @@ export function DocumentPostedEmail({
   );
 }
 
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0 0 16px 0",
+const cardTitleStyle: React.CSSProperties = {
+  fontSize: '15px',
+  fontWeight: 600,
+  color: emailColors.foreground,
+  margin: '0 0 4px 0',
 };
 
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: "#374151",
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
+const metaLabelCell: React.CSSProperties = {
+  ...styles.labelCell,
+  fontSize: '13px',
 };
 
-const documentBoxStyle: React.CSSProperties = {
-  backgroundColor: "#f9fafb",
-  padding: "16px",
-  margin: "16px 0",
-  borderRadius: "8px",
-  border: "1px solid #e5e7eb",
-};
-
-const documentTitleStyle: React.CSSProperties = {
-  fontSize: "18px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0 0 8px 0",
-};
-
-const categoryStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: "#4b5563",
-  margin: "0 0 8px 0",
-};
-
-const uploadedByStyle: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#9ca3af",
-  margin: "0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: "#6b7280",
-  lineHeight: "20px",
-  margin: "0",
-  fontStyle: "italic",
+const metaValueCell: React.CSSProperties = {
+  ...styles.valueCell,
+  fontSize: '13px',
 };

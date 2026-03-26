@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropertyPro Florida — Email Templates v3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#09090B;color:#FAFAFA;font-family:'Geist',system-ui,sans-serif;padding:48px 20px 96px}
+  .mx{max-width:760px;margin:0 auto}
+  .gh{padding-bottom:40px;border-bottom:1px solid #27272A}
+  .gh h1{font-size:24px;font-weight:600;letter-spacing:-.3px;color:#FAFAFA;margin-bottom:6px}
+  .gh p{font-size:14px;color:#71717A;line-height:1.6}
+  .gh .pills{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .gh .pill{font-size:11px;font-weight:500;color:#A1A1AA;background:#18181B;border:1px solid #27272A;padding:4px 10px;border-radius:6px;font-family:'Geist Mono',monospace}
+  .toc{margin:32px 0 48px;display:grid;grid-template-columns:1fr 1fr;gap:0 40px}
+  .toc-cat{font-size:11px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:.8px;margin:20px 0 6px;font-family:'Geist Mono',monospace}
+  .toc-cat:first-child{margin-top:0}
+  .toc a{display:block;font-size:13px;color:#A1A1AA;text-decoration:none;padding:2px 0;transition:color .15s}
+  .toc a:hover{color:#FAFAFA}
+  .ts{margin-bottom:56px}
+  .tl{background:#18181B;border:1px solid #27272A;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+  .tl-name{font-size:13px;font-weight:500;color:#A1A1AA;font-family:'Geist Mono',monospace}
+  .tl-cat{font-size:10px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:.8px;font-family:'Geist Mono',monospace}
+  .tw{background:#27272A;padding:32px;border:1px solid #27272A;border-top:none;border-radius:0 0 8px 8px}
+  @media(max-width:640px){.toc{grid-template-columns:1fr}.tw{padding:16px}}
+</style>
+</head>
+<body>
+<div class="mx">
+<div class="gh">
+  <h1>Email Templates v3</h1>
+  <p>28 transactional templates for PropertyPro Florida. Zinc neutral base, semantic color pairing, contextual accents. WCAG AA compliant.</p>
+  <div class="pills">
+    <span class="pill">28 templates</span>
+    <span class="pill">9 categories</span>
+    <span class="pill">brand: Sunset Condos</span>
+    <span class="pill">accent: #2563EB</span>
+    <span class="pill">zinc-neutral system</span>
+  </div>
+</div>
+<div class="toc">
+  <div>
+    <div class="toc-cat">Auth / Account</div>
+    <a href="#t1">1. Welcome Email</a>
+    <a href="#t2">2. Signup Verification</a>
+    <a href="#t3">3. Password Reset</a>
+    <a href="#t4">4. OTP Verification</a>
+    <a href="#t5">5. Invitation Email</a>
+    <div class="toc-cat">Access Requests</div>
+    <a href="#t6">6. Access Request Pending</a>
+    <a href="#t7">7. Access Request Approved</a>
+    <a href="#t8">8. Access Request Denied</a>
+    <div class="toc-cat">Notifications</div>
+    <a href="#t9">9. Announcement</a>
+    <a href="#t10">10. Document Posted</a>
+    <a href="#t11">11. Maintenance Update</a>
+    <a href="#t12">12. Meeting Notice</a>
+    <a href="#t13">13. Notification Digest</a>
+  </div>
+  <div>
+    <div class="toc-cat">Compliance</div>
+    <a href="#t14">14. Compliance Alert</a>
+    <div class="toc-cat">Emergency</div>
+    <a href="#t15">15. Emergency Alert</a>
+    <div class="toc-cat">E-Sign</div>
+    <a href="#t16">16. E-Sign Invitation</a>
+    <a href="#t17">17. E-Sign Reminder</a>
+    <a href="#t18">18. E-Sign Completed</a>
+    <div class="toc-cat">Finance / Billing</div>
+    <a href="#t19">19. Assessment Due</a>
+    <a href="#t20">20. Payment Received</a>
+    <a href="#t21">21. Payment Failed</a>
+    <a href="#t22">22. Subscription Canceled</a>
+    <a href="#t23">23. Subscription Expiry</a>
+    <div class="toc-cat">Free Access</div>
+    <a href="#t24">24. Free Access Expiring</a>
+    <a href="#t25">25. Free Access Expired</a>
+    <div class="toc-cat">Account Lifecycle</div>
+    <a href="#t26">26. Deletion Initiated</a>
+    <a href="#t27">27. Deletion Executed</a>
+    <a href="#t28">28. Account Recovered</a>
+  </div>
+</div>
+</div>
+<!--
+=============================================================================
+DESIGN SYSTEM (v3 — zinc-neutral, implemented in React Email)
+=============================================================================
+PALETTE:
+  foreground:       #09090B (zinc-950)
+  muted-foreground: #71717A (zinc-500, WCAG AA 4.7:1 on white)
+  footer-text:      #A1A1AA (zinc-400)
+  background:       #FFFFFF
+  muted:            #F4F4F5 (zinc-100)
+  border:           #E4E4E7 (zinc-200)
+
+BUTTONS:
+  default:     bg #18181B, text #FAFAFA
+  destructive: bg #DC2626
+  warning:     bg #CA8A04
+  success:     bg #16A34A
+  violet:      bg #7C3AED
+
+ACCENT STRIPES:
+  blue #2563EB | green #16A34A | red #DC2626 | violet #7C3AED
+  warning #CA8A04 | neutral #71717A | border #E4E4E7
+=============================================================================
+-->
+<div class="mx" style="margin-top:48px;text-align:center">
+  <p style="font-size:14px;color:#52525B">
+    Gallery renders are generated from the React Email source code.<br>
+    Run <code style="font-family:'Geist Mono',monospace;background:#18181B;padding:2px 6px;border-radius:4px;font-size:12px">/dev/email-preview</code> to see live renders.
+  </p>
+</div>
+</body>
+</html>

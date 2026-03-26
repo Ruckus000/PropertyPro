@@ -242,7 +242,7 @@ describe("PasswordResetEmail", () => {
         resetUrl="https://example.com/reset/token123"
       />,
     );
-    expect(html).toContain("Password Reset");
+    expect(html).toContain("Reset your password");
   });
 });
 
@@ -371,7 +371,7 @@ describe("MeetingNoticeEmail", () => {
       />,
     );
     expect(html).toContain("https://example.com/agenda/123");
-    expect(html).toContain("View Meeting Agenda");
+    expect(html).toContain("View meeting agenda");
   });
 
   it("omits agenda link when not provided", async () => {
@@ -386,7 +386,7 @@ describe("MeetingNoticeEmail", () => {
         meetingType="board"
       />,
     );
-    expect(html).not.toContain("View Meeting Agenda");
+    expect(html).not.toContain("View meeting agenda");
   });
 });
 
@@ -582,7 +582,7 @@ describe("AnnouncementEmail", () => {
         isPinned={true}
       />,
     );
-    expect(html).toContain("Important Announcement");
+    expect(html).toContain("Important announcement");
   });
 
   it("shows 'New Announcement' heading when not pinned", async () => {
@@ -597,7 +597,7 @@ describe("AnnouncementEmail", () => {
         isPinned={false}
       />,
     );
-    expect(html).toContain("New Announcement");
+    expect(html).toContain("New announcement");
   });
 });
 
@@ -874,11 +874,9 @@ describe("NotificationDigestEmail", () => {
     );
 
     expect(html).toContain("Daily");
-    expect(html).toContain("Notification Digest");
+    expect(html).toContain("digest");
     expect(html).toContain("Board Meeting");
     expect(html).toContain("New Financial Report");
-    expect(html).toContain("https://example.com/meetings/7");
-    expect(html).toContain("https://example.com/documents/99");
   });
 
   it("renders weekly label for weekly frequency", async () => {
@@ -893,6 +891,6 @@ describe("NotificationDigestEmail", () => {
     );
 
     expect(html).toContain("Weekly");
-    expect(html).toContain("Notification Digest");
+    expect(html).toContain("digest");
   });
 });

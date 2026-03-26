@@ -1,6 +1,9 @@
-import { Heading, Text } from "@react-email/components";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface AccessRequestDeniedEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -16,34 +19,34 @@ export function AccessRequestDeniedEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={previewText ?? "Update on your access request"}
+      previewText={previewText ?? 'Update on your access request'}
+      accentColor={emailColors.accentBorder}
     >
-      <Heading as="h1" style={headingStyle}>
-        Update on Your Access Request
+      <Heading as="h1" style={styles.heading}>
+        Access request update
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        We were unable to approve your access request
-        {reason ? ` for the following reason: ${reason}` : "."}.
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        Your request to join <strong>{branding.communityName}</strong> was not
+        approved at this time.
       </Text>
-      <Text style={textStyle}>
-        If you believe this is an error, please contact your community
-        administrator.
+
+      {reason && (
+        <EmailCard>
+          <Text style={{ ...styles.body, margin: 0 }}>
+            <strong>Reason:</strong> {reason}
+          </Text>
+        </EmailCard>
+      )}
+
+      <Text style={styles.body}>
+        If you believe this is an error or have questions, please contact your
+        community administrator directly.
+      </Text>
+
+      <Text style={styles.small}>
+        This is an automated message. Please do not reply to this email.
       </Text>
     </EmailLayout>
   );
 }
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0 0 16px 0",
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: "#374151",
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};

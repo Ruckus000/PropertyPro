@@ -1,6 +1,10 @@
-import { Button, Heading, Section, Text } from "@react-email/components";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Section, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailAlert } from '../components/email-alert';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface EsignReminderEmailProps extends BaseEmailProps {
   signerName: string;
@@ -8,6 +12,18 @@ export interface EsignReminderEmailProps extends BaseEmailProps {
   signingUrl: string;
   reminderNumber: number;
   expiresAt?: string;
+}
+
+function formatOrdinal(n: number): string {
+  const suffixes: Record<string, string> = {
+    one: 'st',
+    two: 'nd',
+    few: 'rd',
+    other: 'th',
+  };
+  const pr = new Intl.PluralRules('en-US', { type: 'ordinal' });
+  const rule = pr.select(n);
+  return `${n}${suffixes[rule] ?? 'th'}`;
 }
 
 export function EsignReminderEmail({
@@ -24,111 +40,39 @@ export function EsignReminderEmail({
   return (
     <EmailLayout
       branding={branding}
+      accentColor={emailColors.accentWarning}
       previewText={
         previewText ??
         `Reminder: Your signature is needed on "${documentName}"`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        Signature Reminder
+      <Heading as="h1" style={styles.heading}>
+        Signature reminder
       </Heading>
-      <Text style={textStyle}>Hi {signerName},</Text>
-      <Text style={textStyle}>
-        This is your {ordinal} reminder that your signature is still needed on
-        the following document from{" "}
-        <strong>{branding.communityName}</strong>:
+
+      <Text style={styles.body}>Hi {signerName},</Text>
+      <Text style={styles.body}>
+        Reminder #{reminderNumber} — a document from{' '}
+        <strong>{branding.communityName}</strong> is awaiting your signature.
       </Text>
-      <Section style={documentSectionStyle}>
-        <Text style={documentNameStyle}>{documentName}</Text>
+
+      <EmailAlert variant="warning" title={documentName}>
+        {expiresAt
+          ? `This signing request expires on ${expiresAt}. Please sign before the deadline to avoid delays.`
+          : 'Please review and sign the document at your earliest convenience.'}
+      </EmailAlert>
+
+      <Section style={styles.buttonSection}>
+        <EmailButton href={signingUrl} variant="warning">
+          Sign now
+        </EmailButton>
       </Section>
-      {expiresAt && (
-        <Text style={urgentTextStyle}>
-          This signing request expires on {expiresAt}. Please sign before
-          the deadline to avoid delays.
-        </Text>
-      )}
-      <Text style={textStyle}>
-        Please review and sign the document at your earliest convenience.
-      </Text>
-      <Button style={buttonStyle(branding.accentColor)} href={signingUrl}>
-        Sign Now
-      </Button>
-      <Text style={smallTextStyle}>
-        If you have already signed this document, please disregard this
-        reminder.
+
+      <Text style={styles.smallSpaced}>
+        If you have already signed this document, please disregard this reminder.
       </Text>
     </EmailLayout>
   );
 }
 
 export default EsignReminderEmail;
-
-function formatOrdinal(n: number): string {
-  const suffixes: Record<string, string> = {
-    one: "st",
-    two: "nd",
-    few: "rd",
-    other: "th",
-  };
-  const pr = new Intl.PluralRules("en-US", { type: "ordinal" });
-  const rule = pr.select(n);
-  return `${n}${suffixes[rule] ?? "th"}`;
-}
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0 0 16px 0",
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: "#374151",
-  lineHeight: "24px",
-  margin: "0 0 12px 0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: "#6b7280",
-  lineHeight: "20px",
-  margin: "0",
-};
-
-const documentSectionStyle: React.CSSProperties = {
-  backgroundColor: "#fffbeb",
-  borderRadius: "6px",
-  padding: "12px 16px",
-  margin: "0 0 12px 0",
-  borderLeft: "4px solid #f59e0b",
-};
-
-const documentNameStyle: React.CSSProperties = {
-  fontSize: "16px",
-  fontWeight: "bold",
-  color: "#111827",
-  margin: "0",
-};
-
-const urgentTextStyle: React.CSSProperties = {
-  fontSize: "15px",
-  color: "#b45309",
-  lineHeight: "22px",
-  margin: "0 0 12px 0",
-  fontWeight: "bold",
-};

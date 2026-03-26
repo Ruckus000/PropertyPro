@@ -26,7 +26,8 @@
     "test:e2e:headed": "pnpm --filter @propertypro/web test:e2e:headed",
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
-    "lint": "turbo run lint && pnpm guard:db-access",
+    "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness",
     "clean": "turbo run clean"
   },
   "pnpm": {

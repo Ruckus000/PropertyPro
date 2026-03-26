@@ -98,6 +98,12 @@ export type { AccountDeletionExecutedEmailProps } from "./templates/account-dele
 export { AccountRecoveredEmail } from "./templates/account-recovered-email";
 export type { AccountRecoveredEmailProps } from "./templates/account-recovered-email";
 
+// Shared components (v2 redesign)
+export { EmailButton } from "./components/email-button";
+export { EmailCard } from "./components/email-card";
+export { EmailAlert } from "./components/email-alert";
+export * as emailStyles from "./components/shared-styles";
+
 // Send helper
 export { sendEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";

@@ -1,0 +1,151 @@
+:root {
+  /* Primitive Colors */
+  --blue-50: #EFF6FF;
+  --blue-100: #DBEAFE;
+  --blue-200: #BFDBFE;
+  --blue-300: #93C5FD;
+  --blue-400: #60A5FA;
+  --blue-500: #3B82F6;
+  --blue-600: #2563EB;
+  --blue-700: #1D4ED8;
+  --blue-800: #1E40AF;
+  --blue-900: #1E3A8A;
+  --blue-950: #172554;
+
+  --gray-0: #FFFFFF;
+  --gray-25: #FCFCFD;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+  --gray-950: #0D1117;
+
+  --green-50: #ECFDF5;
+  --green-100: #D1FAE5;
+  --green-200: #A7F3D0;
+  --green-500: #10B981;
+  --green-600: #059669;
+  --green-700: #047857;
+
+  --amber-50: #FFFBEB;
+  --amber-100: #FEF3C7;
+  --amber-200: #FDE68A;
+  --amber-500: #F59E0B;
+  --amber-600: #D97706;
+  --amber-700: #B45309;
+
+  --red-50: #FEF2F2;
+  --red-100: #FEE2E2;
+  --red-200: #FECACA;
+  --red-500: #EF4444;
+  --red-600: #DC2626;
+  --red-700: #B91C1C;
+  --red-900: #7F1D1D;
+
+  --orange-500: #F97316;
+  --orange-600: #EA580C;
+  --orange-700: #C2410C;
+
+  --zinc-50: #FAFAFA;
+  --zinc-100: #F4F4F5;
+  --zinc-200: #E4E4E7;
+  --zinc-300: #D4D4D8;
+  --zinc-400: #A1A1AA;
+  --zinc-500: #71717A;
+  --zinc-600: #52525B;
+  --zinc-700: #3F3F46;
+  --zinc-800: #27272A;
+  --zinc-900: #18181B;
+  --zinc-950: #09090B;
+
+  --violet-500: #8B5CF6;
+  --violet-600: #7C3AED;
+  --violet-700: #6D28D9;
+
+  --yellow-50: #FEFCE8;
+  --yellow-100: #FEF9C3;
+  --yellow-200: #FDE68A;
+  --yellow-600: #CA8A04;
+  --yellow-700: #A16207;
+  --yellow-800: #854D0E;
+  --yellow-900: #713F12;
+
+  /* Text */
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-600);
+  --text-disabled: var(--gray-400);
+  --text-placeholder: var(--gray-400);
+  --text-inverse: var(--gray-0);
+  --text-brand: var(--blue-600);
+  --text-link: var(--blue-600);
+  --text-link-hover: var(--blue-700);
+
+  /* Surfaces */
+  --surface-page: var(--gray-50);
+  --surface-card: var(--gray-0);
+  --surface-subtle: var(--gray-25);
+  --surface-muted: var(--gray-100);
+  --surface-elevated: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+  --surface-hover: var(--gray-50);
+  --surface-inverse: var(--gray-950);
+  --surface-inverse-subtle: var(--gray-900);
+
+  /* Borders */
+  --border-default: var(--gray-200);
+  --border-subtle: var(--gray-100);
+  --border-strong: var(--gray-300);
+  --border-muted: var(--gray-50);
+  --border-focus: var(--blue-500);
+  --border-error: var(--red-500);
+
+  /* Brand-overridable — resolve to community theme vars when injected */
+  --brand-accent: var(--theme-accent, var(--blue-200));
+
+  /* Interactive */
+  --interactive-primary: var(--theme-primary, var(--blue-600));
+  --interactive-primary-hover: var(--theme-primary-hover, var(--blue-700));
+  --interactive-primary-active: var(--blue-800);
+  --interactive-disabled: var(--gray-300);
+  --interactive-subtle: var(--blue-50);
+  --interactive-subtle-hover: var(--blue-100);
+  --interactive-muted: var(--blue-100);
+
+  /* Status */
+  --status-success: var(--green-700);
+  --status-success-bg: var(--green-50);
+  --status-success-border: var(--green-200);
+  --status-success-subtle: var(--green-100);
+
+  --status-brand: var(--theme-primary, var(--blue-600));
+  --status-brand-bg: var(--blue-50);
+  --status-brand-border: var(--blue-200);
+  --status-brand-subtle: var(--blue-100);
+
+  --status-warning: var(--amber-700);
+  --status-warning-bg: var(--amber-50);
+  --status-warning-border: var(--amber-200);
+  --status-warning-subtle: var(--amber-100);
+
+  --status-danger: var(--red-700);
+  --status-danger-bg: var(--red-50);
+  --status-danger-border: var(--red-200);
+  --status-danger-subtle: var(--red-100);
+
+  --status-info: var(--blue-700);
+  --status-info-bg: var(--blue-50);
+  --status-info-border: var(--blue-200);
+  --status-info-subtle: var(--blue-100);
+
+  --status-neutral: var(--gray-600);
+  --status-neutral-bg: var(--gray-100);
+  --status-neutral-border: var(--gray-200);
+  --status-neutral-subtle: var(--gray-50);
+}
