@@ -42,7 +42,8 @@ export function TabbedPreviewClient({
   webAppBaseUrl,
 }: TabbedPreviewClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('public');
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [copyOnboardingState, setCopyOnboardingState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [copyTabState, setCopyTabState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshFlash, setRefreshFlash] = useState(false);
   const [phoneScale, setPhoneScale] = useState(1);
@@ -81,22 +82,37 @@ export function TabbedPreviewClient({
 
   const [convertOpen, setConvertOpen] = useState(false);
 
-  const handleCopyShareableLink = async () => {
-    const url = landingPageUrl ?? activeTabDef.url;
-    if (!url) return;
-
+  const handleCopyOnboardingLink = async () => {
+    if (!landingPageUrl) return;
     try {
-      await navigator.clipboard.writeText(url);
-      setCopyState('copied');
+      await navigator.clipboard.writeText(landingPageUrl);
+      setCopyOnboardingState('copied');
     } catch {
-      setCopyState('error');
+      setCopyOnboardingState('error');
     }
 
     if (copyResetTimerRef.current) {
       clearTimeout(copyResetTimerRef.current);
     }
     copyResetTimerRef.current = setTimeout(() => {
-      setCopyState('idle');
+      setCopyOnboardingState('idle');
+    }, 1600);
+  };
+
+  const handleCopyTabPreviewUrl = async () => {
+    const url = activeTabDef.url;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyTabState('copied');
+    } catch {
+      setCopyTabState('error');
+    }
+    if (copyResetTimerRef.current) {
+      clearTimeout(copyResetTimerRef.current);
+    }
+    copyResetTimerRef.current = setTimeout(() => {
+      setCopyTabState('idle');
     }, 1600);
   };
 
@@ -160,20 +176,36 @@ export function TabbedPreviewClient({
             );
           })}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => {
-              void handleCopyShareableLink();
+              void handleCopyOnboardingLink();
+            }}
+            disabled={!landingPageUrl}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title={landingPageUrl}
+          >
+            {copyOnboardingState === 'copied'
+              ? 'Copied!'
+              : copyOnboardingState === 'error'
+                ? 'Copy failed'
+                : 'Copy onboarding link'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyTabPreviewUrl();
             }}
             disabled={!activeTabDef.url}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title="URL loaded in the preview iframe (may include short-lived tokens)"
           >
-            {copyState === 'copied'
+            {copyTabState === 'copied'
               ? 'Copied!'
-              : copyState === 'error'
+              : copyTabState === 'error'
                 ? 'Copy failed'
-                : 'Copy link'}
+                : 'Copy tab preview URL'}
           </button>
           <button
             type="button"

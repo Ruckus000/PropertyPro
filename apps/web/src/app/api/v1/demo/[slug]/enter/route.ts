@@ -94,7 +94,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 
   if (instance.demoExpiresAt && new Date(instance.demoExpiresAt) < new Date()) {
-    return NextResponse.json({ error: 'This demo has expired.' }, { status: 404 });
+    // HTML form POST — redirect to the landing page so the client sees the friendly expiry message
+    const landing = new URL(`/demo/${slug}`, request.url);
+    const response = NextResponse.redirect(landing, { status: 303 });
+    response.headers.set('Cache-Control', 'no-store');
+    response.headers.set('Pragma', 'no-cache');
+    return response;
   }
 
   const communityId = instance.seededCommunityId;

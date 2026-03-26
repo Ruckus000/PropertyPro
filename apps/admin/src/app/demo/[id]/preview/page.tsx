@@ -14,6 +14,7 @@ import {
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import { TabbedPreviewClient } from './TabbedPreviewClient';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+import { getClientDemoLandingUrl } from '@/lib/demo-client-url';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -51,20 +52,14 @@ export default async function DemoPreviewPage({ params }: PageProps) {
       ? `http://localhost:3000`
       : `https://${demo.slug}.propertyprofl.com`;
 
-  // Public landing page URL for sharing
-  const landingPageUrl =
-    process.env.NODE_ENV === 'development'
-      ? `http://localhost:3000/demo/${demo.slug}`
-      : `https://propertyprofl.com/demo/${demo.slug}`;
+  // Public landing page URL for sharing (main web app — same helper as demo wizard)
+  const landingPageUrl = getClientDemoLandingUrl(demo.slug);
 
   const demoLoginBase = `${webBaseUrl}/api/v1/auth/demo-login`;
 
   // 1. Public Website — public demo landing route
   // Public demo landing page lives on the main domain, not the community subdomain
-  const publicUrl =
-    process.env.NODE_ENV === 'development'
-      ? `http://localhost:3000/demo/${demo.slug}?preview=true`
-      : `https://propertyprofl.com/demo/${demo.slug}?preview=true`;
+  const publicUrl = `${landingPageUrl}?preview=true`;
 
   // 2. Mobile App — preview mode (no auth needed, avoids cross-origin cookie issues)
   const mobileUrl = demo.seeded_community_id
