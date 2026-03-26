@@ -333,7 +333,7 @@ export async function processRecurringAssessments(
           const result = await generateAssessmentLineItemsForCommunity(
             community.id,
             assessment.id,
-            'system', // system-generated, no actor user
+            null,
           );
           summary.assessmentsProcessed += 1;
           summary.totalInserted += result.insertedCount;

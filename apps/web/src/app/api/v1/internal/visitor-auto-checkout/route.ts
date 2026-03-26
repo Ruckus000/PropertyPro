@@ -48,7 +48,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
     for (const [communityId, ids] of byCommunity) {
       await logAuditEvent({
-        userId: 'system',
+        userId: null,
         communityId,
         action: 'update',
         resourceType: 'visitor_log',

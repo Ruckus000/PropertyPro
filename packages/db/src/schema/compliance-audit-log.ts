@@ -11,8 +11,8 @@ import { users } from './users';
 
 export const complianceAuditLog = pgTable('compliance_audit_log', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
+  // Nullable so background jobs can record system-generated events without a user actor.
   userId: uuid('user_id')
-    .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
   communityId: bigint('community_id', { mode: 'number' })
     .notNull()

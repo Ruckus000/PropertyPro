@@ -6,7 +6,7 @@
 
 export interface AuditLogEntry {
   id: number;
-  userId: string;
+  userId: string | null;
   communityId: number;
   action: string;
   resourceType: string;
@@ -30,7 +30,7 @@ function formatAction(action: string): string {
 
 export function AuditEntry({ entry, userName }: AuditEntryProps) {
   const timestamp = new Date(entry.createdAt).toLocaleString();
-  const userDisplay = userName ?? entry.userId.substring(0, 8) + '...';
+  const userDisplay = userName ?? (entry.userId ? entry.userId.substring(0, 8) + '...' : 'System');
 
   return (
     <div className="rounded-md border border-edge bg-surface-card p-4">

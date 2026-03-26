@@ -90,7 +90,7 @@ export async function postLedgerEntry(
   }
 
   await logAuditEvent({
-    userId: entry.createdByUserId ?? 'system',
+    userId: entry.createdByUserId ?? null,
     action: 'create',
     resourceType: 'ledger_entry',
     resourceId: String(id),

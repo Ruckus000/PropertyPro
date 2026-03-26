@@ -364,7 +364,7 @@ export async function listAssessmentLineItemsForCommunity(
 export async function generateAssessmentLineItemsForCommunity(
   communityId: number,
   assessmentId: number,
-  actorUserId: string,
+  actorUserId: string | null,
   dueDateOverride?: string | null,
   requestId?: string | null,
 ): Promise<{ insertedCount: number; skippedCount: number; dueDate: string }> {

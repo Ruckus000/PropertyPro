@@ -133,7 +133,11 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
       {!loading && entries.length > 0 && (
         <div className="space-y-2">
           {entries.map((entry) => (
-            <AuditEntry key={entry.id} entry={entry} userName={users[entry.userId]} />
+            <AuditEntry
+              key={entry.id}
+              entry={entry}
+              userName={entry.userId ? users[entry.userId] : undefined}
+            />
           ))}
 
           {hasMore && (

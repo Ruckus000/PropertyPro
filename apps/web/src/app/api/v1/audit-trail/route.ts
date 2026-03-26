@@ -59,7 +59,7 @@ function isSensitiveKey(key: string): boolean {
 
 interface AuditLogRow {
   id: number;
-  userId: string;
+  userId: string | null;
   communityId: number;
   action: string;
   resourceType: string;
@@ -73,7 +73,7 @@ interface AuditLogRow {
 function coerceAuditRow(row: Record<string, unknown>): AuditLogRow {
   return {
     id: row['id'] as number,
-    userId: row['userId'] as string,
+    userId: (row['userId'] as string | null) ?? null,
     communityId: row['communityId'] as number,
     action: row['action'] as string,
     resourceType: row['resourceType'] as string,
@@ -277,7 +277,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       action: row.action,
       resourceType: row.resourceType,
       resourceId: row.resourceId,
-      userId: row.userId,
+      userId: row.userId ?? 'System',
       metadata: row.metadata ? JSON.stringify(redactMetadata(row.metadata)) : '',
     }));
 
@@ -316,7 +316,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }));
 
   // Load user display names for this page
-  const userIds = new Set(page.map((r) => r.userId));
+  const userIds = new Set(page.flatMap((row) => (row.userId ? [row.userId] : [])));
   const userNames = await loadUserDisplayNames(communityId, userIds);
 
   return NextResponse.json({
