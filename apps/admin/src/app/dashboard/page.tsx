@@ -6,15 +6,20 @@
  */
 import { AdminLayout } from '@/components/AdminLayout';
 import { PlatformDashboard } from '@/components/dashboard/PlatformDashboard';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+import { getPlatformDashboardStats } from '@/lib/server/dashboard';
 
 export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await requireAdminPageSession();
+  const stats = await getPlatformDashboardStats();
+
   return (
     <AdminLayout>
       <div className="p-6">
         <h1 className="mb-6 text-xl font-semibold text-gray-900">Dashboard</h1>
-        <PlatformDashboard />
+        <PlatformDashboard stats={stats} />
       </div>
     </AdminLayout>
   );

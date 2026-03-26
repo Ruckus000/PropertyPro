@@ -16,7 +16,8 @@ import {
 } from '@propertypro/shared/server';
 import { seedCommunity } from '@propertypro/db/seed/seed-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { listDemos, insertDemo } from '@/lib/db/demo-queries';
+import { insertDemo } from '@/lib/db/demo-queries';
+import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
@@ -49,16 +50,16 @@ const createDemoSchema = z.object({
 export async function GET() {
   await requirePlatformAdmin();
 
-  const { data, error } = await listDemos();
-
-  if (error) {
+  try {
+    const data = await getDemoListData();
+    return NextResponse.json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load demos';
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
+      { error: { code: 'INTERNAL_ERROR', message } },
       { status: 500 },
     );
   }
-
-  return NextResponse.json({ data: data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
