@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef, type PointerEvent as ReactPoi
 import dynamic from 'next/dynamic';
 import { X, Loader2 } from 'lucide-react';
 import { BrandingEditSection } from './BrandingEditSection';
+import { ProspectEditSection } from './ProspectEditSection';
 
 // CodeMirror requires browser APIs at import time — must skip SSR
 const JsxTemplateEditor = dynamic(() => import('../clients/JsxTemplateEditor'), {
@@ -37,7 +38,7 @@ interface DemoEditDrawerProps {
   previewTab?: 'public' | 'mobile' | 'admin';
 }
 
-type DrawerTab = 'branding' | 'template';
+type DrawerTab = 'branding' | 'template' | 'info';
 
 interface BrandingInfo {
   primaryColor: string;
@@ -488,6 +489,17 @@ export function DemoEditDrawer({
             >
               Branding
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('info')}
+              className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'info'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Info
+            </button>
           </nav>
         </div>
 
@@ -509,6 +521,12 @@ export function DemoEditDrawer({
               demoId={demoId}
               communityId={communityId}
               onSaved={handleBrandingSaved}
+            />
+          )}
+          {activeTab === 'info' && (
+            <ProspectEditSection
+              demoId={demoId}
+              onSaved={onSaved}
             />
           )}
         </div>

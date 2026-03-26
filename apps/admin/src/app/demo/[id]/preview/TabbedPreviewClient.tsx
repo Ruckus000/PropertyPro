@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pencil, X, ExternalLink } from 'lucide-react';
+import { Pencil, X, ExternalLink, Minus, Plus } from 'lucide-react';
 import { PhoneFrame } from '@propertypro/ui';
 import { DemoEditDrawer } from '@/components/demo/DemoEditDrawer';
 import { ConvertDemoDialog } from '@/components/demo/ConvertDemoDialog';
@@ -45,6 +45,10 @@ export function TabbedPreviewClient({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshFlash, setRefreshFlash] = useState(false);
+  const [phoneScale, setPhoneScale] = useState(1);
+
+  const handleScaleUp = () => setPhoneScale((s) => Math.min(s + 0.1, 1.4));
+  const handleScaleDown = () => setPhoneScale((s) => Math.max(s - 0.1, 0.6));
 
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRefs = useRef<Record<TabKey, HTMLIFrameElement | null>>({
@@ -71,8 +75,6 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
-    // Edit drawer is only available on the public website tab.
-    if (!isPublicWebsiteTab(key)) setDrawerOpen(false);
   };
 
   const [convertOpen, setConvertOpen] = useState(false);
@@ -208,16 +210,42 @@ export function TabbedPreviewClient({
                 style={{ display: isActive ? 'flex' : 'none' }}
               >
                 <div className="flex flex-col items-center gap-4">
-                  <PhoneFrame ref={(el) => setIframeRef('mobile', el)} src={tab.url} />
-                  <a
-                    href={tab.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                  >
-                    <ExternalLink size={12} />
-                    Open in new tab
-                  </a>
+                  <div style={{ transform: `scale(${phoneScale})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}>
+                    <PhoneFrame ref={(el) => setIframeRef('mobile', el)} src={tab.url} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleScaleDown}
+                      disabled={phoneScale <= 0.6}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Zoom out"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <span className="min-w-[3.5rem] text-center text-xs font-medium text-gray-500">
+                      {Math.round(phoneScale * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleScaleUp}
+                      disabled={phoneScale >= 1.4}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Zoom in"
+                    >
+                      <Plus size={12} />
+                    </button>
+                    <span className="mx-1 text-gray-300">|</span>
+                    <a
+                      href={tab.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    >
+                      <ExternalLink size={12} />
+                      Open in new tab
+                    </a>
+                  </div>
                 </div>
               </div>
             );
@@ -235,19 +263,17 @@ export function TabbedPreviewClient({
           );
         })}
 
-        {/* Floating Edit Button — only available on Public Website tab */}
-        {isPublicWebsiteTab(activeTab) && (
-          <button
-            type="button"
-            onClick={() => setDrawerOpen((prev) => !prev)}
-            className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
-              drawerOpen ? 'rotate-0' : ''
-            }`}
-            title={drawerOpen ? 'Close editor' : 'Edit demo'}
-          >
-            {drawerOpen ? <X size={20} /> : <Pencil size={20} />}
-          </button>
-        )}
+        {/* Floating Edit Button — available on all tabs */}
+        <button
+          type="button"
+          onClick={() => setDrawerOpen((prev) => !prev)}
+          className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
+            drawerOpen ? 'rotate-0' : ''
+          }`}
+          title={drawerOpen ? 'Close editor' : 'Edit demo'}
+        >
+          {drawerOpen ? <X size={20} /> : <Pencil size={20} />}
+        </button>
       </div>
 
       {/* Edit Drawer */}

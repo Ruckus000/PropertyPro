@@ -60,7 +60,11 @@ export default async function DemoPreviewPage({ params }: PageProps) {
   const demoLoginBase = `${webBaseUrl}/api/v1/auth/demo-login`;
 
   // 1. Public Website — public demo landing route
-  const publicUrl = `${webBaseUrl}/demo/${demo.slug}?preview=true`;
+  // Public demo landing page lives on the main domain, not the community subdomain
+  const publicUrl =
+    process.env.NODE_ENV === 'development'
+      ? `http://localhost:3000/demo/${demo.slug}?preview=true`
+      : `https://propertyprofl.com/demo/${demo.slug}?preview=true`;
 
   // 2. Mobile App — preview mode (no auth needed, avoids cross-origin cookie issues)
   const mobileUrl = demo.seeded_community_id

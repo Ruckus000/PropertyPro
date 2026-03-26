@@ -122,6 +122,25 @@ export async function markDemoCustomized(id: number): Promise<{
 }
 
 /**
+ * Update mutable prospect-level fields on a demo instance.
+ * Called by PATCH /api/admin/demos/:id.
+ */
+export async function updateDemo(
+  id: number,
+  fields: {
+    prospect_name?: string;
+    external_crm_url?: string | null;
+    prospect_notes?: string | null;
+  },
+): Promise<{ data: DemoInstanceRow | null; error: { message: string } | null }> {
+  return from('demo_instances')
+    .update(fields)
+    .eq('id', id)
+    .select()
+    .single();
+}
+
+/**
  * Get the seeded community ID for a demo instance.
  * Returns null if the demo doesn't exist or has no community.
  */

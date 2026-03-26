@@ -5,9 +5,10 @@
  * DELETE /api/admin/demos/:id — hard-deletes a demo instance + community + auth users
  */
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getDemoById, deleteDemo, deleteCommunity } from '@/lib/db/demo-queries';
+import { getDemoById, deleteDemo, deleteCommunity, updateDemo } from '@/lib/db/demo-queries';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -91,4 +92,72 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ success: true });
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  await requirePlatformAdmin();
+
+  const { id: idRaw } = await context.params;
+  const id = Number(idRaw);
+  if (!Number.isInteger(id) || id <= 0) {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'id must be a positive integer' } },
+      { status: 400 },
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body' } },
+      { status: 400 },
+    );
+  }
+
+  const schema = z.object({
+    prospect_name: z.string().min(1).max(255).optional(),
+    external_crm_url: z.string().url().max(2048).nullable().optional(),
+    prospect_notes: z.string().max(4000).nullable().optional(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues.map((e) => e.message).join(', '),
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  // Ensure at least one field is being updated
+  if (Object.keys(parsed.data).length === 0) {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'No fields provided to update' } },
+      { status: 400 },
+    );
+  }
+
+  const { data, error } = await updateDemo(id, parsed.data);
+
+  if (error) {
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: error.message } },
+      { status: 500 },
+    );
+  }
+
+  if (!data) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'Demo not found' } },
+      { status: 404 },
+    );
+  }
+
+  return NextResponse.json({ data });
 }
