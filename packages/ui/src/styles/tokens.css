@@ -31,7 +31,6 @@
   --gray-800: #1F2937;
   --gray-900: #111827;
   --gray-950: #0D1117;
-  --surface-page-warm: #F5F5F4;
 
   --green-50: #ECFDF5;
   --green-100: #D1FAE5;
@@ -170,7 +169,7 @@
   --text-link-hover: var(--blue-700);
 
   /* Surfaces */
-  --surface-page: var(--surface-page-warm);
+  --surface-page: var(--gray-50);
   --surface-card: var(--gray-0);
   --surface-subtle: var(--gray-25);
   --surface-muted: var(--gray-100);
