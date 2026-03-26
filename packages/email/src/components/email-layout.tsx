@@ -5,128 +5,156 @@ import {
   Html,
   Img,
   Preview,
-  Section,
   Text,
-  Hr,
-} from "@react-email/components";
-import type { CommunityBranding } from "../types";
-import { emailColors } from "@propertypro/tokens/email";
+} from '@react-email/components';
+import type { CommunityBranding } from '../types';
+import { emailColors } from '@propertypro/tokens/email';
 
 interface EmailLayoutProps {
   branding: CommunityBranding;
   previewText?: string;
+  /** Override the accent stripe color. Defaults to blue (#2563EB). */
+  accentColor?: string;
   children: React.ReactNode;
 }
 
 export function EmailLayout({
   branding,
   previewText,
+  accentColor,
   children,
 }: EmailLayoutProps) {
-  const accent = branding.accentColor ?? emailColors.interactivePrimary;
+  const stripe = accentColor ?? branding.accentColor ?? emailColors.accentBlue;
 
   return (
     <Html>
       <Head />
       {previewText && <Preview>{previewText}</Preview>}
       <Body style={bodyStyle}>
-        <Container style={containerStyle}>
-          <Section style={headerStyle(accent)}>
-            {branding.logoUrl && (
-              <Img
-                src={branding.logoUrl}
-                alt={`${branding.communityName} logo`}
-                width="48"
-                height="48"
-                style={logoStyle}
-              />
-            )}
-            <Text style={communityNameStyle}>{branding.communityName}</Text>
-          </Section>
+        <Container style={outerStyle}>
+          <table
+            width="580"
+            cellPadding={0}
+            cellSpacing={0}
+            style={cardStyle}
+          >
+            <tbody>
+              {/* Accent stripe */}
+              <tr>
+                <td style={{ height: '2px', backgroundColor: stripe, fontSize: 0, lineHeight: 0 }}>
+                  &nbsp;
+                </td>
+              </tr>
 
-          <Section style={contentStyle}>{children}</Section>
+              {/* Header */}
+              <tr>
+                <td style={headerStyle}>
+                  <table cellPadding={0} cellSpacing={0}>
+                    <tbody>
+                      <tr>
+                        {branding.logoUrl && (
+                          <td style={{ paddingRight: '10px', verticalAlign: 'middle' }}>
+                            <Img
+                              src={branding.logoUrl}
+                              alt={`${branding.communityName} logo`}
+                              width="28"
+                              height="28"
+                              style={{ borderRadius: '4px' }}
+                            />
+                          </td>
+                        )}
+                        <td style={{ verticalAlign: 'middle' }}>
+                          <Text style={communityNameStyle}>
+                            {branding.communityName}
+                          </Text>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
 
-          <Hr style={hrStyle} />
+              {/* Content */}
+              <tr>
+                <td style={contentStyle}>{children}</td>
+              </tr>
 
-          <Section style={footerStyle}>
-            <Text style={footerTextStyle}>
-              &copy; {new Date().getFullYear()} {branding.communityName}. All
-              rights reserved.
-            </Text>
-            <Text style={footerTextStyle}>
-              Powered by PropertyPro Florida
-            </Text>
-            {branding.customEmailFooter && (
-              <Text style={customFooterTextStyle}>
-                {branding.customEmailFooter}
-              </Text>
-            )}
-          </Section>
+              {/* Footer */}
+              <tr>
+                <td style={footerStyle}>
+                  <Text style={footerTextStyle}>
+                    &copy; {new Date().getFullYear()} {branding.communityName}{' '}
+                    &middot; Powered by PropertyPro Florida
+                  </Text>
+                  {branding.customEmailFooter && (
+                    <Text style={customFooterStyle}>
+                      {branding.customEmailFooter}
+                    </Text>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </Container>
       </Body>
     </Html>
   );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
 const bodyStyle: React.CSSProperties = {
-  backgroundColor: emailColors.surfacePage,
+  backgroundColor: emailColors.muted,
   fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   margin: 0,
   padding: 0,
 };
 
-const containerStyle: React.CSSProperties = {
-  maxWidth: "600px",
-  margin: "0 auto",
-  backgroundColor: emailColors.surfaceCard,
-  borderRadius: "8px",
-  overflow: "hidden",
+const outerStyle: React.CSSProperties = {
+  maxWidth: '600px',
+  margin: '0 auto',
+  padding: '24px 0',
 };
 
-function headerStyle(accent: string): React.CSSProperties {
-  return {
-    backgroundColor: accent,
-    padding: "24px",
-    textAlign: "center" as const,
-  };
-}
+const cardStyle: React.CSSProperties = {
+  backgroundColor: emailColors.background,
+  borderRadius: '8px',
+  overflow: 'hidden',
+  border: `1px solid ${emailColors.border}`,
+};
 
-const logoStyle: React.CSSProperties = {
-  margin: "0 auto 8px auto",
-  borderRadius: "4px",
+const headerStyle: React.CSSProperties = {
+  padding: '20px 24px',
+  borderBottom: `1px solid ${emailColors.border}`,
 };
 
 const communityNameStyle: React.CSSProperties = {
-  color: emailColors.textInverse,
-  fontSize: "20px",
-  fontWeight: "bold",
+  fontSize: '15px',
+  fontWeight: 600,
+  color: emailColors.foreground,
+  letterSpacing: '-0.2px',
   margin: 0,
 };
 
 const contentStyle: React.CSSProperties = {
-  padding: "32px 24px",
-};
-
-const hrStyle: React.CSSProperties = {
-  borderColor: emailColors.borderDefault,
-  margin: "0 24px",
+  padding: '28px 24px 32px',
 };
 
 const footerStyle: React.CSSProperties = {
-  padding: "16px 24px",
-  textAlign: "center" as const,
+  borderTop: `1px solid ${emailColors.border}`,
+  padding: '16px 24px',
+  textAlign: 'center' as const,
 };
 
 const footerTextStyle: React.CSSProperties = {
-  color: emailColors.textDisabled,
-  fontSize: "12px",
-  margin: "4px 0",
+  fontSize: '12px',
+  color: emailColors.footerText,
+  margin: 0,
 };
 
-const customFooterTextStyle: React.CSSProperties = {
-  color: emailColors.textSecondary,
-  fontSize: "12px",
-  margin: "8px 0 0 0",
-  fontStyle: "italic",
+const customFooterStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: emailColors.mutedForeground,
+  margin: '4px 0 0 0',
 };
