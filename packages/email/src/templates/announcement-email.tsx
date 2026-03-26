@@ -1,7 +1,10 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { emailColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text, Section } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface AnnouncementEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -30,80 +33,50 @@ export function AnnouncementEmail({
         `New announcement from ${branding.communityName}: ${announcementTitle}`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        {isPinned ? "Important Announcement" : "New Announcement"}
+      <Heading as="h1" style={styles.heading}>
+        {isPinned ? 'Important announcement' : 'New announcement'}
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        A new announcement has been posted at{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        A new announcement has been posted at{' '}
         <strong>{branding.communityName}</strong>.
       </Text>
 
-      <div style={announcementBoxStyle}>
-        <Text style={announcementTitleStyle}>{announcementTitle}</Text>
-        <Text style={announcementBodyStyle}>{announcementBody}</Text>
-        <Text style={authorStyle}>Posted by {authorName}</Text>
-      </div>
+      <EmailCard>
+        <p style={cardTitleStyle}>{announcementTitle}</p>
+        <p style={cardBodyStyle}>{announcementBody}</p>
+        <p style={cardAuthorStyle}>Posted by {authorName}</p>
+      </EmailCard>
 
-      <Button style={buttonStyle(branding.accentColor)} href={portalUrl}>
-        View in Portal
-      </Button>
+      <Section style={styles.buttonSection}>
+        <EmailButton href={portalUrl} variant="default">
+          View in portal
+        </EmailButton>
+      </Section>
+
+      <Text style={styles.smallSpaced}>
+        You are receiving this as a member of {branding.communityName}.
+      </Text>
     </EmailLayout>
   );
 }
 
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
+const cardTitleStyle: React.CSSProperties = {
+  fontSize: '15px',
+  fontWeight: 600,
+  color: emailColors.foreground,
+  margin: '0 0 8px 0',
 };
 
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
+const cardBodyStyle: React.CSSProperties = {
+  fontSize: '14px',
+  color: '#3F3F46',
+  lineHeight: '1.6',
+  margin: '0 0 10px 0',
 };
 
-const announcementBoxStyle: React.CSSProperties = {
-  backgroundColor: emailColors.surfacePage,
-  padding: "16px",
-  margin: "16px 0",
-  borderRadius: "8px",
-  border: `1px solid ${emailColors.borderDefault}`,
+const cardAuthorStyle: React.CSSProperties = {
+  fontSize: '13px',
+  color: emailColors.mutedForeground,
+  margin: '0',
 };
-
-const announcementTitleStyle: React.CSSProperties = {
-  fontSize: "18px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 8px 0",
-};
-
-const announcementBodyStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textSecondary,
-  lineHeight: "22px",
-  margin: "0 0 12px 0",
-};
-
-const authorStyle: React.CSSProperties = {
-  fontSize: "12px",
-  color: emailColors.textDisabled,
-  margin: "0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? emailColors.interactivePrimary,
-    color: emailColors.textInverse,
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}

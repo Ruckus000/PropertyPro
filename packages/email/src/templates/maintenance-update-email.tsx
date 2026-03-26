@@ -1,7 +1,10 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { emailColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text, Section } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface MaintenanceUpdateEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -30,149 +33,127 @@ export function MaintenanceUpdateEmail({
         `Update on your maintenance request: ${requestTitle}`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        Maintenance Request Update
+      <Heading as="h1" style={styles.heading}>
+        Maintenance request update
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        There has been an update to a maintenance request at{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        There has been an update to a maintenance request at{' '}
         <strong>{branding.communityName}</strong>.
       </Text>
 
-      <div style={updateBoxStyle}>
-        <Text style={requestTitleStyle}>{requestTitle}</Text>
-        <table style={detailsTableStyle}>
+      <EmailCard>
+        <p style={cardTitleStyle}>{requestTitle}</p>
+        <table
+          width="100%"
+          cellPadding={0}
+          cellSpacing={0}
+          style={{ borderCollapse: 'collapse', marginTop: '8px' }}
+        >
           <tbody>
             <tr>
-              <td style={labelStyle}>Previous Status</td>
-              <td style={valueStyle}>
-                <span style={statusBadgeStyle(emailColors.textDisabled)}>{previousStatus}</span>
+              <td style={styles.labelCell}>Previous status</td>
+              <td style={styles.valueCell}>
+                <span style={statusBadge(getStatusBadgeColors(previousStatus))}>
+                  {previousStatus}
+                </span>
               </td>
             </tr>
             <tr>
-              <td style={labelStyle}>New Status</td>
-              <td style={valueStyle}>
-                <span style={statusBadgeStyle(getStatusColor(newStatus))}>{newStatus}</span>
+              <td style={styles.labelCell}>Current status</td>
+              <td style={styles.valueCell}>
+                <span style={statusBadge(getStatusBadgeColors(newStatus))}>
+                  {newStatus}
+                </span>
               </td>
             </tr>
           </tbody>
         </table>
         {notes && (
-          <div style={notesBoxStyle}>
-            <Text style={notesLabelStyle}>Notes:</Text>
-            <Text style={notesTextStyle}>{notes}</Text>
+          <div style={notesSectionStyle}>
+            <p style={notesLabelStyle}>Notes</p>
+            <p style={notesTextStyle}>{notes}</p>
           </div>
         )}
-      </div>
+      </EmailCard>
 
-      <Button style={buttonStyle(branding.accentColor)} href={portalUrl}>
-        View Request
-      </Button>
+      <Section style={styles.buttonSection}>
+        <EmailButton href={portalUrl} variant="default">
+          View request
+        </EmailButton>
+      </Section>
+
+      <Text style={styles.smallSpaced}>
+        This notification was sent because you submitted or are assigned to this
+        maintenance request.
+      </Text>
     </EmailLayout>
   );
 }
 
-function getStatusColor(status: string): string {
-  const lower = status.toLowerCase();
-  if (lower === "completed" || lower === "resolved") return emailColors.successForeground;
-  if (lower === "in_progress" || lower === "in progress") return emailColors.interactivePrimary;
-  if (lower === "rejected" || lower === "cancelled") return emailColors.dangerForeground;
-  return emailColors.warningForeground;
+interface BadgeColors {
+  bg: string;
+  text: string;
 }
 
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
-};
+function getStatusBadgeColors(status: string): BadgeColors {
+  const lower = status.toLowerCase();
+  if (lower === 'completed' || lower === 'resolved') {
+    return { bg: '#DCFCE7', text: '#166534' };
+  }
+  if (lower === 'in_progress' || lower === 'in progress') {
+    return { bg: '#FEF9C3', text: '#854D0E' };
+  }
+  if (lower === 'rejected' || lower === 'cancelled') {
+    return { bg: '#FEE2E2', text: '#991B1B' };
+  }
+  return { bg: '#FEF3C7', text: '#92400E' };
+}
 
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};
+// Keep legacy name for any external references
+function getStatusColor(status: string): string {
+  return getStatusBadgeColors(status).text;
+}
 
-const updateBoxStyle: React.CSSProperties = {
-  backgroundColor: emailColors.surfacePage,
-  padding: "16px",
-  margin: "16px 0",
-  borderRadius: "8px",
-  border: `1px solid ${emailColors.borderDefault}`,
-};
-
-const requestTitleStyle: React.CSSProperties = {
-  fontSize: "18px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 12px 0",
-};
-
-const detailsTableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse" as const,
-  margin: "0 0 12px 0",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "14px",
-  fontWeight: "bold",
-  color: emailColors.textDisabled,
-  padding: "4px 16px 4px 0",
-  verticalAlign: "middle",
-  whiteSpace: "nowrap",
-};
-
-const valueStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textPrimary,
-  padding: "4px 0",
-  verticalAlign: "middle",
-};
-
-function statusBadgeStyle(color: string): React.CSSProperties {
+function statusBadge({ bg, text }: BadgeColors): React.CSSProperties {
   return {
-    backgroundColor: color,
-    color: emailColors.textInverse,
-    padding: "2px 10px",
-    borderRadius: "12px",
-    fontSize: "12px",
-    fontWeight: "bold",
-    textTransform: "capitalize" as const,
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 600,
+    backgroundColor: bg,
+    color: text,
   };
 }
 
-const notesBoxStyle: React.CSSProperties = {
-  borderTop: `1px solid ${emailColors.borderDefault}`,
-  paddingTop: "12px",
-  marginTop: "8px",
+const cardTitleStyle: React.CSSProperties = {
+  fontSize: '15px',
+  fontWeight: 600,
+  color: emailColors.foreground,
+  margin: '0 0 4px 0',
+};
+
+const notesSectionStyle: React.CSSProperties = {
+  borderTop: `1px solid ${emailColors.border}`,
+  paddingTop: '12px',
+  marginTop: '12px',
 };
 
 const notesLabelStyle: React.CSSProperties = {
-  fontSize: "12px",
-  fontWeight: "bold",
-  color: emailColors.textDisabled,
-  margin: "0 0 4px 0",
+  fontSize: '12px',
+  fontWeight: 600,
+  color: emailColors.mutedForeground,
+  margin: '0 0 4px 0',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.05em',
 };
 
 const notesTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textSecondary,
-  lineHeight: "20px",
-  margin: "0",
+  fontSize: '14px',
+  color: emailColors.foreground,
+  lineHeight: '1.55',
+  margin: '0',
 };
 
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? emailColors.interactivePrimary,
-    color: emailColors.textInverse,
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
+export { getStatusColor };

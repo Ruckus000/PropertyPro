@@ -1,7 +1,9 @@
-import { Heading, Text, Link } from "@react-email/components";
-import { emailColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text, Link, Section } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface MeetingNoticeEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -10,7 +12,7 @@ export interface MeetingNoticeEmailProps extends BaseEmailProps {
   meetingTime: string;
   location: string;
   agendaUrl?: string;
-  meetingType: "board" | "owner" | "special";
+  meetingType: 'board' | 'owner' | 'special';
 }
 
 export function MeetingNoticeEmail({
@@ -25,114 +27,117 @@ export function MeetingNoticeEmail({
   meetingType,
 }: MeetingNoticeEmailProps) {
   const noticeWindow =
-    meetingType === "owner" || meetingType === "special"
-      ? "14 days"
-      : "48 hours";
+    meetingType === 'owner' || meetingType === 'special'
+      ? '14 days'
+      : '48 hours';
 
   return (
     <EmailLayout
       branding={branding}
       previewText={
-        previewText ?? `Meeting Notice: ${meetingTitle} on ${meetingDate}`
+        previewText ?? `Meeting notice: ${meetingTitle} on ${meetingDate}`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        Meeting Notice
+      <Heading as="h1" style={styles.heading}>
+        Meeting notice
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        This is an official notice for the following meeting at{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        This is an official notice for the following meeting at{' '}
         <strong>{branding.communityName}</strong>.
       </Text>
 
-      <table style={detailsTableStyle}>
-        <tbody>
-          <tr>
-            <td style={labelStyle}>Meeting</td>
-            <td style={valueStyle}>{meetingTitle}</td>
-          </tr>
-          <tr>
-            <td style={labelStyle}>Type</td>
-            <td style={valueStyle}>
-              {meetingType.charAt(0).toUpperCase() + meetingType.slice(1)}{" "}
-              Meeting
-            </td>
-          </tr>
-          <tr>
-            <td style={labelStyle}>Date</td>
-            <td style={valueStyle}>{meetingDate}</td>
-          </tr>
-          <tr>
-            <td style={labelStyle}>Time</td>
-            <td style={valueStyle}>{meetingTime}</td>
-          </tr>
-          <tr>
-            <td style={labelStyle}>Location</td>
-            <td style={valueStyle}>{location}</td>
-          </tr>
-        </tbody>
-      </table>
+      <EmailCard>
+        <table
+          width="100%"
+          cellPadding={0}
+          cellSpacing={0}
+          style={{ borderCollapse: 'collapse' }}
+        >
+          <tbody>
+            <tr>
+              <td style={styles.labelCell}>Meeting</td>
+              <td style={meetingTitleCell}>{meetingTitle}</td>
+            </tr>
+            <tr>
+              <td style={styles.labelCell}>Type</td>
+              <td style={styles.valueCell}>
+                <span style={meetingTypeBadge(meetingType)}>
+                  {meetingType.charAt(0).toUpperCase() + meetingType.slice(1)}{' '}
+                  Meeting
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td style={styles.labelCell}>Date</td>
+              <td style={styles.valueCell}>{meetingDate}</td>
+            </tr>
+            <tr>
+              <td style={styles.labelCell}>Time</td>
+              <td style={styles.valueCell}>{meetingTime}</td>
+            </tr>
+            <tr>
+              <td style={styles.labelCell}>Location</td>
+              <td style={styles.valueCell}>{location}</td>
+            </tr>
+          </tbody>
+        </table>
+      </EmailCard>
 
       {agendaUrl && (
-        <Text style={textStyle}>
-          <Link href={agendaUrl} style={linkStyle}>
-            View Meeting Agenda
+        <Section style={{ margin: '0 0 20px 0' }}>
+          <Link href={agendaUrl} style={agendaLinkStyle}>
+            View meeting agenda &rarr;
           </Link>
-        </Text>
+        </Section>
       )}
 
-      <Text style={smallTextStyle}>
-        Per Florida Statute §718, this notice is provided at least{" "}
+      <Text style={styles.small}>
+        Per Florida Statute &sect;718.112, this notice is provided at least{' '}
         {noticeWindow} before the meeting as required by law.
       </Text>
     </EmailLayout>
   );
 }
 
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
+const meetingTitleCell: React.CSSProperties = {
+  ...styles.valueCell,
+  fontSize: '14px',
+  fontWeight: 600,
 };
 
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};
+interface MeetingTypeBadgeColors {
+  bg: string;
+  text: string;
+}
 
-const detailsTableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse" as const,
-  margin: "16px 0",
-};
+function getMeetingTypeColors(
+  type: MeetingNoticeEmailProps['meetingType'],
+): MeetingTypeBadgeColors {
+  if (type === 'owner') return { bg: '#DBEAFE', text: '#1E40AF' };
+  if (type === 'special') return { bg: '#FEF3C7', text: '#92400E' };
+  // board — zinc
+  return { bg: '#F4F4F5', text: '#3F3F46' };
+}
 
-const labelStyle: React.CSSProperties = {
-  fontSize: "14px",
-  fontWeight: "bold",
-  color: emailColors.textDisabled,
-  padding: "8px 16px 8px 0",
-  verticalAlign: "top",
-  whiteSpace: "nowrap",
-};
+function meetingTypeBadge(
+  type: MeetingNoticeEmailProps['meetingType'],
+): React.CSSProperties {
+  const { bg, text } = getMeetingTypeColors(type);
+  return {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 600,
+    backgroundColor: bg,
+    color: text,
+  };
+}
 
-const valueStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textPrimary,
-  padding: "8px 0",
-};
-
-const linkStyle: React.CSSProperties = {
-  color: emailColors.interactivePrimary,
-  textDecoration: "underline",
-};
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textDisabled,
-  lineHeight: "20px",
-  margin: "16px 0 0 0",
-  fontStyle: "italic",
+const agendaLinkStyle: React.CSSProperties = {
+  color: '#2563EB',
+  fontSize: '14px',
+  fontWeight: 500,
+  textDecoration: 'none',
 };

@@ -1,7 +1,9 @@
-import { Button, Heading, Link, Section, Text } from "@react-email/components";
-import { emailColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text, Section } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface NotificationDigestItem {
   title: string;
@@ -11,13 +13,13 @@ export interface NotificationDigestItem {
 
 export interface NotificationDigestEmailProps extends BaseEmailProps {
   recipientName: string;
-  frequency: "daily_digest" | "weekly_digest";
+  frequency: 'daily_digest' | 'weekly_digest';
   items: NotificationDigestItem[];
   portalUrl: string;
 }
 
-function getDigestLabel(frequency: NotificationDigestEmailProps["frequency"]): string {
-  return frequency === "weekly_digest" ? "Weekly" : "Daily";
+function getDigestLabel(frequency: NotificationDigestEmailProps['frequency']): string {
+  return frequency === 'weekly_digest' ? 'Weekly' : 'Daily';
 }
 
 export function NotificationDigestEmail({
@@ -37,91 +39,78 @@ export function NotificationDigestEmail({
         `${digestLabel} digest from ${branding.communityName} (${items.length} updates)`
       }
     >
-      <Heading as="h1" style={headingStyle}>
-        {digestLabel} Notification Digest
+      <Heading as="h1" style={styles.heading}>
+        {digestLabel} digest
       </Heading>
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        Here are your latest updates from <strong>{branding.communityName}</strong>.
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        Here is what happened this week at{' '}
+        <strong>{branding.communityName}</strong>.
       </Text>
 
-      <Section style={listStyle}>
-        {items.map((item, index) => (
-          <div key={`${item.title}-${index}`} style={itemStyle}>
-            <Text style={itemTitleStyle}>{item.title}</Text>
-            {item.summary ? <Text style={itemSummaryStyle}>{item.summary}</Text> : null}
-            {item.actionUrl ? (
-              <Link href={item.actionUrl} style={linkStyle}>
-                View update
-              </Link>
-            ) : null}
-          </div>
-        ))}
+      <table
+        width="100%"
+        cellPadding={0}
+        cellSpacing={0}
+        style={digestTableStyle}
+      >
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={`${item.title}-${index}`}>
+              <td style={index < items.length - 1 ? digestItemCell : digestItemCellLast}>
+                <p style={itemTitleStyle}>{item.title}</p>
+                {item.summary ? (
+                  <p style={itemSummaryStyle}>{item.summary}</p>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <Section style={styles.buttonSection}>
+        <EmailButton href={portalUrl} variant="default">
+          Open portal
+        </EmailButton>
       </Section>
 
-      <Button style={buttonStyle(branding.accentColor)} href={portalUrl}>
-        Open Community Portal
-      </Button>
+      <Text style={styles.smallSpaced}>
+        You received this digest based on your notification preferences. You can
+        update them in your account settings.
+      </Text>
     </EmailLayout>
   );
 }
 
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
+const digestTableStyle: React.CSSProperties = {
+  border: `1px solid ${emailColors.border}`,
+  borderRadius: '6px',
+  borderCollapse: 'collapse' as const,
+  margin: '0 0 20px 0',
+  overflow: 'hidden',
 };
 
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
+const digestItemCell: React.CSSProperties = {
+  padding: '12px 16px',
+  borderBottom: `1px solid ${emailColors.border}`,
+  verticalAlign: 'top' as const,
 };
 
-const listStyle: React.CSSProperties = {
-  margin: "16px 0",
-};
-
-const itemStyle: React.CSSProperties = {
-  border: `1px solid ${emailColors.borderDefault}`,
-  borderRadius: "8px",
-  padding: "12px",
-  marginBottom: "12px",
-  backgroundColor: emailColors.surfacePage,
+const digestItemCellLast: React.CSSProperties = {
+  padding: '12px 16px',
+  verticalAlign: 'top' as const,
 };
 
 const itemTitleStyle: React.CSSProperties = {
-  fontSize: "16px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 8px 0",
+  fontSize: '14px',
+  fontWeight: 600,
+  color: emailColors.foreground,
+  margin: '0 0 3px 0',
 };
 
 const itemSummaryStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textSecondary,
-  lineHeight: "20px",
-  margin: "0 0 6px 0",
+  fontSize: '13px',
+  color: emailColors.mutedForeground,
+  lineHeight: '1.5',
+  margin: '0',
 };
-
-const linkStyle: React.CSSProperties = {
-  fontSize: "13px",
-  color: emailColors.interactivePrimary,
-  textDecoration: "underline",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? emailColors.interactivePrimary,
-    color: emailColors.textInverse,
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
