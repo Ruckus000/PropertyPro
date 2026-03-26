@@ -1,4 +1,5 @@
 import { Button, Heading, Link, Section, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -68,13 +69,13 @@ export function NotificationDigestEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
@@ -84,37 +85,37 @@ const listStyle: React.CSSProperties = {
 };
 
 const itemStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
+  border: `1px solid ${emailColors.borderDefault}`,
   borderRadius: "8px",
   padding: "12px",
   marginBottom: "12px",
-  backgroundColor: "#f9fafb",
+  backgroundColor: emailColors.surfacePage,
 };
 
 const itemTitleStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 8px 0",
 };
 
 const itemSummaryStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#4b5563",
+  color: emailColors.textSecondary,
   lineHeight: "20px",
   margin: "0 0 6px 0",
 };
 
 const linkStyle: React.CSSProperties = {
   fontSize: "13px",
-  color: "#2563eb",
+  color: emailColors.interactivePrimary,
   textDecoration: "underline",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",

@@ -1,4 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -45,7 +46,7 @@ export function MaintenanceUpdateEmail({
             <tr>
               <td style={labelStyle}>Previous Status</td>
               <td style={valueStyle}>
-                <span style={statusBadgeStyle("#6b7280")}>{previousStatus}</span>
+                <span style={statusBadgeStyle(emailColors.textDisabled)}>{previousStatus}</span>
               </td>
             </tr>
             <tr>
@@ -73,38 +74,38 @@ export function MaintenanceUpdateEmail({
 
 function getStatusColor(status: string): string {
   const lower = status.toLowerCase();
-  if (lower === "completed" || lower === "resolved") return "#16a34a";
-  if (lower === "in_progress" || lower === "in progress") return "#2563eb";
-  if (lower === "rejected" || lower === "cancelled") return "#dc2626";
-  return "#d97706";
+  if (lower === "completed" || lower === "resolved") return emailColors.successForeground;
+  if (lower === "in_progress" || lower === "in progress") return emailColors.interactivePrimary;
+  if (lower === "rejected" || lower === "cancelled") return emailColors.dangerForeground;
+  return emailColors.warningForeground;
 }
 
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
 
 const updateBoxStyle: React.CSSProperties = {
-  backgroundColor: "#f9fafb",
+  backgroundColor: emailColors.surfacePage,
   padding: "16px",
   margin: "16px 0",
   borderRadius: "8px",
-  border: "1px solid #e5e7eb",
+  border: `1px solid ${emailColors.borderDefault}`,
 };
 
 const requestTitleStyle: React.CSSProperties = {
   fontSize: "18px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 12px 0",
 };
 
@@ -117,7 +118,7 @@ const detailsTableStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   fontSize: "14px",
   fontWeight: "bold",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   padding: "4px 16px 4px 0",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -125,7 +126,7 @@ const labelStyle: React.CSSProperties = {
 
 const valueStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#111827",
+  color: emailColors.textPrimary,
   padding: "4px 0",
   verticalAlign: "middle",
 };
@@ -133,7 +134,7 @@ const valueStyle: React.CSSProperties = {
 function statusBadgeStyle(color: string): React.CSSProperties {
   return {
     backgroundColor: color,
-    color: "#ffffff",
+    color: emailColors.textInverse,
     padding: "2px 10px",
     borderRadius: "12px",
     fontSize: "12px",
@@ -143,7 +144,7 @@ function statusBadgeStyle(color: string): React.CSSProperties {
 }
 
 const notesBoxStyle: React.CSSProperties = {
-  borderTop: "1px solid #e5e7eb",
+  borderTop: `1px solid ${emailColors.borderDefault}`,
   paddingTop: "12px",
   marginTop: "8px",
 };
@@ -151,21 +152,21 @@ const notesBoxStyle: React.CSSProperties = {
 const notesLabelStyle: React.CSSProperties = {
   fontSize: "12px",
   fontWeight: "bold",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   margin: "0 0 4px 0",
 };
 
 const notesTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#4b5563",
+  color: emailColors.textSecondary,
   lineHeight: "20px",
   margin: "0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",

@@ -1,4 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -54,49 +55,49 @@ export function AnnouncementEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
 
 const announcementBoxStyle: React.CSSProperties = {
-  backgroundColor: "#f9fafb",
+  backgroundColor: emailColors.surfacePage,
   padding: "16px",
   margin: "16px 0",
   borderRadius: "8px",
-  border: "1px solid #e5e7eb",
+  border: `1px solid ${emailColors.borderDefault}`,
 };
 
 const announcementTitleStyle: React.CSSProperties = {
   fontSize: "18px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 8px 0",
 };
 
 const announcementBodyStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#4b5563",
+  color: emailColors.textSecondary,
   lineHeight: "22px",
   margin: "0 0 12px 0",
 };
 
 const authorStyle: React.CSSProperties = {
   fontSize: "12px",
-  color: "#9ca3af",
+  color: emailColors.textDisabled,
   margin: "0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",

@@ -1,4 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -23,10 +24,10 @@ export function ComplianceAlertEmail({
 }: ComplianceAlertEmailProps) {
   const severityColor =
     severity === "critical"
-      ? "#dc2626"
+      ? emailColors.dangerForeground
       : severity === "warning"
-        ? "#d97706"
-        : "#2563eb";
+        ? emailColors.warningForeground
+        : emailColors.infoForeground;
 
   const severityLabel =
     severity.charAt(0).toUpperCase() + severity.slice(1);
@@ -77,7 +78,7 @@ export function ComplianceAlertEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 8px 0",
 };
 
@@ -88,7 +89,7 @@ const badgeContainerStyle: React.CSSProperties = {
 function badgeStyle(color: string): React.CSSProperties {
   return {
     backgroundColor: color,
-    color: "#ffffff",
+    color: emailColors.textInverse,
     padding: "4px 12px",
     borderRadius: "12px",
     fontSize: "12px",
@@ -99,7 +100,7 @@ function badgeStyle(color: string): React.CSSProperties {
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
@@ -107,7 +108,7 @@ const textStyle: React.CSSProperties = {
 function alertBoxStyle(borderColor: string): React.CSSProperties {
   return {
     borderLeft: `4px solid ${borderColor}`,
-    backgroundColor: "#f9fafb",
+    backgroundColor: emailColors.surfacePage,
     padding: "16px",
     margin: "16px 0",
     borderRadius: "0 4px 4px 0",
@@ -117,13 +118,13 @@ function alertBoxStyle(borderColor: string): React.CSSProperties {
 const alertTitleStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 8px 0",
 };
 
 const alertDescStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#4b5563",
+  color: emailColors.textSecondary,
   lineHeight: "20px",
   margin: "0 0 8px 0",
 };
@@ -131,14 +132,14 @@ const alertDescStyle: React.CSSProperties = {
 const dueDateStyle: React.CSSProperties = {
   fontSize: "14px",
   fontWeight: "bold",
-  color: "#dc2626",
+  color: emailColors.dangerForeground,
   margin: "0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",
@@ -151,7 +152,7 @@ function buttonStyle(accent?: string): React.CSSProperties {
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
   fontStyle: "italic",
