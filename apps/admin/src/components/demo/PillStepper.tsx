@@ -65,7 +65,9 @@ export function PillStepper({
                 'bg-[color:var(--status-success-bg,#dcfce7)] text-[var(--status-success)]'
               )}
             >
-              <Check className="h-3 w-3" />
+              <span className="check-scale-in inline-flex">
+                <Check size={12} />
+              </span>
               {step.label}
             </button>
           );

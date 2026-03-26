@@ -32,7 +32,7 @@ import { MobileStep } from '@/components/demo/MobileStep';
 // Types
 // ---------------------------------------------------------------------------
 
-type WizardStep = 'basics' | 'public-site' | 'mobile' | 'preview' | 'creating';
+type WizardStep = 'basics' | 'public-site' | 'mobile' | 'preview';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,22 +79,6 @@ const NEXT_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Creating state (stays inline per spec)
-// ---------------------------------------------------------------------------
-
-function CreatingState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <div
-        className="h-10 w-10 rounded-full border-4 border-[var(--border-default)] border-t-[var(--interactive-primary)] animate-spin"
-        aria-hidden="true"
-      />
-      <p className="text-sm text-[var(--text-secondary)]">Generating demo…</p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -103,6 +87,10 @@ export default function DemoNewPage() {
   const [step, setStep] = useState<WizardStep>('basics');
   const [config, setConfig] = useState(getInitialConfig('condo_718'));
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+
+  // Generation state
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
 
   // Preview state
   const [previewHtml, setPreviewHtml] = useState<{ publicHtml: string; mobileHtml: string } | null>(null);
@@ -201,17 +189,39 @@ export default function DemoNewPage() {
     setStep('basics');
   }
 
-  function handleGenerated(demoId: string) {
-    setStep('creating');
-    router.push(`/demo/${demoId}/preview`);
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const res = await fetch('/api/admin/demos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateType: config.communityType,
+          prospectName: config.prospectName,
+          branding: config.branding,
+          publicTemplateId: config.publicTemplateId,
+          mobileTemplateId: config.mobileTemplateId,
+          contentStrategy: config.contentStrategy,
+          externalCrmUrl: config.crmUrl || undefined,
+          prospectNotes: config.notes || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message ?? 'Failed');
+      router.push(`/demo/${data.id ?? data.demoId}/preview`);
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Something went wrong');
+      setGenerating(false);
+    }
   }
 
   // Validation gate for Next button
   const isNextDisabled =
     step === 'basics' && !config.prospectName.trim();
 
-  // Show footer on all steps except creating
-  const showFooter = step !== 'creating';
+  // Always show footer
+  const showFooter = true;
 
   // Preview emphasis based on current step
   const previewEmphasis = step === 'mobile' ? 'mobile' as const : step === 'public-site' ? 'public' as const : 'both' as const;
@@ -266,70 +276,88 @@ export default function DemoNewPage() {
             </div>
 
             {/* PillStepper */}
-            {step !== 'creating' && (
-              <div className="px-6 py-4">
-                <PillStepper
-                  steps={WIZARD_STEPS}
-                  currentStep={step}
-                  completedSteps={completedSteps}
-                  errorSteps={errorSteps}
-                  onStepClick={goToStep}
-                />
-              </div>
-            )}
+            <div className="px-6 py-4">
+              <PillStepper
+                steps={WIZARD_STEPS}
+                currentStep={step}
+                completedSteps={completedSteps}
+                errorSteps={errorSteps}
+                onStepClick={goToStep}
+              />
+            </div>
 
             {/* Scrollable step content */}
             <div ref={contentRef} className="flex-1 overflow-y-auto px-6 pb-4">
               <div aria-live="polite" className="sr-only">
                 {`Step ${STEP_ORDER.indexOf(step) + 1} of ${STEP_ORDER.length}: ${WIZARD_STEPS.find(s => s.id === step)?.label}`}
               </div>
-              {step === 'basics' && (
-                <BasicsStep
-                  config={config}
-                  onConfigChange={(updater) => setConfig((prev) => updater(prev))}
-                  onCommunityTypeChange={handleCommunityTypeChange}
-                  triggerValidation={basicsTrigger}
-                />
+
+              {generateError && step === 'preview' && (
+                <div role="alert" className="rounded-[10px] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 mb-4 text-sm text-[var(--text-primary)]">
+                  {generateError}
+                </div>
               )}
 
-              {step === 'public-site' && (
-                <PublicSiteStep
-                  prospectName={config.prospectName}
-                  communityType={config.communityType}
-                  selectedTemplateId={config.publicTemplateId}
-                  onSelect={(id: DemoTemplateId) =>
-                    setConfig((prev) => ({ ...prev, publicTemplateId: id }))
-                  }
-                />
+              {generating && (
+                <div className="rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-muted)] p-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 rounded-full border-2 border-[var(--border-default)] border-t-[var(--interactive-primary)] animate-spin" aria-hidden="true" />
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">Creating demo...</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Configuring community → Building templates → Finalizing</p>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              {step === 'mobile' && (
-                <MobileStep
-                  prospectName={config.prospectName}
-                  communityType={config.communityType}
-                  selectedTemplateId={config.mobileTemplateId}
-                  onSelect={(id: DemoTemplateId) =>
-                    setConfig((prev) => ({ ...prev, mobileTemplateId: id }))
-                  }
-                />
-              )}
+              <div key={step} className="step-animate">
+                {step === 'basics' && (
+                  <BasicsStep
+                    config={config}
+                    onConfigChange={(updater) => setConfig((prev) => updater(prev))}
+                    onCommunityTypeChange={handleCommunityTypeChange}
+                    triggerValidation={basicsTrigger}
+                  />
+                )}
 
-              {step === 'preview' && (
-                <ReviewStep config={config} onEditStep={goToStep} />
-              )}
+                {step === 'public-site' && (
+                  <PublicSiteStep
+                    prospectName={config.prospectName}
+                    communityType={config.communityType}
+                    selectedTemplateId={config.publicTemplateId}
+                    onSelect={(id: DemoTemplateId) =>
+                      setConfig((prev) => ({ ...prev, publicTemplateId: id }))
+                    }
+                  />
+                )}
 
-              {step === 'creating' && <CreatingState />}
+                {step === 'mobile' && (
+                  <MobileStep
+                    prospectName={config.prospectName}
+                    communityType={config.communityType}
+                    selectedTemplateId={config.mobileTemplateId}
+                    onSelect={(id: DemoTemplateId) =>
+                      setConfig((prev) => ({ ...prev, mobileTemplateId: id }))
+                    }
+                  />
+                )}
+
+                {step === 'preview' && (
+                  <ReviewStep config={config} onEditStep={goToStep} />
+                )}
+              </div>
             </div>
 
             {/* Sticky footer */}
             {showFooter && (
               <WizardFooter
                 onBack={goBack}
-                onNext={goNext}
+                onNext={step === 'preview' ? handleGenerate : goNext}
                 nextLabel={NEXT_LABELS[step] ?? 'Next'}
                 nextDisabled={isNextDisabled}
                 showBack={step !== 'basics'}
                 onCancel={() => router.push('/demo')}
+                loading={step === 'preview' ? generating : false}
               />
             )}
           </div>
