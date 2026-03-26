@@ -108,6 +108,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/page.tsx'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/self-service-upgrade/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/demo/[slug]/upgrade/page.tsx'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/expire-demos/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-session.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
