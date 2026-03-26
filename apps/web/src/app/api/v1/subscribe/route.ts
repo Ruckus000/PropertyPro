@@ -23,6 +23,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { resolveStripePrice } from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 const subscribeSchema = z.object({
   planId: z.enum(PLAN_IDS),
@@ -105,6 +106,15 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   }
 
   const session = await stripe.checkout.sessions.create(sessionParams);
+
+  // Emit self_service_upgrade_started for non-demo communities upgrading
+  await emitConversionEvent({
+    communityId,
+    eventType: 'self_service_upgrade_started',
+    source: 'web_app',
+    dedupeKey: `community:${communityId}:upgrade:${session.id}`,
+    userId,
+  });
 
   return NextResponse.json({ checkoutUrl: session.url });
 });
