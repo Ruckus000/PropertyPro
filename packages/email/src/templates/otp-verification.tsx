@@ -1,4 +1,5 @@
 import { Heading, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -39,13 +40,13 @@ export function OtpVerificationEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
@@ -53,18 +54,18 @@ const textStyle: React.CSSProperties = {
 const codeStyle: React.CSSProperties = {
   fontSize: "32px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   letterSpacing: "8px",
   textAlign: "center",
   padding: "16px 24px",
-  backgroundColor: "#f3f4f6",
+  backgroundColor: emailColors.surfaceMuted,
   borderRadius: "6px",
   margin: "8px 0 24px 0",
 };
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
 };
