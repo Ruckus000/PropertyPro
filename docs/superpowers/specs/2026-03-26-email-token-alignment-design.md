@@ -6,7 +6,7 @@
 
 ## Problem
 
-Email templates in `packages/email/` hardcode ~15 distinct hex values per template across 29 templates. These values drift from the design system tokens in `packages/ui/`. The audit found mismatches in secondary text color (`#374151` vs `#4B5563`), body background (`#F6F9FC` vs `#F9FAFB`), button radius (`6px` vs `10px`), and status colors (different green/red scales).
+Email templates in `packages/email/` hardcode ~15 distinct hex values per template across 29 templates. These color values drift from the design system tokens in `packages/ui/`. The audit found mismatches in secondary text color (`#374151` vs `#4B5563`), body background (`#F6F9FC` vs `#F9FAFB`), and status colors (different green/red scales). Non-color drift (button radius `6px` vs `10px`) is documented but deferred — this spec addresses color alignment only.
 
 The root cause: `packages/ui` owns the token source, but email clients don't support CSS custom properties. There's no way for email templates to consume the same token values.
 
@@ -477,9 +477,19 @@ export function getStatusColors(status: StatusVariant) {
 
 **Why `semanticColors` isn't re-exported from tokens:** The UI semantic colors are CSS `var()` string references (`"var(--text-primary)"`), which is a web-specific representation. The token package owns the definitions and resolvers; UI continues to provide the web-specific API. This keeps the public API identical — no consumer changes needed.
 
-**`packages/ui/src/styles/tokens.css`** — The color sections (primitive colors lines 8-54 and semantic colors lines 130-208) are replaced with content inlined from `@propertypro/tokens/styles.css` during the UI build step. Non-color sections (spacing, radius, typography, motion, focus, elevation, responsive density, focus styles, reduced motion) remain hand-authored in this file.
+**`packages/ui/src/styles/tokens.css`** — This file is imported at source level by the web app (`apps/web/src/app/globals.css` line 1: `@import '../../../../packages/ui/src/styles/tokens.css'`), and the `@propertypro/ui` tsconfig path in both apps resolves to `../../packages/ui/src`. This means the web app reads `tokens.css` directly from source — not from a built `dist/` artifact. A prebuild that only modifies `dist/` output would be invisible to the dev server and Next.js builds.
 
-**Build integration:** Add a `prebuild` script in `packages/ui/package.json` that reads `@propertypro/tokens/styles.css` and splices the color declarations into `tokens.css`, replacing the existing color section. The splice boundaries use prefix matching against the current comment markers: start after `/* Colors */` (line 8), end before `/* Spacing` (line 56, actual text is `/* Spacing (4px base unit) */`). The prefix match avoids breaking if the parenthetical changes.
+**Source-level replacement strategy:** Replace both color sections in the source file `packages/ui/src/styles/tokens.css` with an `@import` of the generated CSS from `packages/tokens`. Specifically:
+
+1. The primitive color block (lines 8-54, from `/* Colors */` through the red palette) and the semantic color block (lines 130-208, from `/* Text */` through `--status-neutral-subtle`) are **both** removed from `tokens.css`.
+2. A single `@import` is added at the top of the file: `@import '../../tokens/src/generated/tokens.css';` — this is a relative source-level import that works in both dev (direct file resolution) and build (CSS bundler resolves it).
+3. Non-color sections remain in place: spacing (lines 56-66), radius (68-74), typography (76-87), motion (89-107), sizing (109-115), focus (117-123), semantic elevation (204-208), responsive density (215-223), focus styles (229-260), motion/animation (262-294), navigation (296-306), large text (308-322).
+
+**Why `@import` instead of splicing:** The web app's `globals.css` imports `tokens.css` by relative path from source. Any build-time splice script would need to run before the Next.js dev server starts, creating a fragile ordering dependency. A source-level `@import` works immediately in both dev and production because CSS `@import` is resolved by the CSS bundler (PostCSS/Tailwind pipeline), not by a custom build step.
+
+**Impact on existing tests:** The `packages/ui/__tests__/tokens/tokens.test.ts` reads `tokens.css` via `fs.readFileSync`. After this change, the file contains an `@import` instead of inline color declarations. The test must be updated to either:
+- Follow the `@import` and read the imported file too (preferred — tests the actual content)
+- Import from `packages/tokens` directly for color assertions and test only non-color declarations against `tokens.css`
 
 ### 6. Consumer Migration: `packages/email`
 
@@ -536,8 +546,21 @@ import { emailColors } from '@propertypro/tokens/email';
 **Next.js config:**
 - Add `@propertypro/tokens` to `transpilePackages` in `apps/web/next.config.ts` and `apps/admin/next.config.ts`
 
+**Vercel deploy build command (`apps/web/vercel.json` line 3):**
+The current `buildCommand` is:
+```
+pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build
+```
+This must be updated to include `@propertypro/tokens` **before** `@propertypro/ui` and `@propertypro/email` (since both consume it):
+```
+pnpm --filter '@propertypro/tokens' --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build
+```
+Without this, the `dist/` artifacts for tokens won't exist when `ui` and `email` build, and the deploy will fail.
+
+**Note:** The CSS `@import` from `tokens.css` references `src/generated/tokens.css` (source level), so it works without a `dist/` build in dev. But `@propertypro/tokens/email` (used by `packages/email`) resolves to `dist/email.js`, which requires the tokens package to be built first.
+
 **Turbo pipeline:**
-- Workspace dependency graph handles build ordering automatically — `packages/tokens` builds before `packages/ui` and `packages/email` because they declare it as a dependency.
+- Workspace dependency graph handles build ordering automatically for `turbo` runs — `packages/tokens` builds before its consumers. But Vercel's `buildCommand` uses explicit `pnpm --filter` calls, not `turbo`, so the ordering must be specified manually.
 
 **tsup config (`packages/tokens/tsup.config.ts`):**
 - Two entry points: `src/index.ts` and `src/email.ts`
@@ -579,19 +602,19 @@ describe('Token parity', () => {
 
 **`packages/ui/__tests__/tokens/tokens.test.ts` updates:**
 
-The existing test reads `packages/ui/src/styles/tokens.css` directly and checks for CSS var declarations. After migration:
+The existing test reads `packages/ui/src/styles/tokens.css` via `fs.readFileSync` and checks `cssContent.includes()` for color declarations. After migration, `tokens.css` contains an `@import` for colors instead of inline declarations.
 
-- The color section of `tokens.css` is now inlined from `@propertypro/tokens` during the UI prebuild step
-- The CSS content is identical (same var names, same values), just sourced differently
-- Tests that check `cssContent.includes('--blue-50: #EFF6FF')` still pass
-- Tests that check `cssContent.includes('--text-primary: var(--gray-900)')` still pass
-- Tests that check `semanticColors.text.primary === 'var(--text-primary)'` still pass (UI's `semanticColors` unchanged)
-- The structural check that all semantic color values start with `var(--` still passes
+**Required changes:**
 
-**Required test adjustments:**
-- The generated CSS must use the same whitespace convention as the current `tokens.css` (two-space indentation, `  --blue-50: #EFF6FF;`) so that `cssContent.includes()` assertions pass without modification. The `build.ts` script must match this formatting exactly.
-- The `primitiveColors` import path changes from `../../src/tokens` to either the same path (if UI re-exports) or `@propertypro/tokens` — the test should continue importing from UI's barrel export to test the compatibility layer.
-- If the generated CSS comment structure changes, some `includes()` checks may need updating for section boundaries.
+1. **Color tests** — The test must read *both* files: `tokens.css` (for non-color vars) and the imported `packages/tokens/src/generated/tokens.css` (for color vars). Concatenate both into `cssContent` for the existing `includes()` assertions. Alternatively, split into two test files.
+
+2. **Generated CSS whitespace** — The `packages/tokens/scripts/build.ts` must emit the same two-space indentation format (`  --blue-50: #EFF6FF;`) that the current `tokens.css` uses, so existing assertions pass without modification.
+
+3. **TS imports** — The `primitiveColors` import continues to come from `../../src/tokens` (UI's barrel), which now re-exports from `@propertypro/tokens`. The test should use UI's barrel to verify the compatibility layer works.
+
+4. **Semantic color tests** — Assertions like `semanticColors.text.primary === 'var(--text-primary)'` and the structural check that all semantic color values start with `var(--` are unaffected — `semanticColors` still lives in `packages/ui/src/tokens/colors.ts` with the same string values.
+
+5. **Non-color tests** — Spacing, radius, typography, motion tests are completely unchanged since those sections stay in `tokens.css`.
 
 ## What This Does NOT Change
 
