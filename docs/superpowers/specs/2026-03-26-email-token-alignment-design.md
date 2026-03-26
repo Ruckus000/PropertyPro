@@ -477,19 +477,51 @@ export function getStatusColors(status: StatusVariant) {
 
 **Why `semanticColors` isn't re-exported from tokens:** The UI semantic colors are CSS `var()` string references (`"var(--text-primary)"`), which is a web-specific representation. The token package owns the definitions and resolvers; UI continues to provide the web-specific API. This keeps the public API identical — no consumer changes needed.
 
-**`packages/ui/src/styles/tokens.css`** — This file is imported at source level by the web app (`apps/web/src/app/globals.css` line 1: `@import '../../../../packages/ui/src/styles/tokens.css'`), and the `@propertypro/ui` tsconfig path in both apps resolves to `../../packages/ui/src`. This means the web app reads `tokens.css` directly from source — not from a built `dist/` artifact. A prebuild that only modifies `dist/` output would be invisible to the dev server and Next.js builds.
+**`packages/ui/src/styles/tokens.css`** — This file is imported at source level by the web app (`apps/web/src/app/globals.css` line 1: `@import '../../../../packages/ui/src/styles/tokens.css'`), and the `@propertypro/ui` tsconfig path in both apps resolves to `../../packages/ui/src`. This means the web app reads `tokens.css` directly from source — not from a built `dist/` artifact. Additionally, `packages/ui/tsup.config.ts` uses `loader: { ".css": "copy" }` which copies CSS files verbatim to `dist/`, so any relative `@import` in the source file would be preserved in `dist/styles/tokens.css` where it would no longer resolve. The `@propertypro/ui/styles.css` export (line 23 of `packages/ui/package.json`) maps to `./dist/styles/tokens.css`.
 
-**Source-level replacement strategy:** Replace both color sections in the source file `packages/ui/src/styles/tokens.css` with an `@import` of the generated CSS from `packages/tokens`. Specifically:
+**Strategy: inline replacement with committed generated file.**
 
-1. The primitive color block (lines 8-54, from `/* Colors */` through the red palette) and the semantic color block (lines 130-208, from `/* Text */` through `--status-neutral-subtle`) are **both** removed from `tokens.css`.
-2. A single `@import` is added at the top of the file: `@import '../../tokens/src/generated/tokens.css';` — this is a relative source-level import that works in both dev (direct file resolution) and build (CSS bundler resolves it).
-3. Non-color sections remain in place: spacing (lines 56-66), radius (68-74), typography (76-87), motion (89-107), sizing (109-115), focus (117-123), semantic elevation (204-208), responsive density (215-223), focus styles (229-260), motion/animation (262-294), navigation (296-306), large text (308-322).
+Rather than an `@import` (which breaks the dist copy and requires a build step before dev), or a splice script (which is fragile), the color sections of `tokens.css` are replaced directly with the content from `packages/tokens/src/generated/tokens.css`. The generated CSS file is **committed to git** so it exists on every checkout.
 
-**Why `@import` instead of splicing:** The web app's `globals.css` imports `tokens.css` by relative path from source. Any build-time splice script would need to run before the Next.js dev server starts, creating a fragile ordering dependency. A source-level `@import` works immediately in both dev and production because CSS `@import` is resolved by the CSS bundler (PostCSS/Tailwind pipeline), not by a custom build step.
+Specifically:
 
-**Impact on existing tests:** The `packages/ui/__tests__/tokens/tokens.test.ts` reads `tokens.css` via `fs.readFileSync`. After this change, the file contains an `@import` instead of inline color declarations. The test must be updated to either:
-- Follow the `@import` and read the imported file too (preferred — tests the actual content)
-- Import from `packages/tokens` directly for color assertions and test only non-color declarations against `tokens.css`
+1. `packages/tokens/scripts/build.ts` generates `packages/tokens/src/generated/tokens.css` containing all color declarations (both primitives and semantics).
+2. This generated file is **checked into git**. It is a derived artifact from `primitives.ts` + `semantic.ts`, but committing it eliminates all lifecycle problems:
+   - Fresh checkout + `pnpm dev` works immediately (no build step needed — `turbo dev` has no `dependsOn: ["^build"]`)
+   - `pnpm test` works immediately (test reads the file directly)
+   - UI's tsup `{ ".css": "copy" }` copies a self-contained CSS file to `dist/` (no broken relative imports)
+   - The `@propertypro/ui/styles.css` package export continues to work
+3. The color sections in `packages/ui/src/styles/tokens.css` are replaced with an `@import` pointing to the committed generated file: `@import '../../tokens/src/generated/tokens.css';`. This works because:
+   - At source level (dev): CSS bundler resolves the relative path
+   - At dist level (package export): UI's build step must inline the import. Add a `prebuild` script in `packages/ui/package.json` that resolves the `@import` and produces a self-contained `tokens.css` before tsup copies it. Alternatively, configure tsup or PostCSS to resolve CSS imports.
+4. Both color blocks are removed from `tokens.css`:
+   - Primitive colors (lines 8-54, from `/* Colors */` through the red palette)
+   - Semantic colors (lines 130-208, from the second `:root` block through `--status-neutral-subtle`)
+5. Non-color sections remain in place: spacing, radius, typography, motion, sizing, focus, elevation, responsive density, focus styles, animation, navigation, large text.
+
+**Staleness guard:** A CI check or `pnpm lint` step verifies the committed `tokens.css` matches what `build.ts` would generate. If someone edits `primitives.ts` or `semantic.ts` without re-running the generator, CI fails. The check is: run `build.ts` to a temp file, diff against the committed file.
+
+**Generated file lifecycle:**
+- **Fresh checkout:** File exists (committed to git). `pnpm dev` works immediately.
+- **Token change:** Developer edits `primitives.ts` or `semantic.ts`, runs `pnpm --filter @propertypro/tokens generate` (or a convenience alias), commits the updated generated file. CI verifies consistency.
+- **CI/deploy:** Staleness check runs. If the committed file is stale, the build fails with a clear error.
+
+**Impact on existing tests:** The `packages/ui/__tests__/tokens/tokens.test.ts` reads `tokens.css` via `fs.readFileSync` and checks `cssContent.includes()`. After migration:
+- The test must read both `tokens.css` (for non-color vars) and the imported generated file (for color vars). Simplest approach: resolve the `@import` path relative to `tokens.css` and concatenate both file contents into `cssContent`.
+- Alternatively, the color parity test moves to `packages/tokens/__tests__/parity.test.ts` and the UI test only checks non-color declarations.
+
+**Impact on `@propertypro/ui/styles.css` package export:**
+The `./styles.css` export maps to `./dist/styles/tokens.css`. With the `@import`, UI's build must produce a self-contained CSS file in dist. Options:
+- **Option A (recommended):** Add a `prebuild` script that concatenates the generated color CSS + the non-color sections into a single `src/styles/tokens.built.css`, then point tsup at that file. The source `tokens.css` with `@import` is the dev-time file; the built version is the dist artifact.
+- **Option B:** Configure tsup's CSS handling to resolve `@import` statements (e.g., via postcss-import plugin).
+- **Option C:** Have the tokens build script also write directly into `packages/ui/src/styles/tokens.css` (replacing color sections inline). This avoids the `@import` entirely but couples the two packages at the file level.
+
+For simplicity, **Option C is recommended for this phase**: `packages/tokens/scripts/build.ts` generates `src/generated/tokens.css` (committed to git) AND directly writes the color sections into `packages/ui/src/styles/tokens.css`. This means:
+- `tokens.css` remains a self-contained file with no `@import`
+- tsup copies it to `dist/` without modification
+- The `@propertypro/ui/styles.css` export works unchanged
+- Fresh checkout works (both files are committed)
+- The staleness CI check verifies both files match the generator output
 
 ### 6. Consumer Migration: `packages/email`
 
@@ -543,6 +575,28 @@ import { emailColors } from '@propertypro/tokens/email';
 - `packages/ui` → `@propertypro/tokens` (workspace dependency)
 - `packages/email` → `@propertypro/tokens` (workspace dependency)
 
+**Local dev/test resolution:**
+The `turbo dev` task has no `dependsOn: ["^build"]`, so `pnpm dev` on a fresh checkout does NOT build workspace dependencies first. Similarly, root `pnpm test` runs vitest directly without building. Both `packages/ui` and `packages/email` import from `@propertypro/tokens`, whose package exports resolve to `dist/*`. Without a build, those files don't exist.
+
+**Resolution strategy — tsconfig source aliases (matching existing pattern):**
+The repo already solves this for `@propertypro/ui` by adding tsconfig path aliases that point at source. Apply the same pattern for `@propertypro/tokens`:
+
+In `apps/web/tsconfig.json` and `apps/admin/tsconfig.json`:
+```json
+"@propertypro/tokens": ["../../packages/tokens/src"],
+"@propertypro/tokens/*": ["../../packages/tokens/src/*"]
+```
+
+In `packages/ui/tsconfig.json` and `packages/email/tsconfig.json`:
+```json
+"@propertypro/tokens": ["../tokens/src"],
+"@propertypro/tokens/*": ["../tokens/src/*"]
+```
+
+This ensures TypeScript resolves imports to source files in dev and test. The `dist/` exports are only used by external consumers and the Vercel production build.
+
+For `@propertypro/tokens/email` specifically: the tsconfig `"@propertypro/tokens/*"` wildcard maps `@propertypro/tokens/email` to `packages/tokens/src/email.ts`, which is correct.
+
 **Next.js config:**
 - Add `@propertypro/tokens` to `transpilePackages` in `apps/web/next.config.ts` and `apps/admin/next.config.ts`
 
@@ -555,12 +609,11 @@ This must be updated to include `@propertypro/tokens` **before** `@propertypro/u
 ```
 pnpm --filter '@propertypro/tokens' --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build
 ```
-Without this, the `dist/` artifacts for tokens won't exist when `ui` and `email` build, and the deploy will fail.
-
-**Note:** The CSS `@import` from `tokens.css` references `src/generated/tokens.css` (source level), so it works without a `dist/` build in dev. But `@propertypro/tokens/email` (used by `packages/email`) resolves to `dist/email.js`, which requires the tokens package to be built first.
+Without this, the `dist/` artifacts for tokens won't exist when `ui` and `email` build during the Vercel deploy, and the build will fail.
 
 **Turbo pipeline:**
-- Workspace dependency graph handles build ordering automatically for `turbo` runs — `packages/tokens` builds before its consumers. But Vercel's `buildCommand` uses explicit `pnpm --filter` calls, not `turbo`, so the ordering must be specified manually.
+- `turbo build` uses `dependsOn: ["^build"]`, so workspace dependency ordering is automatic for production builds.
+- `turbo dev` has no `dependsOn`, but this is handled by the tsconfig source aliases above — dev never needs `dist/`.
 
 **tsup config (`packages/tokens/tsup.config.ts`):**
 - Two entry points: `src/index.ts` and `src/email.ts`
@@ -602,19 +655,18 @@ describe('Token parity', () => {
 
 **`packages/ui/__tests__/tokens/tokens.test.ts` updates:**
 
-The existing test reads `packages/ui/src/styles/tokens.css` via `fs.readFileSync` and checks `cssContent.includes()` for color declarations. After migration, `tokens.css` contains an `@import` for colors instead of inline declarations.
+With Option C (generator writes color sections directly into `tokens.css`), the test file remains self-contained — `fs.readFileSync` on `tokens.css` returns the full CSS including generated color declarations. This means:
 
-**Required changes:**
+- Tests that check `cssContent.includes('--blue-50: #EFF6FF')` still pass
+- Tests that check `cssContent.includes('--text-primary: var(--gray-900)')` still pass
+- Tests that check `semanticColors.text.primary === 'var(--text-primary)'` still pass
+- The structural check that all semantic color values start with `var(--` still passes
+- Non-color tests (spacing, radius, typography, motion) are completely untouched
 
-1. **Color tests** — The test must read *both* files: `tokens.css` (for non-color vars) and the imported `packages/tokens/src/generated/tokens.css` (for color vars). Concatenate both into `cssContent` for the existing `includes()` assertions. Alternatively, split into two test files.
-
-2. **Generated CSS whitespace** — The `packages/tokens/scripts/build.ts` must emit the same two-space indentation format (`  --blue-50: #EFF6FF;`) that the current `tokens.css` uses, so existing assertions pass without modification.
-
-3. **TS imports** — The `primitiveColors` import continues to come from `../../src/tokens` (UI's barrel), which now re-exports from `@propertypro/tokens`. The test should use UI's barrel to verify the compatibility layer works.
-
-4. **Semantic color tests** — Assertions like `semanticColors.text.primary === 'var(--text-primary)'` and the structural check that all semantic color values start with `var(--` are unaffected — `semanticColors` still lives in `packages/ui/src/tokens/colors.ts` with the same string values.
-
-5. **Non-color tests** — Spacing, radius, typography, motion tests are completely unchanged since those sections stay in `tokens.css`.
+**Required adjustments:**
+- The generated CSS must use the same whitespace convention as the current `tokens.css` (two-space indentation, `  --blue-50: #EFF6FF;`) so `cssContent.includes()` assertions pass without modification. The `build.ts` script must match this formatting exactly, including section comment markers.
+- The `primitiveColors` import continues from `../../src/tokens` (UI's barrel), which now re-exports from `@propertypro/tokens` via tsconfig source aliases.
+- If `primitiveColors` gains new entries (red.900, orange scale), the test's color palette iterations automatically cover them.
 
 ## What This Does NOT Change
 
