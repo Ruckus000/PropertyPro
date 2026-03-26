@@ -40,8 +40,8 @@ export function EsignCompletedEmail({
       {/* Success-styled card with green bg/border */}
       <EmailCard
         style={{
-          backgroundColor: '#F0FDF4',
-          border: '1px solid #BBF7D0',
+          backgroundColor: emailColors.alertSuccessBg,
+          border: `1px solid ${emailColors.alertSuccessBorder}`,
         }}
       >
         <Text

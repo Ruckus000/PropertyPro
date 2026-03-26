@@ -19,9 +19,9 @@ const severityBadge: Record<
   'info' | 'warning' | 'critical',
   { bg: string; color: string; label: string }
 > = {
-  critical: { bg: '#FEE2E2', color: '#991B1B', label: 'Critical' },
-  warning: { bg: '#FEF9C3', color: '#854D0E', label: 'Warning' },
-  info: { bg: '#DBEAFE', color: '#1E40AF', label: 'Info' },
+  critical: { bg: emailColors.alertDangerBg, color: emailColors.alertDangerText, label: 'Critical' },
+  warning: { bg: emailColors.alertWarningBg, color: emailColors.alertWarningText, label: 'Warning' },
+  info: { bg: emailColors.alertInfoBg, color: emailColors.alertInfoText, label: 'Info' },
 };
 
 export function ComplianceAlertEmail({

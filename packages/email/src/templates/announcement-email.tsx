@@ -1,5 +1,5 @@
 import { Heading, Text, Section } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
+import { emailColors, primitiveColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
 import { EmailButton } from '../components/email-button';
 import { EmailCard } from '../components/email-card';
@@ -70,7 +70,7 @@ const cardTitleStyle: React.CSSProperties = {
 
 const cardBodyStyle: React.CSSProperties = {
   fontSize: '14px',
-  color: '#3F3F46',
+  color: primitiveColors.zinc[700],
   lineHeight: '1.6',
   margin: '0 0 10px 0',
 };

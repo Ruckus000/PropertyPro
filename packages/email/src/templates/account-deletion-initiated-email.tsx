@@ -45,8 +45,8 @@ export function AccountDeletionInitiatedEmail({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
             <tr>
-              <td style={{ padding: '14px 16px', borderBottom: '1px solid #E4E4E7' }}>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: emailColors.foreground, marginBottom: '4px' }}>
+              <td style={{ padding: '14px 16px', borderBottom: `1px solid ${emailColors.border}` }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: emailColors.foreground, marginBottom: '4px' }}>
                   Days 1–7: Cooling off
                 </div>
                 <div style={{ fontSize: '13px', color: emailColors.mutedForeground }}>
@@ -55,8 +55,8 @@ export function AccountDeletionInitiatedEmail({
               </td>
             </tr>
             <tr>
-              <td style={{ padding: '14px 16px', borderBottom: '1px solid #E4E4E7' }}>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: emailColors.foreground, marginBottom: '4px' }}>
+              <td style={{ padding: '14px 16px', borderBottom: `1px solid ${emailColors.border}` }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: emailColors.foreground, marginBottom: '4px' }}>
                   Days 8–30: Recovery window
                 </div>
                 <div style={{ fontSize: '13px', color: emailColors.mutedForeground }}>
@@ -66,7 +66,7 @@ export function AccountDeletionInitiatedEmail({
             </tr>
             <tr>
               <td style={{ padding: '14px 16px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: emailColors.foreground, marginBottom: '4px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: emailColors.foreground, marginBottom: '4px' }}>
                   After day 30: Permanent purge
                 </div>
                 <div style={{ fontSize: '13px', color: emailColors.mutedForeground }}>

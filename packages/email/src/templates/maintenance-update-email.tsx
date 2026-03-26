@@ -99,15 +99,15 @@ interface BadgeColors {
 function getStatusBadgeColors(status: string): BadgeColors {
   const lower = status.toLowerCase();
   if (lower === 'completed' || lower === 'resolved') {
-    return { bg: '#DCFCE7', text: '#166534' };
+    return { bg: emailColors.alertSuccessBg, text: emailColors.alertSuccessText };
   }
   if (lower === 'in_progress' || lower === 'in progress') {
-    return { bg: '#FEF9C3', text: '#854D0E' };
+    return { bg: emailColors.alertWarningBg, text: emailColors.alertWarningText };
   }
   if (lower === 'rejected' || lower === 'cancelled') {
-    return { bg: '#FEE2E2', text: '#991B1B' };
+    return { bg: emailColors.alertDangerBg, text: emailColors.alertDangerText };
   }
-  return { bg: '#FEF3C7', text: '#92400E' };
+  return { bg: emailColors.alertWarningBg, text: emailColors.alertWarningText };
 }
 
 // Keep legacy name for any external references

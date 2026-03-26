@@ -35,14 +35,14 @@ export function EmergencyAlertEmail({
         width="100%"
         cellPadding={0}
         cellSpacing={0}
-        style={{ background: '#DC2626', borderRadius: '6px', margin: '0 0 20px 0' }}
+        style={{ background: emailColors.buttonDestructive, borderRadius: '6px', margin: '0 0 20px 0' }}
       >
         <tbody>
           <tr>
             <td style={{ padding: '12px', textAlign: 'center' as const }}>
               <span
                 style={{
-                  color: '#FFFFFF',
+                  color: emailColors.buttonDefaultText,
                   fontSize: '13px',
                   fontWeight: 600,
                   letterSpacing: '2px',

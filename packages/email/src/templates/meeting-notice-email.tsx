@@ -114,10 +114,10 @@ interface MeetingTypeBadgeColors {
 function getMeetingTypeColors(
   type: MeetingNoticeEmailProps['meetingType'],
 ): MeetingTypeBadgeColors {
-  if (type === 'owner') return { bg: '#DBEAFE', text: '#1E40AF' };
-  if (type === 'special') return { bg: '#FEF3C7', text: '#92400E' };
+  if (type === 'owner') return { bg: emailColors.alertInfoBg, text: emailColors.alertInfoText };
+  if (type === 'special') return { bg: emailColors.alertWarningBg, text: emailColors.alertWarningText };
   // board — zinc
-  return { bg: '#F4F4F5', text: '#3F3F46' };
+  return { bg: emailColors.muted, text: emailColors.mutedForeground };
 }
 
 function meetingTypeBadge(
@@ -136,7 +136,7 @@ function meetingTypeBadge(
 }
 
 const agendaLinkStyle: React.CSSProperties = {
-  color: '#2563EB',
+  color: emailColors.textLink,
   fontSize: '14px',
   fontWeight: 500,
   textDecoration: 'none',

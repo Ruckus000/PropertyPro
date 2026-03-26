@@ -1,4 +1,4 @@
-import { emailColors } from '@propertypro/tokens/email';
+import { emailColors, primitiveColors } from '@propertypro/tokens/email';
 
 interface EmailCardProps {
   children: React.ReactNode;
@@ -12,7 +12,7 @@ export function EmailCard({ children, style }: EmailCardProps) {
       cellPadding={0}
       cellSpacing={0}
       style={{
-        backgroundColor: '#FAFAFA',
+        backgroundColor: primitiveColors.zinc[50],
         border: `1px solid ${emailColors.border}`,
         borderRadius: '6px',
         margin: '0 0 20px 0',

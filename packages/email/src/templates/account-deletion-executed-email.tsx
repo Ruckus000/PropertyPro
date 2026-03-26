@@ -34,7 +34,7 @@ export function AccountDeletionExecutedEmail({
       </Text>
 
       <EmailCard>
-        <div style={{ fontSize: '14px', fontWeight: 700, color: emailColors.foreground, marginBottom: '6px' }}>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: emailColors.foreground, marginBottom: '6px' }}>
           Recovery window: until {purgeDate}
         </div>
         <div style={{ fontSize: '13px', color: emailColors.mutedForeground }}>

@@ -40,9 +40,11 @@ export function AccountRecoveredEmail({
         in again using your previous credentials.
       </Text>
 
-      <EmailButton href={portalUrl ?? '#'} variant="default">
-        Log in
-      </EmailButton>
+      {portalUrl && (
+        <EmailButton href={portalUrl} variant="default">
+          Log in
+        </EmailButton>
+      )}
 
       <Text style={styles.smallSpaced}>
         If you did not request account recovery, please contact support

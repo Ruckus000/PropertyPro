@@ -44,7 +44,7 @@ export function AssessmentPaymentReceivedEmail({
         processed on {paymentDate}.
       </Text>
 
-      <EmailCard style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+      <EmailCard style={{ backgroundColor: emailColors.alertSuccessBg, border: `1px solid ${emailColors.alertSuccessBorder}` }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
             <tr>
@@ -61,7 +61,7 @@ export function AssessmentPaymentReceivedEmail({
             </tr>
             <tr>
               <td style={styles.labelCell}>Balance</td>
-              <td style={{ ...styles.valueCell, color: '#166534', fontWeight: 700 }}>
+              <td style={{ ...styles.valueCell, color: emailColors.alertSuccessText, fontWeight: 600 }}>
                 {remainingBalance}
               </td>
             </tr>
