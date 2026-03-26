@@ -445,6 +445,10 @@ export function CommandPalette({
             e.preventDefault();
           }}
         >
+          <Dialog.Title className="sr-only">Command palette</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Search pages, actions, and settings, then use the arrow keys to choose a result.
+          </Dialog.Description>
           <div className="overflow-hidden rounded-2xl border border-edge bg-surface-card shadow-2xl">
             <CommandInput
               ref={inputRef}

@@ -34,7 +34,7 @@ packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/t
 | Text | `--text-secondary` | Supporting text, descriptions |
 | Text | `--text-tertiary` | Metadata, timestamps |
 | Text | `--text-disabled` | Disabled controls |
-| Surface | `--surface-page` | Page background (gray-50) |
+| Surface | `--surface-page` | Page background (`--surface-page-warm`, `#F5F5F4`) |
 | Surface | `--surface-card` | Card/panel background (white) |
 | Surface | `--surface-muted` | Subdued sections (gray-100) |
 | Border | `--border-default` | Card boundaries, dividers |
@@ -43,6 +43,8 @@ packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/t
 | Interactive | `--interactive-primary` | Primary actions (theme-overridable) |
 | Interactive | `--interactive-primary-hover` | Primary hover state |
 | Status | `--status-success-*` / `--status-danger-*` / `--status-warning-*` | fg/bg/border per status |
+
+`--surface-page-warm` is a purpose-named primitive for the page surface, not the start of a new neutral scale family. The project still uses `--gray-*` as its only neutral scale.
 
 ### Spacing
 

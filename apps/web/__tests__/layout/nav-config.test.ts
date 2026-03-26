@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   NAV_ITEMS,
+  NAV_SECTIONS,
   PM_NAV_ITEMS,
   getVisibleItems,
   getActiveItemId,
@@ -61,6 +62,45 @@ const APARTMENT_FEATURES: CommunityFeatures = {
   hasEsign: true,
   hasEmergencyNotifications: true,
 };
+
+describe('NAV_SECTIONS', () => {
+  it('exposes the expected section order', () => {
+    expect(NAV_SECTIONS.map((section) => section.label)).toEqual([
+      null,
+      'Community',
+      'Management',
+      'Admin',
+    ]);
+  });
+
+  it('keeps dashboard in its own top section', () => {
+    expect(NAV_SECTIONS[0].items).toHaveLength(1);
+    expect(NAV_SECTIONS[0].items[0].id).toBe('dashboard');
+  });
+
+  it('represents each NAV_ITEMS id exactly once across sections', () => {
+    const allIds = NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.id));
+    const uniqueIds = new Set(allIds);
+
+    expect(allIds).toHaveLength(NAV_ITEMS.length);
+    expect(uniqueIds.size).toBe(NAV_ITEMS.length);
+
+    for (const item of NAV_ITEMS) {
+      expect(allIds.filter((id) => id === item.id)).toHaveLength(1);
+    }
+  });
+
+  it('only references child item IDs that exist in NAV_ITEMS', () => {
+    const allIds = new Set(NAV_ITEMS.map((item) => item.id));
+
+    for (const item of NAV_ITEMS) {
+      for (const childId of item.children ?? []) {
+        expect(allIds.has(childId)).toBe(true);
+        expect(childId).not.toBe(item.id);
+      }
+    }
+  });
+});
 
 describe('getVisibleItems', () => {
   it('shows all main items to owners in condo communities', () => {

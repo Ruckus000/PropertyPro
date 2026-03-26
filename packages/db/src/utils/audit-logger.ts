@@ -42,7 +42,7 @@ export type AuditAction =
   | 'support_consent_granted' | 'support_consent_revoked';
 
 export interface AuditEventParams {
-  userId: string;
+  userId: string | null;
   action: AuditAction;
   resourceType: string;
   resourceId: string;
