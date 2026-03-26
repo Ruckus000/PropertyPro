@@ -276,6 +276,9 @@ function navSection(label: string | null, itemIds: readonly string[]): NavSectio
 }
 
 export const NAV_SECTIONS: readonly NavSection[] = [
+  // Parent `children` remain the source of truth for nested rendering. Child IDs
+  // also live in a section so `AppSidebar` has a fallback top-level placement when
+  // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
   navSection('Community', ['documents', 'meetings', 'announcements', 'maintenance']),
   navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'violations-report']),
