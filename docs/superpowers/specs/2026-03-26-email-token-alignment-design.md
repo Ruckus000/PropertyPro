@@ -29,15 +29,22 @@ packages/tokens/dist/
   └── styles.css                    ← generated color CSS (copied from src/generated/)
 ```
 
-### Package Exports
+### Package Exports (source-first)
+
+`@propertypro/tokens` is a **source-first** package, matching the pattern of `@propertypro/theme`. All exports point at source TypeScript and generated CSS — not `dist/`. This means:
+- No build step required before any local consumer can import
+- `pnpm dev`, `pnpm test`, and `turbo build` all work on a fresh checkout
+- `dist/` is produced by tsup for completeness but is not on the critical path
 
 ```json
 {
   "name": "@propertypro/tokens",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./email": { "types": "./dist/email.d.ts", "import": "./dist/email.js" },
-    "./styles.css": "./dist/styles.css"
+    ".": "./src/index.ts",
+    "./email": "./src/email.ts",
+    "./styles.css": "./src/generated/tokens.css"
   }
 }
 ```
@@ -559,48 +566,38 @@ import { emailColors } from '@propertypro/tokens/email';
 **Local dev/test resolution:**
 The `turbo dev` task has no `dependsOn: ["^build"]`, so `pnpm dev` on a fresh checkout does NOT build workspace dependencies first. Similarly, root `pnpm test` runs vitest directly without building. Both `packages/ui` and `packages/email` import from `@propertypro/tokens`, whose package exports resolve to `dist/*`. Without a build, those files don't exist.
 
-**Resolution strategy — app-level tsconfig aliases + pnpm workspace for packages:**
+**Resolution strategy:**
 
-The repo has two resolution contexts with different constraints:
+Because `@propertypro/tokens` is source-first (exports point at `src/`, not `dist/`), all consumers — apps and packages — resolve imports to source TypeScript without any build step. This matches the `@propertypro/theme` pattern.
 
-1. **App tsconfigs** (`apps/web/tsconfig.json`, `apps/admin/tsconfig.json`) — already use source path aliases for all workspace packages (e.g., `"@propertypro/ui": ["../../packages/ui/src"]`). Add the same for tokens:
+1. **App tsconfigs** (`apps/web/tsconfig.json`, `apps/admin/tsconfig.json`) — add source path aliases matching the existing pattern:
    ```json
    "@propertypro/tokens": ["../../packages/tokens/src"],
    "@propertypro/tokens/*": ["../../packages/tokens/src/*"]
    ```
-   This makes `pnpm dev` and app-level vitest work without building tokens first.
 
-2. **App vitest config** (`apps/web/vitest.config.ts`) — add a resolve alias matching the pattern for `@propertypro/theme`:
-   ```ts
-   '@propertypro/tokens': path.resolve(__dirname, '../../packages/tokens/src'),
-   ```
+2. **Package tsconfigs** (`packages/ui/tsconfig.json`, `packages/email/tsconfig.json`) — do NOT add path aliases. These have `rootDir: "./src"` which would conflict with aliases pointing outside `src/`. Instead, pnpm workspace linking resolves `@propertypro/tokens` to the package's `exports` field, which points at `src/*.ts` — no `dist/` needed.
 
-3. **Package tsconfigs** (`packages/ui/tsconfig.json`, `packages/email/tsconfig.json`) — do NOT add source aliases. These tsconfigs set `rootDir: "./src"` and `include: ["src/**/*.ts"]`. Adding a path alias that resolves outside `rootDir` (e.g., `"../tokens/src"`) breaks TypeScript declaration emit and tsup builds. Instead, package-to-package imports resolve via pnpm workspace linking → package `exports` field → `dist/`. This requires `@propertypro/tokens` to be built first, which is handled by `turbo build`'s `dependsOn: ["^build"]`.
-
-4. **Package vitest** — `packages/ui` and `packages/email` tests that import `@propertypro/tokens` resolve via pnpm workspace. The tokens package must be built first (same as other workspace deps). This is the existing pattern — no package-level vitest currently uses source aliases for cross-package imports.
+3. **App vitest config** (`apps/web/vitest.config.ts`) — add a resolve alias if needed (matching `@propertypro/theme` pattern). May not be necessary since pnpm workspace resolution already points at source.
 
 **Next.js config:**
 - Add `@propertypro/tokens` to `transpilePackages` in `apps/web/next.config.ts` and `apps/admin/next.config.ts`
 
 **Vercel deploy build command (`apps/web/vercel.json` line 3):**
-The current `buildCommand` is:
-```
-pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build
-```
-This must be updated to include `@propertypro/tokens` **before** `@propertypro/ui` and `@propertypro/email` (since both consume it):
+Since `@propertypro/tokens` is source-first, its consumers don't need `dist/` to compile. The current `buildCommand` does not need `@propertypro/tokens` added to the filter chain for module resolution. However, if a `dist/` build is desired for the tokens package (e.g., for package publishing), it can be added optionally:
 ```
 pnpm --filter '@propertypro/tokens' --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' build && pnpm build
 ```
-Without this, the `dist/` artifacts for tokens won't exist when `ui` and `email` build during the Vercel deploy, and the build will fail.
+This is not required for the deploy to succeed — it's a nice-to-have for producing `dist/` artifacts.
 
 **Turbo pipeline:**
-- `turbo build` uses `dependsOn: ["^build"]`, so workspace dependency ordering is automatic for production builds.
-- `turbo dev` has no `dependsOn`, but this is handled by the tsconfig source aliases above — dev never needs `dist/`.
+- No changes needed. `turbo build` with `dependsOn: ["^build"]` handles ordering if tokens has a build script. `turbo dev` works immediately since source-first exports need no build.
 
 **tsup config (`packages/tokens/tsup.config.ts`):**
 - Two entry points: `src/index.ts` and `src/email.ts`
 - Output: ESM to `dist/`
 - Copy `src/generated/tokens.css` → `dist/styles.css`
+- This build is optional — `dist/` is not required by any local consumer
 
 ### 8. Testing
 
