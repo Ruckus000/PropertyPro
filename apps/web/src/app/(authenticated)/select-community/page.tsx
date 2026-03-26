@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { CommunityPickerGrid } from '@/components/community-picker/community-picker-grid';
 

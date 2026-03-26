@@ -131,8 +131,8 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={16} className="animate-spin text-gray-400" />
-        <span className="ml-2 text-xs text-gray-500">Loading branding...</span>
+        <Loader2 size={16} className="animate-spin text-[var(--text-disabled)]" />
+        <span className="ml-2 text-xs text-[var(--text-secondary)]">Loading branding...</span>
       </div>
     );
   }
@@ -151,7 +151,7 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--interactive-primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
           {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
           Save
@@ -159,13 +159,13 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-raised)]"
         >
           <RotateCcw size={12} />
           Reset
         </button>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        {success && <p className="text-xs text-green-600">Saved</p>}
+        {error && <p className="text-xs text-[var(--status-danger)]">{error}</p>}
+        {success && <p className="text-xs text-[var(--status-success)]">Saved</p>}
       </div>
     </form>
   );

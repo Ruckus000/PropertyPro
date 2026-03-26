@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { AssessmentManager } from '@/components/finance/assessment-manager';
 

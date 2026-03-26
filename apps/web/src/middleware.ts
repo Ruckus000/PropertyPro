@@ -30,6 +30,17 @@ import {
   buildSecurityHeaders,
   buildCspHeader,
 } from './lib/middleware/security-headers';
+import {
+  COMMUNITY_ID_HEADER,
+  FORWARDED_AUTH_HEADERS,
+  normalizeForwardedHeaderValue,
+  TENANT_SLUG_HEADER,
+  TENANT_SOURCE_HEADER,
+  USER_EMAIL_HEADER,
+  USER_FULL_NAME_HEADER,
+  USER_ID_HEADER,
+  USER_PHONE_HEADER,
+} from './lib/request/forwarded-headers';
 
 /**
  * Routes under (authenticated) that require a valid session.
@@ -95,11 +106,6 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
 const VERIFY_EMAIL_PATH = '/auth/verify-email';
-
-const COMMUNITY_ID_HEADER = 'x-community-id';
-const TENANT_SLUG_HEADER = 'x-tenant-slug';
-const TENANT_SOURCE_HEADER = 'x-tenant-source';
-const USER_ID_HEADER = 'x-user-id';
 
 const TENANT_CACHE_MAX_ENTRIES = 256;
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -286,13 +292,46 @@ async function findCommunityIdBySlug(
 
 function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Headers {
   const headers = new Headers(request.headers);
-  headers.delete(COMMUNITY_ID_HEADER);
-  headers.delete(TENANT_SLUG_HEADER);
-  headers.delete(TENANT_SOURCE_HEADER);
-  headers.delete(USER_ID_HEADER);
-  headers.delete('x-preview');
+  for (const header of FORWARDED_AUTH_HEADERS) {
+    headers.delete(header);
+  }
   headers.set('x-request-id', requestId);
   return headers;
+}
+
+function stampForwardedUserHeaders(
+  forwardedHeaders: Headers,
+  user: {
+    id: string;
+    email?: string | null;
+    phone?: string | null;
+    user_metadata?: { full_name?: unknown } | null;
+  } | null,
+): void {
+  if (!user) {
+    return;
+  }
+
+  forwardedHeaders.set(USER_ID_HEADER, user.id);
+
+  const email = normalizeForwardedHeaderValue(user.email);
+  if (email) {
+    forwardedHeaders.set(USER_EMAIL_HEADER, email);
+  }
+
+  const phone = normalizeForwardedHeaderValue(user.phone);
+  if (phone) {
+    forwardedHeaders.set(USER_PHONE_HEADER, phone);
+  }
+
+  const fullName = normalizeForwardedHeaderValue(
+    typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name
+      : null,
+  );
+  if (fullName) {
+    forwardedHeaders.set(USER_FULL_NAME_HEADER, fullName);
+  }
 }
 
 /**
@@ -341,7 +380,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // Refresh Supabase session (reads + writes cookies)
-  const { supabase, response } = await createMiddlewareClient(
+  const {
+    supabase,
+    response,
+    user: middlewareUser,
+    authChecked,
+  } = await createMiddlewareClient(
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
@@ -413,13 +457,17 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
     const isTokenAuthRoute = isTokenAuthenticatedApiRoute(request);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = authChecked === undefined
+      ? (
+          middlewareUser ??
+          (
+            await supabase.auth.getUser()
+          ).data.user ??
+          null
+        )
+      : middlewareUser;
 
-    if (user) {
-      forwardedHeaders.set(USER_ID_HEADER, user.id);
-    }
+    stampForwardedUserHeaders(forwardedHeaders, user);
 
     // --- Rate limiting (Phase 2: authenticated API routes) [P2-42] ---
     // For read/write API routes, check rate limit by user ID (or IP fallback).
@@ -522,9 +570,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       }
 
       // Check auth: authenticated users go to dashboard, unauthenticated see public site
-      const {
-        data: { user: publicSiteUser },
-      } = await supabase.auth.getUser();
+      const publicSiteUser = authChecked === undefined
+        ? (
+            middlewareUser ??
+            (
+              await supabase.auth.getUser()
+            ).data.user ??
+            null
+          )
+        : middlewareUser;
 
       if (publicSiteUser && !isPreviewRequest) {
         const dashboardUrl = request.nextUrl.clone();
@@ -588,9 +642,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // Redirect already-authenticated users away from auth pages (except verify-email)
   if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== VERIFY_EMAIL_PATH) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = authChecked === undefined
+      ? (
+          middlewareUser ??
+          (
+            await supabase.auth.getUser()
+          ).data.user ??
+          null
+        )
+      : middlewareUser;
 
     if (user) {
       if (!user.email_confirmed_at) {

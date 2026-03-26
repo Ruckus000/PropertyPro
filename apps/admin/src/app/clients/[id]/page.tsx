@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
+import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,7 +61,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   const community = communityParse.data;
 
   // Fetch counts and compliance score in parallel
-  const [membersResult, documentsResult, complianceResult] = await Promise.all([
+  const [membersResult, documentsResult, complianceResult, coolingCount] = await Promise.all([
     db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
     db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
     // Use the actual table name (not the non-existent compliance_items view)
@@ -68,6 +69,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
       .select('document_id, deadline, is_applicable')
       .eq('community_id', communityId)
       .is('deleted_at', null),
+    getCoolingDeletionRequestCount(),
   ]);
 
   const memberCount = membersResult.count ?? 0;
@@ -80,7 +82,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   const complianceScore = applicable.length > 0 ? Math.round((met.length / applicable.length) * 100) : null;
 
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={coolingCount}>
       <ClientWorkspace
         community={{
           ...community,

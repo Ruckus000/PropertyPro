@@ -14,6 +14,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import {
+  ADMIN_FORWARDED_HEADERS,
+  ADMIN_ROLE_HEADER,
+  ADMIN_USER_EMAIL_HEADER,
+  ADMIN_USER_ID_HEADER,
+  normalizeAdminHeaderValue,
+} from '@/lib/request/forwarded-headers';
 
 // ---------------------------------------------------------------------------
 // Simple sliding-window rate limiter (edge-compatible, in-memory)
@@ -66,13 +73,6 @@ function maybeEvict() {
 // ---------------------------------------------------------------------------
 // Header constants — strip inbound spoofed headers
 // ---------------------------------------------------------------------------
-const SPOOFED_HEADERS = [
-  'x-community-id',
-  'x-tenant-slug',
-  'x-user-id',
-  'x-tenant-source',
-] as const;
-
 // Routes that bypass admin auth check
 const PUBLIC_PATH_PREFIXES = ['/auth/', '/api/health'];
 const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login'];
@@ -88,6 +88,28 @@ function isApiRoute(pathname: string): boolean {
   return pathname.startsWith('/api/');
 }
 
+function attachResponseCookies(source: NextResponse, target: NextResponse): void {
+  if (typeof source.cookies?.getAll !== 'function') {
+    return;
+  }
+  for (const { name, value, ...options } of source.cookies.getAll()) {
+    target.cookies.set(name, value, options);
+  }
+}
+
+function buildForwardedResponse(
+  source: NextResponse,
+  requestHeaders: Headers,
+  requestId: string,
+): NextResponse {
+  const target = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+  attachResponseCookies(source, target);
+  target.headers.set('x-request-id', requestId);
+  return target;
+}
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
@@ -99,7 +121,7 @@ export async function middleware(request: NextRequest): Promise<Response> {
 
   // 1. Strip spoofed headers — clone the request with clean headers
   const cleanHeaders = new Headers(request.headers);
-  for (const header of SPOOFED_HEADERS) {
+  for (const header of ADMIN_FORWARDED_HEADERS) {
     cleanHeaders.delete(header);
   }
 
@@ -115,12 +137,16 @@ export async function middleware(request: NextRequest): Promise<Response> {
   });
 
   // 3. Refresh Supabase session
-  const { supabase, response } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
-  response.headers.set('x-request-id', requestId);
+  const {
+    supabase,
+    response,
+    user: middlewareUser,
+    authChecked,
+  } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
 
   // 4. Allow public paths through immediately (no admin check)
   if (isPublicPath(pathname)) {
-    return response;
+    return buildForwardedResponse(response, cleanHeaders, requestId);
   }
 
   // 5. Rate-limit API routes
@@ -143,9 +169,15 @@ export async function middleware(request: NextRequest): Promise<Response> {
   }
 
   // 6. Verify Supabase user (server-side JWT revalidation)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = authChecked === undefined
+    ? (
+        middlewareUser ??
+        (
+          await supabase.auth.getUser()
+        ).data.user ??
+        null
+      )
+    : middlewareUser;
 
   if (!user) {
     const loginUrl = new URL('/auth/login', request.url);
@@ -167,10 +199,14 @@ export async function middleware(request: NextRequest): Promise<Response> {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Forward verified user ID for route handlers
-  response.headers.set('x-user-id', user.id);
+  cleanHeaders.set(ADMIN_USER_ID_HEADER, user.id);
+  const email = normalizeAdminHeaderValue(user.email);
+  if (email) {
+    cleanHeaders.set(ADMIN_USER_EMAIL_HEADER, email);
+  }
+  cleanHeaders.set(ADMIN_ROLE_HEADER, 'super_admin');
 
-  return response;
+  return buildForwardedResponse(response, cleanHeaders, requestId);
 }
 
 export const config = {

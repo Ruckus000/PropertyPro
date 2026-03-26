@@ -9,8 +9,8 @@ import { redirect } from 'next/navigation';
 import { communities, createScopedClient } from '@propertypro/db';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
 

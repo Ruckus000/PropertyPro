@@ -6,7 +6,6 @@
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoById } from '@/lib/db/demo-queries';
 import {
   generateDemoToken,
@@ -14,13 +13,14 @@ import {
 } from '@propertypro/shared/server';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import { TabbedPreviewClient } from './TabbedPreviewClient';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function DemoPreviewPage({ params }: PageProps) {
-  await requirePlatformAdmin();
+  await requireAdminPageSession();
 
   const { id: idRaw } = await params;
   const id = Number(idRaw);

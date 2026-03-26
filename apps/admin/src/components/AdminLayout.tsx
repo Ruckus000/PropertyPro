@@ -7,9 +7,10 @@ const SIDEBAR_KEY = 'ppro-admin-sidebar-collapsed';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
+  coolingCount?: number;
 }
 
-export function AdminLayout({ children }: AdminLayoutProps) {
+export function AdminLayout({ children, coolingCount }: AdminLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={collapsed} onToggle={handleToggle} />
+      <Sidebar collapsed={collapsed} onToggle={handleToggle} coolingCount={coolingCount} />
       <main className="flex-1 overflow-y-auto bg-gray-50 transition-all duration-200">
         {children}
       </main>

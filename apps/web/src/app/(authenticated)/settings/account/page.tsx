@@ -11,7 +11,7 @@ import { redirect } from 'next/navigation';
 import { users } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { requireAuthenticatedUser } from '@/lib/api/auth';
+import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { AccountSettingsClient } from '@/components/settings/account-settings-client';
 
 export default async function AccountSettingsPage() {

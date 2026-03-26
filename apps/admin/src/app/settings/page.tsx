@@ -1,7 +1,8 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { PlatformSettings } from '@/components/settings/PlatformSettings';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ interface PlatformAdminRow {
 }
 
 export default async function SettingsPage() {
-  const currentAdmin = await requirePlatformAdmin();
+  const currentAdmin = await requireAdminPageSession();
   const db = createAdminClient();
 
   // Fetch platform admins with emails
@@ -41,7 +42,7 @@ export default async function SettingsPage() {
   });
 
   // Fetch platform stats
-  const [communityResult, demoResult] = await Promise.all([
+  const [communityResult, demoResult, coolingCount] = await Promise.all([
     db
       .from('communities')
       .select('*', { count: 'exact', head: true })
@@ -50,10 +51,11 @@ export default async function SettingsPage() {
     db
       .from('demo_instances')
       .select('*', { count: 'exact', head: true }),
+    getCoolingDeletionRequestCount(),
   ]);
 
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={coolingCount}>
       <PlatformSettings
         currentAdmin={{ id: currentAdmin.id, email: currentAdmin.email, role: currentAdmin.role }}
         admins={admins}

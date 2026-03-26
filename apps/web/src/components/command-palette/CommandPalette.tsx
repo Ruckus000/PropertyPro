@@ -25,12 +25,14 @@ import { ADMIN_ROLES } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
 import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/feature-registry';
+import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { CommandInput } from './CommandInput';
 import { CommandGroup } from './CommandGroup';
 import { CommandItem } from './CommandItem';
 import { CommandEmpty } from './CommandEmpty';
 import { CommandLoading } from './CommandLoading';
 import { useDataSearch, type DataSearchResult } from './useDataSearch';
+import { getEntityListPath } from './command-palette-paths';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -73,16 +75,6 @@ const ENTITY_ICONS: Record<string, LucideIcon> = {
   maintenance: Wrench,
   violation: AlertTriangle,
   resident: Users,
-};
-
-/** Entity type → list page path for "View all" links */
-const ENTITY_LIST_PATHS: Record<string, string> = {
-  documents: '/documents',
-  announcements: '/announcements',
-  meetings: '/meetings',
-  maintenance: '/maintenance',
-  violations: '/violations',
-  residents: '/residents',
 };
 
 // ---------------------------------------------------------------------------
@@ -132,6 +124,7 @@ export interface CommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  enableGlobalShortcut?: boolean;
 }
 
 export function CommandPalette({
@@ -140,6 +133,7 @@ export function CommandPalette({
   communityId,
   role,
   features,
+  enableGlobalShortcut = true,
 }: CommandPaletteProps) {
   const registryItems = useFilteredRegistry(role, features, communityId);
   const router = useRouter();
@@ -249,12 +243,16 @@ export function CommandPalette({
           });
         }
         // "View all" link for each data group with results
-        const listPath = ENTITY_LIST_PATHS[group.key];
+        const listPath = getEntityListPath(group.key, {
+          communityId,
+          isAdmin: admin,
+          query: query.trim(),
+        });
         if (listPath) {
           items.push({
             type: 'viewAll',
             groupKey: group.key,
-            href: `${listPath}?q=${encodeURIComponent(query.trim())}`,
+            href: listPath,
             domId: `cmd-viewall-${group.key}`,
           });
         }
@@ -311,15 +309,19 @@ export function CommandPalette({
   // Global Cmd+K / Ctrl+K
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!enableGlobalShortcut) {
+      return;
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if (isSearchShortcut(e)) {
         e.preventDefault();
         onOpenChange(!open);
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
+  }, [enableGlobalShortcut, open, onOpenChange]);
 
   // -----------------------------------------------------------------------
   // Scroll active item into view
@@ -501,7 +503,11 @@ export function CommandPalette({
                     if (group.status === 'loaded' && group.results.length > 0) {
                       const entityType = group.results[0]?.entityType ?? 'document';
                       const Icon = ENTITY_ICONS[entityType] ?? FileText;
-                      const listPath = ENTITY_LIST_PATHS[group.key];
+                      const listPath = getEntityListPath(group.key, {
+                        communityId,
+                        isAdmin: admin,
+                        query: query.trim(),
+                      });
                       const viewAllDomId = `cmd-viewall-${group.key}`;
                       const viewAllIdx = navIndexOf(viewAllDomId);
 
@@ -530,12 +536,7 @@ export function CommandPalette({
                               id={viewAllDomId}
                               role="option"
                               aria-selected={activeIndex === viewAllIdx}
-                              onClick={() =>
-                                handleSelect(
-                                  `${listPath}?q=${encodeURIComponent(query.trim())}`,
-                                  `View all ${group.label}`,
-                                )
-                              }
+                              onClick={() => handleSelect(listPath, `View all ${group.label}`)}
                               onMouseEnter={() => setActiveIndex(viewAllIdx)}
                               className={cn(
                                 'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs',

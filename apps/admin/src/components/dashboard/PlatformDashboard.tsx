@@ -1,6 +1,3 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Building2,
@@ -10,76 +7,16 @@ import {
   ShieldCheck,
   AlertTriangle,
   DollarSign,
-  Loader2,
   KeyRound,
   Trash2,
 } from 'lucide-react';
+import type { PlatformDashboardStats } from '@/lib/server/dashboard';
 
-interface Stats {
-  overview: {
-    communities: number;
-    demos: number;
-    members: number;
-    documents: number;
-  };
-  billing: {
-    active: number;
-    trialing: number;
-    past_due: number;
-    canceled: number;
-    none: number;
-  };
-  compliance: {
-    averageScore: number | null;
-    atRiskCount: number;
-    totalTracked: number;
-  };
-  lifecycle?: {
-    activeFreeAccess: number;
-    pendingDeletions: number;
-  };
+interface PlatformDashboardProps {
+  stats: PlatformDashboardStats;
 }
 
-export function PlatformDashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch('/api/admin/stats');
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error?.message ?? 'Failed to load stats');
-          return;
-        }
-        setStats(data);
-      } catch {
-        setError('Network error');
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  if (error || !stats) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        {error || 'Failed to load dashboard'}
-      </div>
-    );
-  }
-
+export function PlatformDashboard({ stats }: PlatformDashboardProps) {
   return (
     <div className="space-y-8">
       {/* Platform Overview */}
@@ -156,7 +93,7 @@ export function PlatformDashboard() {
       </div>
 
       {/* Account Lifecycle */}
-      {stats.lifecycle && (stats.lifecycle.activeFreeAccess > 0 || stats.lifecycle.pendingDeletions > 0) && (
+      {(stats.lifecycle.activeFreeAccess > 0 || stats.lifecycle.pendingDeletions > 0) && (
         <div>
           <h2 className="mb-4 text-sm font-semibold text-gray-700 uppercase tracking-wide">Account Lifecycle</h2>
           <div className="grid gap-4 sm:grid-cols-2">

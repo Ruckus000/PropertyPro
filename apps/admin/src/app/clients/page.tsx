@@ -7,6 +7,7 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ClientPortfolio } from '@/components/clients/ClientPortfolio';
+import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export default async function ClientsPage() {
   const db = createAdminClient();
 
   // Fetch communities and stale demos in parallel
-  const [communitiesResult, staleDemosResult] = await Promise.all([
+  const [communitiesResult, staleDemosResult, coolingCount] = await Promise.all([
     db.from('communities')
       .select('id, name, slug, community_type, city, state, subscription_status, created_at')
       .eq('is_demo', false)
@@ -52,6 +53,7 @@ export default async function ClientsPage() {
       .select('id, prospect_name, template_type, created_at')
       .lt('created_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
       .order('created_at'),
+    getCoolingDeletionRequestCount(),
   ]);
 
   interface CommunityRow {
@@ -92,7 +94,7 @@ export default async function ClientsPage() {
   }));
 
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={coolingCount}>
       <ClientPortfolio
         communities={communitiesWithScores}
         staleDemos={staleDemos}
