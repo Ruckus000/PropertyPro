@@ -198,6 +198,56 @@ const STRIPE_FINANCE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'charge.dispute.created',
 ]);
 
+const FINANCE_WEBHOOK_ERROR_CODES = {
+  MISSING_REQUIRED_METADATA: 'FINANCE_WEBHOOK_MISSING_REQUIRED_METADATA',
+  DUPLICATE_EVENT: 'FINANCE_WEBHOOK_DUPLICATE_EVENT',
+  PAYABLE_NOT_FOUND: 'FINANCE_WEBHOOK_PAYABLE_NOT_FOUND',
+  REFUND_PREVIOUS_ATTRIBUTES_MISSING: 'FINANCE_WEBHOOK_REFUND_PREVIOUS_ATTRIBUTES_MISSING',
+  REFUND_INVALID_INCREMENTAL_AMOUNT: 'FINANCE_WEBHOOK_REFUND_INVALID_INCREMENTAL_AMOUNT',
+  DISPUTE_CHARGE_ID_MISSING: 'FINANCE_WEBHOOK_DISPUTE_CHARGE_ID_MISSING',
+  UNHANDLED_EVENT_PROCESSING_ERROR: 'FINANCE_WEBHOOK_UNHANDLED_EVENT_PROCESSING_ERROR',
+} as const;
+
+type FinanceWebhookErrorCode =
+  (typeof FINANCE_WEBHOOK_ERROR_CODES)[keyof typeof FINANCE_WEBHOOK_ERROR_CODES];
+
+type FinanceWebhookCategory =
+  | 'validation'
+  | 'idempotency'
+  | 'reconciliation'
+  | 'dependency'
+  | 'processing';
+
+interface FinanceWebhookLogContext {
+  eventId?: string;
+  eventType?: string;
+  communityId?: number | null;
+  payableType?: PayableType | null;
+  payableId?: number | null;
+  payloadSnippet?: Record<string, unknown>;
+}
+
+function logFinanceWebhookEvent(
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  input: FinanceWebhookLogContext & {
+    errorCode?: FinanceWebhookErrorCode;
+    category?: FinanceWebhookCategory;
+    metricName?: string;
+    outcome?: 'success' | 'failure' | 'duplicate' | 'skipped';
+    reason?: string;
+    errorMessage?: string;
+  },
+): void {
+  const payload = {
+    component: 'finance-webhook',
+    message,
+    ...input,
+  };
+  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
+  fn('[finance-webhook]', payload);
+}
+
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
@@ -1389,6 +1439,15 @@ async function recordFinanceStripeEvent(
     return true;
   } catch (err) {
     if (isUniqueConstraintError(err)) {
+      logFinanceWebhookEvent('info', 'Duplicate finance webhook event skipped', {
+        eventId: event.id,
+        eventType: event.type,
+        communityId,
+        errorCode: FINANCE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT,
+        category: 'idempotency',
+        metricName: 'finance_webhook_event',
+        outcome: 'duplicate',
+      });
       return false;
     }
     throw err;
@@ -1473,6 +1532,25 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   const payerUserId = parseMetadataString(metadata, 'userId');
 
   if (!communityId || !payableType || !payableId || !unitId || !payerUserId) {
+    logFinanceWebhookEvent('warn', 'Skipping payment_intent.succeeded due to missing metadata', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId: communityId ?? null,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.MISSING_REQUIRED_METADATA,
+      category: 'validation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: {
+        paymentIntentId: stripePaymentIntent.id,
+        hasCommunityId: Boolean(communityId),
+        hasPayableType: Boolean(payableType),
+        hasPayableId: Boolean(payableId),
+        hasUnitId: Boolean(unitId),
+        hasUserId: Boolean(payerUserId),
+      },
+    });
     return;
   }
 
@@ -1504,6 +1582,18 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
 
   const payable = await getPayableById(communityId, payableType, payableId);
   if (!payable) {
+    logFinanceWebhookEvent('warn', 'Skipping payment_intent.succeeded; payable not found', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.PAYABLE_NOT_FOUND,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: { paymentIntentId: freshIntent.id, unitId },
+    });
     return;
   }
 
@@ -1618,6 +1708,25 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
   if (!communityId || !payableType || !payableId || !unitId || !payerUserId) {
+    logFinanceWebhookEvent('warn', 'Skipping charge.refunded due to missing metadata', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId: communityId ?? null,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.MISSING_REQUIRED_METADATA,
+      category: 'validation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: {
+        chargeId: charge.id,
+        hasCommunityId: Boolean(communityId),
+        hasPayableType: Boolean(payableType),
+        hasPayableId: Boolean(payableId),
+        hasUnitId: Boolean(unitId),
+        hasUserId: Boolean(payerUserId),
+      },
+    });
     return;
   }
 
@@ -1628,6 +1737,18 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
 
   const payable = await getPayableById(communityId, payableType, payableId);
   if (!payable) {
+    logFinanceWebhookEvent('warn', 'Skipping charge.refunded; payable not found', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.PAYABLE_NOT_FOUND,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: { chargeId: charge.id, unitId },
+    });
     return;
   }
   const scoped = createScopedClient(communityId);
@@ -1651,20 +1772,43 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     // previous_attributes should always be present on charge.refunded events.
     // If missing, we fall back to cumulative which is correct for first refund
     // but would overcredit on subsequent refunds. Log so we can investigate.
-    console.warn(
-      `[finance] charge.refunded event ${event.id} missing previous_attributes.amount_refunded — ` +
-      `using cumulative ${charge.amount_refunded} as incremental. Charge: ${charge.id}`,
-    );
+    logFinanceWebhookEvent('warn', 'Refund previous_attributes.amount_refunded missing', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.REFUND_PREVIOUS_ATTRIBUTES_MISSING,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_refund_delta',
+      outcome: 'failure',
+      payloadSnippet: {
+        chargeId: charge.id,
+        cumulativeAmountRefunded: charge.amount_refunded,
+      },
+    });
   }
 
   if (incrementalRefundCents <= 0) {
     // Defensive: if delta is zero or negative (shouldn't happen), log and skip
     // rather than post a nonsensical amount or modify line item state with bad data.
-    console.error(
-      `[finance] charge.refunded event ${event.id} computed non-positive incremental refund ` +
-      `(${incrementalRefundCents}). cumulative=${charge.amount_refunded}, ` +
-      `previous=${previousRefunded}. Charge: ${charge.id}. Skipping.`,
-    );
+    logFinanceWebhookEvent('error', 'Skipping charge.refunded due to invalid incremental refund amount', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.REFUND_INVALID_INCREMENTAL_AMOUNT,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_refund_delta',
+      outcome: 'failure',
+      payloadSnippet: {
+        chargeId: charge.id,
+        incrementalRefundCents,
+        cumulativeAmountRefunded: charge.amount_refunded,
+        previousRefunded,
+      },
+    });
     return;
   }
 
@@ -1758,6 +1902,15 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
   const freshDispute = await stripe.disputes.retrieve(dispute.id);
   const chargeId = typeof freshDispute.charge === 'string' ? freshDispute.charge : null;
   if (!chargeId) {
+    logFinanceWebhookEvent('warn', 'Skipping charge.dispute.created because dispute charge is missing', {
+      eventId: event.id,
+      eventType: event.type,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.DISPUTE_CHARGE_ID_MISSING,
+      category: 'validation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: { disputeId: dispute.id },
+    });
     return;
   }
 
@@ -1773,6 +1926,24 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
   if (!communityId || !unitId || !payerUserId) {
+    logFinanceWebhookEvent('warn', 'Skipping charge.dispute.created due to missing metadata', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId: communityId ?? null,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.MISSING_REQUIRED_METADATA,
+      category: 'validation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: {
+        disputeId: dispute.id,
+        chargeId,
+        hasCommunityId: Boolean(communityId),
+        hasUnitId: Boolean(unitId),
+        hasUserId: Boolean(payerUserId),
+      },
+    });
     return;
   }
 
@@ -1806,18 +1977,31 @@ export async function processFinanceStripeEvent(event: Stripe.Event): Promise<vo
     return;
   }
 
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      await handlePaymentIntentSucceeded(event);
-      break;
-    case 'charge.refunded':
-      await handleChargeRefunded(event);
-      break;
-    case 'charge.dispute.created':
-      await handleChargeDisputeCreated(event);
-      break;
-    default:
-      break;
+  try {
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        await handlePaymentIntentSucceeded(event);
+        break;
+      case 'charge.refunded':
+        await handleChargeRefunded(event);
+        break;
+      case 'charge.dispute.created':
+        await handleChargeDisputeCreated(event);
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    logFinanceWebhookEvent('error', 'Unhandled finance webhook processing error', {
+      eventId: event.id,
+      eventType: event.type,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.UNHANDLED_EVENT_PROCESSING_ERROR,
+      category: 'processing',
+      metricName: 'finance_webhook_event',
+      outcome: 'failure',
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
   }
 }
 
