@@ -1,6 +1,7 @@
 import { Button, Heading, Hr, Section, Text } from "@react-email/components";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
+import { emailColors } from "@propertypro/tokens/email";
 
 export interface EsignInvitationEmailProps extends BaseEmailProps {
   signerName: string;
@@ -73,21 +74,21 @@ export default EsignInvitationEmail;
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 12px 0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",
@@ -100,13 +101,13 @@ function buttonStyle(accent?: string): React.CSSProperties {
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0 0 8px 0",
 };
 
 const documentSectionStyle: React.CSSProperties = {
-  backgroundColor: "#f9fafb",
+  backgroundColor: emailColors.surfacePage,
   borderRadius: "6px",
   padding: "12px 16px",
   margin: "0 0 12px 0",
@@ -115,25 +116,25 @@ const documentSectionStyle: React.CSSProperties = {
 const documentNameStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0",
 };
 
 const hrStyle: React.CSSProperties = {
-  borderColor: "#e5e7eb",
+  borderColor: emailColors.borderDefault,
   margin: "16px 0",
 };
 
 const messageLabel: React.CSSProperties = {
   fontSize: "14px",
   fontWeight: "bold",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   margin: "0 0 4px 0",
 };
 
 const messageBodyStyle: React.CSSProperties = {
   fontSize: "15px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "22px",
   margin: "0 0 4px 0",
   fontStyle: "italic",

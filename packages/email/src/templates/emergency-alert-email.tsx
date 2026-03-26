@@ -1,6 +1,7 @@
 import { Heading, Text } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
 import type { BaseEmailProps } from '../types';
+import { emailColors, primitiveColors } from '@propertypro/tokens/email';
 
 export type EmergencyAlertSeverity = 'emergency' | 'urgent' | 'info';
 
@@ -18,21 +19,21 @@ const SEVERITY_CONFIG: Record<
 > = {
   emergency: {
     label: 'EMERGENCY',
-    bgColor: '#dc2626',
-    textColor: '#ffffff',
-    borderColor: '#b91c1c',
+    bgColor: primitiveColors.red[600],
+    textColor: emailColors.textInverse,
+    borderColor: emailColors.dangerForeground,
   },
   urgent: {
     label: 'URGENT',
-    bgColor: '#ea580c',
-    textColor: '#ffffff',
-    borderColor: '#c2410c',
+    bgColor: primitiveColors.orange[600],
+    textColor: emailColors.textInverse,
+    borderColor: primitiveColors.orange[700],
   },
   info: {
     label: 'NOTICE',
-    bgColor: '#2563eb',
-    textColor: '#ffffff',
-    borderColor: '#1d4ed8',
+    bgColor: emailColors.interactivePrimary,
+    textColor: emailColors.textInverse,
+    borderColor: emailColors.interactivePrimaryHover,
   },
 };
 
@@ -107,7 +108,7 @@ function bannerStyle(bg: string, border: string): React.CSSProperties {
 }
 
 const bannerTextStyle: React.CSSProperties = {
-  color: '#ffffff',
+  color: emailColors.textInverse,
   fontSize: '18px',
   fontWeight: 'bold',
   letterSpacing: '2px',
@@ -117,20 +118,20 @@ const bannerTextStyle: React.CSSProperties = {
 const headingStyle: React.CSSProperties = {
   fontSize: '24px',
   fontWeight: 'bold',
-  color: '#111827',
+  color: emailColors.textPrimary,
   margin: '0 0 16px 0',
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: '16px',
-  color: '#374151',
+  color: emailColors.textSecondary,
   lineHeight: '24px',
   margin: '0 0 16px 0',
 };
 
 function alertBoxStyle(borderColor: string): React.CSSProperties {
   return {
-    backgroundColor: '#fef2f2',
+    backgroundColor: emailColors.dangerBackground,
     padding: '16px',
     margin: '16px 0',
     borderRadius: '8px',
@@ -140,25 +141,25 @@ function alertBoxStyle(borderColor: string): React.CSSProperties {
 
 const alertBodyStyle: React.CSSProperties = {
   fontSize: '15px',
-  color: '#1f2937',
+  color: primitiveColors.gray[800],
   lineHeight: '24px',
   margin: '0 0 4px 0',
 };
 
 const timestampStyle: React.CSSProperties = {
   fontSize: '13px',
-  color: '#6b7280',
+  color: emailColors.textDisabled,
   margin: '8px 0 24px 0',
 };
 
 const dividerStyle: React.CSSProperties = {
-  borderTop: '1px solid #e5e7eb',
+  borderTop: `1px solid ${emailColors.borderDefault}`,
   margin: '24px 0',
 };
 
 const footerStyle: React.CSSProperties = {
   fontSize: '12px',
-  color: '#9ca3af',
+  color: emailColors.textDisabled,
   lineHeight: '18px',
   margin: '0',
 };

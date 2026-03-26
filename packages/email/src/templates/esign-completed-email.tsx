@@ -1,6 +1,7 @@
 import { Heading, Section, Text } from "@react-email/components";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
+import { emailColors } from "@propertypro/tokens/email";
 
 export interface EsignCompletedEmailProps extends BaseEmailProps {
   senderName: string;
@@ -64,41 +65,41 @@ export default EsignCompletedEmail;
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 12px 0",
 };
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
 };
 
 const documentSectionStyle: React.CSSProperties = {
-  backgroundColor: "#f0fdf4",
+  backgroundColor: emailColors.successBackground,
   borderRadius: "6px",
   padding: "12px 16px",
   margin: "0 0 16px 0",
-  borderLeft: "4px solid #22c55e",
+  borderLeft: `4px solid ${emailColors.successBorder}`,
 };
 
 const documentNameStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0",
 };
 
 const detailsSectionStyle: React.CSSProperties = {
-  backgroundColor: "#f9fafb",
+  backgroundColor: emailColors.surfacePage,
   borderRadius: "6px",
   padding: "12px 16px",
   margin: "0 0 16px 0",
@@ -106,7 +107,7 @@ const detailsSectionStyle: React.CSSProperties = {
 
 const detailRowStyle: React.CSSProperties = {
   fontSize: "15px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 4px 0",
 };

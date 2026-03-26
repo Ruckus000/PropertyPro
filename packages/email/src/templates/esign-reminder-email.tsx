@@ -1,6 +1,7 @@
 import { Button, Heading, Section, Text } from "@react-email/components";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
+import { emailColors, primitiveColors } from "@propertypro/tokens/email";
 
 export interface EsignReminderEmailProps extends BaseEmailProps {
   signerName: string;
@@ -78,21 +79,21 @@ function formatOrdinal(n: number): string {
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 12px 0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",
@@ -105,29 +106,29 @@ function buttonStyle(accent?: string): React.CSSProperties {
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
 };
 
 const documentSectionStyle: React.CSSProperties = {
-  backgroundColor: "#fffbeb",
+  backgroundColor: emailColors.warningBackground,
   borderRadius: "6px",
   padding: "12px 16px",
   margin: "0 0 12px 0",
-  borderLeft: "4px solid #f59e0b",
+  borderLeft: `4px solid ${primitiveColors.amber[500]}`,
 };
 
 const documentNameStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0",
 };
 
 const urgentTextStyle: React.CSSProperties = {
   fontSize: "15px",
-  color: "#b45309",
+  color: emailColors.warningForeground,
   lineHeight: "22px",
   margin: "0 0 12px 0",
   fontWeight: "bold",
