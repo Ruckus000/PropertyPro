@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     '@propertypro/shared',
     '@propertypro/ui',
     '@propertypro/theme',
+    '@propertypro/tokens',
   ],
   serverExternalPackages: ['isomorphic-dompurify'],
   env: {

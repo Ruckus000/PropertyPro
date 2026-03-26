@@ -48,6 +48,12 @@
       ],
       "@propertypro/theme": [
         "../../packages/theme/src"
+      ],
+      "@propertypro/tokens": [
+        "../../packages/tokens/src"
+      ],
+      "@propertypro/tokens/*": [
+        "../../packages/tokens/src/*"
       ]
     },
     "incremental": true
