@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,14 @@ export function ReauthModal({ isOpen, onCancel, verify }: ReauthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  // Reset form state whenever the modal closes so stale error messages don't persist on re-open
+  useEffect(() => {
+    if (!isOpen) {
+      setPassword('');
+      setError(null);
+    }
+  }, [isOpen]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

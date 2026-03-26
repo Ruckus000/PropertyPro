@@ -56,4 +56,30 @@ describe('useReauth', () => {
       act(async () => { await result.current.verify('wrong'); })
     ).rejects.toThrow('Incorrect password');
   });
+
+  it('verify success closes modal and resolves true', async () => {
+    fetchMock.mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useReauth());
+    let resolved: boolean | undefined;
+    act(() => { void result.current.triggerReauth().then((v) => { resolved = v; }); });
+    await act(async () => { await result.current.verify('correct'); });
+    await Promise.resolve(); // flush microtasks
+    expect(result.current.isOpen).toBe(false);
+    expect(resolved).toBe(true);
+  });
+
+  it('failed verify leaves modal open and promise pending', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { message: 'Wrong password' } }),
+    });
+    const { result } = renderHook(() => useReauth());
+    let resolved: boolean | undefined;
+    act(() => { void result.current.triggerReauth().then((v) => { resolved = v; }); });
+    await act(async () => {
+      await result.current.verify('wrong').catch(() => {});
+    });
+    expect(result.current.isOpen).toBe(true);
+    expect(resolved).toBeUndefined();
+  });
 });

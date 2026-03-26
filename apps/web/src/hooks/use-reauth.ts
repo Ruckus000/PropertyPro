@@ -24,6 +24,8 @@ export function useReauth(): UseReauthReturn {
   const resolveRef = useRef<((success: boolean) => void) | null>(null);
 
   const triggerReauth = useCallback((): Promise<boolean> => {
+    // Guard: if already open, don't stack modals
+    if (resolveRef.current !== null) return Promise.resolve(false);
     setIsOpen(true);
     return new Promise<boolean>((resolve) => {
       resolveRef.current = resolve;
