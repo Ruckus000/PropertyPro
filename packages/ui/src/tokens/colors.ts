@@ -1,65 +1,10 @@
 /**
- * Color tokens — primitive and semantic
- *
- * Primitive colors are raw palette values. Never use directly in components.
- * Semantic colors map to CSS custom properties for theme-ability.
+ * Color tokens — re-exported from @propertypro/tokens.
+ * packages/ui no longer owns the color source of truth.
  */
+export { primitiveColors } from '@propertypro/tokens';
 
-export const primitiveColors = {
-  blue: {
-    50: "#EFF6FF",
-    100: "#DBEAFE",
-    200: "#BFDBFE",
-    300: "#93C5FD",
-    400: "#60A5FA",
-    500: "#3B82F6",
-    600: "#2563EB",
-    700: "#1D4ED8",
-    800: "#1E40AF",
-    900: "#1E3A8A",
-    950: "#172554",
-  },
-  gray: {
-    0: "#FFFFFF",
-    25: "#FCFCFD",
-    50: "#F9FAFB",
-    100: "#F3F4F6",
-    200: "#E5E7EB",
-    300: "#D1D5DB",
-    400: "#9CA3AF",
-    500: "#6B7280",
-    600: "#4B5563",
-    700: "#374151",
-    800: "#1F2937",
-    900: "#111827",
-    950: "#0D1117",
-  },
-  green: {
-    50: "#ECFDF5",
-    100: "#D1FAE5",
-    200: "#A7F3D0",
-    500: "#10B981",
-    600: "#059669",
-    700: "#047857",
-  },
-  amber: {
-    50: "#FFFBEB",
-    100: "#FEF3C7",
-    200: "#FDE68A",
-    500: "#F59E0B",
-    600: "#D97706",
-    700: "#B45309",
-  },
-  red: {
-    50: "#FEF2F2",
-    100: "#FEE2E2",
-    200: "#FECACA",
-    500: "#EF4444",
-    600: "#DC2626",
-    700: "#B91C1C",
-  },
-} as const;
-
+// Semantic colors for web — CSS var() references (unchanged public API)
 export const semanticColors = {
   text: {
     primary: "var(--text-primary)",
@@ -79,6 +24,7 @@ export const semanticColors = {
     muted: "var(--surface-muted)",
     elevated: "var(--surface-elevated)",
     sunken: "var(--surface-sunken)",
+    hover: "var(--surface-hover)",
     inverse: "var(--surface-inverse)",
     inverseSubtle: "var(--surface-inverse-subtle)",
   },
@@ -91,6 +37,8 @@ export const semanticColors = {
     error: "var(--border-error)",
   },
   interactive: {
+    // NOTE: UI uses "default/hover/active" keys, token definitions use
+    // "primary/primaryHover/primaryActive". This shim preserves the UI API.
     default: "var(--interactive-primary)",
     hover: "var(--interactive-primary-hover)",
     active: "var(--interactive-primary-active)",
