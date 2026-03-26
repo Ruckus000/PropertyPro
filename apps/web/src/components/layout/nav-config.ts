@@ -150,6 +150,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: CreditCard,
     href: (cid) => `/communities/${cid}/payments`,
     children: ['assessments', 'finance'],
+    roles: FINANCE_READ_NAV_ROLES,
     featureKey: 'hasFinance',
     group: 'main',
     matchPrefixes: ['/payments'],
