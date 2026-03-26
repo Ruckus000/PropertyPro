@@ -52,6 +52,11 @@
   --red-500: #EF4444;
   --red-600: #DC2626;
   --red-700: #B91C1C;
+  --red-900: #7F1D1D;
+
+  --orange-500: #F97316;
+  --orange-600: #EA580C;
+  --orange-700: #C2410C;
 
   /* Spacing (4px base unit) */
   --space-1: 4px;
