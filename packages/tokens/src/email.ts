@@ -65,4 +65,46 @@ export const emailColors = {
   neutralBackground: toHex(t.status.neutral.background), // #F3F4F6
   neutralBorder:     toHex(t.status.neutral.border),     // #E5E7EB
   neutralSubtle:     toHex(t.status.neutral.subtle),     // #F9FAFB
+
+  // ── Redesign v2: zinc-neutral system ──────────────────────────────────
+
+  // Core zinc palette
+  foreground:      '#09090B',  // zinc-950
+  mutedForeground: '#71717A',  // zinc-500 (WCAG AA 4.7:1 on white)
+  footerText:      '#A1A1AA',  // zinc-400
+  background:      '#FFFFFF',
+  muted:           '#F4F4F5',  // zinc-100
+  border:          '#E4E4E7',  // zinc-200
+  ring:            '#D4D4D8',  // zinc-300
+
+  // Button variants
+  buttonDefault:     '#18181B',  // zinc-900
+  buttonDefaultText: '#FAFAFA',
+  buttonDestructive: '#DC2626',  // red-600
+  buttonWarning:     '#CA8A04',  // yellow-600
+  buttonSuccess:     '#16A34A',  // green-600
+  buttonViolet:      '#7C3AED',  // violet-600
+
+  // Accent stripe colors (top of email card)
+  accentBlue:    '#2563EB',
+  accentGreen:   '#16A34A',
+  accentRed:     '#DC2626',
+  accentViolet:  '#7C3AED',
+  accentWarning: '#CA8A04',
+  accentNeutral: '#71717A',
+  accentBorder:  '#E4E4E7',
+
+  // Alert component variants (full 1px border style)
+  alertDangerBg:     '#FEF2F2',
+  alertDangerBorder: '#FECACA',
+  alertDangerText:   '#991B1B',  // red-800
+  alertWarningBg:    '#FEFCE8',
+  alertWarningBorder:'#FDE68A',
+  alertWarningText:  '#854D0E',  // yellow-800
+  alertSuccessBg:    '#F0FDF4',
+  alertSuccessBorder:'#BBF7D0',
+  alertSuccessText:  '#166534',  // green-800
+  alertInfoBg:       '#DBEAFE',
+  alertInfoBorder:   '#93C5FD',  // blue-300
+  alertInfoText:     '#1E40AF',  // blue-800
 } as const;
