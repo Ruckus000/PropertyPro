@@ -15,6 +15,7 @@ import archiver from 'archiver';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
@@ -27,6 +28,8 @@ import {
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
+  await requireFreshReauth(actorUserId);
+
   const { searchParams } = new URL(req.url);
 
   const rawCommunityId = searchParams.get('communityId');

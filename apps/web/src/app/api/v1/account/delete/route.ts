@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { desc } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import {
   requestUserDeletion,
   cancelUserDeletion,
@@ -50,6 +51,7 @@ export const GET = withErrorHandler(async (): Promise<NextResponse> => {
 // POST — request deletion
 export const POST = withErrorHandler(async (): Promise<NextResponse> => {
   const userId = await requireAuthenticatedUserId();
+  await requireFreshReauth(userId);
   const request = await requestUserDeletion(userId);
   return NextResponse.json({ data: request }, { status: 201 });
 });
