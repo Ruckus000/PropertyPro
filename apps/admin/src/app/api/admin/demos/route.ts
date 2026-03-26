@@ -164,18 +164,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Set demo_expires_at (30 days from now) on the seeded community.
-  // Note: demo_expires_at is not in the auto-generated Supabase types yet,
-  // so we use the untyped from() helper pattern (same as demo-queries.ts).
+  // Set trial_ends_at (14 days) and demo_expires_at (21 days) on the seeded community.
+  // 14-day trial + 7-day grace period model (replaces 30-day flat expiry).
+  // Note: uses untyped from() helper pattern (same as demo-queries.ts).
   if (seedResult.communityId) {
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: updateError } = await (createAdminClient() as any)
       .from('communities')
-      .update({ demo_expires_at: expiresAt })
+      .update({ trial_ends_at: trialEndsAt, demo_expires_at: expiresAt })
       .eq('id', seedResult.communityId);
     if (updateError) {
-      console.error('[demos/POST] Failed to set demo_expires_at:', updateError.message);
+      console.error('[demos/POST] Failed to set demo timestamps:', updateError.message);
     }
   }
 

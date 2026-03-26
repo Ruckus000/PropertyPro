@@ -111,6 +111,7 @@ async function convertCommunity(params: ConvertCommunityParams): Promise<boolean
       stripeCustomerId,
       stripeSubscriptionId,
       demoExpiresAt: null,
+      trialEndsAt: null,
       updatedAt: new Date(),
     })
     .where(

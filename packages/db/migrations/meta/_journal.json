@@ -575,6 +575,13 @@
       "when": 1774760000000,
       "tag": "0121_conversion_events",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1774770000000,
+      "tag": "0122_trial_ends_at",
+      "breakpoints": true
     }
   ]
 }
