@@ -21,6 +21,8 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { resolveStripePrice } from '@/lib/services/stripe-service';
+import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 
 const subscribeSchema = z.object({
   planId: z.enum(PLAN_IDS),
@@ -43,16 +45,28 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   const { planId } = parsed.data;
   const db = createUnscopedClient();
 
-  // Look up community for Stripe customer info
+  // Look up community for Stripe customer info + community type
   const [community] = await db
     .select({
       id: communities.id,
       name: communities.name,
+      communityType: communities.communityType,
       stripeCustomerId: communities.stripeCustomerId,
     })
     .from(communities)
     .where(eq(communities.id, communityId))
     .limit(1);
+
+  if (!community) {
+    throw new ValidationError('Community not found', { communityId: 'Not found' });
+  }
+
+  // Validate plan is available for this community type
+  if (!isPlanAvailableForCommunityType(community.communityType, planId)) {
+    throw new ValidationError('This plan is not available for your community type', {
+      planId: 'Invalid plan for community type',
+    });
+  }
 
   // Check for active access plan to include in checkout metadata
   const [activePlan] = await db
@@ -67,14 +81,8 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
     )
     .limit(1);
 
-  // Resolve Stripe price
-  const envKey = `STRIPE_PRICE_${planId.toUpperCase()}`;
-  const priceId = process.env[envKey];
-  if (!priceId) {
-    throw new ValidationError(`No Stripe price configured for plan: ${planId}`, {
-      planId: `Price not configured for plan ${planId}`,
-    });
-  }
+  // Resolve Stripe price from DB
+  const priceId = await resolveStripePrice(planId, community.communityType, 'month');
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 

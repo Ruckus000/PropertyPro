@@ -25,6 +25,12 @@ export interface PlanFeatureConfig {
  *
  * A feature omitted from `features` defaults to `false` — plans must
  * explicitly opt-in to each capability.
+ *
+ * Display prices (monthlyPriceUsd) are for UI rendering only. They do NOT
+ * determine what Stripe charges. Authoritative pricing lives in the
+ * stripe_prices table → Stripe price objects. When updating prices: change
+ * both this file AND the stripe_prices row. The /api/v1/internal/readiness
+ * endpoint validates stripe_prices completeness.
  */
 export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
   essentials: {
