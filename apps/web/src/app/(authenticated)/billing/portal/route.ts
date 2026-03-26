@@ -16,6 +16,8 @@ import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createBillingPortalSession } from '@/lib/services/stripe-service';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireFreshReauth } from '@/lib/api/reauth-guard';
+import { ReauthRequiredError } from '@/lib/api/errors';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -24,6 +26,15 @@ import { headers } from 'next/headers';
 export const GET = async (req: NextRequest): Promise<never> => {
   // 1. Require authenticated user
   const userId = await requireAuthenticatedUserId();
+
+  try {
+    await requireFreshReauth(userId);
+  } catch (err) {
+    if (err instanceof ReauthRequiredError) {
+      redirect(`/settings/billing?reauth=required`);
+    }
+    throw err;
+  }
 
   // 2. Resolve community from subdomain / querystring
   const requestHeaders = await headers();

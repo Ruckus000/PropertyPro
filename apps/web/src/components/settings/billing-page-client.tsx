@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CreditCard,
   ExternalLink,
@@ -12,6 +12,9 @@ import {
   Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { useReauth } from '@/hooks/use-reauth';
+import { ReauthModal } from '@/components/auth/reauth-modal';
 
 import { PLAN_FEATURES, LEGACY_PLAN_ALIASES } from '@propertypro/shared';
 
@@ -104,6 +107,21 @@ export function BillingPageClient({
   const portalUrl = `/billing/portal?communityId=${communityId}`;
   const hasStripe = !!stripeCustomerId;
 
+  const [portalPending, setPortalPending] = useState(false);
+  const router = useRouter();
+  const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
+
+  async function openPortal() {
+    if (portalPending) return;
+    setPortalPending(true);
+    const confirmed = await triggerReauth();
+    if (confirmed) {
+      router.push(portalUrl);
+    } else {
+      setPortalPending(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -137,13 +155,15 @@ export function BillingPageClient({
               Please update your payment method to avoid service interruption.
             </p>
             {hasStripe && isAdmin && (
-              <a
-                href={portalUrl}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-[10px] bg-status-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+              <button
+                type="button"
+                onClick={openPortal}
+                disabled={portalPending}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-[10px] bg-status-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Update Payment Method
                 <ExternalLink size={14} aria-hidden="true" />
-              </a>
+              </button>
             )}
           </div>
         </div>
@@ -177,13 +197,15 @@ export function BillingPageClient({
             </div>
 
             {hasStripe && isAdmin && (
-              <a
-                href={portalUrl}
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary"
+              <button
+                type="button"
+                onClick={openPortal}
+                disabled={portalPending}
+                className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Manage Subscription
                 <ExternalLink size={14} aria-hidden="true" />
-              </a>
+              </button>
             )}
           </div>
         ) : (
@@ -206,19 +228,22 @@ export function BillingPageClient({
           <h2 className="mb-4 text-base font-semibold">Billing Actions</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <QuickLink
-              href={portalUrl}
+              onClick={openPortal}
+              disabled={portalPending}
               icon={FileText}
               label="View Invoices"
               description="See past invoices and receipts"
             />
             <QuickLink
-              href={portalUrl}
+              onClick={openPortal}
+              disabled={portalPending}
               icon={CreditCard}
               label="Update Payment Method"
               description="Change your card or bank account"
             />
             <QuickLink
-              href={portalUrl}
+              onClick={openPortal}
+              disabled={portalPending}
               icon={XCircle}
               label="Cancel Subscription"
               description="Cancel with a 30-day grace period"
@@ -235,6 +260,7 @@ export function BillingPageClient({
           </p>
         </div>
       )}
+      <ReauthModal isOpen={reauthOpen} onCancel={reauthCancel} verify={reauthVerify} />
     </div>
   );
 }
@@ -242,26 +268,30 @@ export function BillingPageClient({
 // ── Quick Link sub-component ──
 
 function QuickLink({
-  href,
+  onClick,
+  disabled,
   icon: Icon,
   label,
   description,
 }: {
-  href: string;
+  onClick: () => void;
+  disabled?: boolean;
   icon: React.ElementType;
   label: string;
   description: string;
 }) {
   return (
-    <a
-      href={href}
-      className="flex items-start gap-3 rounded-[10px] border border-edge p-4 transition-colors hover:bg-surface-secondary"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-3 rounded-[10px] border border-edge p-4 text-left transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
     >
       <Icon size={18} className="mt-0.5 shrink-0 text-content-secondary" aria-hidden="true" />
       <div>
         <p className="text-sm font-medium text-content-primary">{label}</p>
         <p className="mt-0.5 text-xs text-content-secondary">{description}</p>
       </div>
-    </a>
+    </button>
   );
 }

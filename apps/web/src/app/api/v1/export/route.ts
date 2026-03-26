@@ -4,7 +4,7 @@
  * Exports community data (residents, documents, maintenance requests,
  * announcements) as a ZIP file containing individual CSV files.
  *
- * Auth chain: requireAuthenticatedUserId → resolveEffectiveCommunityId →
+ * Auth chain: requireAuthenticatedUserId → requireFreshReauth → resolveEffectiveCommunityId →
  *   requireCommunityMembership → requirePermission(settings, read).
  *
  * RBAC: settings + read grants access to owner, board_member, board_president,
@@ -15,6 +15,7 @@ import archiver from 'archiver';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
@@ -27,6 +28,8 @@ import {
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
+  await requireFreshReauth(actorUserId);
+
   const { searchParams } = new URL(req.url);
 
   const rawCommunityId = searchParams.get('communityId');

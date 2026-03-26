@@ -9,7 +9,7 @@ export const SESSION_END_REASONS = ['manual', 'expired', 'consent_revoked'] as c
 export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
 
 // --- Session Constraints ---
-export const SUPPORT_SESSION_MAX_TTL_HOURS = 1;
+export const SUPPORT_SESSION_MAX_TTL_HOURS = 0.5;
 export const SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY = 10;
 export const SUPPORT_SESSION_DEV_SECRET =
   'propertypro-local-support-session-secret-2026';
