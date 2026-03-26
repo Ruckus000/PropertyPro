@@ -564,11 +564,8 @@ import { emailColors } from '@propertypro/tokens/email';
 - `packages/email` → `@propertypro/tokens` (workspace dependency)
 
 **Local dev/test resolution:**
-The `turbo dev` task has no `dependsOn: ["^build"]`, so `pnpm dev` on a fresh checkout does NOT build workspace dependencies first. Similarly, root `pnpm test` runs vitest directly without building. Both `packages/ui` and `packages/email` import from `@propertypro/tokens`, whose package exports resolve to `dist/*`. Without a build, those files don't exist.
 
-**Resolution strategy:**
-
-Because `@propertypro/tokens` is source-first (exports point at `src/`, not `dist/`), all consumers — apps and packages — resolve imports to source TypeScript without any build step. This matches the `@propertypro/theme` pattern.
+Because `@propertypro/tokens` is source-first (exports point at `src/`, not `dist/`), all consumers resolve imports to source TypeScript without any build step. This matches the `@propertypro/theme` pattern. `pnpm dev`, `pnpm test`, and `turbo build` all work on a fresh checkout with no prior build of the tokens package.
 
 1. **App tsconfigs** (`apps/web/tsconfig.json`, `apps/admin/tsconfig.json`) — add source path aliases matching the existing pattern:
    ```json
@@ -644,7 +641,7 @@ With Option C (generator writes color sections directly into `tokens.css`), the 
 
 **Required adjustments:**
 - The generated CSS must use the same whitespace convention as the current `tokens.css` (two-space indentation, `  --blue-50: #EFF6FF;`) so `cssContent.includes()` assertions pass without modification. The `build.ts` script must match this formatting exactly, including section comment markers.
-- The `primitiveColors` import continues from `../../src/tokens` (UI's barrel), which now re-exports from `@propertypro/tokens` via tsconfig source aliases.
+- The `primitiveColors` import continues from `../../src/tokens` (UI's barrel), which now re-exports from `@propertypro/tokens`. The import resolves via pnpm workspace linking to the source-first package exports.
 - If `primitiveColors` gains new entries (red.900, orange scale), the test's color palette iterations automatically cover them.
 
 ## What This Does NOT Change
