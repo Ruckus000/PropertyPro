@@ -25,6 +25,7 @@ import {
   queueAnnouncementDelivery,
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // Send announcement to each community using Promise.allSettled
   const results = await Promise.allSettled(
     communityIds.map(async (communityId): Promise<BulkResult> => {
+      await assertNotDemoGrace(communityId);
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
 
       const scoped = createScopedClient(communityId);

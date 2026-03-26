@@ -8,6 +8,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -47,6 +48,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { fileName, fileSize, mimeType } = parseResult.data;
   await requireCommunityMembership(communityId, userId);
   validateFileSize(mimeType, fileSize);

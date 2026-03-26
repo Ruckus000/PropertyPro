@@ -13,6 +13,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
@@ -75,6 +76,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedBody.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   const features = getFeaturesForCommunity(membership.communityType);
 

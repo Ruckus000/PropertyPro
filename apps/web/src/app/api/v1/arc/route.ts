@@ -21,6 +21,7 @@ import {
   createArcSubmissionForCommunity,
   listArcSubmissionsForCommunity,
 } from '@/lib/services/violations-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const createArcSchema = z.object({
   communityId: z.number().int().positive(),
@@ -94,6 +95,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireArcEnabled(membership);

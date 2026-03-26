@@ -13,6 +13,7 @@ import {
   requirePollReadPermission,
   requirePollWritePermission,
 } from '@/lib/polls/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   deleteForumThreadForCommunity,
   getForumThreadWithRepliesForCommunity,
@@ -69,6 +70,7 @@ export const PATCH = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
@@ -100,6 +102,7 @@ export const DELETE = withErrorHandler(
 
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);

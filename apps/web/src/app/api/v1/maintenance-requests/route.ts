@@ -35,6 +35,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
 import { formatRequest } from './_formatRequest';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -211,6 +212,7 @@ async function handleCreateRequest(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const createMembership = await requireCommunityMembership(communityId, actorUserId);
   const createTypeFeatures = getFeaturesForCommunity(createMembership.communityType);
   if (!createTypeFeatures.hasMaintenanceRequests) {
@@ -309,6 +311,7 @@ async function handleAddComment(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   const commentTypeFeatures = getFeaturesForCommunity(membership.communityType);
   if (!commentTypeFeatures.hasMaintenanceRequests) {
@@ -380,6 +383,7 @@ async function handleRequestUploadUrl(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   const uploadTypeFeatures = getFeaturesForCommunity(membership.communityType);
   if (!uploadTypeFeatures.hasMaintenanceRequests) {

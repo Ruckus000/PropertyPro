@@ -5,6 +5,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireViolationAdminWrite,
@@ -24,6 +25,7 @@ export const GET = withErrorHandler(
     const id = parsePositiveInt(params?.id ?? '', 'violation id');
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);

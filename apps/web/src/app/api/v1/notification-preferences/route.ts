@@ -27,6 +27,7 @@ import {
   getDefaultPreferences,
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
 const emailFrequencySchema = z.enum([
@@ -91,6 +92,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled, smsEnabled, smsEmergencyOnly } = result.data;
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const userAgent = req.headers.get('user-agent') ?? 'unknown';

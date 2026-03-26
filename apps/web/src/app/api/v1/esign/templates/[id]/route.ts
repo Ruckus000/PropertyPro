@@ -11,6 +11,7 @@ import {
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   getTemplate,
   updateTemplate,
@@ -77,6 +78,7 @@ export const PATCH = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignWritePermission(membership);
@@ -107,6 +109,7 @@ export const DELETE = withErrorHandler(
 
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignWritePermission(membership);

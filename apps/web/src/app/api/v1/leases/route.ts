@@ -31,6 +31,7 @@ import {
   type LeaseRecord,
 } from '@/lib/services/lease-expiration-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -195,6 +196,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
@@ -318,6 +320,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const { id, communityId: rawCommunityId, ...fields } = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
@@ -417,6 +420,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { id } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);

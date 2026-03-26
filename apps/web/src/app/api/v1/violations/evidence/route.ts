@@ -6,6 +6,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   requireViolationsEnabled,
   requireViolationsWritePermission,
@@ -34,6 +35,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireViolationsEnabled(membership);

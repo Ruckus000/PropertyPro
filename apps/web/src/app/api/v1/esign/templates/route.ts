@@ -11,6 +11,7 @@ import {
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createTemplate,
   listTemplates,
@@ -97,6 +98,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireEsignWritePermission(membership);

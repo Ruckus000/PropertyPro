@@ -7,6 +7,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError, ForbiddenError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   isResidentRole,
@@ -90,6 +91,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requirePackageLoggingEnabled(membership);

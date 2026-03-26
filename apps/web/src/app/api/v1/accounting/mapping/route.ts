@@ -11,6 +11,7 @@ import {
   requireAccountingReadPermission,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   getAccountingMapping,
   updateAccountingMapping,
@@ -61,6 +62,7 @@ export const PUT = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireAccountingEnabled(membership);

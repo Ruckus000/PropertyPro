@@ -21,6 +21,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ensureFaqsExist } from '@/lib/services/faq-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -64,6 +65,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const { question, answer } = result.data;
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
+  await assertNotDemoGrace(communityId);
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 

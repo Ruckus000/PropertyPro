@@ -10,6 +10,7 @@ import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { disconnectAccounting } from '@/lib/services/accounting-connectors-service';
 
 const disconnectSchema = z.object({
@@ -29,6 +30,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireAccountingEnabled(membership);

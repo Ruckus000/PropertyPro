@@ -17,6 +17,7 @@ import { isElevatedRole } from '@propertypro/shared';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -79,6 +80,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const payload = parseResult.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(effectiveCommunityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(effectiveCommunityId);
@@ -125,6 +127,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { id } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
   if (!isElevatedRole(membership.role, { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions })) {

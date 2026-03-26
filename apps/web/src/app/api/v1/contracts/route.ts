@@ -29,6 +29,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getContractExpirationAlerts } from '@/lib/services/contract-renewal-alerts';
 import { requirePermission } from '@/lib/db/access-control';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -264,6 +265,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const { id, communityId: rawCommunityId, ...fields } = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
   requirePermission(membership, 'contracts', 'write');
@@ -341,6 +343,7 @@ async function handleCreateContract(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
   requirePermission(membership, 'contracts', 'write');
@@ -417,6 +420,7 @@ async function handleCreateBid(
 
   const payload = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireComplianceCommunity(membership.communityType);
   requirePermission(membership, 'contracts', 'write');

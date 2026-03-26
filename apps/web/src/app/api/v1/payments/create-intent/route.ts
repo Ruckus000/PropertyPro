@@ -12,6 +12,7 @@ import {
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { createPaymentIntentForLineItem, findActorUnitId } from '@/lib/services/finance-service';
 
 const createIntentSchema = z.object({
@@ -31,6 +32,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);

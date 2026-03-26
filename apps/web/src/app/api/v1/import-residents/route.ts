@@ -21,6 +21,7 @@ import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { requireCommunityType } from "@/lib/utils/community-validators";
 import { listCommunitiesForUser } from "@/lib/api/user-communities";
+import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
@@ -88,6 +89,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { csv, dryRun } = parsed.data;
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);

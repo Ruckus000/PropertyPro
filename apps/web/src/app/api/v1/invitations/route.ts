@@ -27,6 +27,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const createInvitationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -72,6 +73,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { userId, ttlDays } = parsed.data;
   await requireCommunityMembership(communityId, actorUserId);
   const scoped = createScopedClient(communityId);
@@ -146,6 +148,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   // Token-authenticated exception: invitation acceptance does not require
   // an authenticated session user. Middleware allows this endpoint through.
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const { token, password } = parsed.data;
   const scoped = createScopedClient(communityId);
 
