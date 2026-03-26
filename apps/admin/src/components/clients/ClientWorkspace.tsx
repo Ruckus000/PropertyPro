@@ -17,6 +17,11 @@ import { CommunityCompliance } from './CommunityCompliance';
 import { WebsiteTabPanel } from './WebsiteTabPanel';
 import { CommunityAccess } from './CommunityAccess';
 import { SupportAccessTab } from './SupportAccessTab';
+import {
+  formatSiteNotLiveMessage,
+  getSiteLiveStatus,
+  getWebsiteDomainInfo,
+} from '@/lib/clients/website';
 
 interface CommunitySettings {
   announcementsWriteLevel?: 'all_members' | 'admin_only';
@@ -38,6 +43,8 @@ interface Community {
   address_line1: string | null;
   subscription_status: string | null;
   subscription_plan: string | null;
+  custom_domain: string | null;
+  site_published_at: string | null;
   timezone: string;
   transparency_enabled: boolean;
   community_settings: CommunitySettings;
@@ -68,6 +75,18 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
 
   const statusEntry = SUBSCRIPTION_STATUS_LABELS[community.subscription_status ?? ''];
   const statusClass = statusEntry?.className ?? 'bg-gray-100 text-gray-600';
+  const domainInfo = getWebsiteDomainInfo({
+    slug: community.slug,
+    customDomain: community.custom_domain,
+  });
+  const siteLiveStatus = getSiteLiveStatus({
+    sitePublishedAt: community.site_published_at,
+    subscriptionStatus: community.subscription_status,
+  });
+  const siteNotLiveMessage = formatSiteNotLiveMessage(siteLiveStatus);
+  const publishedLabel = community.site_published_at
+    ? format(new Date(community.site_published_at), 'MMM d, yyyy')
+    : null;
 
   const address = [community.address_line1, community.city, community.state, community.zip_code]
     .filter(Boolean)
@@ -104,11 +123,26 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
               )}
             </div>
           </div>
-          {community.subscription_status && (
-            <span className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${statusClass}`}>
-              {statusEntry?.label ?? community.subscription_status.replace('_', ' ')}
+          <div className="flex items-center gap-2">
+            {community.subscription_status && (
+              <span className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium ${statusClass}`}>
+                {statusEntry?.label ?? community.subscription_status.replace('_', ' ')}
+              </span>
+            )}
+            <span
+              className={[
+                'shrink-0 rounded-full px-3 py-1 text-sm font-medium',
+                siteLiveStatus.isLive
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-800',
+              ].join(' ')}
+            >
+              {siteLiveStatus.isLive ? 'Site Live' : 'Site Not Live'}
             </span>
-          )}
+            {publishedLabel && (
+              <span className="text-xs text-gray-500">Published {publishedLabel}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -197,12 +231,31 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                     {community.subscription_plan ?? '—'}
                   </dd>
                 </div>
+                <div>
+                  <dt className="text-xs text-gray-500">Website URL</dt>
+                  <dd className="mt-0.5 text-sm text-gray-900 font-mono">{domainInfo.displayUrl}</dd>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {domainInfo.urlSource === 'custom_domain' ? 'Custom domain' : 'Default subdomain'}
+                  </p>
+                </div>
                 {address && (
                   <div className="sm:col-span-2">
                     <dt className="text-xs text-gray-500">Address</dt>
                     <dd className="mt-0.5 text-sm text-gray-900">{address}</dd>
                   </div>
                 )}
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-gray-500">Site Status</dt>
+                  <dd className="mt-0.5 text-sm text-gray-900">
+                    {siteLiveStatus.isLive ? 'Live' : 'Not live'}
+                  </dd>
+                  {publishedLabel && (
+                    <p className="mt-0.5 text-xs text-gray-500">Published {publishedLabel}</p>
+                  )}
+                  {!siteLiveStatus.isLive && siteNotLiveMessage && (
+                    <p className="mt-0.5 text-xs text-gray-500">{siteNotLiveMessage}</p>
+                  )}
+                </div>
                 <div>
                   <dt className="text-xs text-gray-500">Created</dt>
                   <dd className="mt-0.5 text-sm text-gray-900">
@@ -227,7 +280,11 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'website' && (
-          <WebsiteTabPanel communityId={community.id} communitySlug={community.slug} />
+          <WebsiteTabPanel
+            communityId={community.id}
+            communitySlug={community.slug}
+            customDomain={community.custom_domain}
+          />
         )}
 
         {activeTab === 'support' && (

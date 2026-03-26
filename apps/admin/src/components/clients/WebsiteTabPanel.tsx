@@ -20,11 +20,12 @@ const JsxTemplateEditor = dynamic(() => import('./JsxTemplateEditor'), {
 interface WebsiteTabPanelProps {
   communityId: number;
   communitySlug: string;
+  customDomain: string | null;
 }
 
 type SubTab = 'branding' | 'template';
 
-export function WebsiteTabPanel({ communityId, communitySlug }: WebsiteTabPanelProps) {
+export function WebsiteTabPanel({ communityId, communitySlug, customDomain }: WebsiteTabPanelProps) {
   const [subTab, setSubTab] = useState<SubTab>('branding');
 
   return (
@@ -57,7 +58,11 @@ export function WebsiteTabPanel({ communityId, communitySlug }: WebsiteTabPanelP
 
       {/* Sub-tab content */}
       {subTab === 'branding' && (
-        <CommunityWebsiteEditor communityId={communityId} communitySlug={communitySlug} />
+        <CommunityWebsiteEditor
+          communityId={communityId}
+          communitySlug={communitySlug}
+          customDomain={customDomain}
+        />
       )}
       {subTab === 'template' && (
         <JsxTemplateEditor communityId={communityId} />
