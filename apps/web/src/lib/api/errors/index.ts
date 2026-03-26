@@ -3,6 +3,7 @@ export { BadRequestError } from './BadRequestError';
 export { ValidationError } from './ValidationError';
 export { UnauthorizedError } from './UnauthorizedError';
 export { ForbiddenError } from './ForbiddenError';
+export { ReauthRequiredError } from './ReauthRequiredError';
 export { NotFoundError } from './NotFoundError';
 export { UnprocessableEntityError } from './UnprocessableEntityError';
 export { RateLimitError } from './RateLimitError';
