@@ -35,7 +35,7 @@ async function makeValidToken(userId = USER_ID, ttl = 900): Promise<string> {
 describe('requireFreshReauth', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env.NODE_ENV = 'test';
+    (process.env as Record<string, string>).NODE_ENV = 'test';
   });
 
   it('passes when a valid cookie exists for the user', async () => {
