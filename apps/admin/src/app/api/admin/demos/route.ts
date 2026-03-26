@@ -168,8 +168,11 @@ export async function POST(request: NextRequest) {
   // 14-day trial + 7-day grace period model (replaces 30-day flat expiry).
   // Note: uses untyped from() helper pattern (same as demo-queries.ts).
   if (seedResult.communityId) {
-    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    const expiresAt = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
+    const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+    const GRACE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const trialEndsAt = new Date(now + TRIAL_DURATION_MS).toISOString();
+    const expiresAt = new Date(now + TRIAL_DURATION_MS + GRACE_DURATION_MS).toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: updateError } = await (createAdminClient() as any)
       .from('communities')

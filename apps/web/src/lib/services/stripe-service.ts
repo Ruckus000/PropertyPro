@@ -59,7 +59,7 @@ export async function resolveStripePrice(
     throw new AppError(
       `No Stripe price configured for plan=${planId}, communityType=${communityType}, interval=${interval}`,
       500,
-      'BILLING_CONFIG_MISSING',
+      'STRIPE_PRICE_CONFIG_MISSING',
     );
   }
   return row.stripePriceId;
