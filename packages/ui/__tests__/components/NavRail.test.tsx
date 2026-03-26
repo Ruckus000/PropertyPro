@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { NavRail } from "../../src/components/NavRail";
-import type { NavRailItem } from "../../src/components/NavRail";
+import type { NavRailItem, NavRailSection } from "../../src/components/NavRail";
 
 function TestIcon({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
   return (
@@ -179,6 +179,116 @@ describe("NavRail", () => {
       renderNavRail({ onToggle: undefined });
       expect(screen.queryByLabelText("Collapse sidebar")).toBeNull();
       expect(screen.queryByLabelText("Expand sidebar")).toBeNull();
+    });
+  });
+
+  describe("Section-based rendering", () => {
+    const SECTION_DATA: NavRailSection[] = [
+      {
+        label: null,
+        items: [
+          { id: "dashboard", label: "Dashboard", icon: TestIcon, href: "/dashboard" },
+        ],
+      },
+      {
+        label: "Community",
+        items: [
+          { id: "announcements", label: "Announcements", icon: TestIcon, href: "/announcements", badge: 2 },
+          { id: "meetings", label: "Meetings", icon: TestIcon, href: "/meetings" },
+        ],
+      },
+      {
+        label: "Admin",
+        items: [
+          { id: "governance", label: "Governance", icon: TestIcon, href: "/governance" },
+        ],
+      },
+    ];
+
+    function renderSectionNavRail(
+      overrides: Partial<React.ComponentProps<typeof NavRail>> = {},
+    ) {
+      const props = {
+        items: [],
+        sections: SECTION_DATA,
+        activeView: "dashboard",
+        onViewChange: vi.fn(),
+        expanded: true,
+        ...overrides,
+      };
+
+      return {
+        ...render(<NavRail {...props} />),
+        props,
+      };
+    }
+
+    it("renders all items from all sections", () => {
+      renderSectionNavRail();
+
+      expect(screen.getByLabelText("Dashboard")).toBeTruthy();
+      expect(screen.getByLabelText("Announcements")).toBeTruthy();
+      expect(screen.getByLabelText("Meetings")).toBeTruthy();
+      expect(screen.getByLabelText("Governance")).toBeTruthy();
+    });
+
+    it("renders section labels as uppercase text", () => {
+      renderSectionNavRail();
+
+      const labels = screen.getAllByTestId("section-label");
+      expect(labels).toHaveLength(2);
+      expect(labels[0]!.textContent).toBe("Community");
+      expect(labels[1]!.textContent).toBe("Admin");
+      // Verify uppercase styling class
+      expect(labels[0]!.className).toContain("uppercase");
+    });
+
+    it("does not render a header for null-label sections", () => {
+      renderSectionNavRail();
+
+      // Only 2 labeled sections (Community and Admin), not 3
+      const labels = screen.getAllByTestId("section-label");
+      expect(labels).toHaveLength(2);
+    });
+
+    it("renders dividers between sections", () => {
+      renderSectionNavRail();
+
+      // Dividers appear between sections (not before the first one)
+      const dividers = screen.getAllByTestId("section-divider");
+      expect(dividers).toHaveLength(2); // between section 0-1 and section 1-2
+    });
+
+    it("hides section labels when collapsed", () => {
+      renderSectionNavRail({ expanded: false });
+
+      const labels = screen.queryAllByTestId("section-label");
+      for (const label of labels) {
+        expect(label.className).toContain("opacity-0");
+      }
+    });
+
+    it("shows section labels when expanded", () => {
+      renderSectionNavRail({ expanded: true });
+
+      const labels = screen.getAllByTestId("section-label");
+      for (const label of labels) {
+        expect(label.className).toContain("opacity-100");
+      }
+    });
+
+    it("still renders badge counts in section mode", () => {
+      renderSectionNavRail({ expanded: true });
+
+      expect(screen.getByText("2")).toBeTruthy();
+    });
+
+    it("backward compat: items prop still works without sections", () => {
+      renderNavRail({ items: defaultItems });
+
+      for (const item of defaultItems) {
+        expect(screen.getByLabelText(item.label)).toBeTruthy();
+      }
     });
   });
 });

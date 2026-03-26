@@ -6,7 +6,7 @@
  * Keyboard navigation: ArrowUp/ArrowDown to move between items, Enter/Space to select.
  */
 
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import type { StatusVariant } from "../tokens";
 
 export type NavRailItem = {
@@ -17,6 +17,12 @@ export type NavRailItem = {
   badgeVariant?: StatusVariant;
   /** Optional URL — when provided, the item renders as a link instead of a button. */
   href?: string;
+};
+
+export type NavRailSection = {
+  /** Section header label. When null, no header is rendered. */
+  label: string | null;
+  items: NavRailItem[];
 };
 
 export interface NavRailProps {
@@ -43,9 +49,18 @@ export interface NavRailProps {
   header?: React.ReactNode;
   /** Optional footer content rendered below the toggle (e.g. user profile). */
   footer?: React.ReactNode;
-  /** Optional separator with label rendered between item groups. */
+  /**
+   * Structured sections with labeled dividers. When provided, takes precedence over `items`.
+   * Each section can have a label (rendered as uppercase header) or null (no header).
+   */
+  sections?: NavRailSection[];
+  /**
+   * @deprecated Use `sections` instead. Optional separator with label rendered between item groups.
+   */
   groupSeparator?: React.ReactNode;
-  /** Index at which to insert the group separator. */
+  /**
+   * @deprecated Use `sections` instead. Index at which to insert the group separator.
+   */
   groupSeparatorAfterIndex?: number;
 }
 
@@ -85,24 +100,34 @@ export function NavRail({
   renderLink,
   header,
   footer,
+  sections: sectionsProp,
   groupSeparator,
   groupSeparatorAfterIndex,
 }: NavRailProps) {
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // Normalize into sections: sectionsProp takes precedence, else wrap items in a single section
+  const sections: NavRailSection[] = useMemo(
+    () => sectionsProp ?? [{ label: null, items }],
+    [sectionsProp, items],
+  );
+
+  // Flatten all items across sections for keyboard navigation
+  const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
+
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent, index: number) => {
+    (event: React.KeyboardEvent, flatIndex: number) => {
       let nextIndex: number | undefined;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        nextIndex = index < items.length - 1 ? index + 1 : 0;
+        nextIndex = flatIndex < allItems.length - 1 ? flatIndex + 1 : 0;
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        nextIndex = index > 0 ? index - 1 : items.length - 1;
+        nextIndex = flatIndex > 0 ? flatIndex - 1 : allItems.length - 1;
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        const navItem = items[index];
+        const navItem = allItems[flatIndex];
         if (navItem) {
           onViewChange(navItem.id);
         }
@@ -113,7 +138,7 @@ export function NavRail({
         itemsRef.current[nextIndex]?.focus();
       }
     },
-    [items, onViewChange],
+    [allItems, onViewChange],
   );
 
   const renderItemContent = (navItem: NavRailItem, isActive: boolean) => {
@@ -134,7 +159,7 @@ export function NavRail({
           <div className="flex size-full items-center justify-center" aria-hidden="true">
             <Icon
               size={22}
-              color={isActive ? "#FFFFFF" : "rgba(255, 255, 255, 0.85)"}
+              color={isActive ? "var(--nav-text-active)" : "var(--nav-text-inactive)"}
               strokeWidth={isActive ? 2 : 1.75}
             />
           </div>
@@ -159,7 +184,9 @@ export function NavRail({
           <span
             className={cn(
               "truncate text-[0.9375rem] leading-snug",
-              isActive ? "font-semibold text-white" : "font-medium text-white/85 dark:text-gray-200",
+              isActive
+                ? "font-semibold text-[var(--nav-text-active)]"
+                : "font-medium text-[var(--nav-text-inactive)] dark:text-gray-200",
             )}
           >
             {navItem.label}
@@ -167,10 +194,10 @@ export function NavRail({
           {badge !== null && badge > 0 && (
             <span
               className={cn(
-                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold text-white",
+                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold text-[var(--nav-text-active)]",
                 badgeVariant === "danger"
                   ? "bg-[var(--status-danger)] dark:bg-red-500"
-                  : "bg-white/15 dark:bg-gray-700",
+                  : "bg-[var(--nav-bg-active)] dark:bg-gray-700",
               )}
             >
               {badge}
@@ -185,9 +212,12 @@ export function NavRail({
     cn(
       "relative flex h-12 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
       isActive
-        ? "bg-white/[0.15] text-[var(--text-inverse)]"
-        : "bg-transparent text-white/85 hover:bg-white/[0.07] hover:text-white dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-200",
+        ? "bg-[var(--nav-bg-active)] text-[var(--text-inverse)]"
+        : "bg-transparent text-[var(--nav-text-inactive)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-200",
     );
+
+  // Track the flat index across sections for keyboard navigation ref assignment
+  let flatIndex = 0;
 
   return (
     <nav
@@ -201,49 +231,84 @@ export function NavRail({
 
       <div role="list" className="flex-1 overflow-y-auto p-2">
         <div className="flex flex-col gap-1">
-          {items.map((navItem, index) => {
-            const isActive = activeView === navItem.id;
-            const content = renderItemContent(navItem, isActive);
-            const classes = itemClassName(isActive);
+          {sections.map((section, sectionIndex) => {
+            const sectionItems = section.items.map((navItem) => {
+              const currentFlatIndex = flatIndex;
+              flatIndex++;
+
+              const isActive = activeView === navItem.id;
+              const content = renderItemContent(navItem, isActive);
+              const classes = itemClassName(isActive);
+
+              // Legacy groupSeparator support (only when sectionsProp is not provided)
+              const showLegacySeparator =
+                !sectionsProp &&
+                groupSeparator != null &&
+                groupSeparatorAfterIndex === currentFlatIndex;
+
+              return (
+                <React.Fragment key={navItem.id}>
+                  {showLegacySeparator && groupSeparator}
+                  {navItem.href && renderLink ? (
+                    renderLink({
+                      href: navItem.href,
+                      className: classes,
+                      children: content,
+                      'aria-label': navItem.label,
+                      ...(isActive ? { 'aria-current': 'page' as const } : {}),
+                      onClick: () => onViewChange(navItem.id),
+                    })
+                  ) : navItem.href ? (
+                    <a
+                      href={navItem.href}
+                      className={classes}
+                      aria-label={navItem.label}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={() => onViewChange(navItem.id)}
+                    >
+                      {content}
+                    </a>
+                  ) : (
+                    <button
+                      ref={(element) => {
+                        itemsRef.current[currentFlatIndex] = element;
+                      }}
+                      role="listitem"
+                      type="button"
+                      onClick={() => onViewChange(navItem.id)}
+                      onKeyDown={(event) => handleKeyDown(event, currentFlatIndex)}
+                      aria-label={navItem.label}
+                      aria-current={isActive ? "page" : undefined}
+                      className={classes}
+                    >
+                      {content}
+                    </button>
+                  )}
+                </React.Fragment>
+              );
+            });
 
             return (
-              <React.Fragment key={navItem.id}>
-                {groupSeparator != null && groupSeparatorAfterIndex === index && groupSeparator}
-                {navItem.href && renderLink ? (
-                  renderLink({
-                    href: navItem.href,
-                    className: classes,
-                    children: content,
-                    'aria-label': navItem.label,
-                    ...(isActive ? { 'aria-current': 'page' as const } : {}),
-                    onClick: () => onViewChange(navItem.id),
-                  })
-                ) : navItem.href ? (
-                  <a
-                    href={navItem.href}
-                    className={classes}
-                    aria-label={navItem.label}
-                    aria-current={isActive ? "page" : undefined}
-                    onClick={() => onViewChange(navItem.id)}
-                  >
-                    {content}
-                  </a>
-                ) : (
-                  <button
-                    ref={(element) => {
-                      itemsRef.current[index] = element;
-                    }}
-                    role="listitem"
-                    type="button"
-                    onClick={() => onViewChange(navItem.id)}
-                    onKeyDown={(event) => handleKeyDown(event, index)}
-                    aria-label={navItem.label}
-                    aria-current={isActive ? "page" : undefined}
-                    className={classes}
-                  >
-                    {content}
-                  </button>
+              <React.Fragment key={section.label ?? `section-${sectionIndex}`}>
+                {sectionIndex > 0 && (
+                  <div
+                    data-testid="section-divider"
+                    className="mx-2 my-2 h-px bg-white/10 dark:bg-gray-800"
+                    aria-hidden="true"
+                  />
                 )}
+                {section.label != null && (
+                  <div
+                    data-testid="section-label"
+                    className={cn(
+                      "px-3 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--nav-text-muted)] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                      expanded ? "opacity-100" : "opacity-0",
+                    )}
+                  >
+                    {section.label}
+                  </div>
+                )}
+                {sectionItems}
               </React.Fragment>
             );
           })}
@@ -257,7 +322,7 @@ export function NavRail({
             onClick={onToggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
-              "flex w-full items-center bg-transparent px-3 py-3 text-white/60 transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)] dark:text-gray-400 dark:hover:text-gray-200",
+              "flex w-full items-center bg-transparent px-3 py-3 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)] dark:text-gray-400 dark:hover:text-gray-200",
               expanded ? "justify-end" : "justify-center",
             )}
           >
