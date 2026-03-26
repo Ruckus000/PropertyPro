@@ -46,7 +46,7 @@ packages/tokens/dist/
 
 ### 1. Token Source: `src/primitives.ts`
 
-Raw hex palette migrated from `packages/ui/src/tokens/colors.ts`. Identical values, identical structure.
+Raw hex palette migrated from `packages/ui/src/tokens/colors.ts`. The existing scales are preserved exactly, with additional steps added where email templates currently use Tailwind colors outside the design system palette.
 
 ```ts
 export const primitiveColors = {
@@ -72,9 +72,20 @@ export const primitiveColors = {
   red: {
     50: '#FEF2F2', 100: '#FEE2E2', 200: '#FECACA',
     500: '#EF4444', 600: '#DC2626', 700: '#B91C1C',
+    900: '#7F1D1D',
+  },
+  orange: {
+    500: '#F97316', 600: '#EA580C', 700: '#C2410C',
   },
 } as const;
 ```
+
+**Changes from current `packages/ui` palette:**
+- `red.900` (`#7F1D1D`) added — used in payment-failed and subscription-expiry email templates
+- `orange` scale added (`500`/`600`/`700`) — used in emergency alert email severity colors
+
+**Non-primitive hex values in current email templates that get corrected:**
+Several templates use Tailwind green/amber shades that are NOT in the design system palette (e.g., `#16a34a` green-600-tailwind, `#22c55e` green-500-tailwind, `#f0fdf4` green-50-tailwind, `#92400e` amber-800-tailwind, `#ca8a04` yellow-600, `#fde047` yellow-300, `#fef9c3` yellow-100). During migration, these get replaced with the nearest design system semantic token (e.g., `successForeground` = `#047857`, `warningForeground` = `#B45309`). This is an intentional correction — the email templates were using ad-hoc Tailwind colors instead of the design system status palette.
 
 ### 2. Token Definitions: `src/semantic.ts`
 
@@ -84,13 +95,13 @@ Semantic tokens are defined as a discriminated union of references, not pre-reso
 import { primitiveColors } from './primitives';
 
 type ColorScale = keyof typeof primitiveColors;
-type ColorStep<S extends ColorScale> = keyof (typeof primitiveColors)[S];
+type ColorStep<S extends ColorScale> = keyof (typeof primitiveColors)[S] & number;
 
-/** Plain reference to a primitive color */
-export type PrimitiveRef = {
+/** Plain reference to a primitive color — step is type-constrained to valid keys */
+export type PrimitiveRef<S extends ColorScale = ColorScale> = {
   kind: 'primitive';
-  scale: ColorScale;
-  step: number;
+  scale: S;
+  step: ColorStep<S>;
 };
 
 /** Theme-overridable reference with CSS var fallback chain */
@@ -121,14 +132,14 @@ export function toCssValue(ref: TokenRef): string {
 
 // --- Helper to reduce boilerplate ---
 
-function prim(scale: ColorScale, step: number): PrimitiveRef {
+function prim<S extends ColorScale>(scale: S, step: ColorStep<S>): PrimitiveRef<S> {
   return { kind: 'primitive', scale, step };
 }
 
-function theme(
+function theme<S extends ColorScale>(
   cssVar: ThemeRef['cssVar'],
-  scale: ColorScale,
-  step: number
+  scale: S,
+  step: ColorStep<S>
 ): ThemeRef {
   return { kind: 'theme', cssVar, fallback: prim(scale, step) };
 }
@@ -272,7 +283,11 @@ Resolves all semantic tokens to hex using the same `toHex()` resolver. This is a
 
 ```ts
 import { tokenDefinitions as t, toHex } from './semantic';
-import { primitiveColors as p } from './primitives';
+import { primitiveColors } from './primitives';
+
+// Re-export primitives so email templates can reference one-off colors
+// without needing a semantic token for every shade.
+export { primitiveColors } from './primitives';
 
 /**
  * Resolved color values for email inline styles.
@@ -287,6 +302,7 @@ export const emailColors = {
   // Text
   textPrimary:     toHex(t.text.primary),        // #111827
   textSecondary:   toHex(t.text.secondary),       // #4B5563
+  textTertiary:    toHex(t.text.tertiary),         // #4B5563
   textDisabled:    toHex(t.text.disabled),         // #9CA3AF
   textInverse:     toHex(t.text.inverse),          // #FFFFFF
   textBrand:       toHex(t.text.brand),            // #2563EB
@@ -299,6 +315,7 @@ export const emailColors = {
 
   // Borders
   borderDefault:   toHex(t.border.default),        // #E5E7EB
+  borderStrong:    toHex(t.border.strong),         // #D1D5DB
 
   // Interactive (default fallback — overridden by branding.accentColor at runtime)
   interactivePrimary:      toHex(t.interactive.primary),      // #2563EB
@@ -336,6 +353,8 @@ export const emailColors = {
 } as const;
 ```
 
+**Coverage strategy for one-off colors:** `emailColors` covers all semantic tokens. For colors that templates need but that don't have a semantic mapping (e.g., `primitiveColors.red[600]` for inline severity indicators, `primitiveColors.gray[800]` for dark section text), templates import `primitiveColors` directly from `@propertypro/tokens/email`. This avoids bloating `emailColors` with every possible primitive shade while keeping all values traceable to the single source.
+
 ### 5. Consumer Migration: `packages/ui`
 
 **`packages/ui/src/tokens/colors.ts`** becomes a thin compatibility layer:
@@ -352,14 +371,81 @@ export const semanticColors = {
   text: {
     primary: "var(--text-primary)",
     secondary: "var(--text-secondary)",
-    // ... (all current entries preserved exactly)
+    tertiary: "var(--text-tertiary)",
+    disabled: "var(--text-disabled)",
+    placeholder: "var(--text-placeholder)",
+    inverse: "var(--text-inverse)",
+    brand: "var(--text-brand)",
+    link: "var(--text-link)",
+    linkHover: "var(--text-link-hover)",
   },
   surface: {
     page: "var(--surface-page)",
     default: "var(--surface-card)",
-    // ... (all current entries preserved exactly)
+    subtle: "var(--surface-subtle)",
+    muted: "var(--surface-muted)",
+    elevated: "var(--surface-elevated)",
+    sunken: "var(--surface-sunken)",
+    inverse: "var(--surface-inverse)",
+    inverseSubtle: "var(--surface-inverse-subtle)",
   },
-  // ... (border, interactive, status — all preserved)
+  border: {
+    default: "var(--border-default)",
+    subtle: "var(--border-subtle)",
+    strong: "var(--border-strong)",
+    muted: "var(--border-muted)",
+    focus: "var(--border-focus)",
+    error: "var(--border-error)",
+  },
+  interactive: {
+    // NOTE: UI uses "default/hover/active" keys, token definitions use
+    // "primary/primaryHover/primaryActive". This shim preserves the UI API.
+    default: "var(--interactive-primary)",
+    hover: "var(--interactive-primary-hover)",
+    active: "var(--interactive-primary-active)",
+    disabled: "var(--interactive-disabled)",
+    subtle: "var(--interactive-subtle)",
+    subtleHover: "var(--interactive-subtle-hover)",
+    muted: "var(--interactive-muted)",
+  },
+  status: {
+    success: {
+      foreground: "var(--status-success)",
+      background: "var(--status-success-bg)",
+      border: "var(--status-success-border)",
+      subtle: "var(--status-success-subtle)",
+    },
+    brand: {
+      foreground: "var(--status-brand)",
+      background: "var(--status-brand-bg)",
+      border: "var(--status-brand-border)",
+      subtle: "var(--status-brand-subtle)",
+    },
+    warning: {
+      foreground: "var(--status-warning)",
+      background: "var(--status-warning-bg)",
+      border: "var(--status-warning-border)",
+      subtle: "var(--status-warning-subtle)",
+    },
+    danger: {
+      foreground: "var(--status-danger)",
+      background: "var(--status-danger-bg)",
+      border: "var(--status-danger-border)",
+      subtle: "var(--status-danger-subtle)",
+    },
+    info: {
+      foreground: "var(--status-info)",
+      background: "var(--status-info-bg)",
+      border: "var(--status-info-border)",
+      subtle: "var(--status-info-subtle)",
+    },
+    neutral: {
+      foreground: "var(--status-neutral)",
+      background: "var(--status-neutral-bg)",
+      border: "var(--status-neutral-border)",
+      subtle: "var(--status-neutral-subtle)",
+    },
+  },
 } as const;
 
 export type StatusVariant = keyof typeof semanticColors.status;
@@ -368,6 +454,8 @@ export function getStatusColors(status: StatusVariant) {
   return semanticColors.status[status];
 }
 ```
+
+**Key mapping note:** The `interactive` keys in `semanticColors` use `default`/`hover`/`active` (matching the current public API), while `tokenDefinitions.interactive` uses `primary`/`primaryHover`/`primaryActive` (matching the CSS var names). The `build.ts` naming lookup must map `interactive.primary` → `--interactive-primary`, and the UI shim maps `interactive.default` → `"var(--interactive-primary)"`. These are two different naming conventions for the same token — one for token definitions, one for UI consumers.
 
 **Why `semanticColors` isn't re-exported from tokens:** The UI semantic colors are CSS `var()` string references (`"var(--text-primary)"`), which is a web-specific representation. The token package owns the definitions and resolvers; UI continues to provide the web-specific API. This keeps the public API identical — no consumer changes needed.
 
@@ -395,23 +483,31 @@ import { emailColors } from '@propertypro/tokens/email';
 ```
 
 **All 29 templates** — Same mechanical change:
-1. Add `import { emailColors } from '@propertypro/tokens/email';`
-2. Replace each hardcoded hex with the corresponding `emailColors.*` property
-3. Accent color overrides via `branding.accentColor` remain as-is
+1. Add `import { emailColors, primitiveColors } from '@propertypro/tokens/email';`
+2. Replace hardcoded hex with `emailColors.*` for semantic tokens
+3. Replace hardcoded hex with `primitiveColors.*` for one-off primitive references (e.g., `primitiveColors.red[600]` for inline severity coloring, `primitiveColors.gray[800]` for dark section text)
+4. Accent color overrides via `branding.accentColor` remain as-is
 
 **Color corrections applied during migration:**
 
-| Token | Current Email Value | Correct Value (from tokens) | emailColors key |
-|-------|--------------------|-----------------------------|-----------------|
-| Secondary text | `#374151` (gray-700) | `#4B5563` (gray-600) | `textSecondary` |
-| Body background | `#F6F9FC` (custom) | `#F9FAFB` (gray-50) | `surfacePage` |
-| Muted text | `#6b7280` (gray-500) | `#9CA3AF` (gray-400) | `textDisabled` |
-| Success green | `#16a34a` / `#22c55e` | `#047857` (green-700) | `successForeground` |
-| Danger red | `#dc2626` (red-600) | `#B91C1C` (red-700) | `dangerForeground` |
+| Token | Current Email Value | Correct Value (from tokens) | Import |
+|-------|--------------------|-----------------------------|--------|
+| Secondary text | `#374151` (gray-700) | `#4B5563` (gray-600) | `emailColors.textSecondary` |
+| Body background | `#F6F9FC` (custom) | `#F9FAFB` (gray-50) | `emailColors.surfacePage` |
+| Muted text | `#6b7280` (gray-500) | `#9CA3AF` (gray-400) | `emailColors.textDisabled` |
+| Success green | `#16a34a` / `#22c55e` | `#047857` (green-700) | `emailColors.successForeground` |
+| Success bg | `#f0fdf4` (tailwind) | `#ECFDF5` (green-50) | `emailColors.successBackground` |
+| Danger red | `#dc2626` (red-600) | `#B91C1C` (red-700) | `emailColors.dangerForeground` |
+| Warning amber dark | `#92400e` (tailwind) | `#B45309` (amber-700) | `emailColors.warningForeground` |
+| Yellow timeline | `#ca8a04`/`#fde047`/`#fef9c3` | amber scale equivalents | `emailColors.warning*` |
+| Dark text | `#1f2937` (gray-800) | `#1F2937` (gray-800) | `primitiveColors.gray[800]` |
+| Inline red-600 | `#dc2626` | `#DC2626` (red-600) | `primitiveColors.red[600]` |
+| Inline amber-500 | `#f59e0b` | `#F59E0B` (amber-500) | `primitiveColors.amber[500]` |
+| Inline amber-600 | `#d97706` | `#D97706` (amber-600) | `primitiveColors.amber[600]` |
 
 **Colors that stay hardcoded (intentionally):**
-- Emergency severity colors (`#ea580c` urgent orange) — not in the semantic token system. Can be added as a future primitive if needed.
 - Per-community `branding.accentColor` runtime overrides — these are tenant-specific, not design-system tokens.
+- Emergency severity colors now use `primitiveColors.orange[600]` / `primitiveColors.orange[700]` instead of hardcoded hex, since the orange scale was added to primitives.
 
 ### 7. Workspace Wiring
 
@@ -474,9 +570,10 @@ The existing test reads `packages/ui/src/styles/tokens.css` directly and checks 
 - Tests that check `semanticColors.text.primary === 'var(--text-primary)'` still pass (UI's `semanticColors` unchanged)
 - The structural check that all semantic color values start with `var(--` still passes
 
-**Possible test adjustments:**
-- If the generated CSS has different whitespace or comment formatting, the test's `cssContent.includes()` calls may need minor formatting alignment
-- The `primitiveColors` import path changes from `../../src/tokens` to either the same path (if UI re-exports) or `@propertypro/tokens` — either way, the import in the test should use UI's barrel export to test the compatibility layer
+**Required test adjustments:**
+- The generated CSS must use the same whitespace convention as the current `tokens.css` (two-space indentation, `  --blue-50: #EFF6FF;`) so that `cssContent.includes()` assertions pass without modification. The `build.ts` script must match this formatting exactly.
+- The `primitiveColors` import path changes from `../../src/tokens` to either the same path (if UI re-exports) or `@propertypro/tokens` — the test should continue importing from UI's barrel export to test the compatibility layer.
+- If the generated CSS comment structure changes, some `includes()` checks may need updating for section boundaries.
 
 ## What This Does NOT Change
 
@@ -487,10 +584,18 @@ The existing test reads `packages/ui/src/styles/tokens.css` directly and checks 
 - CSS theming via `--theme-primary` / `--theme-accent` injection — preserved
 - `packages/ui` public API surface — `primitiveColors`, `semanticColors`, `StatusVariant`, `getStatusColors` all unchanged
 
-## Future Work (Out of Scope)
+## Explicitly Out of Scope
+
+These are color-related items that remain outside `packages/tokens` for this phase:
+
+- **Navigation sidebar tokens** (`--nav-text-active`, `--nav-text-inactive`, `--nav-text-muted`, `--nav-bg-active`, `--nav-bg-hover` in `tokens.css` lines 300-306) — These use `rgba()` values with alpha channels, not primitive hex references. They stay in `packages/ui` as hand-authored CSS.
+- **Focus ring color tokens** (`--focus-ring-color`, `--focus-ring-color-danger`, `--focus-ring-color-inverse` in `tokens.css` lines 118-123) — These reference primitives (`--blue-500`, `--red-500`, `--gray-0`) but are part of the focus system, not the color token system. They stay in `packages/ui`.
+- **Non-color tokens** (spacing, radius, typography, motion, elevation) — stay in `packages/ui` until they have a second consumer
+- **Email dark mode** (`@media (prefers-color-scheme: dark)`) — separate concern
+
+## Future Work
 
 - Move spacing, radius, typography, motion to `packages/tokens` when they have a second consumer
-- Adopt Style Dictionary if token categories grow or Figma sync becomes important
+- Move navigation and focus ring tokens to `packages/tokens` if needed
+- Adopt Style Dictionary if: Figma sync becomes important, another platform (React Native) is added, token categories grow beyond a small TS script, or DTCG JSON interchange is needed
 - Add React Email dev server for template preview
-- Email dark mode (`@media (prefers-color-scheme: dark)`)
-- Add emergency severity colors as a primitive scale
