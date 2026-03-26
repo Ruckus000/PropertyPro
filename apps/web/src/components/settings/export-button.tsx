@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useReauth } from '@/hooks/use-reauth';
+import { ReauthModal } from '@/components/auth/reauth-modal';
 
 interface ExportButtonProps {
   communityId: number;
@@ -10,6 +12,7 @@ export function ExportButton({ communityId }: ExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const { triggerReauth, isOpen, onCancel, verify } = useReauth();
 
   useEffect(() => {
     return () => {
@@ -20,6 +23,9 @@ export function ExportButton({ communityId }: ExportButtonProps) {
   }, []);
 
   async function handleExport() {
+    const confirmed = await triggerReauth();
+    if (!confirmed) return;
+
     setLoading(true);
     setError(null);
     try {
@@ -68,7 +74,9 @@ export function ExportButton({ communityId }: ExportButtonProps) {
   }
 
   return (
-    <div>
+    <>
+      <ReauthModal isOpen={isOpen} onCancel={onCancel} verify={verify} />
+      <div>
       <button
         type="button"
         onClick={handleExport}
@@ -83,6 +91,7 @@ export function ExportButton({ communityId }: ExportButtonProps) {
           {error}
         </p>
       )}
-    </div>
+      </div>
+    </>
   );
 }

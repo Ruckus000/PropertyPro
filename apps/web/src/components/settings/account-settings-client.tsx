@@ -13,6 +13,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { useReauth } from '@/hooks/use-reauth';
+import { ReauthModal } from '@/components/auth/reauth-modal';
 
 // ── Password requirements (same as set-password-form) ──────────────
 
@@ -449,6 +451,7 @@ function DangerZoneSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const queryClient = useQueryClient();
+  const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
 
   // Fetch active deletion request
   const { data: deletionRequest, isLoading } = useQuery<DeletionRequest | null>({
@@ -656,7 +659,10 @@ function DangerZoneSection() {
             <button
               type="button"
               disabled={confirmText !== 'DELETE' || requestDeletion.isPending}
-              onClick={() => requestDeletion.mutate()}
+              onClick={async () => {
+                const confirmed = await triggerReauth();
+                if (confirmed) requestDeletion.mutate();
+              }}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
                 'bg-[var(--interactive-danger)] text-white hover:bg-[var(--interactive-danger-hover,var(--interactive-danger))]',
@@ -669,6 +675,7 @@ function DangerZoneSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ReauthModal isOpen={reauthOpen} onCancel={reauthCancel} verify={reauthVerify} />
     </section>
   );
 }
