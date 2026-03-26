@@ -1,7 +1,10 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { emailColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Section, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailAlert } from '../components/email-alert';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface ComplianceAlertEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -9,8 +12,17 @@ export interface ComplianceAlertEmailProps extends BaseEmailProps {
   alertDescription: string;
   dueDate?: string;
   dashboardUrl: string;
-  severity: "info" | "warning" | "critical";
+  severity: 'info' | 'warning' | 'critical';
 }
+
+const severityBadge: Record<
+  'info' | 'warning' | 'critical',
+  { bg: string; color: string; label: string }
+> = {
+  critical: { bg: '#FEE2E2', color: '#991B1B', label: 'Critical' },
+  warning: { bg: '#FEF9C3', color: '#854D0E', label: 'Warning' },
+  info: { bg: '#DBEAFE', color: '#1E40AF', label: 'Info' },
+};
 
 export function ComplianceAlertEmail({
   branding,
@@ -22,138 +34,70 @@ export function ComplianceAlertEmail({
   dashboardUrl,
   severity,
 }: ComplianceAlertEmailProps) {
-  const severityColor =
-    severity === "critical"
-      ? emailColors.dangerForeground
-      : severity === "warning"
-        ? emailColors.warningForeground
-        : emailColors.infoForeground;
-
-  const severityLabel =
-    severity.charAt(0).toUpperCase() + severity.slice(1);
+  const badge = severityBadge[severity];
 
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `Compliance Alert: ${alertTitle}`
-      }
+      accentColor={emailColors.accentRed}
+      previewText={previewText ?? `Compliance alert: ${alertTitle}`}
     >
-      <Heading as="h1" style={headingStyle}>
-        Compliance Alert
-      </Heading>
+      {/* Heading + badge side by side */}
+      <table width="100%" cellPadding={0} cellSpacing={0} style={{ margin: '0 0 20px 0' }}>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: 'middle' }}>
+              <Heading as="h1" style={{ ...styles.heading, margin: '0' }}>
+                Compliance alert
+              </Heading>
+            </td>
+            <td style={{ verticalAlign: 'middle', textAlign: 'right' as const, paddingLeft: '12px' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  background: badge.bg,
+                  color: badge.color,
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.3px',
+                }}
+              >
+                {badge.label}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div style={badgeContainerStyle}>
-        <span style={badgeStyle(severityColor)}>{severityLabel}</span>
-      </div>
-
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        A compliance item requires your attention at{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        A compliance item requires your attention at{' '}
         <strong>{branding.communityName}</strong>.
       </Text>
 
-      <div style={alertBoxStyle(severityColor)}>
-        <Text style={alertTitleStyle}>{alertTitle}</Text>
-        <Text style={alertDescStyle}>{alertDescription}</Text>
+      <EmailAlert variant="danger" title={`Missing: ${alertTitle}`}>
+        {alertDescription}
         {dueDate && (
-          <Text style={dueDateStyle}>Due by: {dueDate}</Text>
+          <>
+            {' '}Due by:{' '}
+            <strong style={{ color: emailColors.alertDangerText }}>{dueDate}</strong>
+          </>
         )}
-      </div>
+      </EmailAlert>
 
-      <Button style={buttonStyle(branding.accentColor)} href={dashboardUrl}>
-        View Compliance Dashboard
-      </Button>
+      <Section style={styles.buttonSection}>
+        <EmailButton href={dashboardUrl} variant="destructive">
+          View compliance dashboard
+        </EmailButton>
+      </Section>
 
-      <Text style={smallTextStyle}>
-        Florida Statute §718.111(12)(g) requires timely posting of
-        association documents. Failure to comply may result in regulatory
-        action.
+      <Text style={{ ...styles.smallSpaced, fontStyle: 'italic' }}>
+        Florida Statute §718.111(12)(g) requires timely posting of association documents.
+        Failure to comply may result in regulatory action.
       </Text>
     </EmailLayout>
   );
 }
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 8px 0",
-};
-
-const badgeContainerStyle: React.CSSProperties = {
-  margin: "0 0 16px 0",
-};
-
-function badgeStyle(color: string): React.CSSProperties {
-  return {
-    backgroundColor: color,
-    color: emailColors.textInverse,
-    padding: "4px 12px",
-    borderRadius: "12px",
-    fontSize: "12px",
-    fontWeight: "bold",
-    textTransform: "uppercase" as const,
-  };
-}
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};
-
-function alertBoxStyle(borderColor: string): React.CSSProperties {
-  return {
-    borderLeft: `4px solid ${borderColor}`,
-    backgroundColor: emailColors.surfacePage,
-    padding: "16px",
-    margin: "16px 0",
-    borderRadius: "0 4px 4px 0",
-  };
-}
-
-const alertTitleStyle: React.CSSProperties = {
-  fontSize: "16px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 8px 0",
-};
-
-const alertDescStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textSecondary,
-  lineHeight: "20px",
-  margin: "0 0 8px 0",
-};
-
-const dueDateStyle: React.CSSProperties = {
-  fontSize: "14px",
-  fontWeight: "bold",
-  color: emailColors.dangerForeground,
-  margin: "0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? emailColors.interactivePrimary,
-    color: emailColors.textInverse,
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textDisabled,
-  lineHeight: "20px",
-  margin: "0",
-  fontStyle: "italic",
-};
