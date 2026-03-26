@@ -479,49 +479,30 @@ export function getStatusColors(status: StatusVariant) {
 
 **`packages/ui/src/styles/tokens.css`** — This file is imported at source level by the web app (`apps/web/src/app/globals.css` line 1: `@import '../../../../packages/ui/src/styles/tokens.css'`), and the `@propertypro/ui` tsconfig path in both apps resolves to `../../packages/ui/src`. This means the web app reads `tokens.css` directly from source — not from a built `dist/` artifact. Additionally, `packages/ui/tsup.config.ts` uses `loader: { ".css": "copy" }` which copies CSS files verbatim to `dist/`, so any relative `@import` in the source file would be preserved in `dist/styles/tokens.css` where it would no longer resolve. The `@propertypro/ui/styles.css` export (line 23 of `packages/ui/package.json`) maps to `./dist/styles/tokens.css`.
 
-**Strategy: inline replacement with committed generated file.**
+**Strategy: generator writes directly into UI's `tokens.css` (both files committed).**
 
-Rather than an `@import` (which breaks the dist copy and requires a build step before dev), or a splice script (which is fragile), the color sections of `tokens.css` are replaced directly with the content from `packages/tokens/src/generated/tokens.css`. The generated CSS file is **committed to git** so it exists on every checkout.
+The `packages/tokens/scripts/build.ts` generator produces two committed artifacts:
 
-Specifically:
+1. **`packages/tokens/src/generated/tokens.css`** — standalone color-only CSS (primitives + semantics). This is the canonical generated output and the target for the parity test.
+2. **`packages/ui/src/styles/tokens.css`** — the generator replaces both color sections inline (primitives lines 8-54 and semantics lines 130-208) while preserving all non-color sections. The file remains self-contained with no `@import`.
 
-1. `packages/tokens/scripts/build.ts` generates `packages/tokens/src/generated/tokens.css` containing all color declarations (both primitives and semantics).
-2. This generated file is **checked into git**. It is a derived artifact from `primitives.ts` + `semantic.ts`, but committing it eliminates all lifecycle problems:
-   - Fresh checkout + `pnpm dev` works immediately (no build step needed — `turbo dev` has no `dependsOn: ["^build"]`)
-   - `pnpm test` works immediately (test reads the file directly)
-   - UI's tsup `{ ".css": "copy" }` copies a self-contained CSS file to `dist/` (no broken relative imports)
-   - The `@propertypro/ui/styles.css` package export continues to work
-3. The color sections in `packages/ui/src/styles/tokens.css` are replaced with an `@import` pointing to the committed generated file: `@import '../../tokens/src/generated/tokens.css';`. This works because:
-   - At source level (dev): CSS bundler resolves the relative path
-   - At dist level (package export): UI's build step must inline the import. Add a `prebuild` script in `packages/ui/package.json` that resolves the `@import` and produces a self-contained `tokens.css` before tsup copies it. Alternatively, configure tsup or PostCSS to resolve CSS imports.
-4. Both color blocks are removed from `tokens.css`:
-   - Primitive colors (lines 8-54, from `/* Colors */` through the red palette)
-   - Semantic colors (lines 130-208, from the second `:root` block through `--status-neutral-subtle`)
-5. Non-color sections remain in place: spacing, radius, typography, motion, sizing, focus, elevation, responsive density, focus styles, animation, navigation, large text.
+Both files are **committed to git**. This eliminates all lifecycle and tooling problems:
+- **Fresh checkout + `pnpm dev`**: both files exist, no build step needed (`turbo dev` has no `dependsOn: ["^build"]`)
+- **`pnpm test`**: UI test reads `tokens.css` via `fs.readFileSync` and finds inline declarations as before
+- **UI dist export**: tsup's `{ ".css": "copy" }` copies the self-contained `tokens.css` to `dist/` without modification. The `@propertypro/ui/styles.css` package export (`./dist/styles/tokens.css`) works unchanged.
+- **No `@import` in `tokens.css`**: avoids the relative-path-in-dist problem entirely
 
-**Staleness guard:** A CI check or `pnpm lint` step verifies the committed `tokens.css` matches what `build.ts` would generate. If someone edits `primitives.ts` or `semantic.ts` without re-running the generator, CI fails. The check is: run `build.ts` to a temp file, diff against the committed file.
+**What the generator replaces in `tokens.css`:**
+- Primitive colors (lines 8-54, from `/* Colors */` through the red palette)
+- Semantic colors (lines 130-208, from the second `:root` block with `/* Text */` through `--status-neutral-subtle`)
+- Non-color sections remain untouched: spacing, radius, typography, motion, sizing, focus, elevation, responsive density, focus styles, animation, navigation, large text
+
+**Staleness guard:** A CI check (added to `pnpm lint` or as a standalone script) runs `build.ts` to a temp directory and diffs against the committed files. If someone edits `primitives.ts` or `semantic.ts` without re-running the generator, CI fails with a clear error.
 
 **Generated file lifecycle:**
-- **Fresh checkout:** File exists (committed to git). `pnpm dev` works immediately.
-- **Token change:** Developer edits `primitives.ts` or `semantic.ts`, runs `pnpm --filter @propertypro/tokens generate` (or a convenience alias), commits the updated generated file. CI verifies consistency.
-- **CI/deploy:** Staleness check runs. If the committed file is stale, the build fails with a clear error.
-
-**Impact on existing tests:** The `packages/ui/__tests__/tokens/tokens.test.ts` reads `tokens.css` via `fs.readFileSync` and checks `cssContent.includes()`. After migration:
-- The test must read both `tokens.css` (for non-color vars) and the imported generated file (for color vars). Simplest approach: resolve the `@import` path relative to `tokens.css` and concatenate both file contents into `cssContent`.
-- Alternatively, the color parity test moves to `packages/tokens/__tests__/parity.test.ts` and the UI test only checks non-color declarations.
-
-**Impact on `@propertypro/ui/styles.css` package export:**
-The `./styles.css` export maps to `./dist/styles/tokens.css`. With the `@import`, UI's build must produce a self-contained CSS file in dist. Options:
-- **Option A (recommended):** Add a `prebuild` script that concatenates the generated color CSS + the non-color sections into a single `src/styles/tokens.built.css`, then point tsup at that file. The source `tokens.css` with `@import` is the dev-time file; the built version is the dist artifact.
-- **Option B:** Configure tsup's CSS handling to resolve `@import` statements (e.g., via postcss-import plugin).
-- **Option C:** Have the tokens build script also write directly into `packages/ui/src/styles/tokens.css` (replacing color sections inline). This avoids the `@import` entirely but couples the two packages at the file level.
-
-For simplicity, **Option C is recommended for this phase**: `packages/tokens/scripts/build.ts` generates `src/generated/tokens.css` (committed to git) AND directly writes the color sections into `packages/ui/src/styles/tokens.css`. This means:
-- `tokens.css` remains a self-contained file with no `@import`
-- tsup copies it to `dist/` without modification
-- The `@propertypro/ui/styles.css` export works unchanged
-- Fresh checkout works (both files are committed)
-- The staleness CI check verifies both files match the generator output
+- **Fresh checkout:** Both files exist (committed). `pnpm dev` works immediately.
+- **Token change:** Developer edits `primitives.ts` or `semantic.ts`, runs `pnpm --filter @propertypro/tokens generate`, commits the updated files. CI verifies consistency.
+- **CI/deploy:** Staleness check runs before build.
 
 ### 6. Consumer Migration: `packages/email`
 
@@ -578,24 +559,25 @@ import { emailColors } from '@propertypro/tokens/email';
 **Local dev/test resolution:**
 The `turbo dev` task has no `dependsOn: ["^build"]`, so `pnpm dev` on a fresh checkout does NOT build workspace dependencies first. Similarly, root `pnpm test` runs vitest directly without building. Both `packages/ui` and `packages/email` import from `@propertypro/tokens`, whose package exports resolve to `dist/*`. Without a build, those files don't exist.
 
-**Resolution strategy — tsconfig source aliases (matching existing pattern):**
-The repo already solves this for `@propertypro/ui` by adding tsconfig path aliases that point at source. Apply the same pattern for `@propertypro/tokens`:
+**Resolution strategy — app-level tsconfig aliases + pnpm workspace for packages:**
 
-In `apps/web/tsconfig.json` and `apps/admin/tsconfig.json`:
-```json
-"@propertypro/tokens": ["../../packages/tokens/src"],
-"@propertypro/tokens/*": ["../../packages/tokens/src/*"]
-```
+The repo has two resolution contexts with different constraints:
 
-In `packages/ui/tsconfig.json` and `packages/email/tsconfig.json`:
-```json
-"@propertypro/tokens": ["../tokens/src"],
-"@propertypro/tokens/*": ["../tokens/src/*"]
-```
+1. **App tsconfigs** (`apps/web/tsconfig.json`, `apps/admin/tsconfig.json`) — already use source path aliases for all workspace packages (e.g., `"@propertypro/ui": ["../../packages/ui/src"]`). Add the same for tokens:
+   ```json
+   "@propertypro/tokens": ["../../packages/tokens/src"],
+   "@propertypro/tokens/*": ["../../packages/tokens/src/*"]
+   ```
+   This makes `pnpm dev` and app-level vitest work without building tokens first.
 
-This ensures TypeScript resolves imports to source files in dev and test. The `dist/` exports are only used by external consumers and the Vercel production build.
+2. **App vitest config** (`apps/web/vitest.config.ts`) — add a resolve alias matching the pattern for `@propertypro/theme`:
+   ```ts
+   '@propertypro/tokens': path.resolve(__dirname, '../../packages/tokens/src'),
+   ```
 
-For `@propertypro/tokens/email` specifically: the tsconfig `"@propertypro/tokens/*"` wildcard maps `@propertypro/tokens/email` to `packages/tokens/src/email.ts`, which is correct.
+3. **Package tsconfigs** (`packages/ui/tsconfig.json`, `packages/email/tsconfig.json`) — do NOT add source aliases. These tsconfigs set `rootDir: "./src"` and `include: ["src/**/*.ts"]`. Adding a path alias that resolves outside `rootDir` (e.g., `"../tokens/src"`) breaks TypeScript declaration emit and tsup builds. Instead, package-to-package imports resolve via pnpm workspace linking → package `exports` field → `dist/`. This requires `@propertypro/tokens` to be built first, which is handled by `turbo build`'s `dependsOn: ["^build"]`.
+
+4. **Package vitest** — `packages/ui` and `packages/email` tests that import `@propertypro/tokens` resolve via pnpm workspace. The tokens package must be built first (same as other workspace deps). This is the existing pattern — no package-level vitest currently uses source aliases for cross-package imports.
 
 **Next.js config:**
 - Add `@propertypro/tokens` to `transpilePackages` in `apps/web/next.config.ts` and `apps/admin/next.config.ts`
