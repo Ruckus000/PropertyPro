@@ -46,7 +46,7 @@ async function resolveUser(): Promise<AppShellUser | null> {
 async function resolveCommunity(
   requestHeaders: Headers,
   userId: string,
-): Promise<{ community: AppShellCommunity; role: AnyCommunityRole; subscriptionStatus: string | null; freeAccessExpiresAt: Date | null; isDemo: boolean } | null> {
+): Promise<{ community: AppShellCommunity; role: AnyCommunityRole; subscriptionStatus: string | null; freeAccessExpiresAt: Date | null; isDemo: boolean; trialEndsAt: Date | null; demoExpiresAt: Date | null } | null> {
   const communityIdStr = requestHeaders.get('x-community-id');
   if (!communityIdStr) return null;
 
@@ -78,6 +78,8 @@ async function resolveCommunity(
       subscriptionStatus: match.subscriptionStatus ?? null,
       freeAccessExpiresAt: match.freeAccessExpiresAt ?? null,
       isDemo: match.isDemo,
+      trialEndsAt: match.trialEndsAt ?? null,
+      demoExpiresAt: match.demoExpiresAt ?? null,
     };
   } catch (error) {
     console.error('[AuthenticatedLayout] Failed to resolve community:', error);
@@ -110,7 +112,13 @@ export default async function AuthenticatedLayout({
   const subscriptionStatus = communityData?.subscriptionStatus ?? null;
   const freeAccessExpiresAt = communityData?.freeAccessExpiresAt ?? null;
   const features = community ? getFeaturesForCommunity(community.type) : null;
-  const demoInfo = detectDemoInfo(communityData?.isDemo ?? false, user?.email ?? null);
+  const demoInfo = detectDemoInfo(
+    communityData?.isDemo ?? false,
+    user?.email ?? null,
+    communityData?.trialEndsAt ?? null,
+    communityData?.demoExpiresAt ?? null,
+    community?.type ?? 'condo_718',
+  );
 
   const branding = community ? await getBrandingForCommunity(community.id) : null;
   const theme = community

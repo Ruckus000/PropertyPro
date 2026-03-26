@@ -27,7 +27,7 @@ import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
-import { DemoBanner } from '@/components/demo/DemoBanner';
+import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 
 // Feature flag: set to true to use the new command palette
@@ -195,10 +195,14 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
       />
 
       {demoInfo && (
-        <DemoBanner
+        <DemoTrialBanner
           isDemoMode={demoInfo.isDemoMode}
           currentRole={demoInfo.currentRole}
           slug={demoInfo.slug}
+          status={demoInfo.status}
+          trialEndsAt={demoInfo.trialEndsAt}
+          demoExpiresAt={demoInfo.demoExpiresAt}
+          communityType={demoInfo.communityType}
         />
       )}
     </div>

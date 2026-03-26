@@ -16,7 +16,7 @@ import { type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { MotionProvider } from '@/components/providers/motion-provider';
 import { AppQueryProvider } from '@/components/providers/query-provider';
-import { DemoBanner } from '@/components/demo/DemoBanner';
+import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import '@/styles/mobile.css';
 
@@ -44,6 +44,8 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
   let communityType: CommunityType = 'condo_718';
   let isDemo = false;
   let userEmail: string | null = null;
+  let trialEndsAt: Date | null = null;
+  let demoExpiresAt: Date | null = null;
 
   try {
     const user = await requireAuthenticatedUser();
@@ -52,11 +54,13 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
     communityType = membership.communityType;
     communityName = membership.communityName;
     isDemo = membership.isDemo;
+    trialEndsAt = membership.trialEndsAt;
+    demoExpiresAt = membership.demoExpiresAt;
   } catch {
     redirect('/auth/login');
   }
 
-  const demoInfo = detectDemoInfo(isDemo, userEmail);
+  const demoInfo = detectDemoInfo(isDemo, userEmail, trialEndsAt, demoExpiresAt, communityType);
 
   const branding = await getBrandingForCommunity(communityId);
   const theme = resolveTheme(branding, communityName, communityType);
@@ -75,10 +79,14 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
               {children}
             </main>
             {demoInfo && (
-              <DemoBanner
+              <DemoTrialBanner
                 isDemoMode={demoInfo.isDemoMode}
                 currentRole={demoInfo.currentRole}
                 slug={demoInfo.slug}
+                status={demoInfo.status}
+                trialEndsAt={demoInfo.trialEndsAt}
+                demoExpiresAt={demoInfo.demoExpiresAt}
+                communityType={demoInfo.communityType}
               />
             )}
           </MotionProvider>
