@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CreditCard,
   ExternalLink,
@@ -107,12 +107,17 @@ export function BillingPageClient({
   const portalUrl = `/billing/portal?communityId=${communityId}`;
   const hasStripe = !!stripeCustomerId;
 
+  const [portalPending, setPortalPending] = useState(false);
   const router = useRouter();
   const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
 
   async function openPortal() {
+    if (portalPending) return;
     const confirmed = await triggerReauth();
-    if (confirmed) router.push(portalUrl);
+    if (confirmed) {
+      setPortalPending(true);
+      router.push(portalUrl);
+    }
   }
 
   return (
