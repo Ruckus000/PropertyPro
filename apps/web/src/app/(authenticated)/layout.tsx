@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
+import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppShell } from '@/components/layout/app-shell';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import { AppQueryProvider } from '@/components/providers/query-provider';
@@ -56,6 +57,7 @@ export default async function AuthenticatedLayout({
       <div style={cssVars as React.CSSProperties}>
         <SupportBanner />
         <AuthSessionSync />
+        <IdleSessionManager role={role} />
         <AppQueryProvider>
           <MotionProvider>
             <AppShell user={user} community={community} role={role} features={features} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
