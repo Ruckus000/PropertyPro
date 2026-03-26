@@ -107,5 +107,6 @@ export type {
 export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';
 export * from './demo-templates';
 export * from './demo-content-strategies';
+export * from './reauth';
 export * from './support-access';
 export * from './demo/lifecycle';
