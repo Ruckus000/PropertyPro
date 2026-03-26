@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import {
   Loader2,
@@ -15,28 +15,16 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
+import type { AdminDeletionRequest } from '@/lib/server/deletion-requests';
 
 /* ---------- types ---------- */
 
 type DeletionStatus = 'cooling' | 'soft_deleted' | 'purged' | 'cancelled' | 'recovered';
-type RequestType = 'user' | 'community';
 
-interface DeletionRequest {
-  id: number;
-  requestType: RequestType;
-  userId: string;
-  communityId: number | null;
-  status: DeletionStatus;
-  coolingEndsAt: string;
-  scheduledPurgeAt: string | null;
-  purgedAt: string | null;
-  cancelledAt: string | null;
-  recoveredAt: string | null;
-  interventionNotes: string | null;
-  createdAt: string;
-  requesterEmail: string | null;
-  requesterName: string | null;
-  communityName: string | null;
+interface DeletionRequestsDashboardProps {
+  initialRequests: AdminDeletionRequest[];
+  initialStatusFilter?: string;
+  initialTypeFilter?: string;
 }
 
 /* ---------- status styling ---------- */
@@ -51,12 +39,17 @@ const STATUS_STYLES: Record<DeletionStatus, { className: string; icon: typeof Cl
 
 /* ---------- component ---------- */
 
-export function DeletionRequestsDashboard() {
-  const [requests, setRequests] = useState<DeletionRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+export function DeletionRequestsDashboard({
+  initialRequests,
+  initialStatusFilter = 'all',
+  initialTypeFilter = 'all',
+}: DeletionRequestsDashboardProps) {
+  const [requests, setRequests] = useState<AdminDeletionRequest[]>(initialRequests);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
+  const [typeFilter, setTypeFilter] = useState<string>(initialTypeFilter);
+  const hasHydrated = useRef(false);
 
   // Dialog states
   const [showIntervene, setShowIntervene] = useState<number | null>(null);
@@ -73,17 +66,27 @@ export function DeletionRequestsDashboard() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error?.message ?? 'Failed to load deletion requests');
+        setRequests([]);
         return;
       }
+      setError('');
       setRequests(data.requests);
     } catch {
       setError('Network error');
+      setRequests([]);
     } finally {
       setLoading(false);
     }
   }, [statusFilter, typeFilter]);
 
-  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+  useEffect(() => {
+    if (!hasHydrated.current) {
+      hasHydrated.current = true;
+      return;
+    }
+
+    void fetchRequests();
+  }, [fetchRequests]);
 
   const coolingCount = requests.filter((r) => r.status === 'cooling').length;
 

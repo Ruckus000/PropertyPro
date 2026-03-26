@@ -1,5 +1,6 @@
 export const LEDGER_ENTRY_TYPES = [
   'assessment',
+  'rent',
   'payment',
   'refund',
   'fine',
@@ -11,6 +12,7 @@ export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];
 
 export const LEDGER_SOURCE_TYPES = [
   'assessment',
+  'rent',
   'payment',
   'violation',
   'manual',
@@ -19,7 +21,12 @@ export const LEDGER_SOURCE_TYPES = [
 export type LedgerSourceType = (typeof LEDGER_SOURCE_TYPES)[number];
 
 export interface LedgerMetadata {
+  payableType?: 'assessment_line_item' | 'rent_obligation';
+  payableId?: number;
+  payableSourceType?: 'assessment' | 'rent';
+  payableSourceId?: string;
   assessmentId?: number;
+  assessmentLineItemId?: number;
   lineItemId?: number;
   stripePaymentIntentId?: string;
   stripeChargeId?: string;

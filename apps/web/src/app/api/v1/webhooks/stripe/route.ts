@@ -31,6 +31,7 @@ import {
 } from '@/lib/services/payment-alert-scheduler';
 import { runProvisioning } from '@/lib/services/provisioning-service';
 import { processFinanceStripeEvent } from '@/lib/services/finance-service';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,6 +39,42 @@ import { processFinanceStripeEvent } from '@/lib/services/finance-service';
 
 /** Grace period reminder offset: Day 23 after cancellation (ms). */
 const DAY_23_MS = 23 * 24 * 60 * 60 * 1000;
+
+const STRIPE_WEBHOOK_ERROR_CODES = {
+  SECRET_NOT_CONFIGURED: 'STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED',
+  SIGNATURE_INVALID: 'STRIPE_WEBHOOK_SIGNATURE_INVALID',
+  DUPLICATE_EVENT_PRECHECK: 'STRIPE_WEBHOOK_DUPLICATE_EVENT_PRECHECK',
+  DUPLICATE_EVENT_INSERT_FENCE: 'STRIPE_WEBHOOK_DUPLICATE_EVENT_INSERT_FENCE',
+  INSERT_FENCE_FAILED: 'STRIPE_WEBHOOK_INSERT_FENCE_FAILED',
+  HANDLER_FAILED: 'STRIPE_WEBHOOK_HANDLER_FAILED',
+} as const;
+
+type StripeWebhookErrorCode = (typeof STRIPE_WEBHOOK_ERROR_CODES)[keyof typeof STRIPE_WEBHOOK_ERROR_CODES];
+type StripeWebhookCategory = 'configuration' | 'validation' | 'idempotency' | 'database' | 'processing';
+
+function logStripeWebhookEvent(
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  input: {
+    eventId?: string;
+    eventType?: string;
+    errorCode?: StripeWebhookErrorCode;
+    category?: StripeWebhookCategory;
+    metricName?: string;
+    outcome?: 'success' | 'failure' | 'duplicate' | 'skipped';
+    reason?: string;
+    errorMessage?: string;
+    payloadSnippet?: Record<string, unknown>;
+  },
+): void {
+  const payload = {
+    component: 'stripe-webhook-route',
+    message,
+    ...input,
+  };
+  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
+  fn('[stripe-webhook]', payload);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,13 +97,14 @@ function isUniqueConstraintError(err: unknown): boolean {
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
   eventId: string,
+  eventCreatedEpoch: number,
 ): Promise<void> {
   const demoId = session.metadata?.demoId;
   const signupRequestId = session.metadata?.signupRequestId;
 
   if (demoId) {
     const { handleDemoConversion } = await import('@/lib/services/demo-conversion');
-    await handleDemoConversion(session);
+    await handleDemoConversion(session, eventId, eventCreatedEpoch);
     return;
   }
 
@@ -90,7 +128,19 @@ async function handleCheckoutSessionCompleted(
   if (!signupRequestId) {
     // If we only had an accessPlanId (self-service subscribe), we're done.
     if (accessPlanId) return;
-    console.warn('[stripe-webhook] checkout.session.completed: no demoId or signupRequestId in metadata');
+    logStripeWebhookEvent('warn', 'checkout.session.completed missing demoId/signupRequestId metadata', {
+      eventId,
+      eventType: 'checkout.session.completed',
+      category: 'validation',
+      metricName: 'stripe_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: {
+        sessionId: session.id,
+        hasDemoId: Boolean(demoId),
+        hasSignupRequestId: Boolean(signupRequestId),
+        hasAccessPlanId: Boolean(accessPlanId),
+      },
+    });
     return;
   }
 
@@ -132,7 +182,13 @@ async function handleCheckoutSessionCompleted(
     });
   }
 
-  console.info('[stripe-webhook] provisioning started for', signupRequestId);
+  logStripeWebhookEvent('info', 'Provisioning started from checkout.session.completed', {
+    eventId,
+    eventType: 'checkout.session.completed',
+    metricName: 'stripe_webhook_event',
+    outcome: 'success',
+    payloadSnippet: { signupRequestId, sessionId: session.id },
+  });
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
@@ -266,7 +322,13 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
 
   const community = communityRows[0];
   if (!community) {
-    console.warn('[stripe-webhook] invoice.payment_failed: no community for subscription', subscriptionId);
+    logStripeWebhookEvent('warn', 'invoice.payment_failed has no matching community', {
+      eventType: 'invoice.payment_failed',
+      category: 'validation',
+      metricName: 'stripe_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: { subscriptionId },
+    });
     return;
   }
 
@@ -313,6 +375,25 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
     .where(eq(communities.stripeSubscriptionId, subscriptionId));
 }
 
+async function handleCheckoutSessionExpired(
+  session: Stripe.Checkout.Session,
+  eventId: string,
+  eventCreatedEpoch: number,
+): Promise<void> {
+  const demoId = session.metadata?.demoId;
+  if (!demoId) return; // Only track demo-related checkout expirations
+
+  await emitConversionEvent({
+    demoId: Number(demoId),
+    communityId: session.metadata?.communityId ? Number(session.metadata.communityId) : null,
+    eventType: 'checkout_session_expired',
+    source: 'stripe_webhook',
+    dedupeKey: `stripe:${eventId}`,
+    occurredAt: new Date(eventCreatedEpoch * 1000),
+    stripeEventId: eventId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Event router
 // ---------------------------------------------------------------------------
@@ -320,7 +401,10 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
 async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'checkout.session.completed':
-      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id);
+      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id, event.created);
+      break;
+    case 'checkout.session.expired':
+      await handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session, event.id, event.created);
       break;
     case 'customer.subscription.updated':
       await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
@@ -355,14 +439,27 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // 2. Signature verification
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error('[stripe-webhook] STRIPE_WEBHOOK_SECRET not configured');
+    logStripeWebhookEvent('error', 'Stripe webhook secret not configured', {
+      errorCode: STRIPE_WEBHOOK_ERROR_CODES.SECRET_NOT_CONFIGURED,
+      category: 'configuration',
+      metricName: 'stripe_webhook_request',
+      outcome: 'failure',
+    });
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
   }
 
   let event: Stripe.Event;
   try {
     event = getStripeClient().webhooks.constructEvent(rawBody, sig, webhookSecret);
-  } catch {
+  } catch (err) {
+    logStripeWebhookEvent('warn', 'Stripe webhook signature verification failed', {
+      errorCode: STRIPE_WEBHOOK_ERROR_CODES.SIGNATURE_INVALID,
+      category: 'validation',
+      metricName: 'stripe_webhook_request',
+      outcome: 'failure',
+      errorMessage: err instanceof Error ? err.message : String(err),
+      payloadSnippet: { hasSignatureHeader: Boolean(sig), rawBodyLength: rawBody.length },
+    });
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
@@ -375,6 +472,14 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     .limit(1);
 
   if (existing.length > 0) {
+    logStripeWebhookEvent('info', 'Stripe webhook duplicate skipped at pre-check', {
+      eventId: event.id,
+      eventType: event.type,
+      errorCode: STRIPE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT_PRECHECK,
+      category: 'idempotency',
+      metricName: 'stripe_webhook_event',
+      outcome: 'duplicate',
+    });
     return NextResponse.json({ received: true });
   }
 
@@ -385,8 +490,25 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     await db.insert(stripeWebhookEvents).values({ eventId: event.id });
   } catch (err) {
     if (isUniqueConstraintError(err)) {
+      logStripeWebhookEvent('info', 'Stripe webhook duplicate skipped at insert fence', {
+        eventId: event.id,
+        eventType: event.type,
+        errorCode: STRIPE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT_INSERT_FENCE,
+        category: 'idempotency',
+        metricName: 'stripe_webhook_event',
+        outcome: 'duplicate',
+      });
       return NextResponse.json({ received: true });
     }
+    logStripeWebhookEvent('error', 'Stripe webhook insert fence failed', {
+      eventId: event.id,
+      eventType: event.type,
+      errorCode: STRIPE_WEBHOOK_ERROR_CODES.INSERT_FENCE_FAILED,
+      category: 'database',
+      metricName: 'stripe_webhook_event',
+      outcome: 'failure',
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     captureException(err);
     return NextResponse.json({ received: true });
   }
@@ -398,7 +520,22 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       .update(stripeWebhookEvents)
       .set({ processedAt: new Date() })
       .where(eq(stripeWebhookEvents.eventId, event.id));
+    logStripeWebhookEvent('info', 'Stripe webhook event processed successfully', {
+      eventId: event.id,
+      eventType: event.type,
+      metricName: 'stripe_webhook_event',
+      outcome: 'success',
+    });
   } catch (err) {
+    logStripeWebhookEvent('error', 'Stripe webhook handler failed', {
+      eventId: event.id,
+      eventType: event.type,
+      errorCode: STRIPE_WEBHOOK_ERROR_CODES.HANDLER_FAILED,
+      category: 'processing',
+      metricName: 'stripe_webhook_event',
+      outcome: 'failure',
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     captureException(err, { extra: { eventType: event.type, eventId: event.id } });
     // processedAt stays null — safe to retry via Stripe dashboard if needed
   }

@@ -6,6 +6,8 @@ import {
   Bell,
   Calendar,
   Wrench,
+  CreditCard,
+  ShieldCheck,
 } from "lucide-react";
 import { toInitials } from "@propertypro/shared";
 import {
@@ -28,6 +30,8 @@ interface MobileHomeContentProps {
   role: string;
   presetKey?: string;
   hasCompliance: boolean;
+  hasFinance: boolean;
+  hasMaintenanceRequests: boolean;
   hasMeetings: boolean;
   announcementCount: number;
   openMaintenanceCount: number;
@@ -54,6 +58,8 @@ export function MobileHomeContent({
   role,
   presetKey,
   hasCompliance,
+  hasFinance,
+  hasMaintenanceRequests,
   hasMeetings,
   announcementCount,
   openMaintenanceCount,
@@ -137,12 +143,30 @@ export function MobileHomeContent({
                 href={`/mobile/meetings?communityId=${communityId}`}
               />
             )}
-            <MobileNavRow
-              icon={Wrench}
-              title="Maintenance"
-              description="Submit a request"
-              href={`/mobile/maintenance?communityId=${communityId}`}
-            />
+            {hasMaintenanceRequests && (
+              <MobileNavRow
+                icon={Wrench}
+                title="Maintenance"
+                description="Submit a request"
+                href={`/mobile/maintenance?communityId=${communityId}`}
+              />
+            )}
+            {hasFinance && (
+              <MobileNavRow
+                icon={CreditCard}
+                title="Payments"
+                description="Balances and recent activity"
+                href={`/communities/${communityId}/payments`}
+              />
+            )}
+            {showCompliance && (
+              <MobileNavRow
+                icon={ShieldCheck}
+                title="Compliance"
+                description="Dashboard and statutory status"
+                href={`/communities/${communityId}/compliance`}
+              />
+            )}
           </StaggerChildren>
         </div>
       </div>

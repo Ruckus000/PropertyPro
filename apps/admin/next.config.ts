@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
     '@propertypro/theme',
     '@propertypro/tokens',
   ],
-  serverExternalPackages: ['isomorphic-dompurify'],
   env: {
     NEXT_PUBLIC_APP_ROLE: 'admin',
   },

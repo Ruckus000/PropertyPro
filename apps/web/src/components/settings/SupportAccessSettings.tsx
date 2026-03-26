@@ -26,7 +26,7 @@ interface SupportAccessData {
   recentAccess: AccessLogEntry[];
 }
 
-export function SupportAccessSettings() {
+export function SupportAccessSettings({ communityId }: { communityId: number }) {
   const [data, setData] = useState<SupportAccessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -36,7 +36,7 @@ export function SupportAccessSettings() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/v1/settings/support-access');
+      const res = await fetch(`/api/v1/settings/support-access?communityId=${communityId}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(body.error?.message ?? 'Failed to load support access settings');
@@ -53,7 +53,7 @@ export function SupportAccessSettings() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [communityId]);
 
   const handleToggle = async () => {
     if (!data) return;
@@ -63,7 +63,7 @@ export function SupportAccessSettings() {
       const res = await fetch('/api/v1/settings/support-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !data.consentActive }),
+        body: JSON.stringify({ communityId, enabled: !data.consentActive }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

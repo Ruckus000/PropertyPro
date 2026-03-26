@@ -15,6 +15,7 @@
  * On mobile (<1024px): sidebar hidden, drawer overlay.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
@@ -22,17 +23,33 @@ import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@proper
 import { ADMIN_ROLES } from '@propertypro/shared';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
-import { CommandPalette as CommandPaletteLegacy } from './command-palette';
-import { CommandPalette as CommandPaletteV2 } from '@/components/command-palette';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
-import { DemoBanner } from '@/components/demo/DemoBanner';
+import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
+import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 
 // Feature flag: set to true to use the new command palette
 const USE_COMMAND_PALETTE_V2 = true;
-const CommandPalette = USE_COMMAND_PALETTE_V2 ? CommandPaletteV2 : CommandPaletteLegacy;
+
+interface LazyCommandPaletteProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  communityId: number | null;
+  role: AnyCommunityRole | null;
+  features: CommunityFeatures | null;
+  enableGlobalShortcut?: boolean;
+}
+
+const loadCommandPalette = USE_COMMAND_PALETTE_V2
+  ? () => import('@/components/command-palette').then((module) => module.CommandPalette)
+  : () => import('./command-palette').then((module) => module.CommandPalette);
+
+const LazyCommandPalette = dynamic<LazyCommandPaletteProps>(loadCommandPalette, {
+  ssr: false,
+  loading: () => null,
+});
 
 export interface AppShellUser {
   id: string;
@@ -59,8 +76,9 @@ interface AppShellProps {
 }
 
 function ShellInner({ children, user, community, role, features, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
-  const { expanded, mobileOpen, setMobileOpen } = useSidebar();
+  const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchReady, setSearchReady] = useState(false);
 
   // Close mobile drawer on escape
   useEffect(() => {
@@ -73,6 +91,52 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
   }, [mobileOpen, setMobileOpen]);
 
   const closeMobileNav = useCallback(() => setMobileOpen(false), [setMobileOpen]);
+  const openSearch = useCallback(() => {
+    setSearchReady(true);
+    setSearchOpen(true);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!isSearchShortcut(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      setSearchReady(true);
+      setSearchOpen((currentOpen) => !currentOpen);
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (searchReady) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const requestIdle = globalThis.requestIdleCallback?.bind(globalThis);
+    const cancelIdle = globalThis.cancelIdleCallback?.bind(globalThis);
+
+    if (requestIdle && cancelIdle) {
+      const idleId = requestIdle(() => {
+        setSearchReady(true);
+      }, { timeout: 2000 });
+
+      return () => cancelIdle(idleId);
+    }
+
+    const timeoutId = globalThis.setTimeout(() => {
+      setSearchReady(true);
+    }, 1500);
+
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [searchReady]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
@@ -111,6 +175,8 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           {/* Drawer */}
           <div className="relative z-10 h-full overflow-y-auto">
             <AppSidebar
+              collapsible={false}
+              onNavigate={closeMobileNav}
               communityId={community?.id ?? null}
               communityName={community?.name ?? null}
               communityType={community?.type ?? null}
@@ -122,7 +188,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
             <button
               type="button"
               onClick={closeMobileNav}
-              className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
+              className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
               aria-label="Close navigation"
             >
               <X size={18} />
@@ -137,7 +203,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           userName={user?.fullName ?? null}
           userEmail={user?.email ?? null}
           communityId={community?.id ?? null}
-          onSearchOpen={() => setSearchOpen(true)}
+          onSearchOpen={openSearch}
         />
         {(role === 'pm_admin' || role === 'property_manager_admin') && community && (
           <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
@@ -186,19 +252,26 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
         </main>
       </div>
 
-      <CommandPalette
-        open={searchOpen}
-        onOpenChange={setSearchOpen}
-        communityId={community?.id ?? null}
-        role={role}
-        features={features}
-      />
+      {searchReady && (
+        <LazyCommandPalette
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          communityId={community?.id ?? null}
+          role={role}
+          features={features}
+          enableGlobalShortcut={false}
+        />
+      )}
 
       {demoInfo && (
-        <DemoBanner
+        <DemoTrialBanner
           isDemoMode={demoInfo.isDemoMode}
           currentRole={demoInfo.currentRole}
           slug={demoInfo.slug}
+          status={demoInfo.status}
+          trialEndsAt={demoInfo.trialEndsAt}
+          demoExpiresAt={demoInfo.demoExpiresAt}
+          communityType={demoInfo.communityType}
         />
       )}
     </div>

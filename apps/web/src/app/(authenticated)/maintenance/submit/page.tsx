@@ -6,8 +6,8 @@
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { createScopedClient, maintenanceRequests, maintenanceComments } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';

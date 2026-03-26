@@ -24,6 +24,8 @@ export type LoginAsOptions = {
   communitySlug?: string;
 };
 
+const ADMIN_BASE_URL = 'http://127.0.0.1:3001';
+
 /**
  * Authenticate via the dev agent-login endpoint.
  *
@@ -80,4 +82,15 @@ export async function loginAs(
   await page.goto(payload.portal, { waitUntil: 'networkidle' });
 
   return { communityId, portal: payload.portal };
+}
+
+export async function loginAsPlatformAdmin(page: Page): Promise<void> {
+  await page.goto(`${ADMIN_BASE_URL}/dev/agent-login?as=pm_admin`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.goto(`${ADMIN_BASE_URL}/clients`, {
+    waitUntil: 'domcontentloaded',
+  });
+
+  await expect(page).toHaveURL(/\/clients/);
 }

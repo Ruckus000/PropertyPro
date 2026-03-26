@@ -5,7 +5,7 @@
  * dashboard which orchestrates KPI cards, data table, and bulk actions.
  */
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { isPmAdminInAnyCommunity } from '@/lib/api/pm-communities';
 import { PmDashboardClient } from '@/components/pm/PmDashboardClient';
 

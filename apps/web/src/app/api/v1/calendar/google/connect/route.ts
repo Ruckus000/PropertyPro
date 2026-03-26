@@ -10,6 +10,7 @@ import {
   requireCalendarSyncEnabledForMembership,
   requireCalendarSyncWritePermission,
 } from '@/lib/calendar/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { initiateGoogleCalendarConnect } from '@/lib/services/calendar-sync-service';
 
 const connectSchema = z.object({
@@ -28,6 +29,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireCalendarSyncEnabledForMembership(membership);

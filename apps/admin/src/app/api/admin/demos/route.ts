@@ -16,7 +16,8 @@ import {
 } from '@propertypro/shared/server';
 import { seedCommunity } from '@propertypro/db/seed/seed-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { listDemos, insertDemo } from '@/lib/db/demo-queries';
+import { insertDemo } from '@/lib/db/demo-queries';
+import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
@@ -49,16 +50,16 @@ const createDemoSchema = z.object({
 export async function GET() {
   await requirePlatformAdmin();
 
-  const { data, error } = await listDemos();
-
-  if (error) {
+  try {
+    const data = await getDemoListData();
+    return NextResponse.json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load demos';
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
+      { error: { code: 'INTERNAL_ERROR', message } },
       { status: 500 },
     );
   }
-
-  return NextResponse.json({ data: data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
@@ -164,18 +165,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Set demo_expires_at (30 days from now) on the seeded community.
-  // Note: demo_expires_at is not in the auto-generated Supabase types yet,
-  // so we use the untyped from() helper pattern (same as demo-queries.ts).
+  // Set trial_ends_at (14 days) and demo_expires_at (21 days) on the seeded community.
+  // 14-day trial + 7-day grace period model (replaces 30-day flat expiry).
+  // Note: uses untyped from() helper pattern (same as demo-queries.ts).
   if (seedResult.communityId) {
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+    const GRACE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const trialEndsAt = new Date(now + TRIAL_DURATION_MS).toISOString();
+    const expiresAt = new Date(now + TRIAL_DURATION_MS + GRACE_DURATION_MS).toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: updateError } = await (createAdminClient() as any)
       .from('communities')
-      .update({ demo_expires_at: expiresAt })
+      .update({ trial_ends_at: trialEndsAt, demo_expires_at: expiresAt })
       .eq('id', seedResult.communityId);
     if (updateError) {
-      console.error('[demos/POST] Failed to set demo_expires_at:', updateError.message);
+      console.error('[demos/POST] Failed to set demo timestamps:', updateError.message);
     }
   }
 
@@ -230,6 +235,22 @@ export async function POST(request: NextRequest) {
       { error: { code: 'INTERNAL_ERROR', message: insertError?.message ?? 'Failed to create demo instance' } },
       { status: 500 },
     );
+  }
+
+  // Emit demo_created conversion event (awaited best-effort)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (createAdminClient() as any).from('conversion_events').insert({
+      demo_id: demoInstance.id,
+      community_id: seedResult.communityId,
+      event_type: 'demo_created',
+      source: 'admin_app',
+      dedupe_key: `demo:${demoInstance.id}:created`,
+      occurred_at: new Date().toISOString(),
+      metadata: {},
+    });
+  } catch (err) {
+    console.warn('[demos/POST] Failed to emit demo_created event:', err);
   }
 
   // Compile and store site_blocks when template IDs are provided

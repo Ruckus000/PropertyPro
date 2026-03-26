@@ -9,6 +9,9 @@ const {
   selectFromMock,
   updateMock,
   assessmentLineItemsTable,
+  rentObligationsTable,
+  rentPaymentsTable,
+  leasesTable,
   communitiesTable,
   financeStripeWebhookEventsTable,
   stripeConnectedAccountsTable,
@@ -28,6 +31,17 @@ const {
     unitId: Symbol('assessment_line_items.unit_id'),
     status: Symbol('assessment_line_items.status'),
   },
+  rentObligationsTable: {
+    id: Symbol('rent_obligations.id'),
+    unitId: Symbol('rent_obligations.unit_id'),
+    status: Symbol('rent_obligations.status'),
+    dueDate: Symbol('rent_obligations.due_date'),
+    updatedAt: Symbol('rent_obligations.updated_at'),
+  },
+  rentPaymentsTable: {
+    id: Symbol('rent_payments.id'),
+  },
+  leasesTable: { id: Symbol('leases.id') },
   communitiesTable: { id: Symbol('communities.id') },
   financeStripeWebhookEventsTable: {
     stripeEventId: Symbol('finance_stripe_webhook_events.stripe_event_id'),
@@ -42,6 +56,9 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   assessmentLineItems: assessmentLineItemsTable,
+  rentObligations: rentObligationsTable,
+  rentPayments: rentPaymentsTable,
+  leases: leasesTable,
   assessments: { id: Symbol('assessments.id') },
   communities: communitiesTable,
   createScopedClient: createScopedClientMock,
@@ -96,6 +113,7 @@ vi.mock('@/lib/services/csv-export', () => ({
 
 import {
   getCommunityFeePolicy,
+  createPaymentIntentForLineItem,
   updatePaymentIntentFee,
   processFinanceStripeEvent,
 } from '../../src/lib/services/finance-service';
@@ -719,5 +737,134 @@ describe('processFinanceStripeEvent — convenience fee handling', () => {
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
     // Line item status NOT modified (guard fires before status update)
     expect(updateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('createPaymentIntentForLineItem metadata contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createScopedClientMock.mockImplementation(() => makeScopedClient());
+    selectFromMock.mockImplementation((table: unknown) => {
+      if (table === assessmentLineItemsTable) {
+        return Promise.resolve([{
+          id: 44,
+          assessmentId: 7,
+          communityId: 11,
+          unitId: 88,
+          amountCents: 50000,
+          dueDate: '2026-01-15',
+          status: 'pending',
+          paidAt: null,
+          paymentIntentId: null,
+          lateFeeCents: 1250,
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-01'),
+        }]);
+      }
+      if (table === stripeConnectedAccountsTable) {
+        return Promise.resolve([{
+          id: 1,
+          communityId: 11,
+          stripeAccountId: 'acct_123',
+          onboardingComplete: true,
+          chargesEnabled: true,
+          payoutsEnabled: true,
+        }]);
+      }
+      if (table === communitiesTable) {
+        return Promise.resolve([{ communitySettings: { paymentFeePolicy: 'owner_pays' } }]);
+      }
+      return Promise.resolve([]);
+    });
+    updateMock.mockResolvedValue([{ id: 44 }]);
+  });
+
+  it('sends neutral payable metadata and keeps legacy lineItemId', async () => {
+    const paymentIntentsCreate = vi.fn().mockResolvedValue({
+      id: 'pi_payable_1',
+      client_secret: 'cs_test_1',
+      currency: 'usd',
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { create: paymentIntentsCreate },
+    });
+
+    await createPaymentIntentForLineItem(11, {
+      lineItemId: 44,
+      actorUserId: 'user-11',
+    });
+
+    expect(paymentIntentsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        payableType: 'assessment_line_item',
+        payableId: '44',
+        payableSourceType: 'assessment',
+        payableSourceId: '44',
+        lineItemId: '44',
+      }),
+    }));
+  });
+
+  it('creates rent payable intents with rent metadata contract', async () => {
+    selectFromMock.mockImplementation((table: unknown) => {
+      if (table === rentObligationsTable) {
+        return Promise.resolve([{
+          id: 77,
+          leaseId: 5,
+          communityId: 11,
+          unitId: 88,
+          dueDate: '2026-01-01',
+          amountCents: 160000,
+          status: 'pending',
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-01'),
+        }]);
+      }
+      if (table === stripeConnectedAccountsTable) {
+        return Promise.resolve([{
+          id: 1,
+          communityId: 11,
+          stripeAccountId: 'acct_123',
+          onboardingComplete: true,
+          chargesEnabled: true,
+          payoutsEnabled: true,
+        }]);
+      }
+      if (table === communitiesTable) {
+        return Promise.resolve([{ communitySettings: { paymentFeePolicy: 'owner_pays' } }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const paymentIntentsCreate = vi.fn().mockResolvedValue({
+      id: 'pi_rent_1',
+      client_secret: 'cs_rent_1',
+      currency: 'usd',
+    });
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { create: paymentIntentsCreate },
+    });
+
+    await createPaymentIntentForLineItem(11, {
+      payableType: 'rent_obligation',
+      payableId: 77,
+      lineItemId: 77,
+      actorUserId: 'user-11',
+    });
+
+    expect(paymentIntentsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        payableType: 'rent_obligation',
+        payableId: '77',
+        payableSourceType: 'rent',
+        payableSourceId: '77',
+      }),
+    }));
+    expect(updateMock).not.toHaveBeenCalledWith(
+      assessmentLineItemsTable,
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

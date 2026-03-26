@@ -8,14 +8,26 @@
  * Secret: SUPPORT_SESSION_JWT_SECRET environment variable (min 32 chars).
  */
 import { SignJWT } from 'jose';
-import type { SupportSessionJwtPayload } from '@propertypro/shared';
-import { SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
+import {
+  SUPPORT_SESSION_DEV_SECRET,
+  SUPPORT_SESSION_MAX_TTL_HOURS,
+  type SupportSessionJwtPayload,
+} from '@propertypro/shared';
 
 function getSecret(): Uint8Array {
   const secret = process.env.SUPPORT_SESSION_JWT_SECRET;
+  if (secret && secret.length >= 32) {
+    return new TextEncoder().encode(secret);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    return new TextEncoder().encode(SUPPORT_SESSION_DEV_SECRET);
+  }
+
   if (!secret || secret.length < 32) {
     throw new Error('SUPPORT_SESSION_JWT_SECRET is not set or is too short (min 32 chars)');
   }
+
   return new TextEncoder().encode(secret);
 }
 

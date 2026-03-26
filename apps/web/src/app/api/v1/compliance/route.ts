@@ -22,6 +22,7 @@ import {
   calculateComplianceStatus,
   calculatePostingDeadline,
 } from '@/lib/utils/compliance-calculator';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
@@ -110,6 +111,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedBody.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
 
   // Feature gate: compliance is only available for condo/HOA communities
@@ -217,6 +219,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const { id, action: patchAction, documentId } = parsed.data;
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   requireCondoCommunity(membership.communityType);
   requirePermission(membership, 'compliance', 'write');

@@ -7,11 +7,12 @@
  * Uses createUnscopedClient() for pending_signups updates (pre-tenant context).
  */
 import Stripe from 'stripe';
-import { eq } from '@propertypro/db/filters';
+import { eq, and } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { pendingSignups } from '@propertypro/db';
-import type { CommunityType } from '@propertypro/shared';
+import { pendingSignups, stripePrices } from '@propertypro/db';
+import type { CommunityType, PlanId } from '@propertypro/shared';
 import type { SignupPlanId } from '@/lib/auth/signup-schema';
+import { AppError } from '@/lib/api/errors/AppError';
 
 /** Lazy singleton — initialized on first call. */
 let _stripe: Stripe | null = null;
@@ -31,17 +32,37 @@ export interface EmbeddedCheckoutResult {
 }
 
 /**
- * Map plan IDs to Stripe Price IDs via env vars.
- * Env var naming: STRIPE_PRICE_<PLAN_ID_UPPER>
- * e.g. STRIPE_PRICE_COMPLIANCE_BASIC, STRIPE_PRICE_APARTMENT_OPERATIONS
+ * Resolve a Stripe Price ID from the stripe_prices table.
+ *
+ * Replaces the old env-var-based getPriceId() function. All checkout paths
+ * (subscribe, admin convert, signup embedded) use this single function.
  */
-function getPriceId(planId: SignupPlanId): string {
-  const envKey = `STRIPE_PRICE_${planId.toUpperCase()}`;
-  const priceId = process.env[envKey];
-  if (!priceId) {
-    throw new Error(`Stripe Price ID not configured for plan "${planId}" (env: ${envKey})`);
+export async function resolveStripePrice(
+  planId: PlanId,
+  communityType: CommunityType,
+  interval: 'month' = 'month',
+): Promise<string> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ stripePriceId: stripePrices.stripePriceId })
+    .from(stripePrices)
+    .where(
+      and(
+        eq(stripePrices.planId, planId),
+        eq(stripePrices.communityType, communityType),
+        eq(stripePrices.billingInterval, interval),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    throw new AppError(
+      `No Stripe price configured for plan=${planId}, communityType=${communityType}, interval=${interval}`,
+      500,
+      'STRIPE_PRICE_CONFIG_MISSING',
+    );
   }
-  return priceId;
+  return row.stripePriceId;
 }
 
 /**
@@ -59,7 +80,7 @@ export async function createEmbeddedCheckoutSession(
   returnBaseUrl: string,
 ): Promise<EmbeddedCheckoutResult> {
   const stripe = getStripe();
-  const priceId = getPriceId(planId);
+  const priceId = await resolveStripePrice(planId, communityType, 'month');
 
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',

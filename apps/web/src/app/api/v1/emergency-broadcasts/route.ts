@@ -20,6 +20,7 @@ import {
   createBroadcast,
   listBroadcasts,
 } from '@/lib/services/emergency-broadcast-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const { communityId, ...rest } = parsed.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, communityId);
+  await assertNotDemoGrace(effectiveCommunityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'emergency_broadcasts', 'write');
 

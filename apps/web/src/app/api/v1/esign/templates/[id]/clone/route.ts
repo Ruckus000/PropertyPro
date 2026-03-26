@@ -8,6 +8,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { requireEsignWritePermission } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { cloneTemplate } from '@/lib/services/esign-service';
 
 const cloneSchema = z.object({
@@ -32,6 +33,7 @@ export const POST = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignWritePermission(membership);

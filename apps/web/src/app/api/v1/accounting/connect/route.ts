@@ -10,6 +10,7 @@ import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { initiateAccountingConnect } from '@/lib/services/accounting-connectors-service';
 
 const connectSchema = z.object({
@@ -29,6 +30,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireAccountingEnabled(membership);

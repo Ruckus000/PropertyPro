@@ -27,13 +27,16 @@ export async function compileJsxToHtml(jsxSource: string): Promise<string> {
   const ReactDOMServer = (await import('react-dom/server')).default;
   let html = ReactDOMServer.renderToStaticMarkup(element);
 
-  // 4. Sanitize with isomorphic-dompurify (NOT sanitize-html)
-  const DOMPurify = (await import('isomorphic-dompurify')).default;
-  html = DOMPurify.sanitize(html, {
-    ADD_TAGS: ['style'],
-    ADD_ATTR: ['target', 'rel'],
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
-    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  // 4. Sanitize with sanitize-html (no jsdom dependency, works in Node.js)
+  const sanitizeHtml = (await import('sanitize-html')).default;
+  html = sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['style', 'html', 'head', 'body']),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      '*': ['class', 'id', 'style', 'target', 'rel'],
+    },
+    // script, iframe, object, embed, form are not in allowedTags — blocked by default
+    // event handler attributes (onerror, onload, onclick, etc.) are not in allowedAttributes — blocked by default
   });
 
   return html;

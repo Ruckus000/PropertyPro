@@ -6,7 +6,6 @@
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoById } from '@/lib/db/demo-queries';
 import {
   generateDemoToken,
@@ -14,13 +13,14 @@ import {
 } from '@propertypro/shared/server';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import { TabbedPreviewClient } from './TabbedPreviewClient';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function DemoPreviewPage({ params }: PageProps) {
-  await requirePlatformAdmin();
+  await requireAdminPageSession();
 
   const { id: idRaw } = await params;
   const id = Number(idRaw);
@@ -59,8 +59,8 @@ export default async function DemoPreviewPage({ params }: PageProps) {
 
   const demoLoginBase = `${webBaseUrl}/api/v1/auth/demo-login`;
 
-  // 1. Public Website — no auth needed
-  const publicUrl = `${webBaseUrl}/${demo.slug}?preview=true`;
+  // 1. Public Website — public demo landing route
+  const publicUrl = `${webBaseUrl}/demo/${demo.slug}?preview=true`;
 
   // 2. Mobile App — preview mode (no auth needed, avoids cross-origin cookie issues)
   const mobileUrl = demo.seeded_community_id

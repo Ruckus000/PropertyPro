@@ -21,6 +21,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 import {
   createOnboardingResident,
@@ -63,6 +64,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
+  await assertNotDemoGrace(communityId);
   const {
     email,
     fullName,

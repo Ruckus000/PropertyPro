@@ -10,6 +10,7 @@ import {
   requireAmenitiesWritePermission,
   requireReservationPermission,
 } from '@/lib/work-orders/common';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { cancelReservationForCommunity } from '@/lib/services/work-orders-service';
 
 export const DELETE = withErrorHandler(
@@ -19,6 +20,7 @@ export const DELETE = withErrorHandler(
 
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);

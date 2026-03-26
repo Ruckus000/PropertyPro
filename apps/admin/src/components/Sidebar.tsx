@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -32,13 +32,22 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  coolingCount?: number;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount }: SidebarProps) {
   const pathname = usePathname();
-  const [coolingCount, setCoolingCount] = useState(0);
+  const [coolingCount, setCoolingCount] = useState(initialCoolingCount ?? 0);
 
   useEffect(() => {
+    setCoolingCount(initialCoolingCount ?? 0);
+  }, [initialCoolingCount]);
+
+  useEffect(() => {
+    if (typeof initialCoolingCount === 'number') {
+      return;
+    }
+
     async function fetchCoolingCount() {
       try {
         const res = await fetch('/api/admin/deletion-requests?status=cooling');
@@ -51,7 +60,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       }
     }
     fetchCoolingCount();
-  }, []);
+  }, [initialCoolingCount]);
 
   return (
     <aside

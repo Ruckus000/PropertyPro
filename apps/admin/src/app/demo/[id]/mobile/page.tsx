@@ -5,20 +5,20 @@
  * No admin chrome — this is the page to show prospects on a large screen.
  */
 import { notFound } from 'next/navigation';
-import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoById } from '@/lib/db/demo-queries';
 import {
   generateDemoToken,
   decryptDemoTokenSecret,
 } from '@propertypro/shared/server';
 import { MobilePreviewClient } from './MobilePreviewClient';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function DemoMobilePage({ params }: PageProps) {
-  await requirePlatformAdmin();
+  await requireAdminPageSession();
 
   const { id: idRaw } = await params;
   const id = Number(idRaw);

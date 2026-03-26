@@ -16,6 +16,7 @@ import {
   presetToBranding,
   darkenHex,
 } from '@propertypro/theme';
+import { getWebsiteDomainInfo } from '@/lib/clients/website';
 
 // ---------------------------------------------------------------------------
 // Magic-byte validation (client-side, matches admin upload route)
@@ -43,6 +44,7 @@ function detectImageMime(buf: Uint8Array): string | null {
 interface CommunityWebsiteEditorProps {
   communityId: number;
   communitySlug: string;
+  customDomain: string | null;
 }
 
 interface BrandingForm {
@@ -71,7 +73,11 @@ function brandingToForm(b: CommunityBranding): BrandingForm {
 // Component
 // ---------------------------------------------------------------------------
 
-export function CommunityWebsiteEditor({ communityId, communitySlug }: CommunityWebsiteEditorProps) {
+export function CommunityWebsiteEditor({
+  communityId,
+  communitySlug,
+  customDomain,
+}: CommunityWebsiteEditorProps) {
   const [form, setForm] = useState<BrandingForm>(brandingToForm({}));
   const [initial, setInitial] = useState<BrandingForm>(brandingToForm({}));
   const [loading, setLoading] = useState(true);
@@ -256,6 +262,7 @@ export function CommunityWebsiteEditor({ communityId, communitySlug }: Community
   // ---------------------------------------------------------------------------
 
   const currentLogoSrc = logoPreviewUrl ?? logoPublicUrl ?? null;
+  const domainInfo = getWebsiteDomainInfo({ slug: communitySlug, customDomain });
 
   if (loading) {
     return (
@@ -489,10 +496,18 @@ export function CommunityWebsiteEditor({ communityId, communitySlug }: Community
 
           {/* Public URL info */}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-e1">
-            <p className="text-xs font-medium text-gray-500">Public URL</p>
+            <p className="text-xs font-medium text-gray-500">Website URL</p>
             <p className="mt-1 font-mono text-sm text-gray-700">
-              {communitySlug}.propertyprofl.com
+              {domainInfo.displayUrl}
             </p>
+            <p className="mt-1 text-xs text-gray-500">
+              {domainInfo.urlSource === 'custom_domain' ? 'Custom domain' : 'Default subdomain'}
+            </p>
+            {domainInfo.ignoredInvalidCustomDomain && (
+              <p className="mt-1 text-xs text-amber-700">
+                Saved custom domain is invalid and is ignored for display.
+              </p>
+            )}
           </div>
         </div>
       </div>

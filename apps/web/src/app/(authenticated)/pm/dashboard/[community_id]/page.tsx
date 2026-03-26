@@ -9,7 +9,7 @@
  *   (missing community, revoked access, non-PM role — no data leakage)
  */
 import { redirect } from 'next/navigation';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { resolvePmDashboardTarget } from '@/lib/api/community-context';
 
 interface PmCommunityPageProps {

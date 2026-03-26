@@ -55,6 +55,8 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, POST, PATCH } from '../../src/app/api/v1/contracts/route';
 
 // ---------------------------------------------------------------------------

@@ -561,6 +561,41 @@
       "when": 1774650000000,
       "tag": "0119_support_access",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1774750000000,
+      "tag": "0120_stripe_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1774760000000,
+      "tag": "0121_conversion_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1774770000000,
+      "tag": "0122_trial_ends_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1774780000000,
+      "tag": "0123_support_access_service_role_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1774790000000,
+      "tag": "0124_allow_system_audit_actor",
+      "breakpoints": true
     }
   ]
 }

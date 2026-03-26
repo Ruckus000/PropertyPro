@@ -9,6 +9,8 @@ const {
   selectFromMock,
   updateMock,
   assessmentLineItemsTable,
+  rentObligationsTable,
+  rentPaymentsTable,
   assessmentsTable,
   financeStripeWebhookEventsTable,
   violationFinesTable,
@@ -34,6 +36,12 @@ const {
     id: Symbol('assessment_line_items.id'),
     unitId: Symbol('assessment_line_items.unit_id'),
   },
+  rentObligationsTable: {
+    id: Symbol('rent_obligations.id'),
+    unitId: Symbol('rent_obligations.unit_id'),
+    status: Symbol('rent_obligations.status'),
+  },
+  rentPaymentsTable: { id: Symbol('rent_payments.id') },
   assessmentsTable: { id: Symbol('assessments.id') },
   financeStripeWebhookEventsTable: {
     stripeEventId: Symbol('finance_stripe_webhook_events.stripe_event_id'),
@@ -64,6 +72,8 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   assessmentLineItems: assessmentLineItemsTable,
+  rentObligations: rentObligationsTable,
+  rentPayments: rentPaymentsTable,
   assessments: assessmentsTable,
   createScopedClient: createScopedClientMock,
   financeStripeWebhookEvents: financeStripeWebhookEventsTable,
@@ -207,6 +217,117 @@ describe('processFinanceStripeEvent', () => {
     );
   });
 
+  it('supports payable contract metadata for payment_intent.succeeded', async () => {
+    const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+      id: 'pi_payable_contract_1',
+      metadata: {
+        communityId: '11',
+        payableType: 'assessment_line_item',
+        payableId: '44',
+        unitId: '88',
+        userId: 'user-11',
+      },
+      amount_received: 25000,
+      amount: 25000,
+      latest_charge: 'ch_payable_contract_1',
+    });
+    const chargesRetrieve = vi.fn().mockResolvedValue({
+      id: 'ch_payable_contract_1',
+      amount: 25000,
+      amount_refunded: 0,
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { retrieve: paymentIntentRetrieve },
+      charges: { retrieve: chargesRetrieve },
+    });
+
+    await processFinanceStripeEvent(
+      makeEvent('payment_intent.succeeded', 'evt_fin_payable_contract_1', { id: 'pi_payable_contract_1' }),
+    );
+
+    expect(updateMock).toHaveBeenCalledWith(
+      assessmentLineItemsTable,
+      expect.objectContaining({
+        status: 'paid',
+        paymentIntentId: 'pi_payable_contract_1',
+      }),
+      expect.anything(),
+    );
+    expect(postLedgerEntryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          payableType: 'assessment_line_item',
+          payableId: 44,
+          lineItemId: 44,
+        }),
+      }),
+    );
+  });
+
+  it('settles rent obligations and records rent payment rows', async () => {
+    const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+      id: 'pi_rent_success_1',
+      metadata: {
+        communityId: '11',
+        payableType: 'rent_obligation',
+        payableId: '501',
+        unitId: '88',
+        userId: 'user-11',
+      },
+      amount_received: 160000,
+      amount: 160000,
+      latest_charge: 'ch_rent_success_1',
+    });
+    const chargesRetrieve = vi.fn().mockResolvedValue({
+      id: 'ch_rent_success_1',
+      amount: 160000,
+      amount_refunded: 0,
+    });
+    selectFromMock.mockImplementationOnce((table: unknown) => {
+      if (table === rentObligationsTable) {
+        return Promise.resolve([{
+          id: 501,
+          leaseId: 42,
+          communityId: 11,
+          unitId: 88,
+          dueDate: '2026-01-01',
+          amountCents: 160000,
+          status: 'pending',
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-01'),
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { retrieve: paymentIntentRetrieve },
+      charges: { retrieve: chargesRetrieve },
+    });
+
+    await processFinanceStripeEvent(
+      makeEvent('payment_intent.succeeded', 'evt_fin_rent_1', { id: 'pi_rent_success_1' }),
+    );
+
+    expect(updateMock).toHaveBeenCalledWith(
+      rentObligationsTable,
+      expect.objectContaining({ status: 'paid' }),
+      expect.anything(),
+    );
+    expect(insertMock).toHaveBeenCalledWith(
+      rentPaymentsTable,
+      expect.objectContaining({
+        leaseId: 42,
+        obligationId: 501,
+        unitId: 88,
+        residentId: 'user-11',
+        externalReference: 'pi_rent_success_1',
+      }),
+    );
+  });
+
   it('is idempotent for duplicate Stripe events (unique-constraint insert)', async () => {
     const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
     insertMock.mockRejectedValueOnce(uniqueViolation);
@@ -309,6 +430,112 @@ describe('processFinanceStripeEvent', () => {
         amountCents: 25000,
         sourceType: 'payment',
         sourceId: 'ch_refund_1',
+      }),
+    );
+    expect(insertMock).not.toHaveBeenCalledWith(
+      rentPaymentsTable,
+      expect.anything(),
+    );
+  });
+
+  it('supports payable contract metadata for charge.refunded', async () => {
+    const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+      id: 'pi_refund_payable_1',
+      metadata: {
+        communityId: '11',
+        payableType: 'assessment_line_item',
+        payableId: '44',
+        unitId: '88',
+        userId: 'user-11',
+      },
+    });
+    const chargesRetrieve = vi.fn().mockResolvedValue({
+      id: 'ch_refund_payable_1',
+      amount: 25000,
+      amount_refunded: 25000,
+      payment_intent: 'pi_refund_payable_1',
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { retrieve: paymentIntentRetrieve },
+      charges: { retrieve: chargesRetrieve },
+    });
+
+    await processFinanceStripeEvent(
+      makeEvent('charge.refunded', 'evt_fin_refund_payable', { id: 'ch_refund_payable_1', amount: 25000, amount_refunded: 25000 }, { amount_refunded: 0 }),
+    );
+
+    expect(postLedgerEntryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        entryType: 'refund',
+        metadata: expect.objectContaining({
+          payableType: 'assessment_line_item',
+          payableId: 44,
+          lineItemId: 44,
+        }),
+      }),
+    );
+  });
+
+  it('reverts rent obligation status on full rent refund', async () => {
+    const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+      id: 'pi_rent_refund_1',
+      metadata: {
+        communityId: '11',
+        payableType: 'rent_obligation',
+        payableId: '501',
+        unitId: '88',
+        userId: 'user-11',
+      },
+    });
+    const chargesRetrieve = vi.fn().mockResolvedValue({
+      id: 'ch_rent_refund_1',
+      amount: 160000,
+      amount_refunded: 160000,
+      payment_intent: 'pi_rent_refund_1',
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { retrieve: paymentIntentRetrieve },
+      charges: { retrieve: chargesRetrieve },
+    });
+    selectFromMock.mockImplementationOnce((table: unknown) => {
+      if (table === rentObligationsTable) {
+        return Promise.resolve([{
+          id: 501,
+          leaseId: 42,
+          communityId: 11,
+          unitId: 88,
+          dueDate: '2026-01-01',
+          amountCents: 160000,
+          status: 'paid',
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-01'),
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await processFinanceStripeEvent(
+      makeEvent('charge.refunded', 'evt_fin_rent_refund', { id: 'ch_rent_refund_1', amount: 160000, amount_refunded: 160000 }, { amount_refunded: 0 }),
+    );
+
+    expect(updateMock).toHaveBeenCalledWith(
+      rentObligationsTable,
+      expect.objectContaining({ status: 'pending' }),
+      expect.anything(),
+    );
+    expect(insertMock).toHaveBeenCalledWith(
+      rentPaymentsTable,
+      expect.objectContaining({
+        leaseId: 42,
+        obligationId: 501,
+        unitId: 88,
+        residentId: 'user-11',
+        amountCents: -160000,
+        externalReference: 'ch_rent_refund_1',
+        notes: expect.stringContaining('evt_fin_rent_refund'),
       }),
     );
   });

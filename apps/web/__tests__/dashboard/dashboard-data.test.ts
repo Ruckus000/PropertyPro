@@ -65,4 +65,20 @@ describe('dashboard data helpers', () => {
     const selected = selectUpcomingMeetings(rows);
     expect(selected.map((item) => item.id)).toEqual([2, 3]);
   });
+
+  it('normalizes seeded meeting title artifacts on dashboard output', () => {
+    const now = Date.now();
+    const rows = [
+      {
+        id: 9,
+        title: 'sunset-condos Board Meeting (48-hour notice)',
+        meetingType: 'board',
+        startsAt: new Date(now + 120_000).toISOString(),
+        location: 'Clubhouse',
+      },
+    ] as never;
+
+    const selected = selectUpcomingMeetings(rows);
+    expect(selected[0]?.title).toBe('Board Meeting');
+  });
 });

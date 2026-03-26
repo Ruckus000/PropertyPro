@@ -7,7 +7,7 @@ describe('detectDemoInfo', () => {
       true,
       'demo-board@demo-acme-corp-a1b2c3.propertyprofl.com',
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isDemoMode: true,
       currentRole: 'board',
       slug: 'demo-acme-corp-a1b2c3',
@@ -19,7 +19,7 @@ describe('detectDemoInfo', () => {
       true,
       'demo-resident@demo-acme-corp-a1b2c3.propertyprofl.com',
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isDemoMode: true,
       currentRole: 'resident',
       slug: 'demo-acme-corp-a1b2c3',
@@ -31,7 +31,7 @@ describe('detectDemoInfo', () => {
       true,
       'demo-resident@sunset.condos.propertyprofl.com',
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isDemoMode: true,
       currentRole: 'resident',
       slug: 'sunset.condos',
@@ -43,11 +43,30 @@ describe('detectDemoInfo', () => {
       true,
       'demo-board@sunset.condos.propertyprofl.com',
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isDemoMode: true,
       currentRole: 'board',
       slug: 'sunset.condos',
     });
+  });
+
+  it('includes lifecycle fields from computeDemoStatus', () => {
+    const result = detectDemoInfo(
+      true,
+      'demo-board@test.propertyprofl.com',
+      new Date(Date.now() + 86400000 * 14), // trialEndsAt: 14 days from now
+      new Date(Date.now() + 86400000 * 21), // demoExpiresAt: 21 days from now
+      'condo_718',
+    );
+    expect(result).toMatchObject({
+      isDemoMode: true,
+      currentRole: 'board',
+      slug: 'test',
+      status: 'active_trial',
+      communityType: 'condo_718',
+    });
+    expect(result!.trialEndsAt).toBeInstanceOf(Date);
+    expect(result!.demoExpiresAt).toBeInstanceOf(Date);
   });
 
   it('returns null for non-demo email', () => {

@@ -20,7 +20,7 @@ export const PhoneFrame = forwardRef<HTMLIFrameElement, PhoneFrameProps>(
   function PhoneFrame({ src, loading = 'eager' }, ref) {
     return (
       <div
-        aria-label="Mobile portal preview"
+        aria-label="Tenant portal preview"
         style={{
           position: 'relative',
           width: 430,
@@ -64,7 +64,7 @@ export const PhoneFrame = forwardRef<HTMLIFrameElement, PhoneFrameProps>(
             ref={ref}
             src={src}
             loading={loading}
-            title="Mobile portal preview"
+            title="Tenant portal preview"
             style={{
               width: '100%',
               height: '100%',

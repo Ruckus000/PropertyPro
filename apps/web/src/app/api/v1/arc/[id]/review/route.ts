@@ -14,6 +14,7 @@ import {
   requireArcWritePermission,
 } from '@/lib/violations/common';
 import { reviewArcSubmissionForCommunity } from '@/lib/services/violations-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const reviewSchema = z.object({
   communityId: z.number().int().positive(),
@@ -35,6 +36,7 @@ export const PATCH = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireArcEnabled(membership);

@@ -73,6 +73,8 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { GET, POST, DELETE } from '../../src/app/api/v1/documents/route';
 
 const MANAGER_MEMBERSHIP = {

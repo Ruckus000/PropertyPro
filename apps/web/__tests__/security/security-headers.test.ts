@@ -239,6 +239,15 @@ describe('buildCspHeader', () => {
       vi.unstubAllEnvs();
     });
 
+    it('includes PM and Admin origins in production fallback when ADMIN_ORIGIN is unset', () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('ADMIN_ORIGIN', '');
+      const csp = buildCspHeader({ isPreview: true });
+      expect(csp).toContain('https://pm.propertyprofl.com');
+      expect(csp).toContain('https://admin.propertyprofl.com');
+      vi.unstubAllEnvs();
+    });
+
     it('still returns frame-ancestors none when isPreview is false', () => {
       const csp = buildCspHeader({ isPreview: false });
       expect(csp).toContain("frame-ancestors 'none'");

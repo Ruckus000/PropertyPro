@@ -8,6 +8,10 @@ import { ConvertDemoDialog } from '@/components/demo/ConvertDemoDialog';
 
 type TabKey = 'public' | 'mobile' | 'admin';
 
+export function isPublicWebsiteTab(tab: TabKey): boolean {
+  return tab === 'public';
+}
+
 interface TabDef {
   key: TabKey;
   label: string;
@@ -59,7 +63,7 @@ export function TabbedPreviewClient({
 
   const tabs: TabDef[] = [
     { key: 'public', label: 'Public Website', url: publicUrl },
-    { key: 'mobile', label: 'Mobile App', url: mobileUrl },
+    { key: 'mobile', label: 'Tenant Portal', url: mobileUrl },
     { key: 'admin', label: 'Admin Dashboard', url: adminUrl },
   ];
 
@@ -67,8 +71,8 @@ export function TabbedPreviewClient({
 
   const handleTabClick = (key: TabKey) => {
     setActiveTab(key);
-    // Close the edit drawer when switching to Admin Dashboard (no template editing)
-    if (key === 'admin') setDrawerOpen(false);
+    // Edit drawer is only available on the public website tab.
+    if (!isPublicWebsiteTab(key)) setDrawerOpen(false);
   };
 
   const [convertOpen, setConvertOpen] = useState(false);
@@ -231,8 +235,8 @@ export function TabbedPreviewClient({
           );
         })}
 
-        {/* Floating Edit Button — hidden on Admin Dashboard tab */}
-        {activeTab !== 'admin' && (
+        {/* Floating Edit Button — only available on Public Website tab */}
+        {isPublicWebsiteTab(activeTab) && (
           <button
             type="button"
             onClick={() => setDrawerOpen((prev) => !prev)}

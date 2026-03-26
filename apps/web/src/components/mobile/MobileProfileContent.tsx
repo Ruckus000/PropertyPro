@@ -7,6 +7,9 @@ import {
   Lock,
   HelpCircle,
   MessageSquare,
+  Search,
+  CreditCard,
+  ShieldCheck,
   ChevronRight,
   LogOut,
 } from "lucide-react";
@@ -20,7 +23,19 @@ interface MobileProfileContentProps {
   userRole: string;
   communityName: string;
   communityId: number;
+  role: string;
+  presetKey?: string;
+  hasCompliance: boolean;
+  hasFinance: boolean;
 }
+
+const ADMIN_PRESETS = new Set([
+  "board_member",
+  "board_president",
+  "cam",
+  "site_manager",
+  "property_manager_admin",
+]);
 
 interface SettingsRowProps {
   icon: React.ElementType;
@@ -58,9 +73,17 @@ export function MobileProfileContent({
   userRole,
   communityName,
   communityId,
+  role,
+  presetKey,
+  hasCompliance,
+  hasFinance,
 }: MobileProfileContentProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   const initials = toInitials(userName);
+  const canAccessCompliance =
+    hasCompliance &&
+    (role === "manager" || role === "pm_admin") &&
+    ADMIN_PRESETS.has(presetKey ?? "");
 
   async function handleSignOut() {
     if (loggingOut) return;
@@ -110,8 +133,41 @@ export function MobileProfileContent({
         </div>
       </SlideUp>
 
-      {/* Support group */}
+      {/* Quick access group */}
       <SlideUp delay={0.1}>
+        <div className="px-5 mt-5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-stone-400 mb-2">
+            Quick Access
+          </div>
+          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <SettingsRow
+              icon={Search}
+              label="Search"
+              href={`/mobile/search?communityId=${communityId}`}
+              isLast={!hasFinance && !canAccessCompliance}
+            />
+            {hasFinance && (
+              <SettingsRow
+                icon={CreditCard}
+                label="Payments"
+                href={`/communities/${communityId}/payments`}
+                isLast={!canAccessCompliance}
+              />
+            )}
+            {canAccessCompliance && (
+              <SettingsRow
+                icon={ShieldCheck}
+                label="Compliance Dashboard"
+                href={`/communities/${communityId}/compliance`}
+                isLast
+              />
+            )}
+          </div>
+        </div>
+      </SlideUp>
+
+      {/* Support group */}
+      <SlideUp delay={0.15}>
         <div className="px-5 mt-5">
           <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-stone-400 mb-2">
             Support
@@ -133,7 +189,7 @@ export function MobileProfileContent({
       </SlideUp>
 
       {/* Sign out */}
-      <SlideUp delay={0.15}>
+      <SlideUp delay={0.2}>
         <div className="px-5 mt-6 pb-6">
           <button
             onClick={handleSignOut}

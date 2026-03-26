@@ -1,9 +1,9 @@
 /**
  * Navigation item configuration for the authenticated app shell.
  *
- * Items are grouped ('main' vs 'admin'), role-gated, and feature-gated.
- * The sidebar filters this list based on the current user's role and
- * the active community's feature flags.
+ * Items remain the canonical source of truth for routing, gating, and
+ * active-state matching. Section groupings are derived from this list so
+ * the sidebar can render the new section model without duplicating config.
  */
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -40,11 +40,22 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 
+const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
+  'owner',
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+];
+
 export interface NavItemConfig {
   id: string;
   label: string;
   icon: LucideIcon;
   href: (communityId: number) => string;
+  /** Optional child item IDs for nested sidebar disclosure groups. */
+  children?: readonly string[];
   /** Restrict to these roles. Omit = visible to all roles. */
   roles?: readonly CommunityRole[];
   /** Only show when this community feature is enabled. */
@@ -53,6 +64,11 @@ export interface NavItemConfig {
   group: 'main' | 'admin';
   /** Pathname prefixes used for active-state matching. */
   matchPrefixes: readonly string[];
+}
+
+export interface NavSection {
+  label: string | null;
+  items: readonly NavItemConfig[];
 }
 
 export const NAV_ITEMS: readonly NavItemConfig[] = [
@@ -69,7 +85,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'documents',
     label: 'Documents',
     icon: FileText,
-    href: (cid) => `/communities/${cid}/documents?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/documents`,
     group: 'main',
     matchPrefixes: ['/documents'],
   },
@@ -77,7 +93,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'meetings',
     label: 'Meetings',
     icon: Calendar,
-    href: (cid) => `/communities/${cid}/meetings?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/meetings`,
     featureKey: 'hasMeetings',
     group: 'main',
     matchPrefixes: ['/meetings'],
@@ -95,6 +111,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Maintenance',
     icon: Wrench,
     href: (cid) => `/maintenance/submit?communityId=${cid}`,
+    children: ['maintenance-inbox'],
     featureKey: 'hasMaintenanceRequests',
     group: 'main',
     matchPrefixes: ['/maintenance/submit'],
@@ -104,6 +121,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Leases',
     icon: FileText,
     href: (cid) => `/dashboard/leases?communityId=${cid}`,
+    children: ['move-in-out'],
     featureKey: 'hasLeaseTracking',
     group: 'main',
     matchPrefixes: ['/dashboard/leases'],
@@ -130,7 +148,8 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'payments',
     label: 'Payments',
     icon: CreditCard,
-    href: (cid) => `/payments?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/payments`,
+    children: ['assessments', 'finance'],
     featureKey: 'hasFinance',
     group: 'main',
     matchPrefixes: ['/payments'],
@@ -140,6 +159,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Report Violation',
     icon: AlertTriangle,
     href: (cid) => `/violations/report?communityId=${cid}`,
+    children: ['violations-inbox'],
     featureKey: 'hasViolations',
     group: 'main',
     matchPrefixes: ['/violations/report'],
@@ -150,7 +170,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'compliance',
     label: 'Compliance',
     icon: Shield,
-    href: (cid) => `/communities/${cid}/compliance?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/compliance`,
     roles: ADMIN_ROLES,
     featureKey: 'hasCompliance',
     group: 'admin',
@@ -228,7 +248,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'assessments',
     label: 'Assessments',
     icon: DollarSign,
-    href: (cid) => `/assessments?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/assessments`,
     roles: ADMIN_ROLES,
     featureKey: 'hasFinance',
     group: 'admin',
@@ -238,12 +258,51 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'finance',
     label: 'Finance',
     icon: BarChart3,
-    href: (cid) => `/finance?communityId=${cid}`,
+    href: (cid) => `/communities/${cid}/finance`,
     roles: ADMIN_ROLES,
     featureKey: 'hasFinance',
     group: 'admin',
     matchPrefixes: ['/finance'],
   },
+];
+
+const NAV_ITEM_BY_ID = new Map(NAV_ITEMS.map((item) => [item.id, item] as const));
+
+function navItem(id: string): NavItemConfig {
+  const item = NAV_ITEM_BY_ID.get(id);
+  if (!item) {
+    throw new Error(`Unknown nav item ID: ${id}`);
+  }
+
+  return item;
+}
+
+function navSection(label: string | null, itemIds: readonly string[]): NavSection {
+  return {
+    label,
+    items: itemIds.map(navItem),
+  };
+}
+
+export const NAV_SECTIONS: readonly NavSection[] = [
+  // Parent `children` remain the source of truth for nested rendering. Child IDs
+  // also live in a section so `AppSidebar` has a fallback top-level placement when
+  // a parent is hidden for the current user but the child itself is still visible.
+  navSection(null, ['dashboard']),
+  navSection('Community', ['documents', 'meetings', 'announcements', 'maintenance']),
+  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'violations-report']),
+  navSection('Admin', [
+    'compliance',
+    'residents',
+    'maintenance-inbox',
+    'contracts',
+    'esign',
+    'violations-inbox',
+    'move-in-out',
+    'audit-trail',
+    'assessments',
+    'finance',
+  ]),
 ];
 
 /** PM-specific navigation items (shown when pathname starts with /pm/) */

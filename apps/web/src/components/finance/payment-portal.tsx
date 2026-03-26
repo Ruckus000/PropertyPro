@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
@@ -9,13 +10,15 @@ import { formatDateOnly } from '@/lib/utils/format-date';
 
 /* ─────── Types ─────── */
 
+type LineItemStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
+
 interface LineItem {
   id: number;
   assessmentId: number | null;
   unitId: number;
   amountCents: number;
   dueDate: string;
-  status: 'pending' | 'paid' | 'overdue' | 'waived';
+  status: LineItemStatus;
   paidAt: string | null;
   paymentIntentId: string | null;
   lateFeeCents: number;
@@ -38,11 +41,11 @@ interface StatementData {
 
 interface PaymentPortalProps {
   communityId: number;
-  userId: string;
   userRole: string;
-  isUnitOwner: boolean;
   /** Required for non-owner roles; owners' unitId is resolved server-side. */
   unitId?: number;
+  actorUnits?: Array<{ id: number; label: string }>;
+  requiresExplicitUnitSelection?: boolean;
 }
 
 /* ─────── Helpers ─────── */
@@ -57,12 +60,37 @@ function formatCents(cents: number): string {
 /** @deprecated Use formatDateOnly from @/lib/utils/format-date */
 const formatDate = formatDateOnly;
 
-const STATUS_STYLES: Record<string, string> = {
+const STATUS_STYLES: Record<LineItemStatus, string> = {
   pending: 'bg-status-warning-bg text-status-warning',
+  partially_paid: 'bg-status-info-bg text-status-info',
   overdue: 'bg-status-danger-bg text-status-danger',
   paid: 'bg-status-success-bg text-status-success',
   waived: 'bg-surface-muted text-content-secondary',
 };
+
+function formatStatusLabel(status: LineItemStatus): string {
+  if (status === 'partially_paid') {
+    return 'Partially paid';
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function StatusDotIcon({ className = 'h-2 w-2' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="4" r="4" />
+    </svg>
+  );
+}
+
+function StatusBadge({ status }: { status: LineItemStatus }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[status]}`}>
+      <StatusDotIcon />
+      {formatStatusLabel(status)}
+    </span>
+  );
+}
 
 /* ─────── Fetch ─────── */
 
@@ -84,13 +112,25 @@ async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
 
 /* ─────── Component ─────── */
 
-export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unitId }: PaymentPortalProps) {
+export function PaymentPortal({
+  communityId,
+  userRole,
+  unitId,
+  actorUnits = [],
+  requiresExplicitUnitSelection = false,
+}: PaymentPortalProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [payingLineItem, setPayingLineItem] = useState<LineItem | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const hasMultipleUnits = actorUnits.length > 1;
+  const canLoadData = !requiresExplicitUnitSelection;
 
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['payment-portal', communityId, unitId],
     queryFn: () => fetchStatement(communityId, unitId),
+    enabled: canLoadData,
     staleTime: 30_000,
     retry: false,
   });
@@ -100,6 +140,29 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
     queryFn: () => fetchFeePolicy(communityId),
     staleTime: 60_000,
   });
+
+  const handleUnitChange = (nextUnitId: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('unitId', String(nextUnitId));
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  if (requiresExplicitUnitSelection) {
+    return (
+      <div className="space-y-4">
+        <AlertBanner
+          status="warning"
+          title="Select a unit to continue."
+          description="Choose which unit's payments, history, and statements you want to view."
+        />
+        <UnitSelectCard
+          actorUnits={actorUnits}
+          selectedUnitId={unitId}
+          onSelect={handleUnitChange}
+        />
+      </div>
+    );
+  }
 
   if (isPending) {
     return (
@@ -122,7 +185,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
           <button
             type="button"
             onClick={() => void refetch()}
-            className="shrink-0 rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-1.5 text-xs font-medium text-status-danger hover:opacity-90"
+            className="shrink-0 rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs font-medium text-status-danger hover:opacity-90 min-h-10"
           >
             Retry
           </button>
@@ -133,13 +196,23 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
 
   if (!data) return null;
 
-  const unpaidItems = data.lineItems.filter((li) => li.status === 'pending' || li.status === 'overdue');
+  const unpaidItems = data.lineItems.filter(
+    (li) => li.status === 'pending' || li.status === 'partially_paid' || li.status === 'overdue',
+  );
   const paidItems = data.lineItems.filter((li) => li.status === 'paid');
   const totalDueCents = unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
   const overdueCount = unpaidItems.filter((li) => li.status === 'overdue').length;
 
   return (
     <div className="space-y-6">
+      {hasMultipleUnits && (
+        <UnitSelectCard
+          actorUnits={actorUnits}
+          selectedUnitId={unitId}
+          onSelect={handleUnitChange}
+        />
+      )}
+
       {/* Balance Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
@@ -181,9 +254,9 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
             if (unitId) params.set('unitId', String(unitId));
             window.open(`/api/v1/finance/export/statement?${params}`, '_blank');
           }}
-          className="mb-1 inline-flex items-center gap-1.5 self-start rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-hover sm:self-auto"
+          className="mb-1 inline-flex min-h-10 items-center gap-2 self-start rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-hover sm:self-auto"
         >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Download PDF
@@ -195,7 +268,7 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
         <UpcomingAssessments
           items={unpaidItems}
           onPay={setPayingLineItem}
-          canPay={isUnitOwner || userRole !== 'resident'}
+          canPay={true}
           feePolicy={feePolicy}
         />
       )}
@@ -214,6 +287,46 @@ export function PaymentPortal({ communityId, userId, userRole, isUnitOwner, unit
           }}
         />
       )}
+    </div>
+  );
+}
+
+function UnitSelectCard({
+  actorUnits,
+  selectedUnitId,
+  onSelect,
+}: {
+  actorUnits: Array<{ id: number; label: string }>;
+  selectedUnitId?: number;
+  onSelect: (unitId: number) => void;
+}) {
+  if (actorUnits.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-edge bg-surface-card p-4">
+      <label htmlFor="payments-unit-select" className="block text-sm font-medium text-content">
+        Unit
+      </label>
+      <p className="mt-1 text-xs text-content-tertiary">
+        Payments, statements, and exports are shown for the selected unit.
+      </p>
+      <select
+        id="payments-unit-select"
+        className="mt-3 w-full rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus:outline-none focus:ring-1 focus:ring-interactive"
+        value={selectedUnitId ?? ''}
+        onChange={(event) => onSelect(Number(event.target.value))}
+      >
+        <option value="" disabled>
+          Select a unit
+        </option>
+        {actorUnits.map((unit) => (
+          <option key={unit.id} value={unit.id}>
+            {unit.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -264,7 +377,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
+      className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium min-h-10 ${
         active
           ? 'border-interactive text-interactive'
           : 'border-transparent text-content-tertiary hover:border-edge-strong hover:text-content-secondary'
@@ -273,7 +386,7 @@ function TabButton({
       {label}
       {count > 0 && (
         <span
-          className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`ml-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
             active ? 'bg-interactive-subtle text-interactive' : 'bg-surface-muted text-content-secondary'
           }`}
         >
@@ -333,9 +446,7 @@ function UpcomingAssessments({
               <tr key={item.id} className="hover:bg-surface-hover">
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[item.status] || ''}`}>
-                    {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                  </span>
+                  <StatusBadge status={item.status} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">{formatCents(item.amountCents)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content-tertiary">
@@ -346,7 +457,7 @@ function UpcomingAssessments({
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button
                       onClick={() => onPay(item)}
-                      className="rounded-md bg-interactive px-3 py-1.5 text-xs font-medium text-content-inverse hover:bg-interactive-hover"
+                      className="rounded-md bg-interactive px-3 py-2 text-xs font-medium text-content-inverse hover:bg-interactive-hover min-h-10"
                     >
                       Pay Now
                     </button>
@@ -395,9 +506,7 @@ function PaymentHistory({ items }: { items: LineItem[] }) {
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-content">{formatCents(item.amountCents)}</td>
               <td className="px-4 py-3 text-right">
-                <span className="inline-flex rounded-full bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success">
-                  Paid
-                </span>
+                <StatusBadge status="paid" />
               </td>
             </tr>
           ))}

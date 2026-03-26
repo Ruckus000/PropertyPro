@@ -5,7 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { buildUnitStatement, findActorUnitId, resolveStatementDateRange } from '@/lib/services/finance-service';
+import { buildUnitStatement, listActorUnitIdsForFinance, resolveStatementDateRange } from '@/lib/services/finance-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -22,14 +22,28 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   let unitId: number;
   if (membership.role === 'resident' && membership.isUnitOwner) {
-    const actorUnitId = await findActorUnitId(communityId, actorUserId);
-    if (!actorUnitId) {
+    const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
+    if (actorUnitIds.length === 0) {
       throw new ForbiddenError('No unit association found for this owner');
     }
-    if (rawUnitId && parsePositiveInt(rawUnitId, 'unitId') !== actorUnitId) {
-      throw new ForbiddenError('Owners can only access statements for their own unit');
+    if (!rawUnitId && actorUnitIds.length > 1) {
+      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
     }
-    unitId = actorUnitId;
+    if (rawUnitId) {
+      const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
+      if (!actorUnitIds.includes(requestedUnitId)) {
+        throw new ForbiddenError('Owners can only access statements for their own unit');
+      }
+      unitId = requestedUnitId;
+    } else if (actorUnitIds.length === 1) {
+      const onlyUnitId = actorUnitIds[0];
+      if (onlyUnitId === undefined) {
+        throw new ForbiddenError('No unit association found for this owner');
+      }
+      unitId = onlyUnitId;
+    } else {
+      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
+    }
   } else {
     requireFinanceReadPermission(membership);
     if (!rawUnitId) {

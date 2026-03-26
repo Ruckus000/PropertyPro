@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic';
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { requireAuthenticatedUser } from '@/lib/api/auth';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { getFeaturesForCommunity } from '@propertypro/shared';
+import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { MobileProfileContent } from '@/components/mobile/MobileProfileContent';
 
 export default async function MobileMorePage() {
@@ -31,11 +32,20 @@ export default async function MobileMorePage() {
 
   let communityName = '';
   let displayTitle = '';
+  let role = '';
+  let presetKey: string | undefined;
+  let hasCompliance = false;
+  let hasFinance = false;
 
   try {
     const membership = await requireCommunityMembership(communityId, userId!);
+    const features = getFeaturesForCommunity(membership.communityType);
     communityName = membership.communityName;
     displayTitle = membership.displayTitle;
+    role = membership.role;
+    presetKey = membership.presetKey;
+    hasCompliance = features.hasCompliance;
+    hasFinance = features.hasFinance;
   } catch {
     redirect('/auth/login');
   }
@@ -46,6 +56,10 @@ export default async function MobileMorePage() {
       userRole={displayTitle}
       communityName={communityName}
       communityId={communityId}
+      role={role}
+      presetKey={presetKey}
+      hasCompliance={hasCompliance}
+      hasFinance={hasFinance}
     />
   );
 }

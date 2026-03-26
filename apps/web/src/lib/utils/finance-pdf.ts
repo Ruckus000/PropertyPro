@@ -59,7 +59,7 @@ export function generateFinanceStatementPdf(payload: FinanceStatementPayload): U
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
   lines.push('');
-  lines.push('Line Items');
+  lines.push('Payables');
   lines.push('Due Date     Status     Amount    Late Fee');
   for (const item of payload.lineItems) {
     lines.push(

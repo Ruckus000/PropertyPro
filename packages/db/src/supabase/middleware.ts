@@ -5,6 +5,7 @@
  * @module supabase/middleware
  */
 import { createServerClient, type CookieOptionsWithName } from '@supabase/ssr';
+import type { User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getCookieOptions } from './cookie-config';
 
@@ -16,6 +17,25 @@ type MiddlewareCookieStore = {
 export type MiddlewareRequest = Request & {
   cookies: MiddlewareCookieStore;
 };
+
+function hasAuthCookie(
+  request: MiddlewareRequest,
+  cookieOptions?: CookieOptionsWithName,
+): boolean {
+  const configuredName = cookieOptions?.name?.trim();
+
+  return request.cookies.getAll().some(({ name }) => {
+    if (configuredName) {
+      return name === configuredName || name.startsWith(`${configuredName}.`);
+    }
+
+    return (
+      name === 'sb-auth-token' ||
+      name.endsWith('-auth-token') ||
+      name.includes('-auth-token.')
+    );
+  });
+}
 
 /**
  * Creates a Supabase client inside Next.js middleware.
@@ -67,8 +87,18 @@ export async function createMiddlewareClient(
     },
   });
 
-  // Refresh the session — this silently refreshes expired tokens
-  await supabase.auth.getUser();
+  let user: User | null = null;
+  let authChecked = false;
+  const resolvedCookieOptions = cookieOptions ?? getCookieOptions();
 
-  return { supabase, response };
+  // Refresh the session only when an auth cookie is actually present.
+  if (hasAuthCookie(request, resolvedCookieOptions)) {
+    authChecked = true;
+    const {
+      data: { user: resolvedUser },
+    } = await supabase.auth.getUser();
+    user = resolvedUser ?? null;
+  }
+
+  return { supabase, response, user, authChecked };
 }

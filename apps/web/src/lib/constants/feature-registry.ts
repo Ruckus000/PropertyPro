@@ -41,6 +41,15 @@ import {
 import type { CommunityRole, AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 
+const FINANCE_READ_REGISTRY_ROLES: readonly CommunityRole[] = [
+  'owner',
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+];
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -144,7 +153,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'View balances and make payments',
     icon: CreditCard,
     href: (cid: number) => `/communities/${cid}/payments`,
-    roles: 'all',
+    roles: FINANCE_READ_REGISTRY_ROLES,
     audience: 'all',
     category: 'page',
     group: 'Finance',

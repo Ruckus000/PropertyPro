@@ -18,6 +18,8 @@ export * from './platform-admin-users';
 export * from './stripe-webhook-events';
 export * from './assessments';
 export * from './assessment-line-items';
+export * from './rent-obligations';
+export * from './rent-payments';
 export * from './stripe-connected-accounts';
 export * from './finance-stripe-webhook-events';
 export * from './calendar-sync-tokens';
@@ -59,6 +61,8 @@ export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
 export * from './elections';
 export * from './faqs';
+export * from './stripe-prices';
+export * from './conversion-events';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -77,6 +81,8 @@ import type { pendingSignups } from './pending-signups';
 import type { stripeWebhookEvents } from './stripe-webhook-events';
 import type { assessments } from './assessments';
 import type { assessmentLineItems } from './assessment-line-items';
+import type { rentObligations } from './rent-obligations';
+import type { rentPayments } from './rent-payments';
 import type { stripeConnectedAccounts } from './stripe-connected-accounts';
 import type { financeStripeWebhookEvents } from './finance-stripe-webhook-events';
 import type { calendarSyncTokens } from './calendar-sync-tokens';
@@ -167,6 +173,14 @@ export type NewAssessment = typeof assessments.$inferInsert;
 // Assessment Line Items
 export type AssessmentLineItem = typeof assessmentLineItems.$inferSelect;
 export type NewAssessmentLineItem = typeof assessmentLineItems.$inferInsert;
+
+// Rent Obligations
+export type RentObligation = typeof rentObligations.$inferSelect;
+export type NewRentObligation = typeof rentObligations.$inferInsert;
+
+// Rent Payments
+export type RentPayment = typeof rentPayments.$inferSelect;
+export type NewRentPayment = typeof rentPayments.$inferInsert;
 
 // Stripe Connected Accounts
 export type StripeConnectedAccount = typeof stripeConnectedAccounts.$inferSelect;
@@ -380,6 +394,16 @@ export type NewAccessPlan = typeof _accessPlans.$inferInsert;
 import type { accountDeletionRequests as _accountDeletionRequests } from './account-deletion-requests';
 export type AccountDeletionRequest = typeof _accountDeletionRequests.$inferSelect;
 export type NewAccountDeletionRequest = typeof _accountDeletionRequests.$inferInsert;
+
+// Stripe Prices (global billing config)
+import type { stripePrices } from './stripe-prices';
+export type StripePrice = typeof stripePrices.$inferSelect;
+export type NewStripePrice = typeof stripePrices.$inferInsert;
+
+// Conversion Events (append-only analytics)
+import type { conversionEvents } from './conversion-events';
+export type ConversionEvent = typeof conversionEvents.$inferSelect;
+export type NewConversionEvent = typeof conversionEvents.$inferInsert;
 
 // Support access
 export { supportSessions, type SupportSession, type NewSupportSession } from './support-sessions';

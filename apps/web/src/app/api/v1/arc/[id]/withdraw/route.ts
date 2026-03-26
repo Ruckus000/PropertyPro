@@ -10,6 +10,7 @@ import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { getActorUnitIds, requireArcEnabled, requireArcSubmitterRole, requireArcWritePermission } from '@/lib/violations/common';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { withdrawArcSubmissionForCommunity } from '@/lib/services/violations-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const withdrawSchema = z.object({
   communityId: z.number().int().positive(),
@@ -30,6 +31,7 @@ export const POST = withErrorHandler(
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireArcEnabled(membership);
     requireArcWritePermission(membership);

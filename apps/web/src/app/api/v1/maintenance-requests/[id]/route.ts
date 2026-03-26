@@ -38,6 +38,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { queueNotification } from '@/lib/services/notification-service';
 import { formatRequest } from '../_formatRequest';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -160,6 +161,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
 
   const { communityId: rawCommunityId, ...fields } = parseResult.data;
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
@@ -309,6 +311,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: { para
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 

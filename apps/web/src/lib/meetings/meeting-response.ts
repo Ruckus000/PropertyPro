@@ -5,6 +5,7 @@ import {
   calculateOwnerVoteDocsDeadline,
   type MeetingType,
 } from '@/lib/utils/meeting-calculator';
+import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
 
 export interface MeetingDeadlines {
   noticePostBy: string;
@@ -42,7 +43,7 @@ export function serializeMeetingResponse(
 ) {
   return {
     id: meeting.id,
-    title: meeting.title,
+    title: formatMeetingTitle(meeting.title),
     meetingType: meeting.meetingType,
     startsAt: meeting.startsAt.toISOString(),
     endsAt: meeting.endsAt?.toISOString() ?? null,

@@ -22,6 +22,7 @@ import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -48,6 +49,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: RouteCo
 
   const { question, answer } = result.data;
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
+  await assertNotDemoGrace(communityId);
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 
@@ -93,6 +95,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: RouteC
   }
 
   const communityId = resolveEffectiveCommunityId(req, parsed.data);
+  await assertNotDemoGrace(communityId);
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 

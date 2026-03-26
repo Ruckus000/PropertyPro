@@ -232,6 +232,25 @@ describe('logAuditEvent — create mutation logging', () => {
     const insertedData = mockValues.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(insertedData.metadata).toEqual(metadata);
   });
+
+  it('allows null userId for system-generated events', async () => {
+    await logAuditEvent({
+      userId: null,
+      action: 'create',
+      resourceType: 'visitor_log',
+      resourceId: 'visitor-1',
+      communityId: 1,
+      metadata: { transition: 'auto_checkout' },
+    });
+
+    expect(mockValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        resourceType: 'visitor_log',
+        resourceId: 'visitor-1',
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

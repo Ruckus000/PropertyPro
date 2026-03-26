@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   NAV_ITEMS,
+  NAV_SECTIONS,
   PM_NAV_ITEMS,
   getVisibleItems,
   getActiveItemId,
@@ -62,6 +63,45 @@ const APARTMENT_FEATURES: CommunityFeatures = {
   hasEmergencyNotifications: true,
 };
 
+describe('NAV_SECTIONS', () => {
+  it('exposes the expected section order', () => {
+    expect(NAV_SECTIONS.map((section) => section.label)).toEqual([
+      null,
+      'Community',
+      'Management',
+      'Admin',
+    ]);
+  });
+
+  it('keeps dashboard in its own top section', () => {
+    expect(NAV_SECTIONS[0].items).toHaveLength(1);
+    expect(NAV_SECTIONS[0].items[0].id).toBe('dashboard');
+  });
+
+  it('represents each NAV_ITEMS id exactly once across sections', () => {
+    const allIds = NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.id));
+    const uniqueIds = new Set(allIds);
+
+    expect(allIds).toHaveLength(NAV_ITEMS.length);
+    expect(uniqueIds.size).toBe(NAV_ITEMS.length);
+
+    for (const item of NAV_ITEMS) {
+      expect(allIds.filter((id) => id === item.id)).toHaveLength(1);
+    }
+  });
+
+  it('only references child item IDs that exist in NAV_ITEMS', () => {
+    const allIds = new Set(NAV_ITEMS.map((item) => item.id));
+
+    for (const item of NAV_ITEMS) {
+      for (const childId of item.children ?? []) {
+        expect(allIds.has(childId)).toBe(true);
+        expect(childId).not.toBe(item.id);
+      }
+    }
+  });
+});
+
 describe('getVisibleItems', () => {
   it('shows all main items to owners in condo communities', () => {
     const items = getVisibleItems(NAV_ITEMS, 'owner', ALL_FEATURES);
@@ -80,6 +120,12 @@ describe('getVisibleItems', () => {
     expect(ids).not.toContain('maintenance-inbox');
     expect(ids).not.toContain('contracts');
     expect(ids).not.toContain('audit-trail');
+  });
+
+  it('hides payments from tenant role to avoid finance dead-end pages', () => {
+    const items = getVisibleItems(NAV_ITEMS, 'tenant', ALL_FEATURES);
+    const ids = items.map((i) => i.id);
+    expect(ids).not.toContain('payments');
   });
 
   it('shows admin items to board members', () => {
@@ -109,6 +155,19 @@ describe('getVisibleItems', () => {
   });
 });
 
+describe('nav href generation', () => {
+  it('uses canonical community-scoped paths for primary finance screens', () => {
+    const byId = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+
+    expect(byId.get('documents')?.href(42)).toBe('/communities/42/documents');
+    expect(byId.get('meetings')?.href(42)).toBe('/communities/42/meetings');
+    expect(byId.get('payments')?.href(42)).toBe('/communities/42/payments');
+    expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
+    expect(byId.get('assessments')?.href(42)).toBe('/communities/42/assessments');
+    expect(byId.get('finance')?.href(42)).toBe('/communities/42/finance');
+  });
+});
+
 describe('getActiveItemId', () => {
   it('matches dashboard pathname', () => {
     expect(getActiveItemId(NAV_ITEMS, '/dashboard')).toBe('dashboard');
@@ -118,6 +177,12 @@ describe('getActiveItemId', () => {
   it('matches documents pathname', () => {
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/documents')).toBe('documents');
     expect(getActiveItemId(NAV_ITEMS, '/documents')).toBe('documents');
+  });
+
+  it('matches canonical finance paths', () => {
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/payments')).toBe('payments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/assessments')).toBe('assessments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance')).toBe('finance');
   });
 
   it('matches maintenance paths distinctly', () => {

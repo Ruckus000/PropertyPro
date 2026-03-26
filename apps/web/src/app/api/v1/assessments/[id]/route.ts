@@ -9,6 +9,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { parsePositiveInt, requireFinanceAdminWrite, requireFinanceEnabled, requireFinanceWritePermission } from '@/lib/finance/common';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { deleteAssessmentForCommunity, updateAssessmentForCommunity } from '@/lib/services/finance-service';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const updateAssessmentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -55,6 +56,7 @@ export const PATCH = withErrorHandler(async (
   }
 
   const communityId = parseCommunityIdFromBody(req, rawCommunityId);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requireFinanceEnabled(membership);
   requireFinanceWritePermission(membership);
@@ -80,6 +82,7 @@ export const DELETE = withErrorHandler(async (
   const actorUserId = await requireAuthenticatedUserId();
   const assessmentId = await parseAssessmentId(context);
   const communityId = parseCommunityIdFromQuery(req);
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireFinanceEnabled(membership);

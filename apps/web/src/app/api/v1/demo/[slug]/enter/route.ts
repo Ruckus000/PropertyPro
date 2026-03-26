@@ -17,6 +17,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { createDemoSession } from '@/lib/services/demo-session';
+import { emitConversionEvent } from '@/lib/services/conversion-events';
 
 const RoleSchema = z.object({
   role: z.enum(['board', 'resident']),
@@ -69,6 +70,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       seededCommunityId: demoInstances.seededCommunityId,
       demoResidentEmail: demoInstances.demoResidentEmail,
       demoBoardEmail: demoInstances.demoBoardEmail,
+      demoResidentUserId: demoInstances.demoResidentUserId,
+      demoBoardUserId: demoInstances.demoBoardUserId,
       isDemo: communities.isDemo,
       demoExpiresAt: communities.demoExpiresAt,
     })
@@ -114,7 +117,20 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Failed to create demo session.' }, { status: 500 });
   }
 
-  // 6. Redirect to the appropriate portal with session cookies
+  // 6. Emit demo_entered conversion event (awaited best-effort)
+  const targetUserId = role === 'board' ? instance.demoBoardUserId : instance.demoResidentUserId;
+  const requestId = crypto.randomUUID();
+  await emitConversionEvent({
+    demoId: instance.id,
+    communityId,
+    eventType: 'demo_entered',
+    source: 'web_app',
+    dedupeKey: `demo:${instance.id}:entered:${targetUserId}:${requestId}`,
+    userId: targetUserId,
+    metadata: { role },
+  });
+
+  // 7. Redirect to the appropriate portal with session cookies
   const redirectPath =
     role === 'board'
       ? `/dashboard?communityId=${communityId}`
