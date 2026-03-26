@@ -250,6 +250,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },
   { tableName: 'support_sessions', reason: 'Platform-level support session tracking — service_role only. Admin-created sessions reference communities but are not tenant-scoped.' },
   { tableName: 'stripe_prices', reason: 'Billing configuration — global, not community-scoped. Managed by platform ops.' },
+  { tableName: 'conversion_events', reason: 'Analytics table — must survive demo soft-deletion and community conversion lifecycle. Not tenant-scoped because events span the demo→paid transition.' },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);

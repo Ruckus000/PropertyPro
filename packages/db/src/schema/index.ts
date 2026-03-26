@@ -60,6 +60,7 @@ export * from './emergency-broadcast-recipients';
 export * from './elections';
 export * from './faqs';
 export * from './stripe-prices';
+export * from './conversion-events';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -386,6 +387,11 @@ export type NewAccountDeletionRequest = typeof _accountDeletionRequests.$inferIn
 import type { stripePrices } from './stripe-prices';
 export type StripePrice = typeof stripePrices.$inferSelect;
 export type NewStripePrice = typeof stripePrices.$inferInsert;
+
+// Conversion Events (append-only analytics)
+import type { conversionEvents } from './conversion-events';
+export type ConversionEvent = typeof conversionEvents.$inferSelect;
+export type NewConversionEvent = typeof conversionEvents.$inferInsert;
 
 // Support access
 export { supportSessions, type SupportSession, type NewSupportSession } from './support-sessions';
