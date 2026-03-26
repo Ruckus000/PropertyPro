@@ -1,7 +1,10 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Point to monorepo root so Next.js doesn't pick up ~/package-lock.json
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: [
     "@propertypro/ui",
     "@propertypro/shared",

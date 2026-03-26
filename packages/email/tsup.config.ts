@@ -6,7 +6,8 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ["react"],
+  external: ["react", "react/jsx-runtime"],
+  noExternal: ["@react-email/components", "@propertypro/tokens", "resend"],
   esbuildOptions(options) {
     options.jsx = "automatic";
   },

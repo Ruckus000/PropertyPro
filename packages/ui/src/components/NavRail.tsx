@@ -67,11 +67,6 @@ export interface NavRailProps {
   /** Optional footer content rendered below the toggle (e.g. user profile). */
   footer?: React.ReactNode;
   /**
-   * Structured sections with labeled dividers. When provided, takes precedence over `items`.
-   * Each section can have a label (rendered as uppercase header) or null (no header).
-   */
-  sections?: NavRailSection[];
-  /**
    * @deprecated Use `sections` instead. Optional separator with label rendered between item groups.
    */
   groupSeparator?: React.ReactNode;
