@@ -59,6 +59,7 @@ export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
 export * from './elections';
 export * from './faqs';
+export * from './stripe-prices';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert
@@ -380,6 +381,11 @@ export type NewAccessPlan = typeof _accessPlans.$inferInsert;
 import type { accountDeletionRequests as _accountDeletionRequests } from './account-deletion-requests';
 export type AccountDeletionRequest = typeof _accountDeletionRequests.$inferSelect;
 export type NewAccountDeletionRequest = typeof _accountDeletionRequests.$inferInsert;
+
+// Stripe Prices (global billing config)
+import type { stripePrices } from './stripe-prices';
+export type StripePrice = typeof stripePrices.$inferSelect;
+export type NewStripePrice = typeof stripePrices.$inferInsert;
 
 // Support access
 export { supportSessions, type SupportSession, type NewSupportSession } from './support-sessions';

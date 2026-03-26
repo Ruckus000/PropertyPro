@@ -561,6 +561,13 @@
       "when": 1774650000000,
       "tag": "0119_support_access",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1774750000000,
+      "tag": "0120_stripe_prices",
+      "breakpoints": true
     }
   ]
 }
