@@ -61,6 +61,20 @@ const deleteUnitSchema = z.object({
   unitId: z.number().int().positive(),
 });
 
+function normalizeRentAmount(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed;
+}
+
+function requireApartmentCommunityForRent(communityType: string): void {
+  if (communityType !== 'apartment') {
+    throw new ValidationError('Unit rentAmount is only available for apartment communities');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // GET — list units for a community
 // ---------------------------------------------------------------------------
@@ -124,7 +138,11 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   await requireActiveSubscriptionForMutation(communityId);
   const scoped = createScopedClient(communityId);
 
-  const { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount } = parseResult.data;
+  const { unitNumber, building, floor, bedrooms, bathrooms, sqft } = parseResult.data;
+  const rentAmount = normalizeRentAmount(parseResult.data.rentAmount);
+  if (rentAmount !== undefined) {
+    requireApartmentCommunityForRent(membership.communityType);
+  }
 
   // Check for duplicate unit number within the community
   const existingUnits = await scoped.query(units);
@@ -193,12 +211,19 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   await assertNotDemoGrace(communityId);
-  const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount } = parseResult.data;
+  const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft } = parseResult.data;
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'units', 'write');
   await requireActiveSubscriptionForMutation(communityId);
   const scoped = createScopedClient(communityId);
+  const rentAmount = normalizeRentAmount(parseResult.data.rentAmount);
+  if (rentAmount !== undefined) {
+    requireApartmentCommunityForRent(membership.communityType);
+    throw new ValidationError(
+      'Update lease rentAmount via /api/v1/leases. Unit rentAmount is derived to prevent rent drift.',
+    );
+  }
 
   // Find the existing unit
   const allUnits = await scoped.query(units);

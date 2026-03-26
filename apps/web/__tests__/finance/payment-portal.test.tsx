@@ -6,6 +6,7 @@
  */
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 
@@ -15,6 +16,13 @@ import type { PropsWithChildren } from 'react';
 
 const mockFetch = vi.fn() as Mock;
 vi.stubGlobal('fetch', mockFetch);
+const replaceMock = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: replaceMock }),
+  usePathname: () => '/communities/42/payments',
+  useSearchParams: () => new URLSearchParams('communityId=42'),
+}));
 
 // Mock format-date utility
 vi.mock('@/lib/utils/format-date', () => ({
@@ -79,6 +87,7 @@ async function importPaymentPortal() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('open', vi.fn());
 });
 
 describe('PaymentPortal', () => {
@@ -96,9 +105,7 @@ describe('PaymentPortal', () => {
       <Wrapper>
         <PaymentPortal
           communityId={42}
-          userId="user-1"
           userRole="owner"
-          isUnitOwner={true}
         />
       </Wrapper>,
     );
@@ -120,9 +127,7 @@ describe('PaymentPortal', () => {
       <Wrapper>
         <PaymentPortal
           communityId={42}
-          userId="user-1"
           userRole="owner"
-          isUnitOwner={true}
         />
       </Wrapper>,
     );
@@ -175,9 +180,7 @@ describe('PaymentPortal', () => {
       <Wrapper>
         <PaymentPortal
           communityId={42}
-          userId="user-1"
           userRole="owner"
-          isUnitOwner={true}
         />
       </Wrapper>,
     );
@@ -186,6 +189,57 @@ describe('PaymentPortal', () => {
     await waitFor(() => {
       const bodyText = document.body.textContent || '';
       expect(bodyText).toContain('875');
+    }, { timeout: 10000 });
+  });
+
+  it('treats partially paid items as outstanding in upcoming totals', async () => {
+    mockBothFetches({
+      unitId: 301,
+      balanceCents: 42500,
+      ledgerEntries: [],
+      lineItems: [
+        {
+          id: 10,
+          assessmentId: 1001,
+          unitId: 301,
+          amountCents: 40000,
+          lateFeeCents: 2500,
+          status: 'partially_paid',
+          dueDate: '2026-03-01',
+          paidAt: null,
+          paymentIntentId: null,
+        },
+        {
+          id: 11,
+          assessmentId: 1002,
+          unitId: 301,
+          amountCents: 35000,
+          lateFeeCents: 0,
+          status: 'paid',
+          dueDate: '2026-02-01',
+          paidAt: '2026-02-03',
+          paymentIntentId: 'pi_123',
+        },
+      ],
+    });
+
+    const PaymentPortal = await importPaymentPortal();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <PaymentPortal
+          communityId={42}
+          userRole="owner"
+        />
+      </Wrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/partially paid/i)).toBeInTheDocument();
+      // Total due should include partially_paid row (400 + 25) and exclude paid rows.
+      const bodyText = document.body.textContent || '';
+      expect(bodyText).toContain('$425.00');
     }, { timeout: 10000 });
   });
 
@@ -203,9 +257,7 @@ describe('PaymentPortal', () => {
       <Wrapper>
         <PaymentPortal
           communityId={42}
-          userId="user-1"
           userRole="owner"
-          isUnitOwner={true}
         />
       </Wrapper>,
     );
@@ -215,5 +267,69 @@ describe('PaymentPortal', () => {
       const bodyText = document.body.textContent || '';
       expect(bodyText).toMatch(/\$0|no.*assessment|up to date|0\.00/i);
     }, { timeout: 10000 });
+  });
+
+  it('requires explicit unit selection for multi-unit users before loading data', async () => {
+    const PaymentPortal = await importPaymentPortal();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <PaymentPortal
+          communityId={42}
+          userRole="resident"
+          actorUnits={[
+            { id: 101, label: 'Unit 101' },
+            { id: 202, label: 'Unit 202' },
+          ]}
+          requiresExplicitUnitSelection={true}
+        />
+      </Wrapper>,
+    );
+
+    expect(screen.getByText(/select a unit to continue/i)).toBeInTheDocument();
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/payments/statement?'),
+    );
+  });
+
+  it('passes selected unitId into statement fetch and export', async () => {
+    mockBothFetches({
+      unitId: 202,
+      balanceCents: 0,
+      ledgerEntries: [],
+      lineItems: [],
+    });
+
+    const PaymentPortal = await importPaymentPortal();
+    const { Wrapper } = createWrapper();
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <PaymentPortal
+          communityId={42}
+          userRole="resident"
+          unitId={202}
+          actorUnits={[
+            { id: 101, label: 'Unit 101' },
+            { id: 202, label: 'Unit 202' },
+          ]}
+        />
+      </Wrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/payments/statement?communityId=42&unitId=202'),
+      );
+    });
+
+    const downloadButton = await screen.findByRole('button', { name: /download pdf/i });
+    await user.click(downloadButton);
+    expect(window.open).toHaveBeenCalledWith(
+      '/api/v1/finance/export/statement?communityId=42&unitId=202',
+      '_blank',
+    );
   });
 });

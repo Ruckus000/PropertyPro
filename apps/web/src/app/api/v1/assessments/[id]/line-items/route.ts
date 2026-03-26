@@ -10,7 +10,7 @@ import {
 } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
-  findActorUnitId,
+  listActorUnitIdsForFinance,
   listAssessmentLineItemsForCommunity,
 } from '@/lib/services/finance-service';
 
@@ -41,14 +41,22 @@ export const GET = withErrorHandler(async (
   let unitId: number | undefined;
 
   if (membership.role === 'resident' && membership.isUnitOwner) {
-    const actorUnitId = await findActorUnitId(communityId, actorUserId);
-    if (!actorUnitId) {
+    const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
+    if (actorUnitIds.length === 0) {
       throw new ForbiddenError('No unit is associated with this owner in the selected community');
     }
-    if (rawUnitId && parsePositiveInt(rawUnitId, 'unitId') !== actorUnitId) {
-      throw new ForbiddenError('Owners can only access line items for their own unit');
+    if (!rawUnitId && actorUnitIds.length > 1) {
+      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
     }
-    unitId = actorUnitId;
+    if (rawUnitId) {
+      const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
+      if (!actorUnitIds.includes(requestedUnitId)) {
+        throw new ForbiddenError('Owners can only access line items for their own unit');
+      }
+      unitId = requestedUnitId;
+    } else {
+      unitId = actorUnitIds[0];
+    }
   } else {
     if (rawUnitId) {
       unitId = parsePositiveInt(rawUnitId, 'unitId');

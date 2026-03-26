@@ -408,6 +408,47 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     expect(paymentIntentForbidden.status).toBe(403);
   });
 
+  it('requires explicit unitId for multi-unit owner shared finance endpoints', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const scopedA = kit.dbModule.createScopedClient(communityA.id);
+
+    setActorById(kit, ownerAUserId);
+    await scopedA.update(
+      kit.dbModule.units,
+      {
+        ownerUserId: ownerAUserId,
+      },
+      eq(kit.dbModule.units.id, unitASecondaryId),
+    );
+
+    const historyResponse = await routeModules.paymentHistory.GET(
+      new NextRequest(apiUrl(`/api/v1/payments/history?communityId=${communityA.id}`)),
+    );
+    expect(historyResponse.status).toBe(400);
+
+    const statementResponse = await routeModules.paymentStatement.GET(
+      new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityA.id}`)),
+    );
+    expect(statementResponse.status).toBe(400);
+
+    const ledgerResponse = await routeModules.ledger.GET(
+      new NextRequest(apiUrl(`/api/v1/ledger?communityId=${communityA.id}`)),
+    );
+    expect(ledgerResponse.status).toBe(400);
+
+    const exportCsvResponse = await routeModules.financeExportCsv.GET(
+      new NextRequest(apiUrl(`/api/v1/finance/export/csv?communityId=${communityA.id}`)),
+    );
+    expect(exportCsvResponse.status).toBe(400);
+
+    const exportStatementResponse = await routeModules.financeExportStatement.GET(
+      new NextRequest(apiUrl(`/api/v1/finance/export/statement?communityId=${communityA.id}`)),
+    );
+    expect(exportStatementResponse.status).toBe(400);
+  });
+
   it('enforces cross-tenant isolation for WS66 tables and routes', async () => {
     const kit = requireState();
     const routeModules = requireRoutes();

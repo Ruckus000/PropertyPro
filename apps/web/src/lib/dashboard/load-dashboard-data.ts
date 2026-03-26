@@ -25,6 +25,7 @@ import {
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { listMyPendingSigners } from '@/lib/services/esign-service';
+import { applyDemoAnnouncementProvenancePolicy } from '@/lib/announcements/demo-announcement-provenance';
 
 export interface DashboardPendingSigner {
   signerId: number;
@@ -94,11 +95,23 @@ export async function loadDashboardData(
     }
   }
 
+  const visibleAnnouncements = community
+    ? await applyDemoAnnouncementProvenancePolicy(
+        {
+          id: communityId,
+          isDemo: Boolean(community?.['isDemo']),
+          trialEndsAt: (community?.['trialEndsAt'] as Date | null | undefined) ?? null,
+          demoExpiresAt: (community?.['demoExpiresAt'] as Date | null | undefined) ?? null,
+        },
+        announcementRows as Announcement[],
+      )
+    : [];
+
   return {
     communityName,
     firstName: toFirstName(fullName),
     timezone,
-    announcements: selectRecentAnnouncements(announcementRows as Announcement[]),
+    announcements: selectRecentAnnouncements(visibleAnnouncements),
     meetings: selectUpcomingMeetings(meetingRows as Meeting[]),
     violationSummary: selectViolationSummary(violationRows as unknown as Violation[]),
     pendingSigners,

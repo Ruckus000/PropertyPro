@@ -82,6 +82,7 @@ export * from './rbac-matrix';
 export * from './features';
 export * from './plans';
 export * from './ledger';
+export * from './payables';
 export * from './payment-fees';
 export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';

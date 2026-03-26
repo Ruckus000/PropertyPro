@@ -8,6 +8,7 @@ import {
 import { and, asc, eq, gte, inArray, lt, lte } from '@propertypro/db/filters';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import type { AssessmentLineItemStatus } from '@/lib/services/finance-service';
+import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
 
 export interface CalendarMeetingRecord {
   [key: string]: unknown;
@@ -77,7 +78,7 @@ export async function listCommunityCalendarMeetings(
       )
     : undefined;
 
-  return scoped
+  const rows = await scoped
     .selectFrom<CalendarMeetingRecord>(
       meetings,
       {
@@ -91,6 +92,11 @@ export async function listCommunityCalendarMeetings(
       whereClause,
     )
     .orderBy(asc(meetings.startsAt), asc(meetings.id));
+
+  return rows.map((row) => ({
+    ...row,
+    title: formatMeetingTitle(row.title),
+  }));
 }
 
 export async function listAggregateAssessmentDueRecords(

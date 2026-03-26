@@ -122,6 +122,12 @@ describe('getVisibleItems', () => {
     expect(ids).not.toContain('audit-trail');
   });
 
+  it('hides payments from tenant role to avoid finance dead-end pages', () => {
+    const items = getVisibleItems(NAV_ITEMS, 'tenant', ALL_FEATURES);
+    const ids = items.map((i) => i.id);
+    expect(ids).not.toContain('payments');
+  });
+
   it('shows admin items to board members', () => {
     const items = getVisibleItems(NAV_ITEMS, 'board_member', ALL_FEATURES);
     const ids = items.map((i) => i.id);

@@ -40,6 +40,15 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 
+const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
+  'owner',
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+];
+
 export interface NavItemConfig {
   id: string;
   label: string;
