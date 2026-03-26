@@ -4,7 +4,7 @@
  * Exports community data (residents, documents, maintenance requests,
  * announcements) as a ZIP file containing individual CSV files.
  *
- * Auth chain: requireAuthenticatedUserId → resolveEffectiveCommunityId →
+ * Auth chain: requireAuthenticatedUserId → requireFreshReauth → resolveEffectiveCommunityId →
  *   requireCommunityMembership → requirePermission(settings, read).
  *
  * RBAC: settings + read grants access to owner, board_member, board_president,
