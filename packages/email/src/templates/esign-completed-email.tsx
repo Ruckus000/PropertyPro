@@ -1,7 +1,9 @@
-import { Heading, Section, Text } from "@react-email/components";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
-import { emailColors } from "@propertypro/tokens/email";
+import { Heading, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailCard } from '../components/email-card';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface EsignCompletedEmailProps extends BaseEmailProps {
   senderName: string;
@@ -18,96 +20,64 @@ export function EsignCompletedEmail({
   completedAt,
   signerCount,
 }: EsignCompletedEmailProps) {
-  const signerLabel = signerCount === 1 ? "1 signer" : `${signerCount} signers`;
+  const signerLabel = signerCount === 1 ? '1 signer' : `${signerCount} signers`;
 
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `All signatures collected for "${documentName}"`
-      }
+      accentColor={emailColors.accentGreen}
+      previewText={previewText ?? `All signatures collected for "${documentName}"`}
     >
-      <Heading as="h1" style={headingStyle}>
-        All Signatures Collected
+      <Heading as="h1" style={styles.heading}>
+        All signatures collected
       </Heading>
-      <Text style={textStyle}>Hi {senderName},</Text>
-      <Text style={textStyle}>
-        Great news! All signatures have been collected for the following
-        document:
+
+      <Text style={styles.body}>Hi {senderName},</Text>
+      <Text style={styles.body}>
+        All signatures have been collected for the document below.
       </Text>
-      <Section style={documentSectionStyle}>
-        <Text style={documentNameStyle}>{documentName}</Text>
-      </Section>
-      <Section style={detailsSectionStyle}>
-        <Text style={detailRowStyle}>
-          <strong>Community:</strong> {branding.communityName}
+
+      {/* Success-styled card with green bg/border */}
+      <EmailCard
+        style={{
+          backgroundColor: '#F0FDF4',
+          border: '1px solid #BBF7D0',
+        }}
+      >
+        <Text
+          style={{
+            fontSize: '15px',
+            fontWeight: 600,
+            color: emailColors.foreground,
+            margin: '0 0 10px 0',
+          }}
+        >
+          {documentName}
         </Text>
-        <Text style={detailRowStyle}>
-          <strong>Signers:</strong> {signerLabel}
-        </Text>
-        <Text style={detailRowStyle}>
-          <strong>Completed:</strong> {completedAt}
-        </Text>
-      </Section>
-      <Text style={textStyle}>
+        <table width="100%" cellPadding={0} cellSpacing={0}>
+          <tbody>
+            <tr>
+              <td style={styles.labelCell}>Signers</td>
+              <td style={styles.valueCell}>{signerLabel}</td>
+            </tr>
+            <tr>
+              <td style={styles.labelCell}>Completed</td>
+              <td style={styles.valueCell}>{completedAt}</td>
+            </tr>
+          </tbody>
+        </table>
+      </EmailCard>
+
+      <Text style={styles.body}>
         The fully executed document is now available in your documents portal.
       </Text>
-      <Text style={smallTextStyle}>
-        This is an automated notification from {branding.communityName}.
+
+      <Text style={styles.small}>
+        This document is stored in your document repository at{' '}
+        {branding.communityName}.
       </Text>
     </EmailLayout>
   );
 }
 
 export default EsignCompletedEmail;
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 12px 0",
-};
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textDisabled,
-  lineHeight: "20px",
-  margin: "0",
-};
-
-const documentSectionStyle: React.CSSProperties = {
-  backgroundColor: emailColors.successBackground,
-  borderRadius: "6px",
-  padding: "12px 16px",
-  margin: "0 0 16px 0",
-  borderLeft: `4px solid ${emailColors.successBorder}`,
-};
-
-const documentNameStyle: React.CSSProperties = {
-  fontSize: "16px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0",
-};
-
-const detailsSectionStyle: React.CSSProperties = {
-  backgroundColor: emailColors.surfacePage,
-  borderRadius: "6px",
-  padding: "12px 16px",
-  margin: "0 0 16px 0",
-};
-
-const detailRowStyle: React.CSSProperties = {
-  fontSize: "15px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 4px 0",
-};
