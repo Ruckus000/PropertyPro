@@ -26,6 +26,8 @@ export type NavRailItem = {
   /** Optional URL — when provided, the item renders as a link instead of a button. */
   href?: string;
   children?: NavRailSubItem[];
+  /** Optional popup semantics for button items that open another surface instead of navigating. */
+  ariaHasPopup?: 'dialog';
 };
 
 export type NavRailSection = {
@@ -466,9 +468,7 @@ export function NavRail({
                         }
                         aria-label={navItem.label}
                         aria-current={isActive ? "page" : undefined}
-                        aria-haspopup={
-                          navItem.label.includes("(Upgrade)") ? "dialog" : undefined
-                        }
+                        aria-haspopup={navItem.ariaHasPopup}
                         data-nav-focusable="true"
                         data-testid="nav-item"
                         className={classes}

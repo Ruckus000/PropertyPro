@@ -171,6 +171,17 @@ describe("NavRail", () => {
       expect(props.onViewChange).toHaveBeenNthCalledWith(1, "documents");
       expect(props.onViewChange).toHaveBeenNthCalledWith(2, "documents");
     });
+
+    it("uses explicit popup semantics for non-link actions", () => {
+      renderNavRail({
+        items: [{ id: "upgrade", label: "Requires a higher plan", icon: TestIcon, ariaHasPopup: "dialog" }],
+        activeView: "upgrade",
+      });
+
+      expect(screen.getByLabelText("Requires a higher plan").getAttribute("aria-haspopup")).toBe(
+        "dialog",
+      );
+    });
   });
 
   describe("Expanded/collapsed states", () => {

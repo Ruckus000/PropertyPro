@@ -91,6 +91,7 @@ export function AppSidebar({
       ? (props: { size?: number }) => <LockedIcon Icon={item.icon} />
       : item.icon,
     href: item.planLocked ? undefined : (communityId ? item.href(communityId) : undefined),
+    ariaHasPopup: item.planLocked ? 'dialog' : undefined,
   });
 
   const navRailSections: NavRailSection[] = baseSections
