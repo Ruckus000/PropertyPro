@@ -1,7 +1,10 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { emailColors, primitiveColors } from "@propertypro/tokens/email";
-import { EmailLayout } from "../components/email-layout";
-import type { BaseEmailProps } from "../types";
+import { Heading, Text } from '@react-email/components';
+import { emailColors } from '@propertypro/tokens/email';
+import { EmailLayout } from '../components/email-layout';
+import { EmailButton } from '../components/email-button';
+import { EmailAlert } from '../components/email-alert';
+import * as styles from '../components/shared-styles';
+import type { BaseEmailProps } from '../types';
 
 export interface AssessmentDueReminderEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -27,84 +30,32 @@ export function AssessmentDueReminderEmail({
         previewText ??
         `Reminder: ${assessmentTitle} of ${amountDue} is due ${dueDate}`
       }
+      accentColor={emailColors.accentWarning}
     >
-      <Heading as="h1" style={headingStyle}>
-        Assessment Due Reminder
+      <Heading as="h1" style={styles.heading}>
+        Assessment due reminder
       </Heading>
 
-      <Text style={textStyle}>Hi {recipientName},</Text>
-      <Text style={textStyle}>
-        This is a friendly reminder that your assessment{" "}
-        <strong>{assessmentTitle}</strong> of <strong>{amountDue}</strong> for{" "}
-        <strong>{branding.communityName}</strong> is due on{" "}
+      <Text style={styles.body}>Hi {recipientName},</Text>
+      <Text style={styles.body}>
+        This is a friendly reminder that your assessment{' '}
+        <strong>{assessmentTitle}</strong> of <strong>{amountDue}</strong> for{' '}
+        <strong>{branding.communityName}</strong> is due on{' '}
         <strong>{dueDate}</strong>.
       </Text>
 
-      <div style={reminderBoxStyle}>
-        <Text style={reminderTextStyle}>
-          Please make your payment before the due date to avoid any late fees.
-        </Text>
-      </div>
+      <EmailAlert variant="warning">
+        Please make your payment before the due date to avoid any late fees.
+      </EmailAlert>
 
-      <Button style={buttonStyle(branding.accentColor)} href={portalUrl}>
-        Pay Now
-      </Button>
+      <EmailButton href={portalUrl} variant="warning">
+        Pay now
+      </EmailButton>
 
-      <Text style={smallTextStyle}>
+      <Text style={styles.smallSpaced}>
         If you have already made this payment, please disregard this reminder.
         For questions about your assessment, please contact your association.
       </Text>
     </EmailLayout>
   );
 }
-
-const headingStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: emailColors.textPrimary,
-  margin: "0 0 16px 0",
-};
-
-const textStyle: React.CSSProperties = {
-  fontSize: "16px",
-  color: emailColors.textSecondary,
-  lineHeight: "24px",
-  margin: "0 0 16px 0",
-};
-
-const reminderBoxStyle: React.CSSProperties = {
-  borderLeft: `4px solid ${primitiveColors.amber[500]}`,
-  backgroundColor: emailColors.warningBackground,
-  padding: "16px",
-  margin: "16px 0",
-  borderRadius: "0 4px 4px 0",
-};
-
-const reminderTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.warningForeground,
-  lineHeight: "20px",
-  margin: "0",
-};
-
-function buttonStyle(accent?: string): React.CSSProperties {
-  return {
-    backgroundColor: accent ?? primitiveColors.amber[500],
-    color: emailColors.textInverse,
-    padding: "12px 24px",
-    borderRadius: "6px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textDecoration: "none",
-    display: "inline-block",
-    margin: "8px 0 24px 0",
-  };
-}
-
-const smallTextStyle: React.CSSProperties = {
-  fontSize: "14px",
-  color: emailColors.textDisabled,
-  lineHeight: "20px",
-  margin: "0",
-  fontStyle: "italic",
-};
