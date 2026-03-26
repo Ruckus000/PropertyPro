@@ -53,6 +53,10 @@
   --red-600: #DC2626;
   --red-700: #B91C1C;
 
+  /* Purpose-named warm neutral primitive — NOT a new scale family.
+     Used only for --surface-page. Gray remains the sole neutral family. */
+  --surface-page-warm: #F5F5F4;
+
   /* Spacing (4px base unit) */
   --space-1: 4px;
   --space-2: 8px;
@@ -140,7 +144,7 @@
   --text-link-hover: var(--blue-700);
 
   /* Surfaces */
-  --surface-page: var(--gray-50);
+  --surface-page: var(--surface-page-warm);
   --surface-card: var(--gray-0);
   --surface-subtle: var(--gray-25);
   --surface-muted: var(--gray-100);

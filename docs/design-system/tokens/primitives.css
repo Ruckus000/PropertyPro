@@ -47,6 +47,10 @@
   --red-600: #DC2626;
   --red-700: #B91C1C;
 
+  /* Purpose-named warm neutral primitive — NOT a new scale family.
+     Used only for --surface-page. Gray remains the sole neutral family. */
+  --surface-page-warm: #F5F5F4;
+
   /* Primitives: Spacing (4px base unit) */
   --space-1: 4px;
   --space-2: 8px;

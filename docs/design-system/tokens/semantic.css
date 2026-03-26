@@ -20,7 +20,7 @@
   --text-link-hover: var(--blue-700);
 
   /* Semantic: Surfaces */
-  --surface-page: var(--gray-50);
+  --surface-page: var(--surface-page-warm);
   --surface-card: var(--gray-0);
   --surface-subtle: var(--gray-25);
   --surface-muted: var(--gray-100);
