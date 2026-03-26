@@ -27,6 +27,12 @@ beforeEach(() => {
   vi.unstubAllEnvs();
 });
 
+async function flushMicrotasks(): Promise<void> {
+  await vi.dynamicImportSettled();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('Sentry server config', () => {
   it('calls Sentry.init with the correct DSN', async () => {
     vi.stubEnv('SENTRY_DSN', 'https://test@sentry.io/123');
@@ -124,12 +130,16 @@ describe('Sentry client instrumentation', () => {
 
     vi.resetModules();
     const module = await import('../../instrumentation-client');
+    await flushMicrotasks();
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(config['dsn']).toBe('https://public@sentry.io/456');
     expect(config['enabled']).toBe(true);
-    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
+
+    module.onRouterTransitionStart('/dashboard' as never);
+    await flushMicrotasks();
+    expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
   });
 
   it('disables client Sentry when DSN is not set', async () => {
@@ -138,10 +148,11 @@ describe('Sentry client instrumentation', () => {
     vi.resetModules();
     const module = await import('../../instrumentation-client');
 
-    expect(mockInit).toHaveBeenCalledOnce();
-    const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(config['enabled']).toBe(false);
-    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
+    expect(mockInit).not.toHaveBeenCalled();
+
+    module.onRouterTransitionStart('/dashboard' as never);
+    await flushMicrotasks();
+    expect(mockCaptureRouterTransitionStart).not.toHaveBeenCalled();
   });
 
   it('swallows client initialization errors so the app can keep rendering', async () => {
@@ -153,12 +164,16 @@ describe('Sentry client instrumentation', () => {
 
     vi.resetModules();
     const module = await import('../../instrumentation-client');
+    await flushMicrotasks();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[Sentry] Failed to initialize client instrumentation',
       expect.any(Error),
     );
-    expect(module.onRouterTransitionStart).toBe(mockCaptureRouterTransitionStart);
+
+    module.onRouterTransitionStart('/dashboard' as never);
+    await flushMicrotasks();
+    expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
 
     consoleErrorSpy.mockRestore();
   });

@@ -21,6 +21,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { useRecentPages } from '@/hooks/useRecentPages';
+import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
 
 interface CommandPaletteProps {
@@ -29,6 +30,7 @@ interface CommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  enableGlobalShortcut?: boolean;
 }
 
 interface CommandItem {
@@ -79,7 +81,14 @@ function getCommandItems(
   return [...pageItems, ...extraPages, ...globalItems, ...actionItems];
 }
 
-export function CommandPalette({ open, onOpenChange, communityId, role, features }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onOpenChange,
+  communityId,
+  role,
+  features,
+  enableGlobalShortcut = true,
+}: CommandPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { recentPages, addPage } = useRecentPages();
@@ -104,15 +113,19 @@ export function CommandPalette({ open, onOpenChange, communityId, role, features
 
   // Global Cmd+K / Ctrl+K handler
   useEffect(() => {
+    if (!enableGlobalShortcut) {
+      return;
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if (isSearchShortcut(e)) {
         e.preventDefault();
         onOpenChange(!open);
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
+  }, [enableGlobalShortcut, open, onOpenChange]);
 
   // Track page visits for recent pages using nav-config's route matching
   useEffect(() => {

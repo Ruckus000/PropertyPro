@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   const stats = await getPlatformDashboardStats();
 
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={stats.lifecycle.pendingDeletions}>
       <div className="p-6">
         <h1 className="mb-6 text-xl font-semibold text-gray-900">Dashboard</h1>
         <PlatformDashboard stats={stats} />

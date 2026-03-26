@@ -11,9 +11,10 @@ export const dynamic = 'force-dynamic';
 export default async function DeletionRequestsPage() {
   await requireAdminPageSession();
   const { requests } = await getDeletionRequestsData();
+  const coolingCount = requests.filter((request) => request.status === 'cooling').length;
 
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={coolingCount}>
       <div className="p-6">
         <h1 className="mb-6 text-xl font-semibold text-gray-900">Deletion Requests</h1>
         <DeletionRequestsDashboard

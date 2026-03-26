@@ -25,6 +25,7 @@ import { ADMIN_ROLES } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
 import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/feature-registry';
+import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { CommandInput } from './CommandInput';
 import { CommandGroup } from './CommandGroup';
 import { CommandItem } from './CommandItem';
@@ -123,6 +124,7 @@ export interface CommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  enableGlobalShortcut?: boolean;
 }
 
 export function CommandPalette({
@@ -131,6 +133,7 @@ export function CommandPalette({
   communityId,
   role,
   features,
+  enableGlobalShortcut = true,
 }: CommandPaletteProps) {
   const registryItems = useFilteredRegistry(role, features, communityId);
   const router = useRouter();
@@ -306,15 +309,19 @@ export function CommandPalette({
   // Global Cmd+K / Ctrl+K
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!enableGlobalShortcut) {
+      return;
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if (isSearchShortcut(e)) {
         e.preventDefault();
         onOpenChange(!open);
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
+  }, [enableGlobalShortcut, open, onOpenChange]);
 
   // -----------------------------------------------------------------------
   // Scroll active item into view

@@ -153,6 +153,19 @@ export async function getDeletionRequestsData(
   };
 }
 
+export async function getCoolingDeletionRequestCount(): Promise<number> {
+  const db = createAdminClient();
+
+  const { count, error } = await ((db
+    .from('account_deletion_requests')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'cooling')) as AnyQuery);
+
+  throwIfError(error, 'Failed to load cooling deletion request count');
+
+  return count ?? 0;
+}
+
 export const deletionRequestTestUtils = {
   buildRequesterName,
   mapDeletionRequests,

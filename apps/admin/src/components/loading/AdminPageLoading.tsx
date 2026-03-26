@@ -12,7 +12,7 @@ export function AdminPageLoading({
   label = 'Loading admin page',
 }: AdminPageLoadingProps) {
   return (
-    <AdminLayout>
+    <AdminLayout coolingCount={0}>
       <section aria-busy="true" aria-label={label} role="status" className="space-y-6 p-6">
         <div className="space-y-3">
           <AdminSkeleton className="h-4 w-24" />
