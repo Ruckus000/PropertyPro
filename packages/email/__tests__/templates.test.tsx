@@ -242,7 +242,7 @@ describe("PasswordResetEmail", () => {
         resetUrl="https://example.com/reset/token123"
       />,
     );
-    expect(html).toContain("Password Reset");
+    expect(html).toContain("Reset your password");
   });
 });
 
