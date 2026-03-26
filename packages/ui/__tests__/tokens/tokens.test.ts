@@ -399,6 +399,16 @@ describe("P0-01 Design Tokens", () => {
     });
   });
 
+  describe("Surface Page Warm Token", () => {
+    it("--surface-page-warm primitive is defined with value #F5F5F4", () => {
+      expect(cssContent).toContain("--surface-page-warm: #F5F5F4");
+    });
+
+    it("--surface-page references --surface-page-warm", () => {
+      expect(cssContent).toContain("--surface-page: var(--surface-page-warm)");
+    });
+  });
+
   describe("No hardcoded values (structural checks)", () => {
     it("all semantic color values reference CSS custom properties", () => {
       function checkVarReferences(obj: Record<string, unknown>, path = ""): void {

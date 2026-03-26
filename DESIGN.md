@@ -34,7 +34,7 @@ packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/t
 | Text | `--text-secondary` | Supporting text, descriptions |
 | Text | `--text-tertiary` | Metadata, timestamps |
 | Text | `--text-disabled` | Disabled controls |
-| Surface | `--surface-page` | Page background (`--surface-page-warm`, `#F5F5F4`) |
+| Surface | `--surface-page` | Page background (`--surface-page-warm`, #F5F5F4 — a purpose-named warm neutral, not a new scale family) |
 | Surface | `--surface-card` | Card/panel background (white) |
 | Surface | `--surface-muted` | Subdued sections (gray-100) |
 | Border | `--border-default` | Card boundaries, dividers |

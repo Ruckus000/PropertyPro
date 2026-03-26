@@ -66,9 +66,18 @@ export interface NavRailProps {
   header?: React.ReactNode;
   /** Optional footer content rendered below the toggle (e.g. user profile). */
   footer?: React.ReactNode;
-  /** Optional separator with label rendered between item groups. */
+  /**
+   * Structured sections with labeled dividers. When provided, takes precedence over `items`.
+   * Each section can have a label (rendered as uppercase header) or null (no header).
+   */
+  sections?: NavRailSection[];
+  /**
+   * @deprecated Use `sections` instead. Optional separator with label rendered between item groups.
+   */
   groupSeparator?: React.ReactNode;
-  /** Index at which to insert the group separator. */
+  /**
+   * @deprecated Use `sections` instead. Index at which to insert the group separator.
+   */
   groupSeparatorAfterIndex?: number;
 }
 
@@ -134,6 +143,7 @@ export function NavRail({
   renderLink,
   header,
   footer,
+  sections: sectionsProp,
   groupSeparator,
   groupSeparatorAfterIndex,
 }: NavRailProps) {

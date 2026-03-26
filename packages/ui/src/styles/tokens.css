@@ -32,6 +32,10 @@
   --gray-900: #111827;
   --gray-950: #0D1117;
 
+  /* Purpose-named warm neutral primitive — NOT a new scale family.
+     Used only for --surface-page. Gray remains the sole neutral family. */
+  --surface-page-warm: #F5F5F4;
+
   --green-50: #ECFDF5;
   --green-100: #D1FAE5;
   --green-200: #A7F3D0;
@@ -169,7 +173,7 @@
   --text-link-hover: var(--blue-700);
 
   /* Surfaces */
-  --surface-page: var(--gray-50);
+  --surface-page: var(--surface-page-warm);
   --surface-card: var(--gray-0);
   --surface-subtle: var(--gray-25);
   --surface-muted: var(--gray-100);
@@ -333,6 +337,7 @@
   --nav-bg-active: rgba(255, 255, 255, 0.15);
   --nav-bg-hover: rgba(255, 255, 255, 0.07);
   --nav-divider: rgba(255, 255, 255, 0.10);
+  --nav-border-divider: rgba(255, 255, 255, 0.10);
   --nav-badge-bg: rgba(255, 255, 255, 0.15);
   --nav-badge-border: var(--surface-inverse);
   --nav-indicator: var(--interactive-primary);
