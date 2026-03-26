@@ -126,8 +126,7 @@ CREATE TABLE conversion_events (
     'founding_user_created',
     'grace_started',
     'demo_soft_deleted',
-    'self_service_upgrade_started',
-    'self_service_upgrade_completed'
+    'self_service_upgrade_started'
   )),
   source text NOT NULL CHECK (source IN (
     'admin_app', 'web_app', 'stripe_webhook', 'cron'
@@ -170,7 +169,8 @@ CREATE INDEX idx_ce_type_occurred ON conversion_events(event_type, occurred_at);
 | `grace_started` | `demo:{demoId}:grace_started` | One-time transition |
 | `demo_soft_deleted` | `demo:{demoId}:soft_deleted` | One-time transition |
 | `self_service_upgrade_started` | `community:{communityId}:upgrade:{stripeSessionId}` | One per checkout session |
-| `self_service_upgrade_completed` | `stripe:{stripeEventId}` | Stripe idempotency |
+
+**`self_service_upgrade_completed` is intentionally absent.** `handleDemoConversion()` fires for both admin-initiated and self-service conversions — the webhook handler sees identical metadata shapes and cannot distinguish the origin. Both paths emit `checkout_completed`. Funnel analysis distinguishes admin vs. self-service by correlating `conversion_initiated` (admin, `source: 'admin_app'`) vs. `self_service_upgrade_started` (self-service, `source: 'web_app'`) with the subsequent `checkout_completed` event via `demoId`.
 
 **Event writes are awaited best-effort:**
 
@@ -187,7 +187,11 @@ Non-fatal: primary operation succeeds regardless. But awaited, not fire-and-forg
 
 **`/api/v1/auth/demo-login` does NOT emit `demo_entered`.** That route is admin preview tooling, not prospect-facing. Only `/api/v1/demo/[slug]/enter` emits this event.
 
-**RLS:** Global exclusion. `RLS_GLOBAL_TABLE_EXCLUSIONS`: 9 → 10.
+**RLS:** Global exclusion. `RLS_GLOBAL_TABLE_EXCLUSIONS`: 9 → 10. Reason: analytics table that must survive demo soft-deletion and community conversion lifecycle. Not tenant-scoped because events span the demo→paid transition and funnel queries run cross-community for admin dashboards.
+
+**Nullability of `demo_id` and `community_id`:** Both are nullable. `demo_id` is null for `self_service_upgrade_started`/`self_service_upgrade_completed` events on non-demo communities. `community_id` should always be present for demo-related events (the community exists before any event fires). The implementation should add `NOT NULL` to `community_id` if analysis confirms no event can fire without a community.
+
+**Table growth:** `demo_entered` events use per-request UUIDs in dedupe keys, meaning every entry creates a unique row. For typical demo traffic (tens of entries per demo) this is negligible. If demo entry traffic scales (load tests, bots), add a retention policy or rate-limit the event emission — not the entry endpoint.
 
 ### 1C. Demo Lifecycle — One-field model with `trial_ends_at`
 
@@ -222,11 +226,11 @@ CREATE TRIGGER trg_demo_timestamps
   EXECUTE FUNCTION enforce_demo_timestamps();
 ```
 
-Both timestamps must be set on the initial INSERT in `seedCommunity()` (demo creation is two-step in admin demos route).
+Both timestamps must be set on the initial INSERT in `seedCommunity()` (demo creation is two-step in admin demos route). Add `trialEndsAt` and `demoExpiresAt` parameters to `SeedCommunityConfig`. The admin demos route calculates both timestamps (`trialEndsAt = now + 14 days`, `demoExpiresAt = now + 21 days`) and passes them to `seedCommunity()`. The current `demo_expires_at` default of `now + 30 days` (admin demos route line 167) changes to `now + 21 days`.
 
 **Lifecycle model:**
 
-- `demo_expires_at` stays as the hard lockout boundary. All 5 existing consumers unchanged.
+- `demo_expires_at` stays as the hard lockout boundary. All 5 existing consumers unchanged. Current value changes from 30 days to 21 days for new demos.
 - `trial_ends_at` is the new field. Only new code reads it. Marks when full-feature access ends.
 - Grace period = `trial_ends_at` to `demo_expires_at` (derived, not stored).
 - New demos: `trial_ends_at = now + 14 days`, `demo_expires_at = now + 21 days`.
@@ -315,7 +319,7 @@ interface DemoTrialBannerProps {
 
 **State 1: Active Trial** (`status === 'active_trial'`)
 - Left: role label + switch button (existing DemoBanner behavior)
-- Right: progress bar (`role="progressbar"`, `aria-valuenow`, visual fill based on days elapsed / 14), days remaining text, "Upgrade" button (primary blue)
+- Right: progress bar (`role="progressbar"`, `aria-valuenow`, visual fill = `days_elapsed / total_trial_days` where `total_trial_days = (trialEndsAt - demoCreatedAt).days`), days remaining text, "Upgrade" button (primary blue). Note: backfilled demos may show >100% progress if their original trial was longer than 14 days — clamp to 100% in the UI.
 - Background: `bg-gray-900/90` (existing DemoBanner style)
 - "Upgrade" navigates to `/demo/[slug]/upgrade` — no conversion event emitted on click
 
@@ -398,7 +402,9 @@ async function assertNotDemoGrace(communityId: number): Promise<void> {
 }
 ```
 
-**Integration point:** Called explicitly per-route, immediately after `resolveEffectiveCommunityId()`, before any write logic. Same pattern as `requirePermission()` — not middleware, not `subscriptionGuard`, not `requirePermission()`.
+**DB client:** Uses `createUnscopedClient()` since `communities` is in `RLS_GLOBAL_TABLE_EXCLUSIONS`. The CI import guard would flag a direct Drizzle import.
+
+**Integration point:** Called explicitly per-route, after the community ID is resolved by whatever mechanism the route uses (middleware headers, request body, `resolveEffectiveCommunityId()`, or membership lookup), before any write logic. "After `resolveEffectiveCommunityId()`" is shorthand — most routes get `communityId` from middleware headers, not that function. The pattern is the same regardless of resolution method.
 
 **Why not middleware:** Middleware doesn't have community context for body-derived routes (e.g., `upload/route.ts` resolves `communityId` from request body, `community/contact/route.ts` gates on membership).
 
@@ -426,7 +432,7 @@ Gets Section 1 fixes only: load `communityType`, validate plan, use `resolveStri
 
 **State 1: Demo not found.** Slug doesn't match any demo instance, or demo is soft-deleted. Return 404. This is not webhook lag — it's a bad URL.
 
-**State 2: Checkout completed, webhook pending.** Demo exists, `isDemo` still `true`, `session_id` present, Stripe session status is `'complete'`, session metadata `slug` matches URL slug. Show "Setting up your community..." with auto-refresh (5s interval, 60s max). After 60s: "This is taking longer than expected. Check your email for login instructions." No further polling.
+**State 2: Checkout completed, webhook pending.** Demo exists, `isDemo` still `true`, `session_id` present, Stripe session status is `'complete'`, session metadata `slug` matches URL slug. Show "Setting up your community..." with polling (5s interval, 60s max). After 60s: "This is taking longer than expected. Check your email for login instructions." No further polling. Implementation: the page is a server component, but State 2 requires a **client component boundary** for the polling interval (`useEffect` + `router.refresh()` or a dedicated polling client component).
 
 **State 3: Checkout terminal failure.** Session status is `'expired'` or `'open'`. Show "Checkout was not completed" with "Try again" link to `/demo/[slug]/upgrade`.
 
@@ -491,6 +497,18 @@ for (const row of enteringGrace) {
 
 Events emitted **inside `demo-conversion.ts`**, not from the webhook route:
 
+**Webhook call chain change:**
+
+The current call chain is: `POST handler` → `handleCheckoutSessionCompleted(session, eventId)` → `handleDemoConversion(session)`. The new chain passes event metadata through:
+
+```
+POST handler
+  → handleCheckoutSessionCompleted(session, eventId)
+    → handleDemoConversion(session, stripeEventId, eventCreatedEpoch)
+```
+
+`handleCheckoutSessionCompleted` already receives `eventId` (line 323 of webhook route). It now also receives `event.created` and forwards both to `handleDemoConversion`.
+
 **`handleDemoConversion()` signature change:**
 ```typescript
 async function handleDemoConversion(
@@ -504,11 +522,12 @@ async function handleDemoConversion(
 - Emit `checkout_completed`: `dedupe_key: stripe:{stripeEventId}`, `occurred_at: new Date(eventCreatedEpoch * 1000)`, metadata: `{ planId }`
 
 **Inside `ensureFoundingUser()`, after roles are created:**
-- Emit `founding_user_created`: `dedupe_key: demo:{demoId}:founding_user`, `occurred_at: now()`
+- `ensureFoundingUser()` gains `demoId` as a parameter (it currently receives `communityId`, `email`, `name`). After roles are created, it emits `founding_user_created`: `dedupe_key: demo:{demoId}:founding_user`, `occurred_at: now()`.
 
 **New webhook handler: `checkout.session.expired`:**
 - Stays in webhook route (new handler, no existing service)
-- Only emits if session metadata contains `demoId`
+- Only emits if session metadata contains `demoId` — this covers both admin-initiated and self-service demo conversions (both set `demoId` in metadata)
+- The existing `subscribe` route does NOT set `demoId` in metadata (it sets `communityId`, `planId`, and optionally `accessPlanId`). Expired sessions from the subscribe route are not tracked in `conversion_events`. If subscribe-path expiration tracking is needed later, add a separate event type.
 - Emit `checkout_session_expired`: `dedupe_key: stripe:{stripeEventId}`
 
 ### 3E. Demo Entry + Creation — Event Emission
