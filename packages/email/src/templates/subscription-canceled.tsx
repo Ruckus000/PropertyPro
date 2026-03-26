@@ -1,4 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components";
+import { emailColors, primitiveColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -59,20 +60,20 @@ export function SubscriptionCanceledEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
 
 const alertBoxStyle: React.CSSProperties = {
-  borderLeft: "4px solid #d97706",
-  backgroundColor: "#fffbeb",
+  borderLeft: `4px solid ${primitiveColors.amber[600]}`,
+  backgroundColor: emailColors.warningBackground,
   padding: "16px",
   margin: "16px 0",
   borderRadius: "0 4px 4px 0",
@@ -81,21 +82,21 @@ const alertBoxStyle: React.CSSProperties = {
 const alertTitleStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "bold",
-  color: "#92400e",
+  color: emailColors.warningForeground,
   margin: "0 0 8px 0",
 };
 
 const alertTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#92400e",
+  color: emailColors.warningForeground,
   lineHeight: "20px",
   margin: "0",
 };
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#2563eb",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.interactivePrimary,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",
@@ -108,7 +109,7 @@ function buttonStyle(accent?: string): React.CSSProperties {
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
   fontStyle: "italic",

@@ -1,4 +1,5 @@
 import { Heading, Text } from '@react-email/components';
+import { emailColors, primitiveColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
 import type { BaseEmailProps } from '../types';
 
@@ -61,21 +62,21 @@ export function AccountDeletionExecutedEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: '24px',
   fontWeight: 'bold',
-  color: '#111827',
+  color: emailColors.textPrimary,
   margin: '0 0 16px 0',
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: '16px',
-  color: '#374151',
+  color: emailColors.textSecondary,
   lineHeight: '24px',
   margin: '0 0 16px 0',
 };
 
 const infoBoxStyle: React.CSSProperties = {
-  backgroundColor: '#f3f4f6',
-  border: '1px solid #d1d5db',
-  borderLeft: '4px solid #6b7280',
+  backgroundColor: emailColors.surfaceMuted,
+  border: `1px solid ${emailColors.borderStrong}`,
+  borderLeft: `4px solid ${emailColors.textDisabled}`,
   borderRadius: '8px',
   padding: '16px',
   margin: '0 0 24px 0',
@@ -83,14 +84,14 @@ const infoBoxStyle: React.CSSProperties = {
 
 const infoTextStyle: React.CSSProperties = {
   fontSize: '15px',
-  color: '#1f2937',
+  color: primitiveColors.gray[800],
   lineHeight: '24px',
   margin: '0 0 12px 0',
 };
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: '14px',
-  color: '#6b7280',
+  color: emailColors.textDisabled,
   lineHeight: '20px',
   margin: '0',
 };

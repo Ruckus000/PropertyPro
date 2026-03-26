@@ -1,4 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components";
+import { emailColors } from "@propertypro/tokens/email";
 import { EmailLayout } from "../components/email-layout";
 import type { BaseEmailProps } from "../types";
 
@@ -77,20 +78,20 @@ export function AssessmentPaymentReceivedEmail({
 const headingStyle: React.CSSProperties = {
   fontSize: "24px",
   fontWeight: "bold",
-  color: "#111827",
+  color: emailColors.textPrimary,
   margin: "0 0 16px 0",
 };
 
 const textStyle: React.CSSProperties = {
   fontSize: "16px",
-  color: "#374151",
+  color: emailColors.textSecondary,
   lineHeight: "24px",
   margin: "0 0 16px 0",
 };
 
 const confirmationBoxStyle: React.CSSProperties = {
-  borderLeft: "4px solid #16a34a",
-  backgroundColor: "#f0fdf4",
+  borderLeft: `4px solid ${emailColors.successForeground}`,
+  backgroundColor: emailColors.successBackground,
   padding: "16px",
   margin: "16px 0",
   borderRadius: "0 4px 4px 0",
@@ -98,14 +99,14 @@ const confirmationBoxStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   padding: "4px 12px 4px 0",
   verticalAlign: "top",
 };
 
 const valueStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#111827",
+  color: emailColors.textPrimary,
   fontWeight: "bold",
   padding: "4px 0",
   verticalAlign: "top",
@@ -113,8 +114,8 @@ const valueStyle: React.CSSProperties = {
 
 function buttonStyle(accent?: string): React.CSSProperties {
   return {
-    backgroundColor: accent ?? "#16a34a",
-    color: "#ffffff",
+    backgroundColor: accent ?? emailColors.successForeground,
+    color: emailColors.textInverse,
     padding: "12px 24px",
     borderRadius: "6px",
     fontSize: "16px",
@@ -127,7 +128,7 @@ function buttonStyle(accent?: string): React.CSSProperties {
 
 const smallTextStyle: React.CSSProperties = {
   fontSize: "14px",
-  color: "#6b7280",
+  color: emailColors.textDisabled,
   lineHeight: "20px",
   margin: "0",
   fontStyle: "italic",
