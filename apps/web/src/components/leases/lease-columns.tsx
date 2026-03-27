@@ -1,10 +1,19 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { format, differenceInCalendarDays, parseISO } from 'date-fns';
-import { MoreHorizontal } from 'lucide-react';
-import type { LeaseListItem } from '@/hooks/use-leases';
-import { Badge } from '@/components/ui/badge';
+import { MoreHorizontal, Plus } from 'lucide-react';
+import type { EnrichedLeaseListItem, LeaseTableRow } from '@/hooks/use-leases';
+import {
+  formatRentDisplay,
+  formatLeaseDate,
+  getLeaseDisplayStatus,
+  type LeaseDisplayStatus,
+} from '@/lib/utils/lease-utils';
+// Use @propertypro/ui Badge — it owns the CVA variant system for status colors.
+// The shadcn Badge (apps/web/src/components/ui/badge.tsx) only has
+// default/secondary/destructive/outline variants; pasting ad-hoc status color
+// classes onto it bypasses CVA and breaks tailwind-merge conflict resolution.
+import { Badge, type BadgeVariant } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -14,142 +23,156 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 // ---------------------------------------------------------------------------
-// Helpers
+// LeaseStatusBadge
 // ---------------------------------------------------------------------------
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Month-to-month';
-  try {
-    return format(parseISO(dateStr), 'MMM d, yyyy');
-  } catch {
-    return dateStr;
-  }
+const STATUS_TO_VARIANT: Record<LeaseDisplayStatus | 'vacant', BadgeVariant> = {
+  active: 'success',
+  expiring_soon: 'warning',
+  expired: 'danger',
+  renewed: 'neutral',
+  terminated: 'neutral',
+  vacant: 'neutral',
+};
+
+const STATUS_LABELS: Record<LeaseDisplayStatus | 'vacant', string> = {
+  active: 'Active',
+  expiring_soon: 'Expiring Soon',
+  expired: 'Expired',
+  renewed: 'Renewed',
+  terminated: 'Terminated',
+  vacant: 'Vacant',
+};
+
+function LeaseStatusBadge({ status }: { status: LeaseDisplayStatus | 'vacant' }) {
+  return (
+    <Badge variant={STATUS_TO_VARIANT[status]}>
+      {STATUS_LABELS[status]}
+    </Badge>
+  );
 }
 
-function formatCurrency(cents: string | null): string {
-  if (cents === null || cents === undefined) return '\u2014';
-  const num = Number(cents);
-  if (Number.isNaN(num)) return '\u2014';
-  return (num / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
-}
+// ---------------------------------------------------------------------------
+// Column actions
+// ---------------------------------------------------------------------------
 
-type LeaseStatus = 'active' | 'expiring_soon' | 'expired' | 'renewed' | 'terminated';
-
-function getLeaseStatus(lease: LeaseListItem): LeaseStatus {
-  if (lease.status === 'terminated') return 'terminated';
-  if (lease.status === 'expired') return 'expired';
-  if (lease.status === 'renewed') return 'renewed';
-
-  if (lease.endDate) {
-    const daysUntil = differenceInCalendarDays(parseISO(lease.endDate), new Date());
-    if (daysUntil < 0) return 'expired';
-    if (daysUntil <= 60) return 'expiring_soon';
-  }
-
-  return 'active';
-}
-
-function StatusBadge({ lease }: { lease: LeaseListItem }) {
-  const status = getLeaseStatus(lease);
-
-  switch (status) {
-    case 'active':
-      return (
-        <Badge className="bg-status-success-bg text-status-success hover:bg-status-success-bg">
-          Active
-        </Badge>
-      );
-    case 'expiring_soon':
-      return (
-        <Badge className="bg-status-warning-bg text-status-warning hover:bg-status-warning-bg">
-          Expiring Soon
-        </Badge>
-      );
-    case 'expired':
-      return (
-        <Badge className="bg-status-danger-bg text-status-danger hover:bg-status-danger-bg">
-          Expired
-        </Badge>
-      );
-    case 'renewed':
-      return (
-        <Badge className="bg-interactive-muted text-content-link hover:bg-interactive-muted">
-          Renewed
-        </Badge>
-      );
-    case 'terminated':
-      return (
-        <Badge className="bg-surface-muted text-content-secondary hover:bg-surface-muted">
-          Terminated
-        </Badge>
-      );
-  }
+export interface LeaseColumnActions {
+  onView: (lease: EnrichedLeaseListItem) => void;
+  onEdit: (lease: EnrichedLeaseListItem) => void;
+  onRenew: (lease: EnrichedLeaseListItem) => void;
+  onTerminate: (lease: EnrichedLeaseListItem) => void;
+  onCreateLease?: (unitId: number) => void; // for vacant rows
 }
 
 // ---------------------------------------------------------------------------
 // Column factory
 // ---------------------------------------------------------------------------
 
-export interface LeaseColumnActions {
-  onView: (lease: LeaseListItem) => void;
-  onEdit: (lease: LeaseListItem) => void;
-  onRenew: (lease: LeaseListItem) => void;
-  onTerminate: (lease: LeaseListItem) => void;
-}
-
 export function getLeaseColumns(
   actions: LeaseColumnActions,
-): ColumnDef<LeaseListItem, unknown>[] {
+  referenceDate: Date,
+): ColumnDef<LeaseTableRow, unknown>[] {
   return [
     {
-      accessorKey: 'unitId',
+      id: 'unit',
       header: 'Unit',
-      cell: ({ row }) => (
-        <span className="font-medium">Unit {row.original.unitId}</span>
-      ),
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') {
+          return <span className="font-medium">{row.original.unitNumber}</span>;
+        }
+        const { lease } = row.original;
+        return (
+          <span className="font-medium">
+            {lease.unitNumber ?? `Unit ${lease.unitId}`}
+          </span>
+        );
+      },
     },
     {
-      accessorKey: 'residentId',
+      id: 'resident',
       header: 'Resident',
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {row.original.residentId.slice(0, 8)}...
-        </span>
-      ),
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') {
+          return <span className="text-sm text-muted-foreground">—</span>;
+        }
+        const { lease } = row.original;
+        return (
+          <span className="text-sm">
+            {lease.residentName ?? '—'}
+          </span>
+        );
+      },
     },
     {
-      accessorKey: 'startDate',
+      id: 'startDate',
       header: 'Start Date',
-      cell: ({ row }) => formatDate(row.original.startDate),
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') return '—';
+        return formatLeaseDate(row.original.lease.startDate);
+      },
     },
     {
-      accessorKey: 'endDate',
+      id: 'endDate',
       header: 'End Date',
-      cell: ({ row }) => formatDate(row.original.endDate),
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') return '—';
+        return formatLeaseDate(row.original.lease.endDate);
+      },
     },
     {
-      accessorKey: 'rentAmount',
+      id: 'rentAmount',
       header: () => <div className="text-right">Monthly Rent</div>,
-      cell: ({ row }) => (
-        <div className="text-right">{formatCurrency(row.original.rentAmount)}</div>
-      ),
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') {
+          return <div className="text-right text-muted-foreground">—</div>;
+        }
+        return (
+          <div className="text-right">
+            {formatRentDisplay(row.original.lease.rentAmount)}
+          </div>
+        );
+      },
     },
     {
       id: 'status',
       header: 'Status',
-      cell: ({ row }) => <StatusBadge lease={row.original} />,
+      cell: ({ row }) => {
+        if (row.original.kind === 'vacant') {
+          return <LeaseStatusBadge status="vacant" />;
+        }
+        const displayStatus = getLeaseDisplayStatus(row.original.lease, referenceDate);
+        return <LeaseStatusBadge status={displayStatus} />;
+      },
     },
     {
       id: 'actions',
       header: '',
       cell: ({ row }) => {
-        const lease = row.original;
-        const status = getLeaseStatus(lease);
-        const canRenew = status === 'active' || status === 'expiring_soon';
-        const canTerminate = status === 'active' || status === 'expiring_soon';
+        // Vacant row: only show "Create Lease" action
+        if (row.original.kind === 'vacant') {
+          const { unitId } = row.original;
+          return (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => actions.onCreateLease?.(unitId)}
+              className="h-8 text-xs"
+            >
+              <Plus className="mr-1 h-3 w-3" aria-hidden="true" />
+              Create Lease
+            </Button>
+          );
+        }
+
+        const { lease } = row.original;
+        const displayStatus = getLeaseDisplayStatus(lease, referenceDate);
+        // canRenew requires both active/expiring status AND a fixed end date.
+        // Month-to-month leases have no endDate — the API rejects renewals without one.
+        const canRenew =
+          (displayStatus === 'active' || displayStatus === 'expiring_soon') &&
+          !!lease.endDate;
+        const canTerminate =
+          displayStatus === 'active' || displayStatus === 'expiring_soon';
 
         return (
           <DropdownMenu>
@@ -184,5 +207,5 @@ export function getLeaseColumns(
         );
       },
     },
-  ];
+  ] satisfies ColumnDef<LeaseTableRow, unknown>[];
 }

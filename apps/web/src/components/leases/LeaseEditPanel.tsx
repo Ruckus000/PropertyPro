@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format, parseISO } from 'date-fns';
-import type { LeaseListItem } from '@/hooks/use-leases';
+import type { EnrichedLeaseListItem } from '@/hooks/use-leases';
 import { useUpdateLease, useRenewalChain } from '@/hooks/use-leases';
+import { formatRentDisplay, parseRentInput, formatLeaseDate } from '@/lib/utils/lease-utils';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { SlideOverPanel } from '@/components/shared/slide-over-panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,27 +15,8 @@ import { Separator } from '@/components/ui/separator';
 
 interface LeaseEditPanelProps {
   communityId: number;
-  lease: LeaseListItem | null;
+  lease: EnrichedLeaseListItem | null;
   onClose: () => void;
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Month-to-month';
-  try {
-    return format(parseISO(dateStr), 'MMM d, yyyy');
-  } catch {
-    return dateStr;
-  }
-}
-
-function formatCurrency(cents: string | null): string {
-  if (cents === null || cents === undefined) return '\u2014';
-  const num = Number(cents);
-  if (Number.isNaN(num)) return '\u2014';
-  return (num / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
 }
 
 export function LeaseEditPanel({
@@ -55,13 +37,8 @@ export function LeaseEditPanel({
   useEffect(() => {
     if (lease) {
       setEndDate(lease.endDate ?? '');
-      // Convert cents to dollars for the input
-      if (lease.rentAmount) {
-        const dollars = Number(lease.rentAmount) / 100;
-        setRentAmount(Number.isNaN(dollars) ? '' : String(dollars));
-      } else {
-        setRentAmount('');
-      }
+      // Raw decimal from API (e.g. "1500.00") — no cents conversion needed
+      setRentAmount(lease.rentAmount ?? '');
       setNotes(lease.notes ?? '');
     }
   }, [lease]);
@@ -69,18 +46,12 @@ export function LeaseEditPanel({
   async function handleSave() {
     if (!lease) return;
 
-    let rentCents: string | null = null;
-    if (rentAmount.trim()) {
-      const dollars = parseFloat(rentAmount);
-      if (!Number.isNaN(dollars) && dollars > 0) {
-        rentCents = String(Math.round(dollars * 100));
-      }
-    }
+    const parsedRent = parseRentInput(rentAmount);
 
     await updateLease.mutateAsync({
       id: lease.id,
       endDate: endDate || null,
-      rentAmount: rentCents,
+      rentAmount: parsedRent,
       notes: notes.trim() || null,
     });
 
@@ -97,19 +68,26 @@ export function LeaseEditPanel({
     >
       {lease && (
         <div className="space-y-6">
+          {updateLease.isError && (
+            <AlertBanner
+              status="danger"
+              title="Failed to save changes. Please try again."
+            />
+          )}
+
           {/* Read-only fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Unit</p>
-              <p className="text-sm">Unit {lease.unitId}</p>
+              <p className="text-sm">{lease.unitNumber ?? `Unit ${lease.unitId}`}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Resident</p>
-              <p className="text-sm">{lease.residentId.slice(0, 8)}...</p>
+              <p className="text-sm">{lease.residentName ?? '—'}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Start Date</p>
-              <p className="text-sm">{formatDate(lease.startDate)}</p>
+              <p className="text-sm">{formatLeaseDate(lease.startDate)}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
@@ -181,14 +159,14 @@ export function LeaseEditPanel({
                     >
                       <div>
                         <span className="font-medium">
-                          {formatDate(chainLease.startDate)}
+                          {formatLeaseDate(chainLease.startDate)}
                         </span>
                         <span className="text-muted-foreground mx-1">&rarr;</span>
-                        <span>{formatDate(chainLease.endDate)}</span>
+                        <span>{formatLeaseDate(chainLease.endDate)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">
-                          {formatCurrency(chainLease.rentAmount)}
+                          {formatRentDisplay(chainLease.rentAmount)}
                         </span>
                         <Badge
                           variant={chainLease.id === lease.id ? 'default' : 'outline'}

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format, parseISO, addDays } from 'date-fns';
-import type { LeaseListItem } from '@/hooks/use-leases';
+import type { EnrichedLeaseListItem } from '@/hooks/use-leases';
 import { useCreateLease } from '@/hooks/use-leases';
+import { parseRentInput, addOneDayUTC } from '@/lib/utils/lease-utils';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +19,7 @@ import { Label } from '@/components/ui/label';
 
 interface LeaseRenewalDialogProps {
   communityId: number;
-  lease: LeaseListItem | null;
+  lease: EnrichedLeaseListItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -29,6 +30,9 @@ export function LeaseRenewalDialog({
   open,
   onOpenChange,
 }: LeaseRenewalDialogProps) {
+  // Month-to-month leases (no end date) cannot be renewed
+  if (lease !== null && !lease.endDate) return null;
+
   const createLease = useCreateLease(communityId);
 
   const [newStartDate, setNewStartDate] = useState('');
@@ -37,22 +41,13 @@ export function LeaseRenewalDialog({
 
   useEffect(() => {
     if (lease && open) {
-      // New start = current end + 1 day (or today if month-to-month)
+      // New start = current end + 1 day (UTC-safe)
       if (lease.endDate) {
-        const nextDay = addDays(parseISO(lease.endDate), 1);
-        setNewStartDate(format(nextDay, 'yyyy-MM-dd'));
-      } else {
-        setNewStartDate(format(new Date(), 'yyyy-MM-dd'));
+        setNewStartDate(addOneDayUTC(lease.endDate));
       }
 
-      // Pre-populate current rent (convert cents to dollars)
-      if (lease.rentAmount) {
-        const dollars = Number(lease.rentAmount) / 100;
-        setNewRentAmount(Number.isNaN(dollars) ? '' : String(dollars));
-      } else {
-        setNewRentAmount('');
-      }
-
+      // Pre-populate current rent — raw decimal, no conversion
+      setNewRentAmount(lease.rentAmount ?? '');
       setNewEndDate('');
     }
   }, [lease, open]);
@@ -61,20 +56,14 @@ export function LeaseRenewalDialog({
     e.preventDefault();
     if (!lease) return;
 
-    let rentCents: string | null = null;
-    if (newRentAmount.trim()) {
-      const dollars = parseFloat(newRentAmount);
-      if (!Number.isNaN(dollars) && dollars > 0) {
-        rentCents = String(Math.round(dollars * 100));
-      }
-    }
+    const parsedRent = parseRentInput(newRentAmount);
 
     await createLease.mutateAsync({
       unitId: lease.unitId,
       residentId: lease.residentId,
       startDate: newStartDate,
       endDate: newEndDate || null,
-      rentAmount: rentCents,
+      rentAmount: parsedRent,
       isRenewal: true,
       previousLeaseId: lease.id,
     });
@@ -84,7 +73,7 @@ export function LeaseRenewalDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Renew Lease</DialogTitle>
           <DialogDescription>
@@ -94,6 +83,13 @@ export function LeaseRenewalDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {createLease.isError && (
+            <AlertBanner
+              status="danger"
+              title="Failed to renew lease. Please try again."
+            />
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="renewal-start">New Start Date</Label>
             <Input
