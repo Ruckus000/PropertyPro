@@ -40,6 +40,9 @@ export function BoardChrome({
 }: BoardChromeProps) {
   const pathname = usePathname();
   const tabs = BOARD_TABS.filter((tab) => tab.id !== 'elections' || electionsEnabled);
+  const description = electionsEnabled
+    ? 'Polls, forum discussions, and elections for this community live here.'
+    : 'Polls and forum discussions live here. Elections appear after attorney review is complete.';
 
   return (
     <div className="space-y-6">
@@ -50,7 +53,7 @@ export function BoardChrome({
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-semibold text-content">{communityName}</h1>
           <p className="max-w-2xl text-sm text-content-secondary">
-            Polls, forum discussions, and elections for this community live here.
+            {description}
           </p>
         </div>
       </header>

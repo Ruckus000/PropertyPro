@@ -71,10 +71,8 @@ export const BOARD_KEYS = {
   },
   elections: {
     all: ['board', 'elections'] as const,
-    list: (communityId: number, limit: number, cursor?: string | null) =>
-      ['board', 'elections', 'list', communityId, limit, cursor ?? 'start'] as const,
-    detail: (communityId: number, electionId: number) =>
-      ['board', 'elections', 'detail', communityId, electionId] as const,
+    list: (communityId: number, limit: number) =>
+      ['board', 'elections', 'list', communityId, limit] as const,
     myVote: (communityId: number, electionId: number) =>
       ['board', 'elections', 'my-vote', communityId, electionId] as const,
   },
@@ -117,21 +115,17 @@ export function useBoardForumThreads(
 
 export function useBoardElections(
   communityId: number,
-  options?: { cursor?: string | null; limit?: number },
+  options?: { limit?: number },
 ) {
   const limit = Math.min(options?.limit ?? 25, 25);
-  const cursor = options?.cursor ?? null;
 
   return useQuery({
-    queryKey: BOARD_KEYS.elections.list(communityId, limit, cursor),
+    queryKey: BOARD_KEYS.elections.list(communityId, limit),
     queryFn: async () => {
       const params = new URLSearchParams({
         communityId: String(communityId),
         limit: String(limit),
       });
-      if (cursor) {
-        params.set('cursor', cursor);
-      }
 
       return requestJson<BoardElectionListItem[]>(
         `/api/v1/elections?${params.toString()}`,
@@ -168,7 +162,8 @@ export function useCastPollVote(communityId: number, pollId: number) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.polls.detail(communityId, pollId) });
-      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.polls.all });
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.polls.list(communityId, false) });
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.polls.list(communityId, true) });
     },
   });
 }
@@ -194,14 +189,14 @@ export function useCastElectionVote(communityId: number, electionId: number) {
 
   return useMutation({
     mutationFn: async (payload: { selectedCandidateIds?: number[]; isAbstention?: boolean }) =>
-      requestJson<{ id: number }>(`/api/v1/elections/${electionId}/vote`, {
+      requestJson<{ submissionId: number; submissionFingerprint: string | null }>(`/api/v1/elections/${electionId}/vote`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId, ...payload }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.detail(communityId, electionId) });
-      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.all });
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.list(communityId, 25) });
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.myVote(communityId, electionId) });
     },
   });
 }

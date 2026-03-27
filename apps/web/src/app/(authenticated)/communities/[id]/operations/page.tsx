@@ -20,7 +20,7 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   requireAmenitiesEnabled(membership);
   requireAmenitiesReadPermission(membership);
 
-  const legacyNotice = from
+  const legacyNotice = from === 'maintenance'
     ? 'You were redirected from a legacy maintenance page. Operations now holds requests, work orders, and reservations.'
     : null;
 

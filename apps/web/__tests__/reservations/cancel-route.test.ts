@@ -6,6 +6,8 @@ const {
   requireCommunityMembershipMock,
   cancelReservationForCommunityMock,
   assertNotDemoGraceMock,
+  parsePositiveIntMock,
+  parseCommunityIdFromBodyMock,
   isResidentRoleMock,
   requireAmenitiesEnabledMock,
   requireAmenitiesWritePermissionMock,
@@ -15,6 +17,8 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   cancelReservationForCommunityMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
+  parsePositiveIntMock: vi.fn((value: string) => Number(value)),
+  parseCommunityIdFromBodyMock: vi.fn((_req: Request, communityId: number) => communityId),
   isResidentRoleMock: vi.fn((role: string) => role === 'owner' || role === 'tenant'),
   requireAmenitiesEnabledMock: vi.fn(),
   requireAmenitiesWritePermissionMock: vi.fn(),
@@ -31,6 +35,14 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
+}));
+
+vi.mock('@/lib/finance/common', () => ({
+  parsePositiveInt: parsePositiveIntMock,
+}));
+
+vi.mock('@/lib/finance/request', () => ({
+  parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
 vi.mock('@/lib/work-orders/common', () => ({
@@ -50,6 +62,8 @@ describe('reservation cancel route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
+    parsePositiveIntMock.mockImplementation((value: string) => Number(value));
+    parseCommunityIdFromBodyMock.mockImplementation((_req: Request, communityId: number) => communityId);
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'owner',
       communityType: 'apartment',

@@ -39,9 +39,11 @@ export const STATUS_CONFIG = {
   overdue: { variant: "danger", label: "Overdue", icon: "danger", priority: 0 },
   rejected: { variant: "danger", label: "Rejected", icon: "danger", priority: 5 },
   canceled: { variant: "danger", label: "Canceled", icon: "danger", priority: 3 },
+  cancelled: { variant: "danger", label: "Cancelled", icon: "danger", priority: 3 },
 
   submitted: { variant: "info", label: "Submitted", icon: "info", priority: 30 },
   created: { variant: "info", label: "Created", icon: "info", priority: 22 },
+  confirmed: { variant: "info", label: "Confirmed", icon: "info", priority: 24 },
   open: { variant: "info", label: "Open", icon: "info", priority: 25 },
   closed: { variant: "neutral", label: "Closed", icon: "neutral", priority: 55 },
   draft: { variant: "neutral", label: "Draft", icon: "neutral", priority: 12 },

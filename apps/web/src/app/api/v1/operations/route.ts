@@ -52,7 +52,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     unitId: parsed.data.unitId,
   });
 
-  if (data.meta.partialFailure && data.meta.unavailableSources.length === 2) {
+  if (data.meta.partialFailure && data.data.length === 0) {
     return NextResponse.json(
       {
         error: {

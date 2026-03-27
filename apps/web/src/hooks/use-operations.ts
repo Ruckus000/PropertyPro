@@ -56,6 +56,7 @@ export interface ReservationListItem {
 export const OPERATIONS_KEYS = {
   all: ['operations'] as const,
   summary: (communityId: number) => ['operations', 'summary', communityId] as const,
+  listRoot: (communityId: number) => ['operations', 'list', communityId] as const,
   list: (
     communityId: number,
     params?: { type?: string; status?: string; priority?: string; unitId?: number; cursor?: string | null; limit?: number },
@@ -161,7 +162,7 @@ export function useCancelReservation(communityId: number) {
     onSuccess: async (_data, reservationId) => {
       await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.detail(communityId, reservationId) });
       await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.list(communityId) });
-      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.all });
+      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
     },
   });
 }

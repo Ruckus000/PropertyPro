@@ -112,7 +112,7 @@ export const EMPTY_STATE_CONFIGS = {
   no_operations_items: {
     title: "Nothing in operations right now",
     description:
-      "Requests and work orders will show up here as they move through the workflow.",
+      "Requests, work orders, and reservations will show up here as they move through the workflow.",
     icon: "wrench",
   },
   no_results: {

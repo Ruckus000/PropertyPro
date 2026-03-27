@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOperations, useReservations, useWorkOrders } from '@/hooks/use-operations';
 import { listMyRequests } from '@/lib/api/maintenance-requests';
-import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
@@ -73,6 +73,10 @@ export function OperationsHub({ communityId, legacyNotice }: OperationsHubProps)
     }
   }, [operationsQuery, requestsQuery, reservationsQuery, selectedTab, workOrdersQuery]);
 
+  const operationsPartialFailure =
+    selectedTab === 'all'
+    && operationsQuery.data?.meta.partialFailure === true;
+
   function setTab(nextTab: OperationsTab) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', nextTab);
@@ -130,20 +134,21 @@ export function OperationsHub({ communityId, legacyNotice }: OperationsHubProps)
         />
       ) : null}
 
-      {!activeState.isLoading && !activeState.error && !activeState.hasData ? (
+      {operationsPartialFailure ? (
+        <AlertBanner
+          status="warning"
+          title="Some operations sources are temporarily unavailable."
+          description={`Unavailable: ${operationsQuery.data?.meta.unavailableSources.join(', ')}`}
+          variant="subtle"
+        />
+      ) : null}
+
+      {!activeState.isLoading && !activeState.error && !activeState.hasData && !operationsPartialFailure ? (
         <EmptyState preset="no_operations_items" />
       ) : null}
 
       {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data ? (
         <div className="space-y-4">
-          {operationsQuery.data.meta.partialFailure ? (
-            <AlertBanner
-              status="warning"
-              title="Some operations sources are temporarily unavailable."
-              description={`Unavailable: ${operationsQuery.data.meta.unavailableSources.join(', ')}`}
-              variant="subtle"
-            />
-          ) : null}
           {operationsQuery.data.data.map((item) => (
             <article key={`${item.type}-${item.id}`} className="rounded-xl border border-edge bg-surface-card p-5">
               <div className="flex items-start justify-between gap-3">
@@ -216,14 +221,6 @@ export function OperationsHub({ communityId, legacyNotice }: OperationsHubProps)
           ))}
         </div>
       ) : null}
-
-      <p className="text-xs text-content-tertiary">
-        Legacy maintenance pages remain available temporarily. Use this hub going forward.
-        {' '}
-        <Link href={`/maintenance/submit?communityId=${communityId}`} className="text-content-link underline">
-          Old submit page
-        </Link>
-      </p>
     </div>
   );
 }

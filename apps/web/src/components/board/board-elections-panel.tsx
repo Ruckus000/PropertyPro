@@ -4,7 +4,48 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useBoardElections } from '@/hooks/use-board';
+import { useBoardElectionReceipt, useBoardElections } from '@/hooks/use-board';
+
+function ElectionReceiptSummary({
+  communityId,
+  electionId,
+}: {
+  communityId: number;
+  electionId: number;
+}) {
+  const { data, isLoading, error } = useBoardElectionReceipt(communityId, electionId);
+
+  if (isLoading) {
+    return <p className="text-xs text-content-tertiary">Checking your receipt…</p>;
+  }
+
+  if (error || !data) {
+    return (
+      <p className="text-xs text-content-tertiary">
+        Your voting receipt is temporarily unavailable.
+      </p>
+    );
+  }
+
+  if (!data.hasVoted) {
+    return (
+      <p className="text-xs text-content-tertiary">
+        No ballot receipt is on file for your unit yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1 text-xs text-content-tertiary">
+      <p>
+        Ballot received {data.submittedAt ? new Date(data.submittedAt).toLocaleString() : 'recently'}.
+      </p>
+      <p>
+        Receipt: <span className="font-medium text-content">{data.submissionFingerprint}</span>
+      </p>
+    </div>
+  );
+}
 
 interface BoardElectionsPanelProps {
   communityId: number;
@@ -49,6 +90,7 @@ export function BoardElectionsPanel({ communityId }: BoardElectionsPanelProps) {
               <p className="text-xs text-content-tertiary">
                 Opens {new Date(election.opensAt).toLocaleString()} and closes {new Date(election.closesAt).toLocaleString()}
               </p>
+              <ElectionReceiptSummary communityId={communityId} electionId={election.id} />
             </div>
             <StatusBadge status={election.status} />
           </div>
