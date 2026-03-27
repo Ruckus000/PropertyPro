@@ -26,6 +26,7 @@ ALTER TABLE public_site_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public_site_templates FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON public_site_templates FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public_site_templates TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public_site_templates_id_seq TO service_role;
 
 ALTER TABLE demo_instances
   ADD COLUMN public_template_id bigint REFERENCES public_site_templates(id) ON DELETE SET NULL,
