@@ -7,13 +7,13 @@ import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
 interface TemplateGalleryToolbarProps {
   search: string;
   communityType: 'all' | 'condo_718' | 'hoa_720' | 'apartment';
-  lifecycle: 'all' | 'live' | 'needs_publish';
+  lifecycle: 'all' | 'draft' | 'live' | 'needs_publish';
   countLabel: string;
   hasActiveFilters: boolean;
   creating: boolean;
   onSearchChange: (value: string) => void;
   onCommunityTypeChange: (value: 'all' | 'condo_718' | 'hoa_720' | 'apartment') => void;
-  onLifecycleChange: (value: 'all' | 'live' | 'needs_publish') => void;
+  onLifecycleChange: (value: 'all' | 'draft' | 'live' | 'needs_publish') => void;
   onClearFilters: () => void;
   onCreateTemplate: () => void;
 }
@@ -115,13 +115,14 @@ export function TemplateGalleryToolbar({
           >
             {[
               { id: 'all', label: 'All' },
+              { id: 'draft', label: 'Drafts' },
               { id: 'live', label: 'Live' },
               { id: 'needs_publish', label: 'Needs publish' },
             ].map((option) => (
               <button
                 key={option.id}
                 type="button"
-                onClick={() => onLifecycleChange(option.id as 'all' | 'live' | 'needs_publish')}
+                onClick={() => onLifecycleChange(option.id as 'all' | 'draft' | 'live' | 'needs_publish')}
                 aria-pressed={lifecycle === option.id}
                 className={[
                   'rounded-full px-3 py-1.5 text-sm font-medium transition',

@@ -16,7 +16,7 @@ function filterTemplates(
   filters: {
     search: string;
     communityType: 'all' | 'condo_718' | 'hoa_720' | 'apartment';
-    lifecycle: 'all' | 'live' | 'needs_publish';
+    lifecycle: 'all' | 'draft' | 'live' | 'needs_publish';
   },
 ) {
   const query = filters.search.trim().toLowerCase();
@@ -34,6 +34,10 @@ function filterTemplates(
       filters.lifecycle === 'needs_publish'
       && template.lifecycleState !== 'published_with_unpublished_changes'
     ) {
+      return false;
+    }
+
+    if (filters.lifecycle === 'draft' && template.lifecycleState !== 'draft_only') {
       return false;
     }
 
@@ -65,7 +69,7 @@ export function TemplatesPageClient({ initialTemplates }: TemplatesPageClientPro
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [communityType, setCommunityType] = useState<'all' | 'condo_718' | 'hoa_720' | 'apartment'>('all');
-  const [lifecycle, setLifecycle] = useState<'all' | 'live' | 'needs_publish'>('all');
+  const [lifecycle, setLifecycle] = useState<'all' | 'draft' | 'live' | 'needs_publish'>('all');
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
