@@ -76,6 +76,8 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
   const [previewCompiledAt, setPreviewCompiledAt] = useState<string | null>(initialTemplate.publishedSnapshot?.compiledAt ?? null);
   const [previewErrors, setPreviewErrors] = useState<TemplatePreviewDiagnostic[]>([]);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
   const previewRequestRef = useRef(0);
   const previewAbortRef = useRef<AbortController | null>(null);
@@ -175,6 +177,19 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
       previewAbortRef.current?.abort();
     };
   }, [form.draftJsxSource]);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [moreMenuOpen]);
 
   function applyTemplate(nextTemplate: PublicSiteTemplateDetail) {
     setTemplate(nextTemplate);
@@ -374,29 +389,43 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
             >
               {savingDraft ? 'Saving…' : 'Save Draft'}
             </button>
-            <details className="relative">
-              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((open) => !open)}
+                aria-expanded={moreMenuOpen}
+                aria-haspopup="true"
+                className="flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
                 <MoreHorizontal className="h-4 w-4" />
                 More
-              </summary>
-              <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 min-w-44 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  disabled={!canSave}
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 sm:hidden"
-                >
-                  {savingDraft ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDuplicate}
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-                >
-                  Duplicate
-                </button>
-              </div>
-            </details>
+              </button>
+              {moreMenuOpen && (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 min-w-44 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleSaveDraft();
+                      setMoreMenuOpen(false);
+                    }}
+                    disabled={!canSave}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 sm:hidden"
+                  >
+                    {savingDraft ? 'Saving…' : 'Save Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleDuplicate();
+                      setMoreMenuOpen(false);
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    Duplicate
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
