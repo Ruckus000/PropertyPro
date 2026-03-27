@@ -29,6 +29,8 @@ export type AuditAction =
   | 'election_created' | 'election_updated'                      // Election lifecycle
   | 'election_opened' | 'election_closed'                        // Election state transitions
   | 'election_certified' | 'election_canceled'                   // Election finalization
+  | 'election_candidate_added' | 'election_candidate_removed'    // Candidate lifecycle
+  | 'election_eligibility_snapshotted'                            // Eligibility snapshot
   | 'ballot_cast'                                                // Vote recorded
   | 'proxy_designated' | 'proxy_approved'                        // Proxy workflow
   | 'proxy_rejected' | 'proxy_revoked'                           // Proxy denial/revocation

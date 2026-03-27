@@ -13,6 +13,7 @@ import { createScopedClient, maintenanceRequests, maintenanceComments } from '@p
 import { and, eq, inArray } from '@propertypro/db/filters';
 import { SubmitForm } from '@/components/maintenance/SubmitForm';
 import { RequestCard } from '@/components/maintenance/RequestCard';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -78,6 +79,12 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
 
   return (
     <div className="mx-auto max-w-3xl">
+      <AlertBanner
+        status="info"
+        title="Operations is the new home for maintenance."
+        description="This legacy request page is temporary. Use Operations for the unified requests, work orders, and reservations flow."
+        className="mb-6"
+      />
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">Maintenance Requests</h1>
         <p className="mt-1 text-sm text-content-secondary">

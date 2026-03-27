@@ -11,6 +11,7 @@ import {
   type WorkOrderStatus,
 } from '@propertypro/db';
 import { and, asc, desc, eq, inArray } from '@propertypro/db/filters';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   BadRequestError,
@@ -779,51 +780,78 @@ export async function cancelReservationForCommunity(
   canCancelAny: boolean,
   requestId?: string | null,
 ): Promise<AmenityReservationRecord> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<AmenityReservationRecord>(
-    amenityReservations,
-    {},
-    eq(amenityReservations.id, reservationId),
-  );
-  const existing = rows[0];
+  /**
+   * Authorization contract: the caller must already have validated that the
+   * actor belongs to this community and is allowed to cancel amenity
+   * reservations. The transaction still re-checks community ownership so the
+   * read/write transition stays atomic.
+   */
+  const db = createUnscopedClient();
 
-  if (!existing) {
-    throw new NotFoundError('Reservation not found');
-  }
+  const result = await db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(amenityReservations)
+      .where(
+        and(
+          eq(amenityReservations.id, reservationId),
+          eq(amenityReservations.communityId, communityId),
+        ),
+      )
+      .limit(1);
 
-  if (!canCancelAny && existing.userId !== actorUserId) {
-    throw new ForbiddenError('You can only cancel your own reservations');
-  }
+    const existing = rows[0] as AmenityReservationRecord | undefined;
 
-  if (existing.status === 'cancelled') {
-    return mapReservationRow(existing);
-  }
+    if (!existing) {
+      throw new NotFoundError('Reservation not found');
+    }
 
-  const [updated] = await scoped.update(
-    amenityReservations,
-    {
-      status: 'cancelled',
-    },
-    eq(amenityReservations.id, reservationId),
-  );
+    if (!canCancelAny && existing.userId !== actorUserId) {
+      throw new ForbiddenError('You can only cancel your own reservations');
+    }
 
-  if (!updated) {
-    throw new NotFoundError('Reservation not found');
-  }
+    if (existing.status === 'cancelled') {
+      return { reservation: mapReservationRow(existing), didCancel: false } as const;
+    }
 
-  const row = mapReservationRow(updated as unknown as AmenityReservationRecord);
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'update',
-    resourceType: 'amenity_reservation',
-    resourceId: String(reservationId),
-    communityId,
-    oldValues: existing,
-    newValues: row,
-    metadata: { requestId: requestId ?? null },
+    const [updated] = await tx
+      .update(amenityReservations)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(amenityReservations.id, reservationId),
+          eq(amenityReservations.communityId, communityId),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundError('Reservation not found');
+    }
+
+    return {
+      reservation: mapReservationRow(updated as unknown as AmenityReservationRecord),
+      didCancel: true,
+    } as const;
   });
 
-  return row;
+  if (result.didCancel) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'amenity_reservation',
+      resourceId: String(reservationId),
+      communityId,
+      oldValues: { status: 'confirmed' },
+      newValues: { status: 'cancelled' },
+      metadata: { requestId: requestId ?? null },
+    });
+  }
+
+  return result.reservation;
 }
 
 export async function listReservationsForActor(

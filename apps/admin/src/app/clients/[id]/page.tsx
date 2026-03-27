@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
+import type { CommunitySettings } from '@/components/clients/community-settings';
 import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
 
 export const dynamic = 'force-dynamic';
@@ -90,7 +91,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
           ...community,
           timezone: community.timezone,
           transparency_enabled: community.transparency_enabled,
-          community_settings: (community.community_settings ?? {}) as Record<string, 'all_members' | 'admin_only'>,
+          community_settings: (community.community_settings ?? {}) as CommunitySettings,
           memberCount,
           documentCount,
           complianceScore,

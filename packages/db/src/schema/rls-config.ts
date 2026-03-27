@@ -130,6 +130,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Poll definitions are community-scoped; role-specific create/close controls are enforced in route/service layers.',
   },
   {
+    tableName: 'election_ballot_submissions',
+    policyFamily: 'tenant_append_only',
+    notes: 'Logical ballot submission headers are immutable once cast and enforce one submission per unit/election.',
+  },
+  {
     tableName: 'poll_votes',
     policyFamily: 'tenant_user_scoped',
     notes: 'Vote rows are immutable once cast. SELECT/INSERT are constrained to actor rows for non-admin users.',
@@ -277,7 +282,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 50;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 51;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
