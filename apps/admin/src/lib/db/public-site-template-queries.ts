@@ -165,6 +165,12 @@ export async function updatePublicSiteTemplateRow(
   return { data: updated, error: null, conflict: false };
 }
 
+/**
+ * Fetches all template IDs from demo_instances and counts in JS.
+ * PostgREST doesn't support GROUP BY natively, so client-side aggregation
+ * is the simplest approach for the batch case (gallery page). For
+ * single-template counts, use `getPublicSiteTemplateUsageCount` instead.
+ */
 export async function listPublicSiteTemplateUsageCounts(): Promise<{
   data: Record<number, number>;
   error: PublicSiteTemplateQueryError | null;

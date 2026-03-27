@@ -233,7 +233,8 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
       setSuccessMessage('Draft saved');
       setAnnouncement('Draft saved');
       void runPreview();
-    } catch {
+    } catch (err) {
+      console.error('[templates] save draft failed', err);
       setErrorMessage('Failed to save draft');
       window.setTimeout(() => errorRef.current?.focus(), 0);
     } finally {
@@ -278,7 +279,8 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
       setPreviewCompiledAt(nextTemplate.publishedSnapshot?.compiledAt ?? previewCompiledAt);
       setSuccessMessage('Template published. Publishing makes this template available for future demos. Existing demos keep their current version until regenerated.');
       setAnnouncement('Template published');
-    } catch {
+    } catch (err) {
+      console.error('[templates] publish failed', err);
       setErrorMessage('Failed to publish template');
       window.setTimeout(() => errorRef.current?.focus(), 0);
     } finally {
@@ -304,7 +306,8 @@ export function TemplateEditorPage({ initialTemplate, focusName = false }: Templ
 
       router.push(`/templates/${payload.data.id}?focus=name`);
       router.refresh();
-    } catch {
+    } catch (err) {
+      console.error('[templates] duplicate failed', err);
       setErrorMessage('Failed to duplicate template');
       window.setTimeout(() => errorRef.current?.focus(), 0);
     }

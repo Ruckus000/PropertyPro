@@ -95,6 +95,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     }
   }
 
+  // Unreachable — the loop always returns from within its body.
+  // TypeScript needs this for exhaustiveness; it will never execute.
   return NextResponse.json(
     { error: { code: 'INTERNAL_ERROR', message: 'Failed to duplicate template' } },
     { status: 500 },
