@@ -162,6 +162,30 @@ const VALID_ELECTION_STATUSES: readonly ElectionStatus[] = [
 
 const ELECTION_RESULTS_TERMINAL_STATUSES = new Set<ElectionStatus>(['closed', 'certified', 'canceled']);
 
+const ELECTION_SELECT_COLUMNS = {
+  id: elections.id,
+  communityId: elections.communityId,
+  title: elections.title,
+  description: elections.description,
+  electionType: elections.electionType,
+  status: elections.status,
+  isSecretBallot: elections.isSecretBallot,
+  ballotSalt: elections.ballotSalt,
+  maxSelections: elections.maxSelections,
+  opensAt: elections.opensAt,
+  closesAt: elections.closesAt,
+  quorumPercentage: elections.quorumPercentage,
+  eligibleUnitCount: elections.eligibleUnitCount,
+  totalBallotsCast: elections.totalBallotsCast,
+  certifiedByUserId: elections.certifiedByUserId,
+  certifiedAt: elections.certifiedAt,
+  resultsDocumentId: elections.resultsDocumentId,
+  canceledReason: elections.canceledReason,
+  createdByUserId: elections.createdByUserId,
+  createdAt: elections.createdAt,
+  updatedAt: elections.updatedAt,
+};
+
 function assertElectionStatus(value: string): ElectionStatus {
   if (!VALID_ELECTION_STATUSES.includes(value as ElectionStatus)) {
     throw new ValidationError(`Unsupported election status: ${value}`);
@@ -294,29 +318,7 @@ async function getElectionForMutation(
 ): Promise<ElectionRecord> {
   const rows = await scoped.selectFrom<ElectionRecord>(
     elections,
-    {
-      id: elections.id,
-      communityId: elections.communityId,
-      title: elections.title,
-      description: elections.description,
-      electionType: elections.electionType,
-      status: elections.status,
-      isSecretBallot: elections.isSecretBallot,
-      ballotSalt: elections.ballotSalt,
-      maxSelections: elections.maxSelections,
-      opensAt: elections.opensAt,
-      closesAt: elections.closesAt,
-      quorumPercentage: elections.quorumPercentage,
-      eligibleUnitCount: elections.eligibleUnitCount,
-      totalBallotsCast: elections.totalBallotsCast,
-      certifiedByUserId: elections.certifiedByUserId,
-      certifiedAt: elections.certifiedAt,
-      resultsDocumentId: elections.resultsDocumentId,
-      canceledReason: elections.canceledReason,
-      createdByUserId: elections.createdByUserId,
-      createdAt: elections.createdAt,
-      updatedAt: elections.updatedAt,
-    },
+    ELECTION_SELECT_COLUMNS,
     eq(elections.id, electionId),
   );
 
@@ -601,29 +603,7 @@ export async function listElectionsForCommunity(
   const rows = await scoped
     .selectFrom<ElectionRecord>(
       elections,
-      {
-        id: elections.id,
-        communityId: elections.communityId,
-        title: elections.title,
-        description: elections.description,
-        electionType: elections.electionType,
-        status: elections.status,
-        isSecretBallot: elections.isSecretBallot,
-        ballotSalt: elections.ballotSalt,
-        maxSelections: elections.maxSelections,
-        opensAt: elections.opensAt,
-        closesAt: elections.closesAt,
-        quorumPercentage: elections.quorumPercentage,
-        eligibleUnitCount: elections.eligibleUnitCount,
-        totalBallotsCast: elections.totalBallotsCast,
-        certifiedByUserId: elections.certifiedByUserId,
-        certifiedAt: elections.certifiedAt,
-        resultsDocumentId: elections.resultsDocumentId,
-        canceledReason: elections.canceledReason,
-        createdByUserId: elections.createdByUserId,
-        createdAt: elections.createdAt,
-        updatedAt: elections.updatedAt,
-      },
+      ELECTION_SELECT_COLUMNS,
       where as never,
     )
     .orderBy(desc(elections.opensAt), desc(elections.id))
@@ -639,29 +619,7 @@ export async function getElectionByIdForCommunity(
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom<ElectionRecord>(
     elections,
-    {
-      id: elections.id,
-      communityId: elections.communityId,
-      title: elections.title,
-      description: elections.description,
-      electionType: elections.electionType,
-      status: elections.status,
-      isSecretBallot: elections.isSecretBallot,
-      ballotSalt: elections.ballotSalt,
-      maxSelections: elections.maxSelections,
-      opensAt: elections.opensAt,
-      closesAt: elections.closesAt,
-      quorumPercentage: elections.quorumPercentage,
-      eligibleUnitCount: elections.eligibleUnitCount,
-      totalBallotsCast: elections.totalBallotsCast,
-      certifiedByUserId: elections.certifiedByUserId,
-      certifiedAt: elections.certifiedAt,
-      resultsDocumentId: elections.resultsDocumentId,
-      canceledReason: elections.canceledReason,
-      createdByUserId: elections.createdByUserId,
-      createdAt: elections.createdAt,
-      updatedAt: elections.updatedAt,
-    },
+    ELECTION_SELECT_COLUMNS,
     eq(elections.id, electionId),
   );
 
