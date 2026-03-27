@@ -183,6 +183,10 @@ export async function getPublicSiteTemplateUsageCount(id: number): Promise<{
   count: number;
   error: PublicSiteTemplateQueryError | null;
 }> {
-  const { data, error } = await listPublicSiteTemplateUsageCounts();
-  return { count: data[id] ?? 0, error };
+  const { count, error } = await from('demo_instances')
+    .select('*', { count: 'exact', head: true })
+    .is('deleted_at', null)
+    .eq('public_template_id', id);
+
+  return { count: count ?? 0, error };
 }
