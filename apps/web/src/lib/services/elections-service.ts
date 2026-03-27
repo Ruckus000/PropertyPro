@@ -201,7 +201,14 @@ function mapElectionRow(row: ElectionRecord): ElectionRecord {
   };
 }
 
-/** Strip server-only secrets before returning to the API layer. */
+/**
+ * Strip server-only secrets before returning to the API layer.
+ *
+ * SECURITY INVARIANT: This function MUST be applied to every election value
+ * that leaves the service layer via an exported function, except for
+ * `getElectionForMutation` which intentionally retains `ballotSalt` for
+ * voter hash generation. Verify this invariant in integration tests.
+ */
 function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRecord, 'ballotSalt'> {
   const { ballotSalt: _ignored, ...safe } = election;
   return safe;
@@ -583,14 +590,14 @@ async function updateElectionStatus(
   scoped: ReturnType<typeof createScopedClient>,
   electionId: number,
   patch: Record<string, unknown>,
-): Promise<ElectionRecord> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
   const rows = await scoped.update(elections, patch, eq(elections.id, electionId));
   const updated = rows[0];
   if (!updated) {
     throw new NotFoundError('Election not found');
   }
 
-  return mapElectionRow(updated as ElectionRecord);
+  return sanitizeElectionForResponse(mapElectionRow(updated as ElectionRecord));
 }
 
 export async function listElectionsForCommunity(
@@ -797,7 +804,7 @@ export async function openElectionForCommunity(
   electionId: number,
   actorUserId: string,
   requestId?: string | null,
-): Promise<ElectionRecord> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -805,7 +812,7 @@ export async function openElectionForCommunity(
     const election = await getElectionForMutation(scoped, electionId);
 
     if (election.status === 'open') {
-      return election;
+      return sanitizeElectionForResponse(election);
     }
 
     if (election.status !== 'draft') {
@@ -853,7 +860,7 @@ export async function closeElectionForCommunity(
   electionId: number,
   actorUserId: string,
   requestId?: string | null,
-): Promise<ElectionRecord> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -861,7 +868,7 @@ export async function closeElectionForCommunity(
     const election = await getElectionForMutation(scoped, electionId);
 
     if (election.status === 'closed' || election.status === 'certified' || election.status === 'canceled') {
-      return election;
+      return sanitizeElectionForResponse(election);
     }
 
     if (election.status !== 'open') {
@@ -890,7 +897,7 @@ export async function certifyElectionForCommunity(
   actorUserId: string,
   input: UpdateElectionCertificationInput = {},
   requestId?: string | null,
-): Promise<ElectionRecord> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -898,17 +905,18 @@ export async function certifyElectionForCommunity(
     const election = await getElectionForMutation(scoped, electionId);
 
     if (election.status === 'certified') {
-      return election;
+      return sanitizeElectionForResponse(election);
     }
 
     if (election.status !== 'closed') {
       throw new UnprocessableEntityError('Only closed elections can be certified');
     }
 
+    const certifiedAt = new Date();
     const updated = await updateElectionStatus(scoped, electionId, {
       status: 'certified',
       certifiedByUserId: actorUserId,
-      certifiedAt: new Date(),
+      certifiedAt,
       resultsDocumentId: input.resultsDocumentId ?? election.resultsDocumentId,
     });
 
@@ -921,7 +929,7 @@ export async function certifyElectionForCommunity(
       oldValues: { status: election.status },
       newValues: {
         status: updated.status,
-        certifiedAt: updated.certifiedAt?.toISOString() ?? null,
+        certifiedAt: certifiedAt.toISOString(),
         hasResultsDocument: updated.resultsDocumentId !== null,
       },
       metadata: { requestId: requestId ?? null },
@@ -937,7 +945,7 @@ export async function cancelElectionForCommunity(
   actorUserId: string,
   input: CancelElectionInput,
   requestId?: string | null,
-): Promise<ElectionRecord> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -945,7 +953,7 @@ export async function cancelElectionForCommunity(
     const election = await getElectionForMutation(scoped, electionId);
 
     if (election.status === 'canceled') {
-      return election;
+      return sanitizeElectionForResponse(election);
     }
 
     if (election.status === 'certified') {
