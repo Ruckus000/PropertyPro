@@ -188,7 +188,7 @@ export function filterPublicSiteTemplates(
   filters: {
     q?: string | null;
     communityType?: CommunityType | 'all' | null;
-    lifecycle?: 'all' | 'live' | 'needs_publish' | null;
+    lifecycle?: 'all' | 'draft' | 'live' | 'needs_publish' | null;
   },
 ): PublicSiteTemplateListItem[] {
   const query = filters.q?.trim().toLowerCase() ?? '';
@@ -263,7 +263,7 @@ export async function listPublicSiteTemplates(
   filters: {
     q?: string | null;
     communityType?: CommunityType | 'all' | null;
-    lifecycle?: 'all' | 'live' | 'needs_publish' | null;
+    lifecycle?: 'all' | 'draft' | 'live' | 'needs_publish' | null;
   } = {},
 ): Promise<PublicSiteTemplateListItem[]> {
   const [{ data: rows, error }, { data: usageCounts, error: usageError }] = await Promise.all([
