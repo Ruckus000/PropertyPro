@@ -51,6 +51,14 @@ function toRuntimeMessage(error: unknown): string {
  * Compiles a JSX source string to sanitized static HTML.
  * Pipeline: sucrase transform -> Function constructor -> React.createElement ->
  * ReactDOMServer -> sanitize-html
+ *
+ * SECURITY: This executes arbitrary code via `new Function()` in the Node.js
+ * process with NO sandbox. Only platform-admin-authored templates should reach
+ * this function. A compromised admin session can achieve full server-side RCE.
+ * The sanitize-html step protects the *output* HTML but not the *execution*.
+ *
+ * If this function is ever exposed to non-admin users, it MUST be moved to an
+ * isolated VM (e.g., `vm.runInNewContext` with timeout, or a worker process).
  */
 export async function compileJsxToHtmlDetailed(
   jsxSource: string,
