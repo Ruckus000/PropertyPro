@@ -27,16 +27,16 @@ function buildPreviewSrcDoc(html: string) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="/assets/tailwind.min.js"></script>
+    <script src="/assets/tailwind.min.js" onerror="document.getElementById('tw-err').style.display='block'"></script>
     <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: white;
-      }
+      html, body { margin: 0; padding: 0; background: white; }
+      #tw-err { display: none; padding: 12px 16px; background: #fef3c7; color: #92400e; font: 13px/1.5 system-ui; border-bottom: 1px solid #fde68a; }
     </style>
   </head>
-  <body>${html}</body>
+  <body>
+    <div id="tw-err">Tailwind CSS failed to load. Styles may not render correctly.</div>
+    ${html}
+  </body>
 </html>`;
 }
 
