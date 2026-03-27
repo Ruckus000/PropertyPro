@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useCreateLease } from '@/hooks/use-leases';
+import { useCreateLease, useUnits } from '@/hooks/use-leases';
+import { parseRentInput } from '@/lib/utils/lease-utils';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { ResidentSearchCombobox } from '@/components/shared/ResidentSearchCombobox';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,6 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,11 +37,10 @@ export function LeaseCreateModal({
   onOpenChange,
 }: LeaseCreateModalProps) {
   const createLease = useCreateLease(communityId);
+  const { data: units = [] } = useUnits(communityId);
 
   const [unitId, setUnitId] = useState('');
-  const [residentName, setResidentName] = useState('');
-  const [residentEmail, setResidentEmail] = useState('');
-  const [residentId, setResidentId] = useState('');
+  const [residentId, setResidentId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [rentAmount, setRentAmount] = useState('');
@@ -39,9 +48,7 @@ export function LeaseCreateModal({
 
   function resetForm() {
     setUnitId('');
-    setResidentName('');
-    setResidentEmail('');
-    setResidentId('');
+    setResidentId(null);
     setStartDate('');
     setEndDate('');
     setRentAmount('');
@@ -53,24 +60,17 @@ export function LeaseCreateModal({
 
     const parsedUnitId = Number(unitId);
     if (!Number.isInteger(parsedUnitId) || parsedUnitId <= 0) return;
-    if (!residentId.trim()) return;
+    if (!residentId) return;
     if (!startDate) return;
 
-    // Convert dollar amount to cents string for the API
-    let rentCents: string | null = null;
-    if (rentAmount.trim()) {
-      const dollars = parseFloat(rentAmount);
-      if (!Number.isNaN(dollars) && dollars > 0) {
-        rentCents = String(Math.round(dollars * 100));
-      }
-    }
+    const parsedRent = parseRentInput(rentAmount);
 
     await createLease.mutateAsync({
       unitId: parsedUnitId,
-      residentId: residentId.trim(),
+      residentId,
       startDate,
       endDate: endDate || null,
-      rentAmount: rentCents,
+      rentAmount: parsedRent,
       notes: notes.trim() || null,
     });
 
@@ -78,9 +78,14 @@ export function LeaseCreateModal({
     onOpenChange(false);
   }
 
+  // Sort units by unitNumber with numeric locale compare
+  const sortedUnits = [...units].sort((a, b) =>
+    a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true }),
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>New Lease</DialogTitle>
           <DialogDescription>
@@ -89,50 +94,45 @@ export function LeaseCreateModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="lease-unit">Unit ID</Label>
-            <Input
-              id="lease-unit"
-              type="number"
-              min={1}
-              placeholder="e.g. 101"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              required
+          {createLease.isError && (
+            <AlertBanner
+              status="danger"
+              title="Failed to create lease. Please try again."
             />
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="lease-resident-name">Resident Name</Label>
-              <Input
-                id="lease-resident-name"
-                placeholder="Jane Smith"
-                value={residentName}
-                onChange={(e) => setResidentName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lease-resident-email">Resident Email</Label>
-              <Input
-                id="lease-resident-email"
-                type="email"
-                placeholder="jane@example.com"
-                value={residentEmail}
-                onChange={(e) => setResidentEmail(e.target.value)}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="lease-unit">Unit</Label>
+            <Select value={unitId} onValueChange={setUnitId} required>
+              <SelectTrigger id="lease-unit">
+                <SelectValue placeholder="Select a unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {sortedUnits.map((unit) => (
+                  <SelectItem key={unit.id} value={String(unit.id)}>
+                    {unit.unitNumber}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="lease-resident-id">Resident User ID</Label>
-            <Input
-              id="lease-resident-id"
-              placeholder="UUID of the resident user"
+            <Label>Resident</Label>
+            <ResidentSearchCombobox
+              communityId={communityId}
               value={residentId}
-              onChange={(e) => setResidentId(e.target.value)}
-              required
+              onChange={(id) => setResidentId(id)}
             />
+            <p className="text-xs text-muted-foreground">
+              Resident not listed?{' '}
+              <a
+                href={`/dashboard/residents?communityId=${communityId}`}
+                className="underline hover:no-underline"
+              >
+                Add them first
+              </a>
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
