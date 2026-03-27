@@ -201,6 +201,12 @@ function mapElectionRow(row: ElectionRecord): ElectionRecord {
   };
 }
 
+/** Strip server-only secrets before returning to the API layer. */
+function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRecord, 'ballotSalt'> {
+  const { ballotSalt: _ignored, ...safe } = election;
+  return safe;
+}
+
 function normalizeSelectionIds(selectedCandidateIds: number[] | undefined, maxSelections: number): number[] {
   const normalized = (selectedCandidateIds ?? []).filter((candidateId) => Number.isInteger(candidateId) && candidateId > 0);
   const unique = [...new Set(normalized)];
@@ -590,7 +596,7 @@ async function updateElectionStatus(
 export async function listElectionsForCommunity(
   communityId: number,
   params: ListElectionsParams = {},
-): Promise<ElectionRecord[]> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'>[]> {
   const scoped = createScopedClient(communityId);
   const limit = Math.min(params.limit ?? DEFAULT_ELECTIONS_PAGE_SIZE, MAX_ELECTIONS_PAGE_SIZE);
   const filters = [];
@@ -609,13 +615,13 @@ export async function listElectionsForCommunity(
     .orderBy(desc(elections.opensAt), desc(elections.id))
     .limit(limit);
 
-  return rows.map((row) => mapElectionRow(row as ElectionRecord));
+  return rows.map((row) => sanitizeElectionForResponse(mapElectionRow(row as ElectionRecord)));
 }
 
 export async function getElectionByIdForCommunity(
   communityId: number,
   electionId: number,
-): Promise<ElectionRecord | null> {
+): Promise<Omit<ElectionRecord, 'ballotSalt'> | null> {
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom<ElectionRecord>(
     elections,
@@ -624,7 +630,7 @@ export async function getElectionByIdForCommunity(
   );
 
   const row = rows[0];
-  return row ? mapElectionRow(row as ElectionRecord) : null;
+  return row ? sanitizeElectionForResponse(mapElectionRow(row as ElectionRecord)) : null;
 }
 
 export async function getMyElectionVoteReceiptForCommunity(
