@@ -202,6 +202,10 @@ export function filterPublicSiteTemplates(
       return false;
     }
 
+    if (filters.lifecycle === 'draft' && template.lifecycleState !== 'draft_only') {
+      return false;
+    }
+
     if (filters.lifecycle === 'live' && template.lifecycleState !== 'published_current') {
       return false;
     }

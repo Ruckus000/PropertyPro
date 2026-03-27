@@ -11,6 +11,8 @@ interface TemplatesPageClientProps {
   initialTemplates: PublicSiteTemplateListItem[];
 }
 
+// Client-side filter on SSR data (avoids API round-trip). Keep in sync with
+// filterPublicSiteTemplates in public-site-template-service.ts.
 function filterTemplates(
   templates: PublicSiteTemplateListItem[],
   filters: {
