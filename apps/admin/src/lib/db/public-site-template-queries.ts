@@ -6,6 +6,14 @@ import type {
   PublicSiteTemplateThumbnailDescriptor,
 } from '@/lib/templates/types';
 
+/**
+ * Returns a Supabase query builder for the given table.
+ *
+ * Returns `any` because the PostgREST client lacks generated types for
+ * `public_site_templates`. All callers cast results to typed interfaces.
+ * This can be replaced with generated types once `supabase gen types` is
+ * integrated into the build pipeline for the admin app.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function from(table: string): any {
   return createAdminClient().from(table);
