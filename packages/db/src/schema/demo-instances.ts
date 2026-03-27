@@ -1,6 +1,7 @@
-import { bigint, bigserial, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { communityTypeEnum } from './enums';
+import { publicSiteTemplates } from './public-site-templates';
 
 export type DemoTheme = {
   logoPath?: string;
@@ -28,6 +29,11 @@ export const demoInstances = pgTable(
     authTokenSecret: text('auth_token_secret').notNull(),
     externalCrmUrl: text('external_crm_url'),
     prospectNotes: text('prospect_notes'),
+    publicTemplateId: bigint('public_template_id', { mode: 'number' }).references(
+      () => publicSiteTemplates.id,
+      { onDelete: 'set null' },
+    ),
+    publicTemplateVersion: integer('public_template_version'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     customizedAt: timestamp('customized_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
