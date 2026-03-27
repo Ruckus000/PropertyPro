@@ -2,25 +2,12 @@ import { bigserial, integer, jsonb, pgTable, text, timestamp, unique, uuid } fro
 import { communityTypeEnum } from './enums';
 import { users } from './users';
 
-export interface PublicSiteTemplateThumbnailDescriptor {
-  gradient: [string, string];
-  layout: string;
-}
-
-export interface PublicSiteTemplatePublishedSnapshot {
-  name: string;
-  summary: string;
-  tags: string[];
-  thumbnailDescriptor: PublicSiteTemplateThumbnailDescriptor;
-  communityType: 'condo_718' | 'hoa_720' | 'apartment';
-  jsxSource: string;
-  compiledHtml: string;
-  compiledAt: string;
-}
-
 /**
  * Global public-site template library for demo creation.
  * Platform-level table — not tenant-scoped.
+ *
+ * Canonical TypeScript interfaces for the JSONB columns (thumbnail_descriptor,
+ * published_snapshot) live in apps/admin/src/lib/templates/types.ts.
  */
 export const publicSiteTemplates = pgTable(
   'public_site_templates',
@@ -32,11 +19,9 @@ export const publicSiteTemplates = pgTable(
     name: text('name').notNull(),
     summary: text('summary').notNull().default(''),
     tags: jsonb('tags').notNull().$type<string[]>().default([]),
-    thumbnailDescriptor: jsonb('thumbnail_descriptor')
-      .notNull()
-      .$type<PublicSiteTemplateThumbnailDescriptor>(),
+    thumbnailDescriptor: jsonb('thumbnail_descriptor').notNull(),
     draftJsxSource: text('draft_jsx_source').notNull(),
-    publishedSnapshot: jsonb('published_snapshot').$type<PublicSiteTemplatePublishedSnapshot | null>(),
+    publishedSnapshot: jsonb('published_snapshot'),
     version: integer('version').notNull().default(0),
     publishedPayloadHash: text('published_payload_hash'),
     publishedAt: timestamp('published_at', { withTimezone: true }),
