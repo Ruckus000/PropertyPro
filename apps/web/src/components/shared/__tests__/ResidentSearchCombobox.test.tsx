@@ -99,7 +99,7 @@ describe('ResidentSearchCombobox', () => {
     await flushAndSettle();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = mockFetch.mock.calls[0]![0] as string;
     expect(url).toContain('/api/v1/search/residents');
     expect(url).toContain('q=ja');
     expect(url).toContain('limit=10');
