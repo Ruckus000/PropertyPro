@@ -12,7 +12,7 @@ export default defineConfig({
     exclude: ['__tests__/**/*.integration.test.ts'],
     server: {
       deps: {
-        inline: ['@propertypro/tokens'],
+        inline: ['@propertypro/tokens', '@propertypro/ui'],
       },
     },
   },
@@ -21,6 +21,7 @@ export default defineConfig({
       '@': resolve(import.meta.dirname, './src'),
       '@propertypro/db': resolve(import.meta.dirname, '../../packages/db/src'),
       '@propertypro/shared': resolve(import.meta.dirname, '../../packages/shared/src'),
+      '@propertypro/ui': resolve(import.meta.dirname, '../../packages/ui/src'),
     },
   },
 });

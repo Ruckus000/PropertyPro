@@ -200,8 +200,8 @@ describe("P0-01 Design Tokens", () => {
       expect(semanticColors.surface.inverse).toBe("var(--surface-inverse)");
     });
 
-    it("defines the page surface as gray-50", () => {
-      expect(cssContent).toContain("--surface-page: var(--gray-50)");
+    it("defines the page surface as surface-page-warm", () => {
+      expect(cssContent).toContain("--surface-page: var(--surface-page-warm)");
     });
 
     it("border colors reference correct CSS variables", () => {
