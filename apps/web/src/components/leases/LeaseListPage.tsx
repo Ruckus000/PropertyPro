@@ -2,16 +2,21 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import { useLeases, type LeaseListItem } from '@/hooks/use-leases';
+import {
+  useEnrichedLeases,
+  type EnrichedLeaseListItem,
+  type LeaseTableRow,
+} from '@/hooks/use-leases';
+import { isExpiringWithinWindow } from '@/lib/utils/lease-utils';
 import { DataTable } from '@/components/shared/data-table';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { getLeaseColumns, type LeaseColumnActions } from './lease-columns';
 import { LeaseCreateModal } from './LeaseCreateModal';
 import { LeaseEditPanel } from './LeaseEditPanel';
 import { LeaseRenewalDialog } from './LeaseRenewalDialog';
 import { LeaseTerminationDialog } from './LeaseTerminationDialog';
 import { Button } from '@/components/ui/button';
-import { differenceInCalendarDays, parseISO } from 'date-fns';
 
 interface LeaseListPageProps {
   communityId: number;
@@ -21,34 +26,55 @@ const FILTER_TABS = [
   { label: 'All', value: 'all' },
   { label: 'Expiring Soon', value: 'expiring_soon' },
   { label: 'Month-to-Month', value: 'month_to_month' },
+  { label: 'Vacant Units', value: 'vacant' },
 ];
 
 export function LeaseListPage({ communityId }: LeaseListPageProps) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
-  const [editLease, setEditLease] = useState<LeaseListItem | null>(null);
-  const [renewLease, setRenewLease] = useState<LeaseListItem | null>(null);
-  const [terminateLease, setTerminateLease] = useState<LeaseListItem | null>(null);
+  const [editLease, setEditLease] = useState<EnrichedLeaseListItem | null>(null);
+  const [renewLease, setRenewLease] = useState<EnrichedLeaseListItem | null>(null);
+  const [terminateLease, setTerminateLease] = useState<EnrichedLeaseListItem | null>(null);
 
-  const { data: leases, isLoading } = useLeases(communityId);
+  const { leases, units, isLoading, isError, hasEnrichmentError } = useEnrichedLeases(communityId);
 
-  const filteredLeases = useMemo(() => {
-    if (!leases) return [];
+  // Pin "now" once per render so all filter/status comparisons use the same clock tick
+  const referenceDate = useMemo(() => new Date(), []);
+
+  const filteredRows = useMemo<LeaseTableRow[]>(() => {
     switch (activeFilter) {
       case 'expiring_soon':
-        return leases.filter((l) => {
-          if (!l.endDate || l.status === 'terminated' || l.status === 'expired') return false;
-          const days = differenceInCalendarDays(parseISO(l.endDate), new Date());
-          return days >= 0 && days <= 60;
-        });
+        return leases
+          .filter(
+            (l) =>
+              l.status !== 'terminated' &&
+              l.status !== 'expired' &&
+              isExpiringWithinWindow(l.endDate, 60, referenceDate),
+          )
+          .map((lease) => ({ kind: 'lease' as const, lease }));
+
       case 'month_to_month':
-        return leases.filter(
-          (l) => !l.endDate && l.status === 'active',
+        return leases
+          .filter((l) => !l.endDate && l.status === 'active')
+          .map((lease) => ({ kind: 'lease' as const, lease }));
+
+      case 'vacant': {
+        // Vacancy = unit has no lease with status 'active'.
+        // Units with expired/terminated/renewed leases are considered vacant.
+        const activeUnitIds = new Set(
+          leases
+            .filter((l) => l.status === 'active')
+            .map((l) => l.unitId),
         );
+        return units
+          .filter((u) => !activeUnitIds.has(u.id))
+          .map((u) => ({ kind: 'vacant' as const, unitId: u.id, unitNumber: u.unitNumber }));
+      }
+
       default:
-        return leases;
+        return leases.map((lease) => ({ kind: 'lease' as const, lease }));
     }
-  }, [leases, activeFilter]);
+  }, [leases, units, activeFilter, referenceDate]);
 
   const actions: LeaseColumnActions = useMemo(
     () => ({
@@ -56,11 +82,15 @@ export function LeaseListPage({ communityId }: LeaseListPageProps) {
       onEdit: (lease) => setEditLease(lease),
       onRenew: (lease) => setRenewLease(lease),
       onTerminate: (lease) => setTerminateLease(lease),
+      onCreateLease: () => setCreateOpen(true),
     }),
     [],
   );
 
-  const columns = useMemo(() => getLeaseColumns(actions), [actions]);
+  const columns = useMemo(
+    () => getLeaseColumns(actions, referenceDate),
+    [actions, referenceDate],
+  );
 
   const handleRenewalClose = useCallback((open: boolean) => {
     if (!open) setRenewLease(null);
@@ -79,14 +109,29 @@ export function LeaseListPage({ communityId }: LeaseListPageProps) {
           onChange={setActiveFilter}
         />
         <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           New Lease
         </Button>
       </div>
 
+      {isError && (
+        <AlertBanner
+          status="danger"
+          title="We couldn't load leases."
+          description="Please refresh the page or try again."
+        />
+      )}
+      {hasEnrichmentError && !isError && (
+        <AlertBanner
+          status="warning"
+          title="Some lease details are unavailable."
+          description="Unit numbers or resident names may be missing. Lease data is still complete."
+        />
+      )}
+
       <DataTable
         columns={columns}
-        data={filteredLeases}
+        data={filteredRows}
         isLoading={isLoading}
         emptyMessage="No leases found."
         emptyAction={

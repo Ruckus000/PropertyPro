@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
 import type { DemoInstanceRow } from '@/lib/db/demo-queries';
+import { getClientDemoLandingUrl } from '@/lib/demo-client-url';
 
 interface DemoListClientProps {
   initialDemos: DemoInstanceRow[];
@@ -44,6 +45,19 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
   const [demos, setDemos] = useState(initialDemos);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+
+  const copyClientLink = useCallback(async (slug: string) => {
+    const url = getClientDemoLandingUrl(slug);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedSlug(slug);
+      setTimeout(() => setCopiedSlug(null), 2000);
+    } catch {
+      setCopiedSlug(`error:${slug}`);
+      setTimeout(() => setCopiedSlug(null), 2000);
+    }
+  }, []);
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
@@ -105,6 +119,9 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Status
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Client link
+                </th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                   Actions
                 </th>
@@ -141,6 +158,31 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
                       <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                         Demo
                       </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 max-w-[14rem]">
+                    {!demo.is_converted ? (
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className="truncate text-xs text-gray-600 font-mono"
+                          title={getClientDemoLandingUrl(demo.slug)}
+                        >
+                          {getClientDemoLandingUrl(demo.slug)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { void copyClientLink(demo.slug); }}
+                          className="self-start text-xs font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          {copiedSlug === demo.slug
+                            ? 'Copied'
+                            : copiedSlug === `error:${demo.slug}`
+                              ? 'Copy failed'
+                              : 'Copy link'}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">

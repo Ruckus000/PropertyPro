@@ -26,6 +26,7 @@ import { ReviewStep } from '@/components/demo/ReviewStep';
 import { WizardFooter } from '@/components/demo/WizardFooter';
 import { BasicsStep } from '@/components/demo/BasicsStep';
 import { PublicSiteStep } from '@/components/demo/PublicSiteStep';
+import { getClientDemoLandingUrl } from '@/lib/demo-client-url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,12 @@ export default function DemoNewPage() {
   // Generation state
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
+  const [createdDemo, setCreatedDemo] = useState<{
+    demoId: number;
+    slug: string;
+    clientUrl: string;
+  } | null>(null);
+  const [copyClientState, setCopyClientState] = useState<'idle' | 'copied' | 'error'>('idle');
 
   // Preview state
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -187,6 +194,7 @@ export default function DemoNewPage() {
   }
 
   async function handleGenerate() {
+    if (createdDemo) return;
     setGenerating(true);
     setGenerateError('');
     try {
@@ -204,12 +212,37 @@ export default function DemoNewPage() {
           prospectNotes: config.notes || undefined,
         }),
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message ?? 'Failed');
-      router.push(`/demo/${data.id ?? data.demoId}/preview`);
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error?.message ?? `Request failed (${res.status})`);
+      }
+      const payload = json.data ?? json;
+      const demoId = payload.demoId ?? payload.id;
+      const slug = payload.slug as string | undefined;
+      if (demoId == null || !slug) {
+        throw new Error('Invalid demo response from server');
+      }
+      setCreatedDemo({
+        demoId: Number(demoId),
+        slug,
+        clientUrl: getClientDemoLandingUrl(slug),
+      });
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
       setGenerating(false);
+    }
+  }
+
+  async function copyClientLink() {
+    if (!createdDemo) return;
+    try {
+      await navigator.clipboard.writeText(createdDemo.clientUrl);
+      setCopyClientState('copied');
+      setTimeout(() => setCopyClientState('idle'), 2000);
+    } catch {
+      setCopyClientState('error');
+      setTimeout(() => setCopyClientState('idle'), 2000);
     }
   }
 
@@ -319,8 +352,49 @@ export default function DemoNewPage() {
                   />
                 )}
 
-                {step === 'review' && (
+                {step === 'review' && !createdDemo && (
                   <ReviewStep config={config} onEditStep={goToStep} />
+                )}
+
+              {step === 'review' && createdDemo && (
+                <div className="rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-muted)] p-5 space-y-4">
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">Demo created</h2>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Send this link to your prospect. It stays valid until the demo expires; your edits in admin preview will show on this page after you publish templates.
+                  </p>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Client onboarding link
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                      <input
+                        readOnly
+                        value={createdDemo.clientUrl}
+                        className="flex-1 rounded-md border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { void copyClientLink(); }}
+                        className="rounded-md border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]"
+                      >
+                        {copyClientState === 'copied'
+                          ? 'Copied'
+                          : copyClientState === 'error'
+                            ? 'Copy failed'
+                            : 'Copy'}
+                      </button>
+                      <a
+                        href={createdDemo.clientUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-md bg-[var(--interactive-primary)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+                      >
+                        Open link
+                      </a>
+                    </div>
+                  </div>
+                </div>
                 )}
               </div>
             </div>
@@ -328,12 +402,22 @@ export default function DemoNewPage() {
             {/* Sticky footer */}
             <WizardFooter
               onBack={goBack}
-              onNext={step === 'review' ? handleGenerate : goNext}
-              nextLabel={NEXT_LABELS[step] ?? 'Next'}
+              onNext={
+                createdDemo
+                  ? () => router.push(`/demo/${createdDemo.demoId}/preview`)
+                  : step === 'review'
+                    ? handleGenerate
+                    : goNext
+              }
+              nextLabel={
+                createdDemo
+                  ? 'Open admin preview'
+                  : NEXT_LABELS[step] ?? 'Next'
+              }
               nextDisabled={isNextDisabled}
-              showBack={step !== 'basics'}
+              showBack={step !== 'basics' && !createdDemo}
               onCancel={() => router.push('/demo')}
-              loading={step === 'review' ? generating : false}
+              loading={step === 'review' && !createdDemo ? generating : false}
             />
           </div>
         }

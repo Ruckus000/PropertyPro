@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import type { LeaseListItem } from '@/hooks/use-leases';
+import type { EnrichedLeaseListItem } from '@/hooks/use-leases';
 import { useUpdateLease } from '@/hooks/use-leases';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 interface LeaseTerminationDialogProps {
   communityId: number;
-  lease: LeaseListItem | null;
+  lease: EnrichedLeaseListItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -54,7 +55,7 @@ export function LeaseTerminationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Terminate Lease</DialogTitle>
           <DialogDescription>
@@ -64,6 +65,13 @@ export function LeaseTerminationDialog({
         </DialogHeader>
 
         <form onSubmit={handleConfirm} className="space-y-4">
+          {updateLease.isError && (
+            <AlertBanner
+              status="danger"
+              title="Failed to terminate lease. Please try again."
+            />
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="termination-date">Termination Date</Label>
             <Input
