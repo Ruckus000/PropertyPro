@@ -1,5 +1,5 @@
 import { daysUntilExpiration } from '@/lib/services/lease-expiration-service';
-import type { LeaseListItem as LeaseApiItem } from '@/hooks/use-leases';
+import type { LeaseApiItem } from '@/hooks/use-leases';
 
 // ---------------------------------------------------------------------------
 // Rent helpers

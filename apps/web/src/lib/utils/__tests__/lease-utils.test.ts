@@ -7,9 +7,7 @@ import {
   isExpiringWithinWindow,
   addOneDayUTC,
 } from '../lease-utils';
-// LeaseApiItem is the Task 2 rename of LeaseListItem — alias here so tests
-// are forward-compatible without changing the import after the rename.
-import type { LeaseListItem as LeaseApiItem } from '@/hooks/use-leases';
+import type { LeaseApiItem } from '@/hooks/use-leases';
 
 // ---------------------------------------------------------------------------
 // Helpers
