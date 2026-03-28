@@ -56,7 +56,7 @@ export function ElectionProxySection({
         ),
       )
     : [];
-  const { getName } = useUserNames(proxyUserIds);
+  const { getName } = useUserNames(communityId, proxyUserIds);
 
   const [selectedProxyHolderUserId, setSelectedProxyHolderUserId] = useState<string | null>(null);
   const [selectedProxyHolderLabel, setSelectedProxyHolderLabel] = useState('');

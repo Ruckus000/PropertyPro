@@ -141,12 +141,14 @@ export const electionBallotSubmissions = pgTable(
       .references(() => units.id, { onDelete: 'cascade' }),
     submittedByUserId: uuid('submitted_by_user_id')
       .notNull()
-      .references(() => users.id, { onDelete: 'set null' }),
+      .references(() => users.id, { onDelete: 'restrict' }),
     submissionFingerprint: text('submission_fingerprint').notNull(),
     voterHash: text('voter_hash').notNull(),
     isAbstention: boolean('is_abstention').notNull().default(false),
     isProxyVote: boolean('is_proxy_vote').notNull().default(false),
-    proxyId: bigint('proxy_id', { mode: 'number' }),
+    proxyId: bigint('proxy_id', { mode: 'number' }).references(() => electionProxies.id, {
+      onDelete: 'set null',
+    }),
     submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

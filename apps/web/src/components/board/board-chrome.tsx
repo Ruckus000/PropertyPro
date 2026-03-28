@@ -16,21 +16,22 @@ const BOARD_TABS = [
     id: 'polls',
     label: 'Polls',
     href: (communityId: number) => `/communities/${communityId}/board/polls`,
-    match: '/board/polls',
   },
   {
     id: 'forum',
     label: 'Forum',
     href: (communityId: number) => `/communities/${communityId}/board/forum`,
-    match: '/board/forum',
   },
   {
     id: 'elections',
     label: 'Elections',
     href: (communityId: number) => `/communities/${communityId}/board/elections`,
-    match: '/board/elections',
   },
 ] as const;
+
+export function isBoardTabActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function BoardChrome({
   communityId,
@@ -64,7 +65,7 @@ export function BoardChrome({
       >
         {tabs.map((tab) => {
           const href = tab.href(communityId);
-          const active = pathname === href || pathname.startsWith(tab.match);
+          const active = isBoardTabActive(pathname, href);
 
           return (
             <Link

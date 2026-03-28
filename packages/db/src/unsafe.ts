@@ -7,6 +7,14 @@
 import { closeDb, db } from './drizzle';
 
 export { findCommunityBySlugUnscoped } from './queries/community-lookup';
+/**
+ * Community-scoped user display-name lookup.
+ *
+ * **Authorization contract:** callers MUST ensure the communityId has been
+ * validated from the active request context and the actor is a member of that
+ * community before using the resolved names.
+ */
+export { findCommunityUserDisplayNames, type CommunityUserDisplayNameRow } from './queries/user-display-names';
 export {
   claimDigestQueueRows,
   findCandidateDigestCommunityIds,

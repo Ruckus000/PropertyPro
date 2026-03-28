@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '../../src/lib/api/errors';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -127,6 +128,27 @@ describe('elections routes', () => {
     expect(getMyVoteReceiptForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1');
     expect(requireElectionsEnabledMock).toHaveBeenCalledTimes(1);
     expect(requireElectionsReadPermissionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 403 when attorney review is not complete for my-vote', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident',
+      communityType: 'condo_718',
+      isUnitOwner: true,
+      isAdmin: false,
+      electionsAttorneyReviewed: false,
+    });
+    requireElectionsEnabledMock.mockImplementation((membership: { electionsAttorneyReviewed?: boolean }) => {
+      if (!membership.electionsAttorneyReviewed) {
+        throw new ForbiddenError('Elections are not available until attorney review is complete');
+      }
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/my-vote?communityId=42');
+    const res = await getMyVote(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(403);
+    expect(getMyVoteReceiptForCommunityMock).not.toHaveBeenCalled();
   });
 
   it('submits an election vote through the canonical POST route', async () => {
@@ -423,6 +445,34 @@ describe('elections routes', () => {
     );
     const body = await res.json();
     expect(body).toHaveProperty('data');
+  });
+
+  it('returns 403 when attorney review is not complete for certify', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: false,
+    });
+    requireElectionsEnabledMock.mockImplementation((membership: { electionsAttorneyReviewed?: boolean }) => {
+      if (!membership.electionsAttorneyReviewed) {
+        throw new ForbiddenError('Elections are not available until attorney review is complete');
+      }
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/certify', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ communityId: 42 }),
+    });
+
+    const res = await postCertify(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(403);
+    expect(certifyElectionForCommunityMock).not.toHaveBeenCalled();
   });
 
   it('cancels an election with a canceledReason', async () => {

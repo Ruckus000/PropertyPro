@@ -1170,7 +1170,7 @@ export async function certifyElectionForCommunity(
       oldValues: { status: election.status },
       newValues: {
         status: updated.status,
-        certifiedAt: certifiedAt.toISOString(),
+        certifiedAt: updated.certifiedAt?.toISOString() ?? null,
         hasResultsDocument: updated.resultsDocumentId !== null,
       },
       metadata: { requestId: requestId ?? null },
@@ -1288,6 +1288,7 @@ export async function createElectionProxyForCommunity(
 
 async function updateProxyStatusForCommunity(
   communityId: number,
+  electionId: number,
   proxyId: number,
   actorUserId: string,
   nextStatus: Exclude<ProxyStatus, 'pending'>,
@@ -1312,8 +1313,8 @@ async function updateProxyStatusForCommunity(
         createdAt: electionProxies.createdAt,
         updatedAt: electionProxies.updatedAt,
       },
-      eq(electionProxies.id, proxyId),
-    );
+      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+    ).for('update');
 
     const proxy = (rows[0] as ElectionProxyRecord | undefined) ?? null;
     if (!proxy) {
@@ -1343,7 +1344,7 @@ async function updateProxyStatusForCommunity(
     const updatedRows = await scoped.update(
       electionProxies,
       patch,
-      eq(electionProxies.id, proxyId),
+      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
     );
 
     const updated = updatedRows[0];
@@ -1382,7 +1383,7 @@ export async function approveElectionProxyForCommunity(
   actorUserId: string,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'approved', requestId);
+  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'approved', requestId);
 }
 
 export async function rejectElectionProxyForCommunity(
@@ -1392,7 +1393,7 @@ export async function rejectElectionProxyForCommunity(
   actorUserId: string,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'rejected', requestId);
+  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'rejected', requestId);
 }
 
 export async function revokeElectionProxyForCommunity(
@@ -1403,7 +1404,7 @@ export async function revokeElectionProxyForCommunity(
   actorIsAdmin: boolean,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'revoked', requestId, actorIsAdmin);
+  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'revoked', requestId, actorIsAdmin);
 }
 
 export async function snapshotElectionEligibilityForCommunity(

@@ -21,14 +21,12 @@ interface ForumThreadDetailProps {
   communityId: number;
   threadId: number;
   isAdmin: boolean;
-  userId: string;
 }
 
 export function ForumThreadDetail({
   communityId,
   threadId,
   isAdmin,
-  userId: _userId,
 }: ForumThreadDetailProps) {
   const { data, isLoading, error } = useBoardForumThread(communityId, threadId);
   const createReply = useCreateForumReply(communityId, threadId);
@@ -41,7 +39,7 @@ export function ForumThreadDetail({
         ]),
       )
     : [];
-  const { getName } = useUserNames(userIds);
+  const { getName } = useUserNames(communityId, userIds);
   const [replyBody, setReplyBody] = useState('');
 
   if (isLoading) {

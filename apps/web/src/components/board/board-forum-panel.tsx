@@ -13,10 +13,9 @@ import { useBoardForumThreads } from '@/hooks/use-board';
 
 interface BoardForumPanelProps {
   communityId: number;
-  isAdmin: boolean;
 }
 
-export function BoardForumPanel({ communityId, isAdmin: _isAdmin }: BoardForumPanelProps) {
+export function BoardForumPanel({ communityId }: BoardForumPanelProps) {
   const { data, isLoading, error } = useBoardForumThreads(communityId, { limit: 50, offset: 0 });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 

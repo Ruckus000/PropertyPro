@@ -22,7 +22,6 @@ export default async function ForumThreadPage({ params }: PageProps) {
       communityId={communityId}
       threadId={parsedThreadId}
       isAdmin={membership.isAdmin}
-      userId={userId}
     />
   );
 }

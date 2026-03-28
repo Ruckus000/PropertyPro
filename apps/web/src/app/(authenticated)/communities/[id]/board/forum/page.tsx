@@ -16,5 +16,5 @@ export default async function BoardForumPage({ params }: PageProps) {
   requireCommunityBoardEnabled(membership);
   requirePollReadPermission(membership);
 
-  return <BoardForumPanel communityId={communityId} isAdmin={membership.isAdmin} />;
+  return <BoardForumPanel communityId={communityId} />;
 }

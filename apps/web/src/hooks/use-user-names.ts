@@ -7,7 +7,7 @@ function getFallbackUserDisplayName(userId: string): string {
   return `User ${userId.slice(0, 8)}`;
 }
 
-export function useUserNames(userIds: string[]): {
+export function useUserNames(communityId: number, userIds: string[]): {
   getName: (userId: string) => string;
   isLoading: boolean;
 } {
@@ -16,9 +16,10 @@ export function useUserNames(userIds: string[]): {
   ).sort();
 
   const query = useQuery({
-    queryKey: ['user-names', ...normalizedUserIds],
+    queryKey: ['user-names', communityId, ...normalizedUserIds],
     queryFn: async () => {
       const searchParams = new URLSearchParams({
+        communityId: String(communityId),
         ids: normalizedUserIds.join(','),
       });
 
@@ -26,7 +27,7 @@ export function useUserNames(userIds: string[]): {
         `/api/v1/users/names?${searchParams.toString()}`,
       );
     },
-    enabled: normalizedUserIds.length > 0,
+    enabled: communityId > 0 && normalizedUserIds.length > 0,
     staleTime: 300_000,
   });
 

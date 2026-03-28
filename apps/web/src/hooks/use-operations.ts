@@ -94,9 +94,11 @@ export const RESERVATION_KEYS = {
 export function useOperations(
   communityId: number,
   params?: { type?: string; status?: string; priority?: string; unitId?: number; cursor?: string | null; limit?: number },
+  options?: { enabled?: boolean },
 ) {
   const limit = Math.min(params?.limit ?? 50, 50);
   const cursor = params?.cursor ?? null;
+  const enabled = options?.enabled ?? true;
 
   return useQuery({
     queryKey: OPERATIONS_KEYS.list(communityId, { ...params, limit, cursor }),
@@ -113,7 +115,7 @@ export function useOperations(
 
       return requestJson<OperationsListResponse>(`/api/v1/operations?${searchParams.toString()}`);
     },
-    enabled: communityId > 0,
+    enabled: enabled && communityId > 0,
     staleTime: 45_000,
   });
 }
@@ -121,7 +123,10 @@ export function useOperations(
 export function useWorkOrders(
   communityId: number,
   params?: { status?: WorkOrderListItem['status']; unitId?: number },
+  options?: { enabled?: boolean },
 ) {
+  const enabled = options?.enabled ?? true;
+
   return useQuery({
     queryKey: WORK_ORDER_KEYS.list(communityId, params),
     queryFn: async () => {
@@ -131,17 +136,19 @@ export function useWorkOrders(
 
       return requestJson<WorkOrderListItem[]>(`/api/v1/work-orders?${searchParams.toString()}`);
     },
-    enabled: communityId > 0,
+    enabled: enabled && communityId > 0,
     staleTime: 60_000,
   });
 }
 
-export function useReservations(communityId: number) {
+export function useReservations(communityId: number, options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+
   return useQuery({
     queryKey: RESERVATION_KEYS.list(communityId),
     queryFn: async () =>
       requestJson<ReservationListItem[]>(`/api/v1/reservations?communityId=${communityId}`),
-    enabled: communityId > 0,
+    enabled: enabled && communityId > 0,
     staleTime: 60_000,
   });
 }
