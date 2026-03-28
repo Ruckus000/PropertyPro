@@ -14,6 +14,9 @@ const {
   getMyVoteReceiptForCommunityMock,
   castElectionVoteForCommunityMock,
   openElectionForCommunityMock,
+  closeElectionForCommunityMock,
+  certifyElectionForCommunityMock,
+  cancelElectionForCommunityMock,
   approveElectionProxyForCommunityMock,
   rejectElectionProxyForCommunityMock,
   revokeElectionProxyForCommunityMock,
@@ -31,6 +34,9 @@ const {
   getMyVoteReceiptForCommunityMock: vi.fn(),
   castElectionVoteForCommunityMock: vi.fn(),
   openElectionForCommunityMock: vi.fn(),
+  closeElectionForCommunityMock: vi.fn(),
+  certifyElectionForCommunityMock: vi.fn(),
+  cancelElectionForCommunityMock: vi.fn(),
   approveElectionProxyForCommunityMock: vi.fn(),
   rejectElectionProxyForCommunityMock: vi.fn(),
   revokeElectionProxyForCommunityMock: vi.fn(),
@@ -69,6 +75,9 @@ vi.mock('@/lib/services/elections-service', () => ({
   getMyElectionVoteReceiptForCommunity: getMyVoteReceiptForCommunityMock,
   castElectionVoteForCommunity: castElectionVoteForCommunityMock,
   openElectionForCommunity: openElectionForCommunityMock,
+  closeElectionForCommunity: closeElectionForCommunityMock,
+  certifyElectionForCommunity: certifyElectionForCommunityMock,
+  cancelElectionForCommunity: cancelElectionForCommunityMock,
   approveElectionProxyForCommunity: approveElectionProxyForCommunityMock,
   rejectElectionProxyForCommunity: rejectElectionProxyForCommunityMock,
   revokeElectionProxyForCommunity: revokeElectionProxyForCommunityMock,
@@ -78,6 +87,9 @@ vi.mock('@/lib/services/elections-service', () => ({
 import { GET as getMyVote } from '../../src/app/api/v1/elections/[id]/my-vote/route';
 import { POST as postVote } from '../../src/app/api/v1/elections/[id]/vote/route';
 import { POST as postOpen } from '../../src/app/api/v1/elections/[id]/open/route';
+import { POST as postClose } from '../../src/app/api/v1/elections/[id]/close/route';
+import { POST as postCertify } from '../../src/app/api/v1/elections/[id]/certify/route';
+import { POST as postCancel } from '../../src/app/api/v1/elections/[id]/cancel/route';
 import { POST as postProxyApprove } from '../../src/app/api/v1/elections/[id]/proxies/[proxyId]/approve/route';
 import { POST as postProxyReject } from '../../src/app/api/v1/elections/[id]/proxies/[proxyId]/reject/route';
 import { POST as postProxyRevoke } from '../../src/app/api/v1/elections/[id]/proxies/[proxyId]/revoke/route';
@@ -294,5 +306,183 @@ describe('elections routes', () => {
 
     expect(snapshotRes.status).toBe(201);
     expect(snapshotElectionEligibilityForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1');
+  });
+
+  it('closes an election through the admin transition route', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: true,
+    });
+    closeElectionForCommunityMock.mockResolvedValue({
+      electionId: 15,
+      status: 'closed',
+      certifiedAt: null,
+      resultsDocumentId: null,
+      canceledReason: null,
+      changed: true,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/close', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-close',
+      },
+      body: JSON.stringify({ communityId: 42 }),
+    });
+
+    const res = await postClose(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(200);
+    expect(closeElectionForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1', 'req-close');
+    const body = await res.json();
+    expect(body).toHaveProperty('data');
+  });
+
+  it('certifies an election with a resultsDocumentId', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: true,
+    });
+    certifyElectionForCommunityMock.mockResolvedValue({
+      electionId: 15,
+      status: 'certified',
+      certifiedAt: '2026-03-27T14:00:00.000Z',
+      resultsDocumentId: 99,
+      canceledReason: null,
+      changed: true,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/certify', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-certify-1',
+      },
+      body: JSON.stringify({ communityId: 42, resultsDocumentId: 99 }),
+    });
+
+    const res = await postCertify(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(200);
+    expect(certifyElectionForCommunityMock).toHaveBeenCalledWith(
+      42,
+      15,
+      'user-1',
+      { resultsDocumentId: 99 },
+      'req-certify-1',
+    );
+    const body = await res.json();
+    expect(body).toHaveProperty('data');
+  });
+
+  it('certifies an election without a resultsDocumentId', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: true,
+    });
+    certifyElectionForCommunityMock.mockResolvedValue({
+      electionId: 15,
+      status: 'certified',
+      certifiedAt: '2026-03-27T14:00:00.000Z',
+      resultsDocumentId: null,
+      canceledReason: null,
+      changed: true,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/certify', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-certify-2',
+      },
+      body: JSON.stringify({ communityId: 42 }),
+    });
+
+    const res = await postCertify(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(200);
+    expect(certifyElectionForCommunityMock).toHaveBeenCalledWith(
+      42,
+      15,
+      'user-1',
+      { resultsDocumentId: null },
+      'req-certify-2',
+    );
+    const body = await res.json();
+    expect(body).toHaveProperty('data');
+  });
+
+  it('cancels an election with a canceledReason', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: true,
+    });
+    cancelElectionForCommunityMock.mockResolvedValue({
+      electionId: 15,
+      status: 'canceled',
+      certifiedAt: null,
+      resultsDocumentId: null,
+      canceledReason: 'Insufficient candidates',
+      changed: true,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/cancel', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-cancel',
+      },
+      body: JSON.stringify({ communityId: 42, canceledReason: 'Insufficient candidates' }),
+    });
+
+    const res = await postCancel(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(200);
+    expect(cancelElectionForCommunityMock).toHaveBeenCalledWith(
+      42,
+      15,
+      'user-1',
+      { canceledReason: 'Insufficient candidates' },
+      'req-cancel',
+    );
+    const body = await res.json();
+    expect(body).toHaveProperty('data');
+  });
+
+  it('rejects a cancel request missing canceledReason with a 400', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager',
+      communityType: 'condo_718',
+      isUnitOwner: false,
+      isAdmin: true,
+      electionsAttorneyReviewed: true,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/15/cancel', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-cancel-invalid',
+      },
+      body: JSON.stringify({ communityId: 42 }),
+    });
+
+    const res = await postCancel(req, { params: Promise.resolve({ id: '15' }) });
+
+    expect(res.status).toBe(400);
+    expect(cancelElectionForCommunityMock).not.toHaveBeenCalled();
   });
 });
