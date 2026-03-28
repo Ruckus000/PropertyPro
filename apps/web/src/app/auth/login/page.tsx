@@ -41,7 +41,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </p>
           </div>
           <LoginForm returnTo={returnTo} />
-          <div className="text-center text-sm">
+          <div className="space-y-2 text-center text-sm">
+            <p className="text-content-secondary">
+              New to PropertyPro?{' '}
+              <Link href="/signup" className="font-medium text-content-link hover:text-interactive">
+                Create your account
+              </Link>
+            </p>
             <Link href="/auth/forgot-password" className="text-content-link hover:text-interactive">
               Forgot password?
             </Link>

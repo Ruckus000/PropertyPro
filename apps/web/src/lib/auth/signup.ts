@@ -6,7 +6,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 import { SignupVerificationEmail } from '@propertypro/email';
-import { ValidationError } from '@/lib/api/errors';
+import { SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
 import { isReservedSubdomain } from '@/lib/tenant/reserved-subdomains';
 import {
   normalizeSignupSubdomain,
@@ -190,24 +190,14 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
     candidateSlug: pendingRow.candidateSlug,
   }, verificationRedirectUrl);
 
-  const messageId = await sendSignupVerificationEmail(
-    input.primaryContactName,
-    input.communityName,
-    normalizedEmail,
-    authResult.verificationLink,
-  );
-
-  // Guard: if linking auth user to pending signup fails, log the orphan for
-  // manual cleanup. The auth user remains valid and the "already registered"
-  // fallback (magiclink path) will handle retries.
+  // Persist auth linkage before email delivery so retries remain recoverable
+  // even when the downstream mail provider is unavailable.
   try {
     const db = createUnscopedClient();
     await db
       .update(pendingSignups)
       .set({
         authUserId: authResult.authUserId,
-        verificationEmailSentAt: new Date(),
-        verificationEmailId: messageId,
         updatedAt: new Date(),
       })
       .where(eq(pendingSignups.id, pendingRow.id));
@@ -220,6 +210,34 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
     }));
     throw linkError;
   }
+
+  let messageId: string;
+  try {
+    messageId = await sendSignupVerificationEmail(
+      input.primaryContactName,
+      input.communityName,
+      normalizedEmail,
+      authResult.verificationLink,
+    );
+  } catch (emailError) {
+    console.error(JSON.stringify({
+      event: 'signup.verification_email_failed',
+      signupRequestId: pendingRow.signupRequestId,
+      authUserId: authResult.authUserId,
+      error: emailError instanceof Error ? emailError.message : String(emailError),
+    }));
+    throw new SignupEmailDeliveryError();
+  }
+
+  const db = createUnscopedClient();
+  await db
+    .update(pendingSignups)
+    .set({
+      verificationEmailSentAt: new Date(),
+      verificationEmailId: messageId,
+      updatedAt: new Date(),
+    })
+    .where(eq(pendingSignups.id, pendingRow.id));
 
   console.info(JSON.stringify({
     event: 'signup.completed',
