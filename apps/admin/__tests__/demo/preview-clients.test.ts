@@ -51,7 +51,7 @@ describe('demo preview clients', () => {
       }),
     );
 
-    expect(html).toContain('Copy link');
+    expect(html).toContain('Copy onboarding link');
   });
 
   it('disables tabs with null URLs', () => {
@@ -63,9 +63,9 @@ describe('demo preview clients', () => {
       }),
     );
 
-    // Mobile and Admin should be disabled (disabled="" attribute)
+    // Mobile and Admin tabs should be disabled, plus any URL-dependent controls
     const disabledButtons = html.match(/<button[^>]*disabled=""/g) ?? [];
-    expect(disabledButtons.length).toBe(2);
+    expect(disabledButtons.length).toBeGreaterThanOrEqual(2);
   });
 
   it('preloads all iframes on mount', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useId } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ResizableSplitProps {
@@ -11,6 +11,11 @@ interface ResizableSplitProps {
   maxLeft?: number;
   storageKey?: string;
   className?: string;
+  separatorLabel?: string;
+  leftPaneId?: string;
+  rightPaneId?: string;
+  leftLabel?: string;
+  rightLabel?: string;
 }
 
 export function ResizableSplit({
@@ -21,9 +26,18 @@ export function ResizableSplit({
   maxLeft = 75,
   storageKey,
   className,
+  separatorLabel = 'Resize panels',
+  leftPaneId,
+  rightPaneId,
+  leftLabel = 'Left panel',
+  rightLabel = 'Right panel',
 }: ResizableSplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const generatedLeftPaneId = useId();
+  const generatedRightPaneId = useId();
+  const resolvedLeftPaneId = leftPaneId ?? generatedLeftPaneId;
+  const resolvedRightPaneId = rightPaneId ?? generatedRightPaneId;
 
   const [ratio, setRatio] = useState<number>(defaultRatio);
 
@@ -104,13 +118,22 @@ export function ResizableSplit({
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         newRatio = clampRatio(ratio + 2);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        newRatio = minLeft;
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        newRatio = maxLeft;
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        newRatio = defaultRatio;
       }
       if (newRatio !== null) {
         setRatio(newRatio);
         persistRatio(newRatio);
       }
     },
-    [ratio, clampRatio, persistRatio],
+    [ratio, clampRatio, defaultRatio, persistRatio, maxLeft, minLeft],
   );
 
   // Cleanup dragging state on unmount
@@ -126,8 +149,11 @@ export function ResizableSplit({
     <div ref={containerRef} className={cn('flex h-full', className)}>
       {/* Left panel */}
       <div
+        id={resolvedLeftPaneId}
+        role="region"
         className="h-full overflow-auto"
         style={{ flex: `0 0 ${ratio}%` }}
+        aria-label={leftLabel}
       >
         {left}
       </div>
@@ -135,7 +161,9 @@ export function ResizableSplit({
       {/* Drag handle */}
       <div
         role="separator"
-        aria-label="Resize panels"
+        aria-label={separatorLabel === 'Resize panels' ? `Resize ${leftLabel} and ${rightLabel}` : separatorLabel}
+        aria-controls={resolvedRightPaneId}
+        aria-orientation="vertical"
         aria-valuenow={Math.round(ratio)}
         aria-valuemin={minLeft}
         aria-valuemax={maxLeft}
@@ -147,6 +175,10 @@ export function ResizableSplit({
         )}
         style={{ borderLeft: '1px solid var(--border-default)', borderRight: '1px solid var(--border-default)' }}
         onMouseDown={handleMouseDown}
+        onDoubleClick={() => {
+          setRatio(defaultRatio);
+          persistRatio(defaultRatio);
+        }}
         onKeyDown={handleKeyDown}
       >
         {Array.from({ length: 5 }).map((_, i) => (
@@ -159,7 +191,12 @@ export function ResizableSplit({
       </div>
 
       {/* Right panel */}
-      <div className="h-full flex-1 overflow-auto">
+      <div
+        id={resolvedRightPaneId}
+        role="region"
+        className="h-full flex-1 overflow-auto"
+        aria-label={rightLabel}
+      >
         {right}
       </div>
     </div>

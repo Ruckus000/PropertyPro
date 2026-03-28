@@ -266,6 +266,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'support_sessions', reason: 'Platform-level support session tracking — service_role only. Admin-created sessions reference communities but are not tenant-scoped.' },
   { tableName: 'stripe_prices', reason: 'Billing configuration — global, not community-scoped. Managed by platform ops.' },
   { tableName: 'conversion_events', reason: 'Analytics table — must survive demo soft-deletion and community conversion lifecycle. Not tenant-scoped because events span the demo→paid transition.' },
+  { tableName: 'public_site_templates', reason: 'Platform-level public site template library for demos. Managed by platform admins and consumed through service-role admin APIs.' },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);

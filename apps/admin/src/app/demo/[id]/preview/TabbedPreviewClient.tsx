@@ -51,7 +51,8 @@ export function TabbedPreviewClient({
   const handleScaleUp = () => setPhoneScale((s) => Math.min(s + 0.1, 1.4));
   const handleScaleDown = () => setPhoneScale((s) => Math.max(s - 0.1, 0.6));
 
-  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyOnboardingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTabTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRefs = useRef<Record<TabKey, HTMLIFrameElement | null>>({
     public: null,
     mobile: null,
@@ -60,9 +61,8 @@ export function TabbedPreviewClient({
 
   useEffect(() => {
     return () => {
-      if (copyResetTimerRef.current) {
-        clearTimeout(copyResetTimerRef.current);
-      }
+      if (copyOnboardingTimerRef.current) clearTimeout(copyOnboardingTimerRef.current);
+      if (copyTabTimerRef.current) clearTimeout(copyTabTimerRef.current);
     };
   }, []);
 
@@ -91,10 +91,10 @@ export function TabbedPreviewClient({
       setCopyOnboardingState('error');
     }
 
-    if (copyResetTimerRef.current) {
-      clearTimeout(copyResetTimerRef.current);
+    if (copyOnboardingTimerRef.current) {
+      clearTimeout(copyOnboardingTimerRef.current);
     }
-    copyResetTimerRef.current = setTimeout(() => {
+    copyOnboardingTimerRef.current = setTimeout(() => {
       setCopyOnboardingState('idle');
     }, 1600);
   };
@@ -108,10 +108,10 @@ export function TabbedPreviewClient({
     } catch {
       setCopyTabState('error');
     }
-    if (copyResetTimerRef.current) {
-      clearTimeout(copyResetTimerRef.current);
+    if (copyTabTimerRef.current) {
+      clearTimeout(copyTabTimerRef.current);
     }
-    copyResetTimerRef.current = setTimeout(() => {
+    copyTabTimerRef.current = setTimeout(() => {
       setCopyTabState('idle');
     }, 1600);
   };

@@ -200,7 +200,7 @@ describe("P0-01 Design Tokens", () => {
       expect(semanticColors.surface.inverse).toBe("var(--surface-inverse)");
     });
 
-    it("defines the page surface as gray-50", () => {
+    it("defines the page surface referencing gray-50", () => {
       expect(cssContent).toContain("--surface-page: var(--gray-50)");
     });
 
