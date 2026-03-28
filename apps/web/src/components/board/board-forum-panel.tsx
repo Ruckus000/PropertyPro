@@ -16,7 +16,7 @@ interface BoardForumPanelProps {
   isAdmin: boolean;
 }
 
-export function BoardForumPanel({ communityId, isAdmin }: BoardForumPanelProps) {
+export function BoardForumPanel({ communityId, isAdmin: _isAdmin }: BoardForumPanelProps) {
   const { data, isLoading, error } = useBoardForumThreads(communityId, { limit: 50, offset: 0 });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
@@ -42,13 +42,11 @@ export function BoardForumPanel({ communityId, isAdmin }: BoardForumPanelProps) 
   return (
     <>
       <div className="space-y-4">
-        {isAdmin ? (
-          <div className="flex justify-end">
-            <Button type="button" className="h-11 md:h-9" onClick={() => setCreateDialogOpen(true)}>
-              New Thread
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex justify-end">
+          <Button type="button" className="h-11 md:h-9" onClick={() => setCreateDialogOpen(true)}>
+            New Thread
+          </Button>
+        </div>
 
         {!data || data.length === 0 ? (
           <EmptyState preset="no_board_threads" />
@@ -74,13 +72,11 @@ export function BoardForumPanel({ communityId, isAdmin }: BoardForumPanelProps) 
         )}
       </div>
 
-      {isAdmin ? (
-        <CreateThreadDialog
-          communityId={communityId}
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-        />
-      ) : null}
+      <CreateThreadDialog
+        communityId={communityId}
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </>
   );
 }

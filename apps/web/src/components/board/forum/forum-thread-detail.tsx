@@ -23,6 +23,11 @@ interface ForumThreadDetailProps {
   userId: string;
 }
 
+function formatUserReference(userId: string): string {
+  // TODO: resolve display names from user lookup
+  return `User ${userId.slice(0, 8)}`;
+}
+
 export function ForumThreadDetail({
   communityId,
   threadId,
@@ -71,7 +76,7 @@ export function ForumThreadDetail({
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-content">{thread.title}</h1>
             <p className="text-sm text-content-secondary">
-              Started by {thread.authorUserId} · {new Date(thread.createdAt).toLocaleString()}
+              Started by {formatUserReference(thread.authorUserId)} · {new Date(thread.createdAt).toLocaleString()}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -128,7 +133,7 @@ export function ForumThreadDetail({
             <div key={reply.id} className="rounded-xl border border-edge bg-surface-card p-4">
               <p className="whitespace-pre-wrap text-sm leading-6 text-content">{reply.body}</p>
               <p className="mt-3 text-xs text-content-secondary">
-                {reply.authorUserId} · {new Date(reply.createdAt).toLocaleString()}
+                {formatUserReference(reply.authorUserId)} · {new Date(reply.createdAt).toLocaleString()}
               </p>
             </div>
           ))

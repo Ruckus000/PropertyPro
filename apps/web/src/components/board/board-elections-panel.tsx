@@ -55,6 +55,31 @@ function ElectionReceiptSummary({
   );
 }
 
+function EligibilitySnapshotButton({
+  communityId,
+  electionId,
+}: {
+  communityId: number;
+  electionId: number;
+}) {
+  const snapshotEligibility = useSnapshotEligibility(communityId, electionId);
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="h-11 md:h-9"
+      disabled={snapshotEligibility.isPending}
+      onClick={(event) => {
+        event.stopPropagation();
+        void snapshotEligibility.mutateAsync();
+      }}
+    >
+      Snapshot Eligibility
+    </Button>
+  );
+}
+
 interface BoardElectionsPanelProps {
   communityId: number;
   isAdmin: boolean;
@@ -140,20 +165,21 @@ function ElectionCard({
   isAdmin: boolean;
   onOpen: () => void;
 }) {
-  const snapshotEligibility = useSnapshotEligibility(communityId, election.id);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <article
       className={cn('cursor-pointer rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-interactive-primary')}
-      onClick={onOpen}
+      onClick={() => setExpanded((current) => !current)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          onOpen();
+          setExpanded((current) => !current);
         }
       }}
       role="button"
       tabIndex={0}
+      aria-expanded={expanded}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
@@ -164,25 +190,29 @@ function ElectionCard({
           <p className="text-xs text-content-tertiary">
             Opens {new Date(election.opensAt).toLocaleString()} and closes {new Date(election.closesAt).toLocaleString()}
           </p>
-          <ElectionReceiptSummary communityId={communityId} electionId={election.id} />
         </div>
         <StatusBadge status={election.status} />
       </div>
 
-      {isAdmin && election.status === 'draft' ? (
-        <div className="mt-4 flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 md:h-9"
-            disabled={snapshotEligibility.isPending}
-            onClick={(event) => {
-              event.stopPropagation();
-              void snapshotEligibility.mutateAsync();
-            }}
-          >
-            Snapshot Eligibility
-          </Button>
+      {expanded ? (
+        <div className="mt-4 space-y-3 border-t border-edge pt-4">
+          <ElectionReceiptSummary communityId={communityId} electionId={election.id} />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 md:h-9"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen();
+              }}
+            >
+              View Details
+            </Button>
+            {isAdmin && election.status === 'draft' ? (
+              <EligibilitySnapshotButton communityId={communityId} electionId={election.id} />
+            ) : null}
+          </div>
         </div>
       ) : null}
     </article>

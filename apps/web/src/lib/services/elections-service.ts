@@ -106,6 +106,17 @@ interface ElectionBallotRecord {
   unitId: number;
 }
 
+interface ElectionVoteCountRow {
+  [key: string]: unknown;
+  candidateId: number;
+  voteCount: number;
+}
+
+interface ElectionAbstentionCountRow {
+  [key: string]: unknown;
+  abstentionCount: number;
+}
+
 interface ElectionProxyRecord {
   [key: string]: unknown;
   id: number;
@@ -776,18 +787,20 @@ export async function getElectionResultsForCommunity(
     throw new UnprocessableEntityError('Election results are available only after the election is closed');
   }
 
-  const ballots = await scoped.selectFrom<ElectionBallotRecord>(
+  const voteCounts = await scoped.selectFrom<ElectionVoteCountRow>(
     electionBallots,
     {
       candidateId: electionBallots.candidateId,
+      voteCount: sql<number>`count(*)::int`,
     },
     eq(electionBallots.electionId, electionId),
-  );
+  )
+    .groupBy(electionBallots.candidateId);
 
-  const abstentions = await scoped.selectFrom<ElectionBallotSubmissionRecord>(
+  const [abstentionRow] = await scoped.selectFrom<ElectionAbstentionCountRow>(
     electionBallotSubmissions,
     {
-      id: electionBallotSubmissions.id,
+      abstentionCount: sql<number>`count(*)::int`,
     },
     and(
       eq(electionBallotSubmissions.electionId, electionId),
@@ -795,13 +808,9 @@ export async function getElectionResultsForCommunity(
     ),
   );
 
-  const voteCounts = new Map<number, number>();
-  for (const ballot of ballots) {
-    voteCounts.set(
-      ballot.candidateId,
-      (voteCounts.get(ballot.candidateId) ?? 0) + 1,
-    );
-  }
+  const voteCountByCandidateId = new Map(
+    voteCounts.map((row) => [row.candidateId, row.voteCount]),
+  );
 
   const quorumThreshold = Math.ceil(
     (election.eligibleUnitCount * election.quorumPercentage) / 100,
@@ -811,9 +820,9 @@ export async function getElectionResultsForCommunity(
     candidateResults: candidates.map((candidate) => ({
       candidateId: candidate.id,
       label: candidate.label,
-      voteCount: voteCounts.get(candidate.id) ?? 0,
+      voteCount: voteCountByCandidateId.get(candidate.id) ?? 0,
     })),
-    abstentionCount: abstentions.length,
+    abstentionCount: abstentionRow?.abstentionCount ?? 0,
     totalBallotsCast: election.totalBallotsCast,
     eligibleUnitCount: election.eligibleUnitCount,
     quorumPercentage: election.quorumPercentage,

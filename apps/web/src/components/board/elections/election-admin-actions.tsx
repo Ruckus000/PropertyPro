@@ -54,6 +54,7 @@ export function ElectionAdminActions({
   }
 
   const nonTerminal = status === 'draft' || status === 'open' || status === 'closed';
+  const cancelable = status === 'open' || status === 'closed';
   const sharedError =
     openElection.error ??
     closeElection.error ??
@@ -195,7 +196,7 @@ export function ElectionAdminActions({
           </>
         ) : null}
 
-        {nonTerminal ? (
+        {cancelable ? (
           <>
             <Button type="button" variant="destructive" className="h-11 md:h-9" onClick={() => setCancelDialog(true)}>
               Cancel Election

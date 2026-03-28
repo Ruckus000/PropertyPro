@@ -15,6 +15,7 @@ export type ScopedRow = Record<string, unknown>;
  * Supports .orderBy(), .limit(), .offset() chaining before execution.
  */
 export interface ScopedDynamicBuilder<T> {
+  groupBy: (...columns: unknown[]) => ScopedDynamicBuilder<T>;
   orderBy: (...columns: unknown[]) => ScopedDynamicBuilder<T>;
   limit: (n: number) => ScopedDynamicBuilder<T>;
   offset: (n: number) => ScopedDynamicBuilder<T>;
