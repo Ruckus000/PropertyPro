@@ -42,10 +42,12 @@ export const POST = withErrorHandler(
     requireElectionsWritePermission(membership);
     requireElectionsAdminRole(membership);
 
+    const requestId = req.headers.get('x-request-id');
     const data = await snapshotElectionEligibilityForCommunity(
       communityId,
       electionId,
       actorUserId,
+      requestId,
     );
 
     return NextResponse.json({ data }, { status: 201 });

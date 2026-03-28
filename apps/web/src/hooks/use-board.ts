@@ -195,7 +195,7 @@ export function useCastElectionVote(communityId: number, electionId: number) {
         body: JSON.stringify({ communityId, ...payload }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.list(communityId, 25) });
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.all });
       await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.elections.myVote(communityId, electionId) });
     },
   });
