@@ -53,7 +53,6 @@ export function ElectionAdminActions({
     return null;
   }
 
-  const nonTerminal = status === 'draft' || status === 'open' || status === 'closed';
   const cancelable = status === 'open' || status === 'closed';
   const sharedError =
     openElection.error ??
