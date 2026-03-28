@@ -6,7 +6,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { logAuditEvent } from '@propertypro/db';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
@@ -147,6 +146,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const oldAttorneyReviewed = (oldSettings as Record<string, unknown>).electionsAttorneyReviewed === true;
     const nextAttorneyReviewed = community_settings.electionsAttorneyReviewed === true;
     if (oldAttorneyReviewed !== nextAttorneyReviewed) {
+      const { logAuditEvent } = await import('@propertypro/db');
       await logAuditEvent({
         userId: admin.id,
         action: 'settings_changed',
