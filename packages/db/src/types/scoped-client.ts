@@ -18,6 +18,7 @@ export interface ScopedDynamicBuilder<T> {
   orderBy: (...columns: unknown[]) => ScopedDynamicBuilder<T>;
   limit: (n: number) => ScopedDynamicBuilder<T>;
   offset: (n: number) => ScopedDynamicBuilder<T>;
+  for: (strength: 'update' | 'no key update' | 'share' | 'key share', config?: { of?: unknown }) => ScopedDynamicBuilder<T>;
   then: <R>(
     onFulfilled?: ((value: T[]) => R | PromiseLike<R>) | null,
     onRejected?: ((reason: unknown) => R | PromiseLike<R>) | null,

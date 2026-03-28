@@ -218,10 +218,12 @@ function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRec
 async function getDbNow(
   tx: { execute: (query: ReturnType<typeof sql>) => Promise<unknown[]> },
 ): Promise<Date> {
-  const rows = await tx.execute(sql`SELECT NOW() AS now`) as { now: Date }[];
+  const rows = await tx.execute(sql`SELECT NOW() AS now`) as { now: unknown }[];
   const row = rows[0];
   if (!row) throw new Error('Failed to fetch DB time');
-  return row.now;
+  // tx.execute returns raw driver results — postgres-js in prepare:false mode
+  // may return timestamps as strings rather than Date objects.
+  return row.now instanceof Date ? row.now : new Date(row.now as string);
 }
 
 function normalizeSelectionIds(selectedCandidateIds: number[] | undefined, maxSelections: number): number[] {
@@ -334,6 +336,13 @@ async function insertAuditEventInTransaction(
   });
 }
 
+/**
+ * Fetch and lock an election row for mutation.
+ * The FOR UPDATE lock intentionally serializes ALL election mutations
+ * (vote casting, open/close/certify/cancel transitions, proxy management,
+ * eligibility snapshots) — not just vote submission. This is acceptable at
+ * current scale and prevents counter drift on totalBallotsCast.
+ */
 async function getElectionForMutation(
   scoped: ReturnType<typeof createScopedClient>,
   electionId: number,
@@ -342,7 +351,7 @@ async function getElectionForMutation(
     elections,
     ELECTION_SELECT_COLUMNS,
     eq(elections.id, electionId),
-  );
+  ).for('update');
 
   const election = rows[0];
   if (!election) {
@@ -724,6 +733,26 @@ export async function castElectionVoteForCommunity(
       throw new UnprocessableEntityError('Selected candidates must belong to this election');
     }
 
+    // Check for an existing submission first — idempotency path.
+    // This check-first approach avoids the PostgreSQL problem where a unique
+    // constraint error inside a transaction aborts the entire transaction,
+    // making subsequent queries fail. The FOR UPDATE lock on the election row
+    // serializes concurrent vote submissions for the same election.
+    const existingSubmission = await getExistingSubmissionForUnit(scoped, electionId, unitId);
+    if (existingSubmission) {
+      const existingCandidateIds = await getBallotCandidateIdsForSubmission(scoped, existingSubmission.id);
+      assertSameLogicalSubmission(existingSubmission, existingCandidateIds, selectedCandidateIds, isAbstention, proxyId);
+
+      return {
+        id: existingSubmission.id,
+        hasVoted: true,
+        submittedAt: existingSubmission.submittedAt.toISOString(),
+        submissionFingerprint: existingSubmission.submissionFingerprint,
+        viaProxy: existingSubmission.isProxyVote,
+        electionStatus: election.status,
+      };
+    }
+
     const submissionFingerprint = createSubmissionFingerprint();
     const voterHash = createVoterHash(election.ballotSalt, unitId, actorUserId, proxyId);
 
@@ -792,22 +821,11 @@ export async function castElectionVoteForCommunity(
         throw error;
       }
 
-      const existing = await getExistingSubmissionForUnit(scoped, electionId, unitId);
-      if (!existing) {
-        throw new AppError('This unit has already submitted a ballot for this election', 409, 'CONFLICT');
-      }
-
-      const existingCandidateIds = await getBallotCandidateIdsForSubmission(scoped, existing.id);
-      assertSameLogicalSubmission(existing, existingCandidateIds, selectedCandidateIds, isAbstention, proxyId);
-
-      return {
-        id: existing.id,
-        hasVoted: true,
-        submittedAt: existing.submittedAt.toISOString(),
-        submissionFingerprint: existing.submissionFingerprint,
-        viaProxy: existing.isProxyVote,
-        electionStatus: election.status,
-      };
+      // Rare race condition: two concurrent submissions for the same unit
+      // slipped past the FOR UPDATE lock window. The unique constraint caught
+      // the duplicate; the client should retry the HTTP request (which will
+      // hit the idempotency check above).
+      throw new AppError('This unit has already submitted a ballot for this election', 409, 'CONFLICT');
     }
   });
 }
