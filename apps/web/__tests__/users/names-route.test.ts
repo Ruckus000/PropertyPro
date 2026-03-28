@@ -1,13 +1,15 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  parseCommunityIdFromQueryMock,
   resolveUserDisplayNamesMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
+  parseCommunityIdFromQueryMock: vi.fn(() => 42),
   resolveUserDisplayNamesMock: vi.fn(),
 }));
 
@@ -19,6 +21,10 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/finance/request', () => ({
+  parseCommunityIdFromQuery: parseCommunityIdFromQueryMock,
+}));
+
 vi.mock('@/lib/utils/resolve-users', () => ({
   resolveUserDisplayNames: resolveUserDisplayNamesMock,
 }));
@@ -26,11 +32,14 @@ vi.mock('@/lib/utils/resolve-users', () => ({
 import { GET } from '../../src/app/api/v1/users/names/route';
 
 describe('GET /api/v1/users/names', () => {
-  it('returns display names for the requested user IDs', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('viewer-1');
-    requireCommunityMembershipMock.mockResolvedValue({
-      communityId: 42,
-    });
+    requireCommunityMembershipMock.mockResolvedValue({ communityId: 42 });
+    parseCommunityIdFromQueryMock.mockReturnValue(42);
+  });
+
+  it('returns display names for the requested user IDs', async () => {
     resolveUserDisplayNamesMock.mockResolvedValue(
       new Map([
         ['11111111-1111-4111-8111-111111111111', 'Alice Example'],
@@ -56,5 +65,21 @@ describe('GET /api/v1/users/names', () => {
         '22222222-2222-4222-8222-222222222222': 'Bob Example',
       },
     });
+  });
+
+  it('returns 403 when user is not a member of the requested community', async () => {
+    // ForbiddenError extends AppError which withErrorHandler recognizes as 403
+    const { ForbiddenError } = await import('@/lib/api/errors');
+    requireCommunityMembershipMock.mockRejectedValue(
+      new ForbiddenError('Not a member of this community'),
+    );
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/users/names?communityId=42&ids=11111111-1111-4111-8111-111111111111',
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(resolveUserDisplayNamesMock).not.toHaveBeenCalled();
   });
 });

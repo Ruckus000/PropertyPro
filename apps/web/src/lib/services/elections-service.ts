@@ -1153,7 +1153,7 @@ export async function certifyElectionForCommunity(
       throw new UnprocessableEntityError('Only closed elections can be certified');
     }
 
-    const certifiedAt = new Date();
+    const certifiedAt = await getDbNow(tx);
     const updated = await updateElectionStatus(scoped, electionId, {
       status: 'certified',
       certifiedByUserId: actorUserId,

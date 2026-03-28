@@ -610,6 +610,13 @@
       "when": 1774810000000,
       "tag": "0127_election_ballot_submissions_fk_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1774820000000,
+      "tag": "0128_election_ballot_submissions_rls_fix",
+      "breakpoints": true
     }
   ]
 }

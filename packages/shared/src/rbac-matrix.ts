@@ -361,6 +361,10 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
       property_manager_admin: { read: true,  write: true  },
     },
   },
+  // Two-tier permission model (same pattern as violations):
+  // - write: true for all roles = eligible voters can cast ballots (POST /vote)
+  // - Admin-only mutations (open/close/certify/cancel, proxy approve/reject)
+  //   additionally check requireElectionsAdminRole() at the route layer.
   elections: {
     policy: {
       owner:                  { read: true,  write: true  },
