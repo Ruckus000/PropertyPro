@@ -14,7 +14,7 @@ import {
   type ProxyStatus,
   units,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
+import { and, asc, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   AppError,
@@ -50,10 +50,37 @@ interface ElectionRecord {
   updatedAt: Date;
 }
 
+export interface ElectionResponseRecord {
+  id: number;
+  communityId: number;
+  title: string;
+  description: string | null;
+  electionType: ElectionType;
+  status: ElectionStatus;
+  isSecretBallot: boolean;
+  maxSelections: number;
+  opensAt: Date;
+  closesAt: Date;
+  quorumPercentage: number;
+  eligibleUnitCount: number;
+  totalBallotsCast: number;
+  certifiedByUserId: string | null;
+  certifiedAt: Date | null;
+  resultsDocumentId: number | null;
+  canceledReason: string | null;
+  createdByUserId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 interface ElectionCandidateRecord {
   [key: string]: unknown;
   id: number;
   electionId: number;
+  label: string;
+  description: string | null;
+  userId: string | null;
+  sortOrder: number;
 }
 
 interface ElectionBallotSubmissionRecord {
@@ -137,6 +164,26 @@ export interface CreateElectionProxyInput {
   grantorUnitId?: number | null;
 }
 
+export interface ElectionDetailForCommunity {
+  election: ElectionResponseRecord;
+  candidates: ElectionCandidateRecord[];
+}
+
+export interface ElectionCandidateResult {
+  candidateId: number;
+  label: string;
+  voteCount: number;
+}
+
+export interface ElectionResultsForCommunity {
+  candidateResults: ElectionCandidateResult[];
+  abstentionCount: number;
+  totalBallotsCast: number;
+  eligibleUnitCount: number;
+  quorumPercentage: number;
+  quorumMet: boolean;
+}
+
 export interface UpdateElectionCertificationInput {
   resultsDocumentId?: number | null;
 }
@@ -209,9 +256,30 @@ function mapElectionRow(row: ElectionRecord): ElectionRecord {
  * `getElectionForMutation` which intentionally retains `ballotSalt` for
  * voter hash generation. Verify this invariant in integration tests.
  */
-function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRecord, 'ballotSalt'> {
+function sanitizeElectionForResponse(election: ElectionRecord): ElectionResponseRecord {
   const { ballotSalt: _ignored, ...safe } = election;
-  return safe;
+  return {
+    id: safe.id,
+    communityId: safe.communityId,
+    title: safe.title,
+    description: safe.description,
+    electionType: safe.electionType,
+    status: safe.status,
+    isSecretBallot: safe.isSecretBallot,
+    maxSelections: safe.maxSelections,
+    opensAt: safe.opensAt,
+    closesAt: safe.closesAt,
+    quorumPercentage: safe.quorumPercentage,
+    eligibleUnitCount: safe.eligibleUnitCount,
+    totalBallotsCast: safe.totalBallotsCast,
+    certifiedByUserId: safe.certifiedByUserId,
+    certifiedAt: safe.certifiedAt,
+    resultsDocumentId: safe.resultsDocumentId,
+    canceledReason: safe.canceledReason,
+    createdByUserId: safe.createdByUserId,
+    createdAt: safe.createdAt,
+    updatedAt: safe.updatedAt,
+  };
 }
 
 /** Fetch the current time from the database to avoid clock skew on vote timing. */
@@ -608,7 +676,7 @@ async function updateElectionStatus(
   scoped: ReturnType<typeof createScopedClient>,
   electionId: number,
   patch: Record<string, unknown>,
-): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
+): Promise<ElectionResponseRecord> {
   const rows = await scoped.update(elections, patch, eq(elections.id, electionId));
   const updated = rows[0];
   if (!updated) {
@@ -621,7 +689,7 @@ async function updateElectionStatus(
 export async function listElectionsForCommunity(
   communityId: number,
   params: ListElectionsParams = {},
-): Promise<Omit<ElectionRecord, 'ballotSalt'>[]> {
+): Promise<ElectionResponseRecord[]> {
   const scoped = createScopedClient(communityId);
   const limit = Math.min(params.limit ?? DEFAULT_ELECTIONS_PAGE_SIZE, MAX_ELECTIONS_PAGE_SIZE);
   const filters = [];
@@ -646,7 +714,7 @@ export async function listElectionsForCommunity(
 export async function getElectionByIdForCommunity(
   communityId: number,
   electionId: number,
-): Promise<Omit<ElectionRecord, 'ballotSalt'> | null> {
+): Promise<ElectionResponseRecord | null> {
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom<ElectionRecord>(
     elections,
@@ -656,6 +724,133 @@ export async function getElectionByIdForCommunity(
 
   const row = rows[0];
   return row ? sanitizeElectionForResponse(mapElectionRow(row as ElectionRecord)) : null;
+}
+
+export async function getElectionDetailForCommunity(
+  communityId: number,
+  electionId: number,
+): Promise<ElectionDetailForCommunity> {
+  const election = await getElectionByIdForCommunity(communityId, electionId);
+  if (!election) {
+    throw new NotFoundError('Election not found');
+  }
+
+  const scoped = createScopedClient(communityId);
+  const candidates = await scoped
+    .selectFrom<ElectionCandidateRecord>(
+      electionCandidates,
+      {
+        id: electionCandidates.id,
+        electionId: electionCandidates.electionId,
+        label: electionCandidates.label,
+        description: electionCandidates.description,
+        userId: electionCandidates.userId,
+        sortOrder: electionCandidates.sortOrder,
+      },
+      eq(electionCandidates.electionId, electionId),
+    )
+    .orderBy(asc(electionCandidates.sortOrder), asc(electionCandidates.id));
+
+  return {
+    election,
+    candidates: candidates.map((candidate) => ({
+      id: candidate.id,
+      electionId: candidate.electionId,
+      label: candidate.label,
+      description: candidate.description ?? null,
+      userId: candidate.userId ?? null,
+      sortOrder: candidate.sortOrder,
+    })),
+  };
+}
+
+export async function getElectionResultsForCommunity(
+  communityId: number,
+  electionId: number,
+): Promise<ElectionResultsForCommunity> {
+  const scoped = createScopedClient(communityId);
+  const detail = await getElectionDetailForCommunity(communityId, electionId);
+  const { election, candidates } = detail;
+
+  if (election.status !== 'closed' && election.status !== 'certified') {
+    throw new UnprocessableEntityError('Election results are available only after the election is closed');
+  }
+
+  const ballots = await scoped.selectFrom<ElectionBallotRecord>(
+    electionBallots,
+    {
+      candidateId: electionBallots.candidateId,
+    },
+    eq(electionBallots.electionId, electionId),
+  );
+
+  const abstentions = await scoped.selectFrom<ElectionBallotSubmissionRecord>(
+    electionBallotSubmissions,
+    {
+      id: electionBallotSubmissions.id,
+    },
+    and(
+      eq(electionBallotSubmissions.electionId, electionId),
+      eq(electionBallotSubmissions.isAbstention, true),
+    ),
+  );
+
+  const voteCounts = new Map<number, number>();
+  for (const ballot of ballots) {
+    voteCounts.set(
+      ballot.candidateId,
+      (voteCounts.get(ballot.candidateId) ?? 0) + 1,
+    );
+  }
+
+  const quorumThreshold = Math.ceil(
+    (election.eligibleUnitCount * election.quorumPercentage) / 100,
+  );
+
+  return {
+    candidateResults: candidates.map((candidate) => ({
+      candidateId: candidate.id,
+      label: candidate.label,
+      voteCount: voteCounts.get(candidate.id) ?? 0,
+    })),
+    abstentionCount: abstentions.length,
+    totalBallotsCast: election.totalBallotsCast,
+    eligibleUnitCount: election.eligibleUnitCount,
+    quorumPercentage: election.quorumPercentage,
+    quorumMet: election.totalBallotsCast >= quorumThreshold,
+  };
+}
+
+export async function listElectionProxiesForCommunity(
+  communityId: number,
+  electionId: number,
+): Promise<ElectionProxyRecord[]> {
+  const scoped = createScopedClient(communityId);
+
+  const proxies = await scoped
+    .selectFrom<ElectionProxyRecord>(
+      electionProxies,
+      {
+        id: electionProxies.id,
+        electionId: electionProxies.electionId,
+        grantorUserId: electionProxies.grantorUserId,
+        grantorUnitId: electionProxies.grantorUnitId,
+        proxyHolderUserId: electionProxies.proxyHolderUserId,
+        status: electionProxies.status,
+        approvedByUserId: electionProxies.approvedByUserId,
+        approvedAt: electionProxies.approvedAt,
+        createdAt: electionProxies.createdAt,
+        updatedAt: electionProxies.updatedAt,
+      },
+      eq(electionProxies.electionId, electionId),
+    )
+    .orderBy(desc(electionProxies.createdAt), desc(electionProxies.id));
+
+  return proxies.map((proxy) => ({
+    ...proxy,
+    approvedByUserId: proxy.approvedByUserId ?? null,
+    approvedAt: proxy.approvedAt ?? null,
+  }));
 }
 
 export async function getMyElectionVoteReceiptForCommunity(
@@ -835,7 +1030,7 @@ export async function openElectionForCommunity(
   electionId: number,
   actorUserId: string,
   requestId?: string | null,
-): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
+): Promise<ElectionResponseRecord> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -891,7 +1086,7 @@ export async function closeElectionForCommunity(
   electionId: number,
   actorUserId: string,
   requestId?: string | null,
-): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
+): Promise<ElectionResponseRecord> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -934,7 +1129,7 @@ export async function certifyElectionForCommunity(
   actorUserId: string,
   input: UpdateElectionCertificationInput = {},
   requestId?: string | null,
-): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
+): Promise<ElectionResponseRecord> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {
@@ -982,7 +1177,7 @@ export async function cancelElectionForCommunity(
   actorUserId: string,
   input: CancelElectionInput,
   requestId?: string | null,
-): Promise<Omit<ElectionRecord, 'ballotSalt'>> {
+): Promise<ElectionResponseRecord> {
   const db = createElectionMutationClient();
 
   return db.transaction(async (tx) => {

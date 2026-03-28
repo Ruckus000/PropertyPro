@@ -6,19 +6,39 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
   requireElectionsEnabled,
+  requireElectionsReadPermission,
   requireElectionsWritePermission,
 } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { createElectionProxyForCommunity } from '@/lib/services/elections-service';
+import {
+  createElectionProxyForCommunity,
+  listElectionProxiesForCommunity,
+} from '@/lib/services/elections-service';
 
 const createElectionProxySchema = z.object({
   communityId: z.number().int().positive(),
   proxyHolderUserId: z.string().uuid(),
   grantorUnitId: z.number().int().positive().nullable().optional(),
 });
+
+export const GET = withErrorHandler(
+  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
+    const params = await context?.params;
+    const electionId = parsePositiveInt(params?.id ?? '', 'election id');
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromQuery(req);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+
+    requireElectionsEnabled(membership);
+    requireElectionsReadPermission(membership);
+
+    const data = await listElectionProxiesForCommunity(communityId, electionId);
+    return NextResponse.json({ data });
+  },
+);
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {

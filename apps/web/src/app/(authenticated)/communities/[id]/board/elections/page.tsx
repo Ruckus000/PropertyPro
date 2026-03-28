@@ -16,5 +16,5 @@ export default async function BoardElectionsPage({ params }: PageProps) {
   requireElectionsEnabled(membership);
   requireElectionsReadPermission(membership);
 
-  return <BoardElectionsPanel communityId={communityId} />;
+  return <BoardElectionsPanel communityId={communityId} isAdmin={membership.isAdmin} userId={userId} />;
 }
