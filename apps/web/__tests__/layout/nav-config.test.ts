@@ -110,14 +110,14 @@ describe('getVisibleItems', () => {
     expect(ids).toContain('documents');
     expect(ids).toContain('meetings');
     expect(ids).toContain('announcements');
-    expect(ids).toContain('maintenance');
+    expect(ids).toContain('board');
+    expect(ids).toContain('operations');
   });
 
   it('hides admin items from owners', () => {
     const items = getVisibleItems(NAV_ITEMS, 'owner', ALL_FEATURES);
     const ids = items.map((i) => i.id);
     expect(ids).not.toContain('compliance');
-    expect(ids).not.toContain('maintenance-inbox');
     expect(ids).not.toContain('contracts');
     expect(ids).not.toContain('audit-trail');
   });
@@ -132,7 +132,6 @@ describe('getVisibleItems', () => {
     const items = getVisibleItems(NAV_ITEMS, 'board_member', ALL_FEATURES);
     const ids = items.map((i) => i.id);
     expect(ids).toContain('compliance');
-    expect(ids).toContain('maintenance-inbox');
     expect(ids).toContain('contracts');
     expect(ids).toContain('audit-trail');
   });
@@ -185,9 +184,9 @@ describe('getActiveItemId', () => {
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance')).toBe('finance');
   });
 
-  it('matches maintenance paths distinctly', () => {
-    expect(getActiveItemId(NAV_ITEMS, '/maintenance/submit')).toBe('maintenance');
-    expect(getActiveItemId(NAV_ITEMS, '/maintenance/inbox')).toBe('maintenance-inbox');
+  it('matches board and operations paths', () => {
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/board/polls')).toBe('board');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/operations')).toBe('operations');
   });
 
   it('matches PM paths', () => {
