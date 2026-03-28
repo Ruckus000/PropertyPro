@@ -50,6 +50,7 @@ export function PollVotingSection({
 
   const hasVoted = data?.hasVoted === true;
   const selected = hasVoted ? data.selectedOptions : selectedOptions;
+  const inputDisabled = hasVoted || !isActive || castVote.isPending;
 
   function toggleOption(option: string, checked: boolean) {
     if (pollType === 'single_choice') {
@@ -73,7 +74,7 @@ export function PollVotingSection({
         />
       ) : null}
 
-      <div className="space-y-2">
+      <div className="space-y-2" {...(pollType === 'single_choice' ? { role: 'radiogroup' } : {})}>
         {options.map((option) => {
           const checked = selected.includes(option);
 
@@ -86,11 +87,22 @@ export function PollVotingSection({
                 (hasVoted || !isActive) && 'cursor-default',
               )}
             >
-              <Checkbox
-                checked={checked}
-                disabled={hasVoted || !isActive || castVote.isPending}
-                onCheckedChange={(value) => toggleOption(option, value === true)}
-              />
+              {pollType === 'single_choice' ? (
+                <input
+                  type="radio"
+                  name={`poll-${pollId}`}
+                  checked={checked}
+                  disabled={inputDisabled}
+                  onChange={(e) => toggleOption(option, e.target.checked)}
+                  className="h-4 w-4 accent-interactive-primary"
+                />
+              ) : (
+                <Checkbox
+                  checked={checked}
+                  disabled={inputDisabled}
+                  onCheckedChange={(value) => toggleOption(option, value === true)}
+                />
+              )}
               <span className="flex-1 text-sm text-content">{option}</span>
               {hasVoted && checked ? <CheckCircle2 className="h-4 w-4 text-status-success" aria-hidden="true" /> : null}
             </label>

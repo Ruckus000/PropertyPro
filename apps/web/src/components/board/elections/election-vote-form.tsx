@@ -62,15 +62,19 @@ export function ElectionVoteForm({
   }
 
   async function handleSubmit() {
-    const data = isAbstaining
-      ? await castVote.mutateAsync({ isAbstention: true })
-      : await castVote.mutateAsync({ selectedCandidateIds });
+    try {
+      const data = isAbstaining
+        ? await castVote.mutateAsync({ isAbstention: true })
+        : await castVote.mutateAsync({ selectedCandidateIds });
 
-    setSubmittedReceipt({
-      submissionFingerprint: data.submissionFingerprint,
-      submittedAt: new Date().toISOString(),
-    });
-    setReviewOpen(false);
+      setSubmittedReceipt({
+        submissionFingerprint: data.submissionFingerprint,
+        submittedAt: new Date().toISOString(),
+      });
+      setReviewOpen(false);
+    } catch {
+      // Error is surfaced via castVote.error in the rendered AlertBanner
+    }
   }
 
   const selectionSummary = isAbstaining

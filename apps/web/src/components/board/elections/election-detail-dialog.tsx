@@ -94,7 +94,7 @@ export function ElectionDetailDialog({
               </div>
             </div>
 
-            {data.election.status === 'open' && !receiptQuery.data?.hasVoted ? (
+            {data.election.status === 'open' && !receiptQuery.isLoading && !receiptQuery.data?.hasVoted ? (
               <>
                 <Separator />
                 <ElectionVoteForm
