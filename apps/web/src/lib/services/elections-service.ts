@@ -1000,54 +1000,58 @@ export async function createElectionProxyForCommunity(
   input: CreateElectionProxyInput,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  const scoped = createScopedClient(communityId);
-  const election = await getElectionForMutation(scoped, electionId);
+  const db = createElectionMutationClient();
 
-  if (!electionStatusAllowsProxyDesignation(election.status)) {
-    throw new UnprocessableEntityError('Proxy designations are closed for this election');
-  }
+  return db.transaction(async (tx) => {
+    const scoped = createElectionScopedClient(communityId, tx);
+    const election = await getElectionForMutation(scoped, electionId);
 
-  const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
-  const grantorUnitId = input.grantorUnitId ?? (await requireActorUnitId(scoped, actorUserId));
-  if (!actorUnitIds.includes(grantorUnitId)) {
-    throw new ForbiddenError('You are not authorized to designate a proxy for that unit');
-  }
-
-  try {
-    const [proxy] = await scoped.insert(electionProxies, {
-      electionId,
-      grantorUserId: actorUserId,
-      grantorUnitId,
-      proxyHolderUserId: input.proxyHolderUserId,
-      status: 'pending',
-    });
-
-    if (!proxy) {
-      throw new Error('Failed to create proxy designation');
+    if (!electionStatusAllowsProxyDesignation(election.status)) {
+      throw new UnprocessableEntityError('Proxy designations are closed for this election');
     }
 
-    const typedProxy = proxy as ElectionProxyRecord;
-    await insertAuditEventInTransaction(createElectionMutationClient(), {
-      userId: actorUserId,
-      action: 'proxy_designated',
-      resourceType: 'election_proxy',
-      resourceId: String(typedProxy.id),
-      communityId,
-      metadata: {
+    const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
+    const grantorUnitId = input.grantorUnitId ?? (await requireActorUnitId(scoped, actorUserId));
+    if (!actorUnitIds.includes(grantorUnitId)) {
+      throw new ForbiddenError('You are not authorized to designate a proxy for that unit');
+    }
+
+    try {
+      const [proxy] = await scoped.insert(electionProxies, {
         electionId,
-        status: typedProxy.status,
-        requestId: requestId ?? null,
-      },
-    });
+        grantorUserId: actorUserId,
+        grantorUnitId,
+        proxyHolderUserId: input.proxyHolderUserId,
+        status: 'pending',
+      });
 
-    return typedProxy;
-  } catch (error) {
-    if (isUniqueConstraintError(error)) {
-      throw new AppError('This unit already has a proxy designation for the election', 409, 'CONFLICT');
+      if (!proxy) {
+        throw new Error('Failed to create proxy designation');
+      }
+
+      const typedProxy = proxy as ElectionProxyRecord;
+      await insertAuditEventInTransaction(tx, {
+        userId: actorUserId,
+        action: 'proxy_designated',
+        resourceType: 'election_proxy',
+        resourceId: String(typedProxy.id),
+        communityId,
+        metadata: {
+          electionId,
+          status: typedProxy.status,
+          requestId: requestId ?? null,
+        },
+      });
+
+      return typedProxy;
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new AppError('This unit already has a proxy designation for the election', 409, 'CONFLICT');
+      }
+
+      throw error;
     }
-
-    throw error;
-  }
+  });
 }
 
 async function updateProxyStatusForCommunity(
@@ -1058,74 +1062,78 @@ async function updateProxyStatusForCommunity(
   nextStatus: Exclude<ProxyStatus, 'pending'>,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<ElectionProxyRecord>(
-    electionProxies,
-    {
-      id: electionProxies.id,
-      electionId: electionProxies.electionId,
-      grantorUserId: electionProxies.grantorUserId,
-      grantorUnitId: electionProxies.grantorUnitId,
-      proxyHolderUserId: electionProxies.proxyHolderUserId,
-      status: electionProxies.status,
-      approvedByUserId: electionProxies.approvedByUserId,
-      approvedAt: electionProxies.approvedAt,
-      createdAt: electionProxies.createdAt,
-      updatedAt: electionProxies.updatedAt,
-    },
-    and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
-  );
+  const db = createElectionMutationClient();
 
-  const proxy = (rows[0] as ElectionProxyRecord | undefined) ?? null;
-  if (!proxy) {
-    throw new NotFoundError('Proxy designation not found');
-  }
+  return db.transaction(async (tx) => {
+    const scoped = createElectionScopedClient(communityId, tx);
+    const rows = await scoped.selectFrom<ElectionProxyRecord>(
+      electionProxies,
+      {
+        id: electionProxies.id,
+        electionId: electionProxies.electionId,
+        grantorUserId: electionProxies.grantorUserId,
+        grantorUnitId: electionProxies.grantorUnitId,
+        proxyHolderUserId: electionProxies.proxyHolderUserId,
+        status: electionProxies.status,
+        approvedByUserId: electionProxies.approvedByUserId,
+        approvedAt: electionProxies.approvedAt,
+        createdAt: electionProxies.createdAt,
+        updatedAt: electionProxies.updatedAt,
+      },
+      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+    );
 
-  if (proxy.status === nextStatus) {
-    return proxy;
-  }
+    const proxy = (rows[0] as ElectionProxyRecord | undefined) ?? null;
+    if (!proxy) {
+      throw new NotFoundError('Proxy designation not found');
+    }
 
-  const patch: Record<string, unknown> = { status: nextStatus };
-  if (nextStatus === 'approved') {
-    patch.approvedByUserId = actorUserId;
-    patch.approvedAt = new Date();
-  } else {
-    patch.approvedByUserId = null;
-    patch.approvedAt = null;
-  }
+    if (proxy.status === nextStatus) {
+      return proxy;
+    }
 
-  const updatedRows = await scoped.update(
-    electionProxies,
-    patch,
-    and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
-  );
+    const patch: Record<string, unknown> = { status: nextStatus };
+    if (nextStatus === 'approved') {
+      patch.approvedByUserId = actorUserId;
+      patch.approvedAt = new Date();
+    } else {
+      patch.approvedByUserId = null;
+      patch.approvedAt = null;
+    }
 
-  const updated = updatedRows[0];
-  if (!updated) {
-    throw new NotFoundError('Proxy designation not found');
-  }
+    const updatedRows = await scoped.update(
+      electionProxies,
+      patch,
+      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+    );
 
-  const actionMap: Record<Exclude<ProxyStatus, 'pending'>, AuditAction> = {
-    approved: 'proxy_approved',
-    rejected: 'proxy_rejected',
-    revoked: 'proxy_revoked',
-  };
+    const updated = updatedRows[0];
+    if (!updated) {
+      throw new NotFoundError('Proxy designation not found');
+    }
 
-  await insertAuditEventInTransaction(createElectionMutationClient(), {
-    userId: actorUserId,
-    action: actionMap[nextStatus],
-    resourceType: 'election_proxy',
-    resourceId: String(proxyId),
-    communityId,
-    oldValues: { status: proxy.status },
-    newValues: { status: nextStatus },
-    metadata: {
-      electionId,
-      requestId: requestId ?? null,
-    },
+    const actionMap: Record<Exclude<ProxyStatus, 'pending'>, AuditAction> = {
+      approved: 'proxy_approved',
+      rejected: 'proxy_rejected',
+      revoked: 'proxy_revoked',
+    };
+
+    await insertAuditEventInTransaction(tx, {
+      userId: actorUserId,
+      action: actionMap[nextStatus],
+      resourceType: 'election_proxy',
+      resourceId: String(proxyId),
+      communityId,
+      oldValues: { status: proxy.status },
+      newValues: { status: nextStatus },
+      metadata: {
+        electionId,
+        requestId: requestId ?? null,
+      },
+    });
+
+    return updated as ElectionProxyRecord;
   });
-
-  return updated as ElectionProxyRecord;
 }
 
 export async function approveElectionProxyForCommunity(
