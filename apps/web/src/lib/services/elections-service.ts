@@ -645,8 +645,11 @@ export async function getMyElectionVoteReceiptForCommunity(
   electionId: number,
   actorUserId: string,
 ): Promise<MyElectionVoteReceipt> {
+  const election = await getElectionByIdForCommunity(communityId, electionId);
+  if (!election) {
+    throw new NotFoundError('Election not found');
+  }
   const scoped = createScopedClient(communityId);
-  const election = await getElectionForMutation(scoped, electionId);
   const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
   const submission = await getExistingReceiptForActorUnits(scoped, electionId, actorUnitIds);
 
@@ -655,7 +658,7 @@ export async function getMyElectionVoteReceiptForCommunity(
     submittedAt: submission?.submittedAt.toISOString() ?? null,
     submissionFingerprint: submission?.submissionFingerprint ?? null,
     viaProxy: submission?.isProxyVote ?? false,
-    electionStatus: election.status,
+    electionStatus: election.status as ElectionStatus,
   };
 }
 
