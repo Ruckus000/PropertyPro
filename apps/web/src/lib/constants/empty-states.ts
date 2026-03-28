@@ -91,6 +91,30 @@ export const EMPTY_STATE_CONFIGS = {
     description: "All signature requests have been completed.",
     icon: "check",
   },
+  no_board_polls: {
+    title: "No active polls yet",
+    description:
+      "Polls will appear here once community leaders create a voting question.",
+    icon: "inbox",
+  },
+  no_board_threads: {
+    title: "Start the board conversation",
+    description:
+      "Forum threads will show up here once someone opens a discussion.",
+    icon: "users",
+  },
+  no_board_elections: {
+    title: "No elections to review",
+    description:
+      "Elections will appear here after the attorney-review gate is enabled and a ballot is created.",
+    icon: "shield-check",
+  },
+  no_operations_items: {
+    title: "Nothing in operations right now",
+    description:
+      "Requests, work orders, and reservations will show up here as they move through the workflow.",
+    icon: "wrench",
+  },
   no_results: {
     title: "No results found",
     description:

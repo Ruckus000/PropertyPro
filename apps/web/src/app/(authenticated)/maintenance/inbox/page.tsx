@@ -11,6 +11,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole } from '@propertypro/shared';
 import { AdminInbox } from '@/components/maintenance/AdminInbox';
+import { AlertBanner } from '@/components/shared/alert-banner';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -41,6 +42,12 @@ export default async function MaintenanceInboxPage({ searchParams }: PageProps) 
 
   return (
     <>
+      <AlertBanner
+        status="info"
+        title="Operations is the new home for maintenance."
+        description="This legacy inbox is temporary. Use Operations for the unified requests and work-order workflow."
+        className="mb-6"
+      />
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">Maintenance Inbox</h1>
         <p className="mt-1 text-sm text-content-secondary">

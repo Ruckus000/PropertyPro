@@ -200,8 +200,8 @@ describe("P0-01 Design Tokens", () => {
       expect(semanticColors.surface.inverse).toBe("var(--surface-inverse)");
     });
 
-    it("defines the page surface as surface-page-warm", () => {
-      expect(cssContent).toContain("--surface-page: var(--surface-page-warm)");
+    it("defines the page surface referencing gray-50", () => {
+      expect(cssContent).toContain("--surface-page: var(--gray-50)");
     });
 
     it("border colors reference correct CSS variables", () => {
@@ -399,13 +399,9 @@ describe("P0-01 Design Tokens", () => {
     });
   });
 
-  describe("Surface Page Warm Token", () => {
-    it("--surface-page-warm primitive is defined with value #F5F5F4", () => {
-      expect(cssContent).toContain("--surface-page-warm: #F5F5F4");
-    });
-
-    it("--surface-page references --surface-page-warm", () => {
-      expect(cssContent).toContain("--surface-page: var(--surface-page-warm)");
+  describe("Surface Page Token", () => {
+    it("--surface-page references --gray-50", () => {
+      expect(cssContent).toContain("--surface-page: var(--gray-50)");
     });
   });
 

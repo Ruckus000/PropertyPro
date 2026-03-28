@@ -87,6 +87,11 @@ export interface PollResults {
   }>;
 }
 
+export interface PollMyVote {
+  hasVoted: boolean;
+  selectedOptions: string[];
+}
+
 export interface CreateForumThreadInput {
   title: string;
   body: string;
@@ -386,6 +391,36 @@ export async function getPollResultsForCommunity(
         percentage,
       };
     }),
+  };
+}
+
+export async function getMyPollVoteForCommunity(
+  communityId: number,
+  pollId: number,
+  actorUserId: string,
+): Promise<PollMyVote> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<PollVoteRecord>(
+    pollVotes,
+    {
+      id: pollVotes.id,
+      selectedOptions: pollVotes.selectedOptions,
+      createdAt: pollVotes.createdAt,
+    },
+    and(eq(pollVotes.pollId, pollId), eq(pollVotes.userId, actorUserId)),
+  );
+
+  const vote = rows[0];
+  if (!vote) {
+    return {
+      hasVoted: false,
+      selectedOptions: [],
+    };
+  }
+
+  return {
+    hasVoted: true,
+    selectedOptions: mapVoteRow(vote).selectedOptions,
   };
 }
 

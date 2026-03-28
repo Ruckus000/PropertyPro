@@ -1,21 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Loader2, Save, RotateCcw } from 'lucide-react';
 import {
   COMMUNITY_FEATURES,
   type CommunityType,
   type CommunityFeatures,
 } from '@propertypro/shared';
-
-interface CommunitySettings {
-  announcementsWriteLevel?: 'all_members' | 'admin_only';
-  meetingsWriteLevel?: 'all_members' | 'admin_only';
-  meetingDocumentsWriteLevel?: 'all_members' | 'admin_only';
-  unitsWriteLevel?: 'all_members' | 'admin_only';
-  leasesWriteLevel?: 'all_members' | 'admin_only';
-  documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
-}
+import type {
+  CommunitySettings,
+  CommunityWriteSettings,
+} from './community-settings';
 
 interface CommunityData {
   id: number;
@@ -37,7 +33,7 @@ interface CommunitySettingsEditorProps {
 }
 
 interface WriteLevelConfig {
-  key: keyof CommunitySettings;
+  key: keyof CommunityWriteSettings;
   label: string;
   helpText: string;
   /** Feature flag key from CommunityFeatures — if set, toggle is only shown when the flag is true. */
@@ -99,6 +95,7 @@ function getVisibleWriteLevelToggles(communityType: CommunityType): WriteLevelCo
 }
 
 export function CommunitySettingsEditor({ community: initial }: CommunitySettingsEditorProps) {
+  const router = useRouter();
   const [form, setForm] = useState({
     name: initial.name,
     address_line1: initial.address_line1 ?? '',
@@ -123,10 +120,24 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
     setSuccess(false);
   }
 
-  function handleWriteLevel(key: keyof CommunitySettings, value: 'all_members' | 'admin_only') {
+  function handleWriteLevel(
+    key: keyof CommunityWriteSettings,
+    value: 'all_members' | 'admin_only',
+  ) {
     setForm((prev) => ({
       ...prev,
       community_settings: { ...prev.community_settings, [key]: value },
+    }));
+    setSuccess(false);
+  }
+
+  function handleAttorneyReviewChange(value: boolean) {
+    setForm((prev) => ({
+      ...prev,
+      community_settings: {
+        ...prev.community_settings,
+        electionsAttorneyReviewed: value,
+      },
     }));
     setSuccess(false);
   }
@@ -184,6 +195,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
       }
 
       setSuccess(true);
+      router.refresh();
     } catch {
       setError('Network error');
     } finally {
@@ -292,6 +304,34 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             </select>
           </div>
         </div>
+      </div>
+
+      {/* Elections Attorney Review */}
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">Elections Attorney Review</h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              This is a legal readiness gate. Platform admins can mark the community as attorney-reviewed before elections are enabled for the Board.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleAttorneyReviewChange(!form.community_settings.electionsAttorneyReviewed)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+              form.community_settings.electionsAttorneyReviewed ? 'bg-blue-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                form.community_settings.electionsAttorneyReviewed ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-gray-500">
+          When enabled, board elections can be surfaced to tenant-facing users on this community.
+        </p>
       </div>
 
       {/* Write-Level Restrictions */}

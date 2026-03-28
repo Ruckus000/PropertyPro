@@ -357,11 +357,20 @@ export type MoveChecklist = typeof moveChecklists.$inferSelect;
 export type NewMoveChecklist = typeof moveChecklists.$inferInsert;
 
 // Elections (Phase 1D)
-import type { elections, electionCandidates, electionBallots, electionProxies, electionEligibilitySnapshots } from './elections';
+import type {
+  elections,
+  electionCandidates,
+  electionBallotSubmissions,
+  electionBallots,
+  electionProxies,
+  electionEligibilitySnapshots,
+} from './elections';
 export type Election = typeof elections.$inferSelect;
 export type NewElection = typeof elections.$inferInsert;
 export type ElectionCandidate = typeof electionCandidates.$inferSelect;
 export type NewElectionCandidate = typeof electionCandidates.$inferInsert;
+export type ElectionBallotSubmission = typeof electionBallotSubmissions.$inferSelect;
+export type NewElectionBallotSubmission = typeof electionBallotSubmissions.$inferInsert;
 export type ElectionBallot = typeof electionBallots.$inferSelect;
 export type NewElectionBallot = typeof electionBallots.$inferInsert;
 export type ElectionProxy = typeof electionProxies.$inferSelect;

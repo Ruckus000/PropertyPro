@@ -78,6 +78,9 @@ const SOFT_DELETE_EXEMPT_TABLES: ReadonlySet<string> = new Set([
  */
 const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'compliance_audit_log',
+  'election_ballot_submissions',
+  'election_ballots',
+  'election_eligibility_snapshots',
   'maintenance_comments',
   'esign_events',
 ]);

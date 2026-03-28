@@ -4,7 +4,8 @@
  * Tables:
  * - elections: Election/ballot measure definitions with lifecycle status
  * - election_candidates: Candidates or options on a ballot
- * - election_ballots: Immutable append-only vote records (one per unit per candidate)
+ * - election_ballot_submissions: Immutable logical ballot submissions (one per unit per election)
+ * - election_ballots: Immutable append-only vote records (one per selected candidate)
  * - election_proxies: Proxy voting designations with admin approval workflow
  * - election_eligibility_snapshots: Point-in-time eligibility snapshot at election open
  */
@@ -122,6 +123,42 @@ export const electionCandidates = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// election_ballot_submissions (append-only — NO updatedAt, NO deletedAt)
+// ---------------------------------------------------------------------------
+
+export const electionBallotSubmissions = pgTable(
+  'election_ballot_submissions',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    communityId: bigint('community_id', { mode: 'number' })
+      .notNull()
+      .references(() => communities.id, { onDelete: 'cascade' }),
+    electionId: bigint('election_id', { mode: 'number' })
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    unitId: bigint('unit_id', { mode: 'number' })
+      .notNull()
+      .references(() => units.id, { onDelete: 'cascade' }),
+    submittedByUserId: uuid('submitted_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    submissionFingerprint: text('submission_fingerprint').notNull(),
+    voterHash: text('voter_hash').notNull(),
+    isAbstention: boolean('is_abstention').notNull().default(false),
+    isProxyVote: boolean('is_proxy_vote').notNull().default(false),
+    proxyId: bigint('proxy_id', { mode: 'number' }).references(() => electionProxies.id, {
+      onDelete: 'set null',
+    }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_election_ballot_submissions_election').on(table.electionId, table.submittedAt),
+    index('idx_election_ballot_submissions_unit').on(table.electionId, table.unitId),
+    uniqueIndex('uq_election_ballot_submissions_unit').on(table.electionId, table.unitId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // election_ballots (append-only — NO updatedAt, NO deletedAt)
 // ---------------------------------------------------------------------------
 
@@ -135,6 +172,9 @@ export const electionBallots = pgTable(
     electionId: bigint('election_id', { mode: 'number' })
       .notNull()
       .references(() => elections.id, { onDelete: 'cascade' }),
+    submissionId: bigint('submission_id', { mode: 'number' })
+      .notNull()
+      .references(() => electionBallotSubmissions.id, { onDelete: 'cascade' }),
     candidateId: bigint('candidate_id', { mode: 'number' })
       .notNull()
       .references(() => electionCandidates.id, { onDelete: 'cascade' }),
@@ -151,6 +191,7 @@ export const electionBallots = pgTable(
   (table) => [
     index('idx_election_ballots_election').on(table.electionId),
     index('idx_election_ballots_unit').on(table.electionId, table.unitId),
+    index('idx_election_ballots_submission').on(table.submissionId),
     uniqueIndex('uq_election_ballots_unit_candidate').on(
       table.electionId,
       table.unitId,

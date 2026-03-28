@@ -28,6 +28,7 @@ const patchSchema = z.object({
     unitsWriteLevel: writeLevel.optional(),
     leasesWriteLevel: writeLevel.optional(),
     documentCategoriesWriteLevel: writeLevel.optional(),
+    electionsAttorneyReviewed: z.boolean().optional(),
   }).optional(),
 }).strict();
 
@@ -139,28 +140,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // Audit log: record community_settings changes
+  // Audit the legal-readiness gate with a dedicated settings_changed event.
   if (community_settings !== undefined) {
     const oldSettings = (existing as Record<string, unknown>).community_settings ?? {};
-    const settingsChanged = JSON.stringify(oldSettings) !== JSON.stringify(community_settings);
-    if (settingsChanged) {
-      // Fire-and-forget: audit log failure should not block the response
-      db.from('compliance_audit_log')
-        .insert({
-          user_id: admin.id,
-          community_id: communityId,
-          action: 'settings_changed',
-          resource_type: 'community_settings',
-          resource_id: String(communityId),
-          old_values: oldSettings as Record<string, unknown>,
-          new_values: community_settings as Record<string, unknown>,
-          metadata: { source: 'admin_platform', admin_email: admin.email },
-        } as never)
-        .then(({ error: auditError }) => {
-          if (auditError) {
-            console.error('[audit] Failed to log settings change:', auditError.message);
-          }
-        });
+    const oldAttorneyReviewed = (oldSettings as Record<string, unknown>).electionsAttorneyReviewed === true;
+    const nextAttorneyReviewed = community_settings.electionsAttorneyReviewed === true;
+    if (oldAttorneyReviewed !== nextAttorneyReviewed) {
+      const { logAuditEvent } = await import('@propertypro/db');
+      await logAuditEvent({
+        userId: admin.id,
+        action: 'settings_changed',
+        resourceType: 'community_settings',
+        resourceId: String(communityId),
+        communityId,
+        oldValues: { electionsAttorneyReviewed: oldAttorneyReviewed },
+        newValues: { electionsAttorneyReviewed: nextAttorneyReviewed },
+        metadata: {
+          settingName: 'electionsAttorneyReviewed',
+          oldValue: oldAttorneyReviewed,
+          newValue: nextAttorneyReviewed,
+        },
+      });
     }
   }
 

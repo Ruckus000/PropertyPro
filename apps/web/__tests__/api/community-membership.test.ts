@@ -61,6 +61,7 @@ describe('requireCommunityMembership', () => {
       isDemo: false,
       trialEndsAt: null,
       demoExpiresAt: null,
+      electionsAttorneyReviewed: false,
     });
   });
 

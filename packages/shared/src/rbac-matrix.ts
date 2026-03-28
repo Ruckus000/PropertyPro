@@ -37,6 +37,7 @@ export const RBAC_RESOURCES = [
   'compliance',
   'maintenance',
   'contracts',
+  'elections',
   'finances',
   'violations',
   'arc_submissions',
@@ -75,6 +76,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'violations',
   'arc_submissions',
   'polls',
+  'elections',
   'work_orders',
   'amenities',
   'packages',
@@ -358,6 +360,22 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
       site_manager:           { read: true,  write: true  },
       property_manager_admin: { read: true,  write: true  },
     },
+  },
+  // Two-tier permission model (same pattern as violations):
+  // - write: true for all roles = eligible voters can cast ballots (POST /vote)
+  // - Admin-only mutations (open/close/certify/cancel, proxy approve/reject)
+  //   additionally check requireElectionsAdminRole() at the route layer.
+  elections: {
+    policy: {
+      owner:                  { read: true,  write: true  },
+      tenant:                 { read: true,  write: true  },
+      board_member:           { read: true,  write: true  },
+      board_president:        { read: true,  write: true  },
+      cam:                    { read: true,  write: true  },
+      site_manager:           { read: true,  write: true  },
+      property_manager_admin: { read: true,  write: true  },
+    },
+    excludedCommunityTypes: ['apartment'],
   },
   work_orders: {
     policy: {

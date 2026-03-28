@@ -68,6 +68,13 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/site-template.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
+  // Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch
+  // after the caller has already verified tenant membership and reservation ownership scope.
+  resolve(repoRoot, 'apps/web/src/lib/services/work-orders-service.ts'),
+  // Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
+  resolve(repoRoot, 'apps/web/src/lib/services/elections-service.ts'),
+  // Community-scoped user display-name resolution for board/forum and elections UX
+  resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing
   resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
   // Invitation acceptance — creates Supabase auth user via admin client (service_role)

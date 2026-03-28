@@ -28,17 +28,25 @@ export const STATUS_CONFIG = {
   compliant: { variant: "success", label: "Compliant", icon: "success", priority: 40 },
   completed: { variant: "success", label: "Completed", icon: "success", priority: 50 },
   satisfied: { variant: "success", label: "Satisfied", icon: "success", priority: 45 },
+  certified: { variant: "success", label: "Certified", icon: "success", priority: 48 },
 
   pending: { variant: "warning", label: "Due Soon", icon: "warning", priority: 10 },
   due_soon: { variant: "warning", label: "Due Soon", icon: "warning", priority: 10 },
+  assigned: { variant: "warning", label: "Assigned", icon: "warning", priority: 18 },
   in_progress: { variant: "warning", label: "In Progress", icon: "warning", priority: 20 },
   review: { variant: "warning", label: "Under Review", icon: "warning", priority: 15 },
 
   overdue: { variant: "danger", label: "Overdue", icon: "danger", priority: 0 },
   rejected: { variant: "danger", label: "Rejected", icon: "danger", priority: 5 },
+  canceled: { variant: "danger", label: "Canceled", icon: "danger", priority: 3 },
+  cancelled: { variant: "danger", label: "Cancelled", icon: "danger", priority: 3 },
 
   submitted: { variant: "info", label: "Submitted", icon: "info", priority: 30 },
+  created: { variant: "info", label: "Created", icon: "info", priority: 22 },
+  confirmed: { variant: "info", label: "Confirmed", icon: "info", priority: 24 },
   open: { variant: "info", label: "Open", icon: "info", priority: 25 },
+  closed: { variant: "neutral", label: "Closed", icon: "neutral", priority: 55 },
+  draft: { variant: "neutral", label: "Draft", icon: "neutral", priority: 12 },
 
   brand: { variant: "brand", label: "Good", icon: "info", priority: 60 },
   not_applicable: { variant: "neutral", label: "N/A", icon: "neutral", priority: 100 },

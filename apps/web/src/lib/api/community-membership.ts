@@ -32,6 +32,8 @@ export interface CommunityMembership {
   trialEndsAt: Date | null;
   /** When the demo expires (hard lockout). Null for non-demo communities. */
   demoExpiresAt: Date | null;
+  /** Whether attorney review has cleared board elections for this community. */
+  electionsAttorneyReviewed: boolean;
 }
 
 /**
@@ -94,6 +96,11 @@ export async function requireCommunityMembership(
     community['communityType'],
     `requireCommunityMembership(communityId=${communityId}) community`,
   );
+  const communitySettings = community['communitySettings'];
+  const electionsAttorneyReviewed =
+    typeof communitySettings === 'object'
+    && communitySettings !== null
+    && (communitySettings as Record<string, unknown>).electionsAttorneyReviewed === true;
 
   // Normalize manager permissions from JSONB on every read.
   // For preset-based managers, fall back to RBAC matrix defaults for resources
@@ -123,5 +130,6 @@ export async function requireCommunityMembership(
     isDemo: community['isDemo'] === true,
     trialEndsAt: community['trialEndsAt'] instanceof Date ? community['trialEndsAt'] : null,
     demoExpiresAt: community['demoExpiresAt'] instanceof Date ? community['demoExpiresAt'] : null,
+    electionsAttorneyReviewed,
   };
 }
