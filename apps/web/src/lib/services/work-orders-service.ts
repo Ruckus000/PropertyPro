@@ -1,6 +1,7 @@
 import {
   amenities,
   amenityReservations,
+  complianceAuditLog,
   createScopedClient,
   logAuditEvent,
   vendors,
@@ -832,24 +833,22 @@ export async function cancelReservationForCommunity(
       throw new NotFoundError('Reservation not found');
     }
 
+    await tx.insert(complianceAuditLog).values({
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'amenity_reservation',
+      resourceId: String(reservationId),
+      oldValues: { status: existing.status },
+      newValues: { status: 'cancelled' },
+      metadata: { requestId: requestId ?? null },
+    });
+
     return {
       reservation: mapReservationRow(updated as unknown as AmenityReservationRecord),
       didCancel: true,
     } as const;
   });
-
-  if (result.didCancel) {
-    await logAuditEvent({
-      userId: actorUserId,
-      action: 'update',
-      resourceType: 'amenity_reservation',
-      resourceId: String(reservationId),
-      communityId,
-      oldValues: { status: 'confirmed' },
-      newValues: { status: 'cancelled' },
-      metadata: { requestId: requestId ?? null },
-    });
-  }
 
   return result.reservation;
 }
