@@ -296,7 +296,10 @@ describe('elections routes', () => {
 
     const snapshotReq = new NextRequest('http://localhost:3000/api/v1/elections/15/eligibility', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-6',
+      },
       body: JSON.stringify({ communityId: 42 }),
     });
 
@@ -305,7 +308,7 @@ describe('elections routes', () => {
     });
 
     expect(snapshotRes.status).toBe(201);
-    expect(snapshotElectionEligibilityForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1');
+    expect(snapshotElectionEligibilityForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1', 'req-6');
   });
 
   it('closes an election through the admin transition route', async () => {
