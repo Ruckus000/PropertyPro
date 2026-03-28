@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -43,6 +42,17 @@ export function OperationsHub({ communityId, legacyNotice }: OperationsHubProps)
     enabled: communityId > 0,
     staleTime: 45_000,
   });
+
+  useEffect(() => {
+    if (!legacyNotice) {
+      return;
+    }
+
+    // TODO: wire to analytics service
+    console.info('[analytics] maintenance_redirect', {
+      source: 'legacy_maintenance_page',
+    });
+  }, [legacyNotice]);
 
   const activeState = useMemo(() => {
     switch (selectedTab) {

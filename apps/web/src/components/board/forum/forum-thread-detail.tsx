@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { useUserNames } from '@/hooks/use-user-names';
 import {
   useBoardForumThread,
   useCreateForumReply,
@@ -23,11 +24,6 @@ interface ForumThreadDetailProps {
   userId: string;
 }
 
-function formatUserReference(userId: string): string {
-  // TODO: resolve display names from user lookup
-  return `User ${userId.slice(0, 8)}`;
-}
-
 export function ForumThreadDetail({
   communityId,
   threadId,
@@ -37,6 +33,15 @@ export function ForumThreadDetail({
   const { data, isLoading, error } = useBoardForumThread(communityId, threadId);
   const createReply = useCreateForumReply(communityId, threadId);
   const updateThread = useUpdateForumThread(communityId, threadId);
+  const userIds = data
+    ? Array.from(
+        new Set([
+          data.thread.authorUserId,
+          ...data.replies.map((reply) => reply.authorUserId),
+        ]),
+      )
+    : [];
+  const { getName } = useUserNames(userIds);
   const [replyBody, setReplyBody] = useState('');
 
   if (isLoading) {
@@ -76,7 +81,7 @@ export function ForumThreadDetail({
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-content">{thread.title}</h1>
             <p className="text-sm text-content-secondary">
-              Started by {formatUserReference(thread.authorUserId)} · {new Date(thread.createdAt).toLocaleString()}
+              Started by {getName(thread.authorUserId)} · {new Date(thread.createdAt).toLocaleString()}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -133,7 +138,7 @@ export function ForumThreadDetail({
             <div key={reply.id} className="rounded-xl border border-edge bg-surface-card p-4">
               <p className="whitespace-pre-wrap text-sm leading-6 text-content">{reply.body}</p>
               <p className="mt-3 text-xs text-content-secondary">
-                {formatUserReference(reply.authorUserId)} · {new Date(reply.createdAt).toLocaleString()}
+                {getName(reply.authorUserId)} · {new Date(reply.createdAt).toLocaleString()}
               </p>
             </div>
           ))

@@ -8,6 +8,7 @@ import { ResidentSearchCombobox } from '@/components/shared/ResidentSearchCombob
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUserNames } from '@/hooks/use-user-names';
 import { cn } from '@/lib/utils';
 import {
   useApproveElectionProxy,
@@ -22,11 +23,6 @@ interface ElectionProxySectionProps {
   electionId: number;
   isAdmin: boolean;
   userId: string;
-}
-
-function formatUserReference(userId: string): string {
-  // TODO: resolve display names from user lookup
-  return `User ${userId.slice(0, 8)}`;
 }
 
 function getProxyBadge(status: 'pending' | 'approved' | 'rejected' | 'revoked') {
@@ -53,6 +49,14 @@ export function ElectionProxySection({
   const approveProxy = useApproveElectionProxy(communityId, electionId);
   const rejectProxy = useRejectElectionProxy(communityId, electionId);
   const revokeProxy = useRevokeElectionProxy(communityId, electionId);
+  const proxyUserIds = data
+    ? Array.from(
+        new Set(
+          data.flatMap((proxy) => [proxy.grantorUserId, proxy.proxyHolderUserId]),
+        ),
+      )
+    : [];
+  const { getName } = useUserNames(proxyUserIds);
 
   const [selectedProxyHolderUserId, setSelectedProxyHolderUserId] = useState<string | null>(null);
   const [selectedProxyHolderLabel, setSelectedProxyHolderLabel] = useState('');
@@ -144,8 +148,8 @@ export function ElectionProxySection({
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="space-y-1 text-sm">
-                    <p className="text-content"><span className="font-medium">Grantor:</span> {formatUserReference(proxy.grantorUserId)}</p>
-                    <p className="text-content"><span className="font-medium">Proxy holder:</span> {formatUserReference(proxy.proxyHolderUserId)}</p>
+                    <p className="text-content"><span className="font-medium">Grantor:</span> {getName(proxy.grantorUserId)}</p>
+                    <p className="text-content"><span className="font-medium">Proxy holder:</span> {getName(proxy.proxyHolderUserId)}</p>
                     <p className="text-content-secondary">Unit ID {proxy.grantorUnitId} · Created {new Date(proxy.createdAt).toLocaleString()}</p>
                   </div>
                   <StatusBadge status={badge.status} label={badge.label} />
