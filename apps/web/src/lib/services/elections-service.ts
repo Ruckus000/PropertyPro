@@ -14,7 +14,7 @@ import {
   type ProxyStatus,
   units,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNotNull } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   AppError,
@@ -214,6 +214,16 @@ function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRec
   return safe;
 }
 
+/** Fetch the current time from the database to avoid clock skew on vote timing. */
+async function getDbNow(
+  tx: { execute: (query: ReturnType<typeof sql>) => Promise<unknown[]> },
+): Promise<Date> {
+  const rows = await tx.execute(sql`SELECT NOW() AS now`) as { now: string }[];
+  const row = rows[0];
+  if (!row) throw new Error('Failed to fetch DB time');
+  return new Date(row.now);
+}
+
 function normalizeSelectionIds(selectedCandidateIds: number[] | undefined, maxSelections: number): number[] {
   const normalized = (selectedCandidateIds ?? []).filter((candidateId) => Number.isInteger(candidateId) && candidateId > 0);
   const unique = [...new Set(normalized)];
@@ -252,17 +262,16 @@ function electionStatusAllowsProxyDesignation(status: ElectionStatus): boolean {
   return !ELECTION_RESULTS_TERMINAL_STATUSES.has(status);
 }
 
-function assertElectionOpenForVoting(election: ElectionRecord): void {
-  const now = Date.now();
+function assertElectionOpenForVoting(election: ElectionRecord, dbNow: Date): void {
   if (election.status !== 'open') {
     throw new UnprocessableEntityError('Election is not open for voting');
   }
 
-  if (election.opensAt.getTime() > now) {
+  if (election.opensAt > dbNow) {
     throw new UnprocessableEntityError('Election voting has not opened yet');
   }
 
-  if (election.closesAt.getTime() <= now) {
+  if (election.closesAt <= dbNow) {
     throw new UnprocessableEntityError('Election voting is closed');
   }
 }
@@ -674,7 +683,8 @@ export async function castElectionVoteForCommunity(
   return db.transaction(async (tx) => {
     const scoped = createElectionScopedClient(communityId, tx);
     const election = await getElectionForMutation(scoped, electionId);
-    assertElectionOpenForVoting(election);
+    const dbNow = await getDbNow(tx);
+    assertElectionOpenForVoting(election, dbNow);
 
     const proxyId = input.proxyId ?? null;
     const { unitId, proxy } = await resolveVotingUnit(scoped, actorUserId, input.unitId, proxyId, electionId);
