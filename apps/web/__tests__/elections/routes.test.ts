@@ -275,7 +275,7 @@ describe('elections routes', () => {
     });
 
     expect(revokeRes.status).toBe(200);
-    expect(revokeElectionProxyForCommunityMock).toHaveBeenCalledWith(42, 15, 8, 'user-1', 'req-5');
+    expect(revokeElectionProxyForCommunityMock).toHaveBeenCalledWith(42, 15, 8, 'user-1', false, 'req-5');
 
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'manager',

@@ -880,8 +880,14 @@ export async function closeElectionForCommunity(
     const scoped = createElectionScopedClient(communityId, tx);
     const election = await getElectionForMutation(scoped, electionId);
 
-    if (election.status === 'closed' || election.status === 'certified' || election.status === 'canceled') {
+    if (election.status === 'closed') {
       return sanitizeElectionForResponse(election);
+    }
+    if (election.status === 'certified') {
+      throw new UnprocessableEntityError('Election has already been certified and cannot be closed again');
+    }
+    if (election.status === 'canceled') {
+      throw new UnprocessableEntityError('Election has been canceled and cannot be closed');
     }
 
     if (election.status !== 'open') {
@@ -967,6 +973,10 @@ export async function cancelElectionForCommunity(
 
     if (election.status === 'canceled') {
       return sanitizeElectionForResponse(election);
+    }
+
+    if (election.status === 'draft') {
+      throw new UnprocessableEntityError('Draft elections should be deleted, not canceled');
     }
 
     if (election.status === 'certified') {
@@ -1161,8 +1171,26 @@ export async function revokeElectionProxyForCommunity(
   electionId: number,
   proxyId: number,
   actorUserId: string,
+  actorIsAdmin: boolean,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
+  // Check ownership before delegating — grantor can revoke their own proxy; admins can revoke any
+  const scoped = createScopedClient(communityId);
+  const proxyRows = await scoped.selectFrom<{ id: number; grantorUserId: string }>(
+    electionProxies,
+    { id: electionProxies.id, grantorUserId: electionProxies.grantorUserId },
+    and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+  );
+  const proxy = (proxyRows[0] as { id: number; grantorUserId: string } | undefined) ?? null;
+  if (!proxy) {
+    throw new NotFoundError('Proxy designation not found');
+  }
+
+  const isGrantor = proxy.grantorUserId === actorUserId;
+  if (!isGrantor && !actorIsAdmin) {
+    throw new ForbiddenError('Only the proxy grantor or an admin can revoke a proxy');
+  }
+
   return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'revoked', requestId);
 }
 

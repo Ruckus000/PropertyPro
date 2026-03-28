@@ -8,7 +8,6 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import {
-  requireElectionsAdminRole,
   requireElectionsEnabled,
   requireElectionsWritePermission,
 } from '@/lib/elections/common';
@@ -43,13 +42,15 @@ export const POST = withErrorHandler(
 
     requireElectionsEnabled(membership);
     requireElectionsWritePermission(membership);
-    requireElectionsAdminRole(membership);
+
+    const actorIsAdmin = membership.isAdmin;
 
     const data = await revokeElectionProxyForCommunity(
       communityId,
       electionId,
       proxyId,
       actorUserId,
+      actorIsAdmin,
       req.headers.get('x-request-id'),
     );
 
