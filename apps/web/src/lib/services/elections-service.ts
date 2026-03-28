@@ -218,10 +218,10 @@ function sanitizeElectionForResponse(election: ElectionRecord): Omit<ElectionRec
 async function getDbNow(
   tx: { execute: (query: ReturnType<typeof sql>) => Promise<unknown[]> },
 ): Promise<Date> {
-  const rows = await tx.execute(sql`SELECT NOW() AS now`) as { now: string }[];
+  const rows = await tx.execute(sql`SELECT NOW() AS now`) as { now: Date }[];
   const row = rows[0];
   if (!row) throw new Error('Failed to fetch DB time');
-  return new Date(row.now);
+  return row.now;
 }
 
 function normalizeSelectionIds(selectedCandidateIds: number[] | undefined, maxSelections: number): number[] {
