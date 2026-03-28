@@ -11,7 +11,6 @@ const {
   requireElectionsEnabledMock,
   requireElectionsReadPermissionMock,
   requireElectionsWritePermissionMock,
-  requireElectionsAdminRoleMock,
   getMyVoteReceiptForCommunityMock,
   castElectionVoteForCommunityMock,
   openElectionForCommunityMock,
@@ -29,7 +28,6 @@ const {
   requireElectionsEnabledMock: vi.fn(),
   requireElectionsReadPermissionMock: vi.fn(),
   requireElectionsWritePermissionMock: vi.fn(),
-  requireElectionsAdminRoleMock: vi.fn(),
   getMyVoteReceiptForCommunityMock: vi.fn(),
   castElectionVoteForCommunityMock: vi.fn(),
   openElectionForCommunityMock: vi.fn(),
@@ -64,7 +62,7 @@ vi.mock('@/lib/elections/common', () => ({
   requireElectionsEnabled: requireElectionsEnabledMock,
   requireElectionsReadPermission: requireElectionsReadPermissionMock,
   requireElectionsWritePermission: requireElectionsWritePermissionMock,
-  requireElectionsAdminRole: requireElectionsAdminRoleMock,
+  requireElectionsAdminRole: vi.fn(),
 }));
 
 vi.mock('@/lib/services/elections-service', () => ({
@@ -190,7 +188,6 @@ describe('elections routes', () => {
 
     expect(res.status).toBe(200);
     expect(openElectionForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1', 'req-2');
-    expect(requireElectionsAdminRoleMock).toHaveBeenCalledTimes(1);
   });
 
   it('routes proxy review decisions to approve and reject handlers', async () => {

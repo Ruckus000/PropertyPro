@@ -1066,11 +1066,11 @@ export async function createElectionProxyForCommunity(
 
 async function updateProxyStatusForCommunity(
   communityId: number,
-  electionId: number,
   proxyId: number,
   actorUserId: string,
   nextStatus: Exclude<ProxyStatus, 'pending'>,
   requestId?: string | null,
+  actorIsAdmin: boolean = true,
 ): Promise<ElectionProxyRecord> {
   const db = createElectionMutationClient();
 
@@ -1090,12 +1090,19 @@ async function updateProxyStatusForCommunity(
         createdAt: electionProxies.createdAt,
         updatedAt: electionProxies.updatedAt,
       },
-      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+      eq(electionProxies.id, proxyId),
     );
 
     const proxy = (rows[0] as ElectionProxyRecord | undefined) ?? null;
     if (!proxy) {
       throw new NotFoundError('Proxy designation not found');
+    }
+
+    if (nextStatus === 'revoked') {
+      const isGrantor = proxy.grantorUserId === actorUserId;
+      if (!isGrantor && !actorIsAdmin) {
+        throw new ForbiddenError('Only the proxy grantor or an admin can revoke a proxy');
+      }
     }
 
     if (proxy.status === nextStatus) {
@@ -1114,7 +1121,7 @@ async function updateProxyStatusForCommunity(
     const updatedRows = await scoped.update(
       electionProxies,
       patch,
-      and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
+      eq(electionProxies.id, proxyId),
     );
 
     const updated = updatedRows[0];
@@ -1137,7 +1144,7 @@ async function updateProxyStatusForCommunity(
       oldValues: { status: proxy.status },
       newValues: { status: nextStatus },
       metadata: {
-        electionId,
+        electionId: proxy.electionId,
         requestId: requestId ?? null,
       },
     });
@@ -1153,7 +1160,7 @@ export async function approveElectionProxyForCommunity(
   actorUserId: string,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'approved', requestId);
+  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'approved', requestId);
 }
 
 export async function rejectElectionProxyForCommunity(
@@ -1163,7 +1170,7 @@ export async function rejectElectionProxyForCommunity(
   actorUserId: string,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'rejected', requestId);
+  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'rejected', requestId);
 }
 
 export async function revokeElectionProxyForCommunity(
@@ -1174,24 +1181,7 @@ export async function revokeElectionProxyForCommunity(
   actorIsAdmin: boolean,
   requestId?: string | null,
 ): Promise<ElectionProxyRecord> {
-  // Check ownership before delegating — grantor can revoke their own proxy; admins can revoke any
-  const scoped = createScopedClient(communityId);
-  const proxyRows = await scoped.selectFrom<{ id: number; grantorUserId: string }>(
-    electionProxies,
-    { id: electionProxies.id, grantorUserId: electionProxies.grantorUserId },
-    and(eq(electionProxies.id, proxyId), eq(electionProxies.electionId, electionId)),
-  );
-  const proxy = (proxyRows[0] as { id: number; grantorUserId: string } | undefined) ?? null;
-  if (!proxy) {
-    throw new NotFoundError('Proxy designation not found');
-  }
-
-  const isGrantor = proxy.grantorUserId === actorUserId;
-  if (!isGrantor && !actorIsAdmin) {
-    throw new ForbiddenError('Only the proxy grantor or an admin can revoke a proxy');
-  }
-
-  return updateProxyStatusForCommunity(communityId, electionId, proxyId, actorUserId, 'revoked', requestId);
+  return updateProxyStatusForCommunity(communityId, proxyId, actorUserId, 'revoked', requestId, actorIsAdmin);
 }
 
 export async function snapshotElectionEligibilityForCommunity(
