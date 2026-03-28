@@ -8,3 +8,4 @@ export { NotFoundError } from './NotFoundError';
 export { UnprocessableEntityError } from './UnprocessableEntityError';
 export { RateLimitError } from './RateLimitError';
 export { DataIntegrityError } from './DataIntegrityError';
+export { SignupEmailDeliveryError } from './SignupEmailDeliveryError';

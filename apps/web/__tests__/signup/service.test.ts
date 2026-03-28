@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ValidationError } from '../../src/lib/api/errors';
+import { SignupEmailDeliveryError, ValidationError } from '../../src/lib/api/errors';
 
 const {
   createUnscopedClientMock,
@@ -529,5 +529,18 @@ describe('signup service', () => {
     const second = await submitSignup(validSignupPayload);
     expect(second.signupRequestId).toBe(validSignupPayload.signupRequestId);
     expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('persists auth linkage before surfacing a verification email delivery failure', async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error('provider timeout'));
+
+    await expect(submitSignup(validSignupPayload)).rejects.toBeInstanceOf(
+      SignupEmailDeliveryError,
+    );
+
+    expect(state.pendingSignups).toHaveLength(1);
+    expect(state.pendingSignups[0]?.authUserId).toBe('auth-user-1');
+    expect(state.pendingSignups[0]?.verificationEmailId).toBeNull();
+    expect(state.pendingSignups[0]?.verificationEmailSentAt).toBeNull();
   });
 });
