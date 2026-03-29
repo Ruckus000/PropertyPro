@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getDemoById, deleteDemo, deleteCommunity, updateDemo } from '@/lib/db/demo-queries';
+import { getDemoById, deleteDemo, deleteCommunity, updateDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -42,7 +42,7 @@ export async function GET(_request: Request, context: RouteContext) {
     );
   }
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: sanitizeDemoRow(data) });
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
@@ -159,5 +159,5 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: sanitizeDemoRow(data) });
 }

@@ -8,6 +8,12 @@
  * Handles both HTML form submissions (application/x-www-form-urlencoded)
  * and JSON bodies to support both the landing page forms and direct API calls.
  *
+ * Security model: Slug knowledge grants access. This is by design — demo
+ * links are meant to be shareable with prospects. The demo community contains
+ * only synthetic seed data, and slugs include 6 random hex characters
+ * (~16M combinations) on top of a sanitized prospect name, making blind
+ * enumeration impractical. Rate limited at 30 req/min per IP by middleware.
+ *
  * Token-authenticated (no session required) — listed in middleware allowlist
  * via the /api/v1/demo/.../enter startsWith match.
  */

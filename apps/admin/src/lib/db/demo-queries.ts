@@ -40,6 +40,14 @@ function from(table: string): any {
   return createAdminClient().from(table);
 }
 
+/** Strip `auth_token_secret` before returning rows to the client. */
+export function sanitizeDemoRow<T extends { auth_token_secret?: unknown }>(
+  row: T,
+): Omit<T, 'auth_token_secret'> {
+  const { auth_token_secret: _, ...rest } = row;
+  return rest;
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------

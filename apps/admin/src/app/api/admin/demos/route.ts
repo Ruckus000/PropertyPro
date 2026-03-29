@@ -16,7 +16,7 @@ import {
 } from '@propertypro/shared/server';
 import { seedCommunity } from '@propertypro/db/seed/seed-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { insertDemo } from '@/lib/db/demo-queries';
+import { insertDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
 import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 
@@ -52,7 +52,7 @@ export async function GET() {
 
   try {
     const data = await getDemoListData();
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: data.map(sanitizeDemoRow) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load demos';
     return NextResponse.json(
@@ -120,7 +120,9 @@ export async function POST(request: NextRequest) {
     .slice(0, 40);
   const slug = `demo-${sanitized}-${randomBytes(3).toString('hex')}`;
 
-  // Demo user emails
+  // Synthetic email addresses used only as Supabase Auth identifiers.
+  // No wildcard MX exists for *.getpropertypro.com — these addresses
+  // cannot receive mail, which is intentional. No flow sends to them.
   const residentEmail = `demo-resident@${slug}.getpropertypro.com`;
   const boardEmail = `demo-board@${slug}.getpropertypro.com`;
 
