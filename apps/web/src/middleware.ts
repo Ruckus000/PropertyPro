@@ -611,7 +611,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // --- Tenant resolution for auth pages (branded login) ---
-  // When a community subdomain serves an auth page (e.g. sunset-condos.propertyprofl.com/auth/login),
+  // When a community subdomain serves an auth page (e.g. sunset-condos.getpropertypro.com/auth/login),
   // inject x-community-id so the page can display community branding.
   // Non-blocking: unknown subdomains silently fall through to generic login.
   if (pathname.startsWith(AUTH_PATH_PREFIX)) {

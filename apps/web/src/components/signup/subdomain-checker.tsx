@@ -121,7 +121,7 @@ export function SubdomainChecker({
           required
         />
         <span className="rounded-r-md border border-l-0 border-edge-strong bg-surface-page px-3 py-2 text-sm text-content-secondary">
-          .propertyprofl.com
+          .getpropertypro.com
         </span>
       </div>
 

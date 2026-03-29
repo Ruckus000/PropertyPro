@@ -46,7 +46,7 @@ export default async function DemoMobilePage({ params }: PageProps) {
   const webBaseUrl =
     process.env.NODE_ENV === 'development'
       ? `http://localhost:3000`
-      : `https://${demo.slug}.propertyprofl.com`;
+      : `https://${demo.slug}.getpropertypro.com`;
 
   const residentUrl = `${webBaseUrl}/api/v1/auth/demo-login?token=${residentToken}&preview=true`;
 

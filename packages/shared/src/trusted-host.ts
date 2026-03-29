@@ -1,10 +1,10 @@
 /**
  * Hostname allowlisting for CORS, demo-login redirects, and related trust checks.
- * Primary production hostname is derived from NEXT_PUBLIC_APP_URL; legacy
- * propertyprofl.com remains trusted for existing deployments and tests.
+ * Primary hostname comes from NEXT_PUBLIC_APP_URL; when unset, the canonical
+ * production root getpropertypro.com and its subdomains remain trusted.
  */
 
-const LEGACY_PRODUCTION_ROOT = 'propertyprofl.com';
+const CANONICAL_PRODUCTION_ROOT = 'getpropertypro.com';
 
 /**
  * Parses the hostname from a configured app URL (e.g. https://getpropertypro.com → getpropertypro.com).
@@ -24,7 +24,7 @@ export function parseHostnameFromAppUrl(appUrl: string | undefined | null): stri
  *
  * - localhost and 127.0.0.1
  * - `primaryHostname` and any of its subdomains (from NEXT_PUBLIC_APP_URL)
- * - Legacy: propertyprofl.com and *.propertyprofl.com
+ * - Canonical: getpropertypro.com and *.getpropertypro.com (when tests omit env)
  */
 export function isTrustedHostname(
   hostname: string,
@@ -36,7 +36,7 @@ export function isTrustedHostname(
   const primary = options?.primaryHostname?.trim().toLowerCase();
   if (primary && (h === primary || h.endsWith(`.${primary}`))) return true;
 
-  if (h === LEGACY_PRODUCTION_ROOT || h.endsWith(`.${LEGACY_PRODUCTION_ROOT}`)) return true;
+  if (h === CANONICAL_PRODUCTION_ROOT || h.endsWith(`.${CANONICAL_PRODUCTION_ROOT}`)) return true;
 
   return false;
 }

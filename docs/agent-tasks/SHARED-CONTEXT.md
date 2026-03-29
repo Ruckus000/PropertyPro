@@ -169,8 +169,8 @@ interface ImageBlockContent {
 
 ## Demo User Conventions
 
-- Resident email: `demo-resident@{slug}.propertyprofl.com`
-- Board email: `demo-board@{slug}.propertyprofl.com`
+- Resident email: `demo-resident@{slug}.getpropertypro.com`
+- Board email: `demo-board@{slug}.getpropertypro.com`
 - Passwords: random 32-char string, never stored or shown
 - Resident gets `owner` role, board gets `board_member` role
 - Auth via HMAC-signed tokens (SHA-256), not passwords

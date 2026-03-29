@@ -30,7 +30,7 @@ The naming convention is enforced by [`scripts/verify-integration-test-discovery
 Integration tests require a PostgreSQL database. Set the `DATABASE_URL` environment variable:
 
 ```bash
-export DATABASE_URL="postgresql://user:password@localhost:5432/propertyprofl_test"
+export DATABASE_URL="postgresql://user:password@localhost:5432/getpropertypro_test"
 ```
 
 ### Commands

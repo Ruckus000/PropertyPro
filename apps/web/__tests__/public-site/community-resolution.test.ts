@@ -45,7 +45,7 @@ vi.mock('@propertypro/shared', async (importOriginal) => {
         isReservedSubdomain: false,
       };
     }
-    if (host === 'pm.propertyprofl.com') {
+    if (host === 'pm.getpropertypro.com') {
       return {
         source: 'host_subdomain' as const,
         communityId: null,
@@ -117,8 +117,8 @@ describe('public site auth-split middleware', () => {
   it('lets unauthenticated user through to public site on community subdomain root', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null } });
 
-    const request = createRequest('http://sunset-condos.propertyprofl.com/', {
-      host: 'sunset-condos.propertyprofl.com',
+    const request = createRequest('http://sunset-condos.getpropertypro.com/', {
+      host: 'sunset-condos.getpropertypro.com',
     });
 
     const response = await middleware(request);
@@ -140,8 +140,8 @@ describe('public site auth-split middleware', () => {
       },
     });
 
-    const request = createRequest('http://sunset-condos.propertyprofl.com/', {
-      host: 'sunset-condos.propertyprofl.com',
+    const request = createRequest('http://sunset-condos.getpropertypro.com/', {
+      host: 'sunset-condos.getpropertypro.com',
     });
 
     const response = await middleware(request);
@@ -162,8 +162,8 @@ describe('public site auth-split middleware', () => {
       },
     });
 
-    const request = createRequest('http://sunset-condos.propertyprofl.com/?preview=true', {
-      host: 'sunset-condos.propertyprofl.com',
+    const request = createRequest('http://sunset-condos.getpropertypro.com/?preview=true', {
+      host: 'sunset-condos.getpropertypro.com',
     });
 
     const response = await middleware(request);
@@ -185,8 +185,8 @@ describe('public site auth-split middleware', () => {
 
   it('does not interfere with reserved subdomain handling', async () => {
     // Reserved subdomains on '/' should not trigger public site logic
-    const request = createRequest('http://pm.propertyprofl.com/', {
-      host: 'pm.propertyprofl.com',
+    const request = createRequest('http://pm.getpropertypro.com/', {
+      host: 'pm.getpropertypro.com',
     });
 
     const response = await middleware(request);
@@ -198,8 +198,8 @@ describe('public site auth-split middleware', () => {
   it('does not affect protected paths like /dashboard', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null } });
 
-    const request = createRequest('http://sunset-condos.propertyprofl.com/dashboard', {
-      host: 'sunset-condos.propertyprofl.com',
+    const request = createRequest('http://sunset-condos.getpropertypro.com/dashboard', {
+      host: 'sunset-condos.getpropertypro.com',
     });
 
     const response = await middleware(request);

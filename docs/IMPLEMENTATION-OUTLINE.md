@@ -249,7 +249,7 @@ The application has four distinct portals, each serving a different user type. A
 
 ### 3.1 Public-Facing Community Website (No Auth Required)
 
-Each community gets a public website at their subdomain (e.g., `palmgardens.propertyprofl.com`). For condos/HOAs, this satisfies the statutory requirement for a website "accessible through the internet." For apartments, this is optional but available as a community landing page.
+Each community gets a public website at their subdomain (e.g., `palmgardens.getpropertypro.com`). For condos/HOAs, this satisfies the statutory requirement for a website "accessible through the internet." For apartments, this is optional but available as a community landing page.
 
 | Feature | Condo/HOA | Apartment | Implementation Notes |
 |---------|:---------:|:---------:|---------------------|
@@ -356,7 +356,7 @@ Despite the recommendation to defer this, self-service onboarding is included in
 
 The self-service flow requires a marketing landing page. This is the entry point for inbound leads who discover the product online.
 
-- Route: `/` (root) or a separate marketing subdomain (`www.propertyprofl.com`)
+- Route: `/` (root) or a separate marketing subdomain (`www.getpropertypro.com`)
 - Content: Value proposition, feature highlights, pricing tiers (adapted by community type), screenshots/phone-frame demo, CTA button ("Get Started")
 - Legal: Link to Terms of Service and Privacy Policy in the footer (see Section 12)
 - SEO: Proper meta tags, Open Graph, structured data for Florida-specific keywords
@@ -584,9 +584,9 @@ Consistent error handling across the entire application:
 
 Transactional emails (invitations, meeting notices, compliance alerts) are useless if they land in spam.
 
-- **Sending domain**: Configure a dedicated sending domain (e.g., `mail.propertyprofl.com`) in Resend
+- **Sending domain**: Configure a dedicated sending domain (e.g., `mail.getpropertypro.com`) in Resend
 - **DNS records**: Set up SPF, DKIM, and DMARC records in Cloudflare DNS. Resend provides the exact records to add.
-- **From address**: Use a consistent, professional from address (e.g., `notifications@propertyprofl.com` or per-community addresses like `palmgardens@propertyprofl.com`)
+- **From address**: Use a consistent, professional from address (e.g., `notifications@getpropertypro.com` or per-community addresses like `palmgardens@getpropertypro.com`)
 - **Verify before launch**: Send test emails to Gmail, Outlook, and Yahoo and verify they don't land in spam
 - **Unsubscribe header**: Include the `List-Unsubscribe` header in all non-critical emails (required by CAN-SPAM and Gmail's 2024 sender requirements). The unsubscribe link points to the notification preferences page.
 

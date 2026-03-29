@@ -26,7 +26,7 @@ describe('getWebsiteDomainInfo', () => {
     });
 
     expect(result).toEqual({
-      displayUrl: 'sunset-condos.propertyprofl.com',
+      displayUrl: 'sunset-condos.getpropertypro.com',
       urlSource: 'slug_fallback',
       ignoredInvalidCustomDomain: false,
     });
@@ -65,7 +65,7 @@ describe('getWebsiteDomainInfo', () => {
     });
 
     expect(result).toEqual({
-      displayUrl: 'sunset-condos.propertyprofl.com',
+      displayUrl: 'sunset-condos.getpropertypro.com',
       urlSource: 'slug_fallback',
       ignoredInvalidCustomDomain: true,
     });
@@ -78,7 +78,7 @@ describe('getWebsiteDomainInfo', () => {
     });
 
     expect(result).toEqual({
-      displayUrl: 'sunset-condos.propertyprofl.com',
+      displayUrl: 'sunset-condos.getpropertypro.com',
       urlSource: 'slug_fallback',
       ignoredInvalidCustomDomain: true,
     });

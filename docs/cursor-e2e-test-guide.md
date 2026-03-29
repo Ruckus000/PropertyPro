@@ -444,7 +444,7 @@ These pages are **unauthenticated**. Log out first or use an incognito context.
 | 8.3 | Check for transparency/compliance info | Should display document checklist, meeting notices, and compliance status — all read-only, no login required. |
 | 8.4 | Check for request-access form | Public visitors may see a way to request resident access. |
 
-> **Note:** Subdomain routing (`sunset-condos.propertyprofl.com`) won't work on localhost. Use the dev site preview helper or navigate to `/(public)/sunset-condos/` paths if the app supports them locally.
+> **Note:** Subdomain routing (`sunset-condos.getpropertypro.com`) won't work on localhost. Use the dev site preview helper or navigate to `/(public)/sunset-condos/` paths if the app supports them locally.
 
 ---
 

@@ -6,7 +6,7 @@ describe('resolveCommunityContext', () => {
     const result = resolveCommunityContext({
       searchParams: new URLSearchParams('communityId=42&tenant=sunset'),
       routeSubdomain: 'ignored',
-      host: 'ignored.propertyprofl.com',
+      host: 'ignored.getpropertypro.com',
     });
 
     expect(result).toEqual({
@@ -50,7 +50,7 @@ describe('resolveCommunityContext', () => {
 
   it('falls back to host subdomain when query and route are absent', () => {
     const result = resolveCommunityContext({
-      host: 'sunset.propertyprofl.com',
+      host: 'sunset.getpropertypro.com',
     });
 
     expect(result.source).toBe('host_subdomain');

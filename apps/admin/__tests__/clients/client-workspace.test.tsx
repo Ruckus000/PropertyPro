@@ -57,7 +57,7 @@ describe('ClientWorkspace website status UI', () => {
 
     expect(html).toContain('Site Not Live');
     expect(html).toContain('Publish a public template to make the site live.');
-    expect(html).toContain('sunset-condos.propertyprofl.com');
+    expect(html).toContain('sunset-condos.getpropertypro.com');
     expect(html).toContain('Default subdomain');
   });
 

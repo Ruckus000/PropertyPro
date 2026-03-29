@@ -148,9 +148,9 @@ All documents must be posted within **30 days** of creation/receipt (per HB 913)
 
 | URL Pattern | Purpose |
 |-------------|---------|
-| `[subdomain].propertyprofl.com` | Association public site + portal |
-| `pm.propertyprofl.com` | Property manager dashboard |
-| `app.propertyprofl.com` | Platform admin (internal) |
+| `[subdomain].getpropertypro.com` | Association public site + portal |
+| `pm.getpropertypro.com` | Property manager dashboard |
+| `app.getpropertypro.com` | Platform admin (internal) |
 | Mobile App: "PropertyPro" | Single app, association selected at login |
 
 ---
@@ -547,7 +547,7 @@ maintenance_request_images (
 - Location: 1500 Palm Gardens Drive, West Palm Beach, FL 33401
 - Units: 50
 - Type: Condo (§718)
-- Subdomain: palmgardens.propertyprofl.com
+- Subdomain: palmgardens.getpropertypro.com
 
 **Pre-Populated Users:**
 
@@ -596,9 +596,9 @@ maintenance_request_images (
 
 | Role | Email | Password |
 |------|-------|----------|
-| Board Admin | admin@palmgardens-demo.propertyprofl.com | demo2026 |
-| Unit Owner | owner@palmgardens-demo.propertyprofl.com | demo2026 |
-| Property Manager | pm@demo.propertyprofl.com | demo2026 |
+| Board Admin | admin@palmgardens-demo.getpropertypro.com | demo2026 |
+| Unit Owner | owner@palmgardens-demo.getpropertypro.com | demo2026 |
+| Property Manager | pm@demo.getpropertypro.com | demo2026 |
 
 ### 6.3 Demo Reset
 
@@ -749,7 +749,7 @@ GET    /api/v1/auth/me
 ## 11. File & Folder Structure
 
 ```
-propertyprofl/
+PropertyPro/
 ├── apps/
 │   ├── web/                      # Next.js web application
 │   │   ├── app/

@@ -31,24 +31,24 @@ describe('isAllowedOrigin', () => {
   });
 
   it('allows production root domain', () => {
-    expect(isAllowedOrigin('https://propertyprofl.com')).toBe(true);
+    expect(isAllowedOrigin('https://getpropertypro.com')).toBe(true);
   });
 
   it('allows production subdomains', () => {
-    expect(isAllowedOrigin('https://sunset-condos.propertyprofl.com')).toBe(true);
-    expect(isAllowedOrigin('https://pm.propertyprofl.com')).toBe(true);
-    expect(isAllowedOrigin('https://palm-shores-hoa.propertyprofl.com')).toBe(true);
+    expect(isAllowedOrigin('https://sunset-condos.getpropertypro.com')).toBe(true);
+    expect(isAllowedOrigin('https://pm.getpropertypro.com')).toBe(true);
+    expect(isAllowedOrigin('https://palm-shores-hoa.getpropertypro.com')).toBe(true);
   });
 
   it('rejects unknown external origins', () => {
     expect(isAllowedOrigin('https://evil.com')).toBe(false);
-    expect(isAllowedOrigin('https://notpropertyprofl.com')).toBe(false);
-    expect(isAllowedOrigin('https://propertyprofl.com.evil.com')).toBe(false);
+    expect(isAllowedOrigin('https://notgetpropertypro.com')).toBe(false);
+    expect(isAllowedOrigin('https://getpropertypro.com.evil.com')).toBe(false);
   });
 
   it('rejects domains that contain the production domain but are not subdomains', () => {
-    expect(isAllowedOrigin('https://evilpropertyprofl.com')).toBe(false);
-    expect(isAllowedOrigin('https://prefix.propertyprofl.com.attacker.com')).toBe(false);
+    expect(isAllowedOrigin('https://evilgetpropertypro.com')).toBe(false);
+    expect(isAllowedOrigin('https://prefix.getpropertypro.com.attacker.com')).toBe(false);
   });
 
   it('rejects malformed origin strings', () => {
@@ -81,8 +81,8 @@ describe('isAllowedOrigin', () => {
 
 describe('buildCorsHeaders', () => {
   it('returns CORS headers for an allowed origin', () => {
-    const headers = buildCorsHeaders('https://propertyprofl.com');
-    expect(headers['Access-Control-Allow-Origin']).toBe('https://propertyprofl.com');
+    const headers = buildCorsHeaders('https://getpropertypro.com');
+    expect(headers['Access-Control-Allow-Origin']).toBe('https://getpropertypro.com');
     expect(headers['Access-Control-Allow-Methods']).toContain('GET');
     expect(headers['Access-Control-Allow-Methods']).toContain('POST');
     expect(headers['Access-Control-Allow-Headers']).toContain('Content-Type');
@@ -105,7 +105,7 @@ describe('buildCorsHeaders', () => {
   });
 
   it('reflects the exact allowed origin (not a wildcard)', () => {
-    const origin = 'https://sunset-condos.propertyprofl.com';
+    const origin = 'https://sunset-condos.getpropertypro.com';
     const headers = buildCorsHeaders(origin);
     expect(headers['Access-Control-Allow-Origin']).toBe(origin);
     expect(headers['Access-Control-Allow-Origin']).not.toBe('*');
@@ -243,8 +243,8 @@ describe('buildCspHeader', () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('ADMIN_ORIGIN', '');
       const csp = buildCspHeader({ isPreview: true });
-      expect(csp).toContain('https://pm.propertyprofl.com');
-      expect(csp).toContain('https://admin.propertyprofl.com');
+      expect(csp).toContain('https://pm.getpropertypro.com');
+      expect(csp).toContain('https://admin.getpropertypro.com');
       vi.unstubAllEnvs();
     });
 

@@ -22,21 +22,21 @@ describe('getCookieOptions', () => {
   }
 
   it('returns domain and secure when NEXT_PUBLIC_COOKIE_DOMAIN is set in production', async () => {
-    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
     process.env.NODE_ENV = 'production';
     const getCookieOptions = await importGetCookieOptions();
 
     const result = getCookieOptions();
-    expect(result).toEqual({ domain: '.propertyprofl.com', secure: true });
+    expect(result).toEqual({ domain: '.getpropertypro.com', secure: true });
   });
 
   it('returns domain without secure in development', async () => {
-    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
     process.env.NODE_ENV = 'development';
     const getCookieOptions = await importGetCookieOptions();
 
     const result = getCookieOptions();
-    expect(result).toEqual({ domain: '.propertyprofl.com' });
+    expect(result).toEqual({ domain: '.getpropertypro.com' });
   });
 
   it('returns undefined when NEXT_PUBLIC_COOKIE_DOMAIN is empty', async () => {
@@ -86,7 +86,7 @@ describe('getCookieOptions', () => {
   });
 
   it('does not log a warning when domain starts with "."', async () => {
-    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.propertyprofl.com';
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
     process.env.NODE_ENV = 'development';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getCookieOptions = await importGetCookieOptions();

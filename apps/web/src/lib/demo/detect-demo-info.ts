@@ -2,8 +2,8 @@
  * Detect demo session info from community + user email.
  *
  * Demo users have emails like:
- *   - `demo-board@[slug].propertyprofl.com` (board role)
- *   - `demo-resident@[slug].propertyprofl.com` (resident role)
+ *   - `demo-board@[slug].getpropertypro.com` (board role)
+ *   - `demo-resident@[slug].getpropertypro.com` (resident role)
  *
  * Returns null if not a demo session or the email doesn't match.
  */
@@ -30,10 +30,10 @@ export function detectDemoInfo(
   if (!isDemo || !userEmail) return null;
 
   const boardMatch = userEmail.match(
-    /^demo-board@(.+)\.propertyprofl\.com$/,
+    /^demo-board@(.+)\.getpropertypro\.com$/,
   );
   const residentMatch = userEmail.match(
-    /^demo-resident@(.+)\.propertyprofl\.com$/,
+    /^demo-resident@(.+)\.getpropertypro\.com$/,
   );
 
   const currentRole: 'board' | 'resident' | null =

@@ -220,7 +220,7 @@ export function PreviewPanel({ slug }: { slug: string }) {
       <div className="flex-1 overflow-hidden p-4">
         <iframe
           ref={iframeRef}
-          src={`https://${slug}.propertyprofl.com`}
+          src={`https://${slug}.getpropertypro.com`}
           className="h-full w-full origin-top-left rounded border shadow-sm"
           style={{ transform: 'scale(0.7)', width: '143%', height: '143%' }}
           title="Public site preview"

@@ -19,7 +19,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';
 
-const PRODUCTION_DOMAIN = 'propertyprofl.com';
+const PRODUCTION_DOMAIN = 'getpropertypro.com';
 
 function isTrustedHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();

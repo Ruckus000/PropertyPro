@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { isAllowedReferer } from '../../src/lib/middleware/security-headers';
 
 describe('isAllowedReferer', () => {
-  it('extracts origin from referer URL and allows propertyprofl.com', () => {
-    expect(isAllowedReferer('https://app.propertyprofl.com/dashboard')).toBe(true);
+  it('extracts origin from referer URL and allows getpropertypro.com', () => {
+    expect(isAllowedReferer('https://app.getpropertypro.com/dashboard')).toBe(true);
   });
 
   it('rejects referer from an unknown origin', () => {

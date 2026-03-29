@@ -49,7 +49,7 @@ queries. If the public site request doesn't resolve a community context,
 the setting is never applied.
 
 Check middleware tenant resolution:
-- Is the subdomain correct? (`sunset-condos.propertyprofl.com`)
+- Is the subdomain correct? (`sunset-condos.getpropertypro.com`)
 - Does `communities.slug` match the subdomain?
 - Is the community `deleted_at IS NULL`?
 

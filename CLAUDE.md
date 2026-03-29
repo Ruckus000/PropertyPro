@@ -31,7 +31,7 @@ docs/                   # Specs, ADRs, audits, design system
 
 ## Key Concepts
 
-**Multi-Tenancy:** Single DB with `community_id` FK isolation. Subdomains per association (`[slug].propertyprofl.com`). PM dashboard at `pm.propertyprofl.com`.
+**Multi-Tenancy:** Single DB with `community_id` FK isolation. Subdomains per association (`[slug].getpropertypro.com`). PM dashboard at `pm.getpropertypro.com`.
 
 **User Roles:** `owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`
 

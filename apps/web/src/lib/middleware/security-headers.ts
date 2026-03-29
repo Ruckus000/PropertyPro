@@ -17,7 +17,7 @@
  * - Nonces or hash-based CSP are the recommended upgrade path when strict mode is needed.
  */
 
-const PRODUCTION_DOMAIN = 'propertyprofl.com';
+const PRODUCTION_DOMAIN = 'getpropertypro.com';
 
 /**
  * Returns space-separated admin origin(s) for CSP frame-ancestors in preview mode.
@@ -32,7 +32,7 @@ function getAdminOrigins(): string {
     return 'http://localhost:* http://127.0.0.1:*';
   }
 
-  return 'https://pm.propertyprofl.com https://admin.propertyprofl.com';
+  return 'https://pm.getpropertypro.com https://admin.getpropertypro.com';
 }
 
 /**

@@ -22,8 +22,8 @@ P0
 - Custom domains deferred to later phase
 
 ## Acceptance Criteria
-- [ ] Request to palmgardens.propertyprofl.com resolves to Palm Gardens community
-- [ ] Request to unknown.propertyprofl.com returns 404
+- [ ] Request to palmgardens.getpropertypro.com resolves to Palm Gardens community
+- [ ] Request to unknown.getpropertypro.com returns 404
 - [ ] Reserved subdomains return appropriate page (not community lookup)
 - [ ] Dev mode with ?tenant=palmgardens works
 - [ ] pnpm test passes

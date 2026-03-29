@@ -66,7 +66,7 @@ pnpm typecheck
 
 - `isAllowedOrigin(origin)` — allowlist-based check:
   - `localhost` / `127.0.0.1` (local development)
-  - `propertyprofl.com` and any subdomain (production)
+  - `getpropertypro.com` and any subdomain (production)
   - `NEXT_PUBLIC_APP_URL` hostname (Vercel preview deployments, if configured)
   - All other origins → rejected (no CORS headers emitted)
 - `buildCorsHeaders(origin)` — returns headers only for allowed origins:

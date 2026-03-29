@@ -18,7 +18,7 @@ describe('admin page context', () => {
     headersMock.mockResolvedValue(
       new Headers({
         'x-user-id': 'admin-1',
-        'x-user-email': 'admin@propertyprofl.com',
+        'x-user-email': 'admin@getpropertypro.com',
         'x-platform-admin-role': 'super_admin',
       }),
     );
@@ -29,7 +29,7 @@ describe('admin page context', () => {
 
     await expect(requireAdminPageSession()).resolves.toEqual({
       id: 'admin-1',
-      email: 'admin@propertyprofl.com',
+      email: 'admin@getpropertypro.com',
       role: 'super_admin',
     });
   });

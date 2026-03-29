@@ -54,7 +54,7 @@ describe('CommunityWebsiteEditor website URL panel', () => {
   it('falls back to default subdomain and shows invalid-domain warning', async () => {
     const html = await renderEditor('javascript:alert(1)');
 
-    expect(html).toContain('sunset-condos.propertyprofl.com');
+    expect(html).toContain('sunset-condos.getpropertypro.com');
     expect(html).toContain('Default subdomain');
     expect(html).toContain('Saved custom domain is invalid and is ignored for display.');
   });

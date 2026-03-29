@@ -87,7 +87,7 @@ We retain your personal information for as long as your account is active and as
 
 ### 5.2 Account Deletion
 
-You may request deletion of your personal data at any time by contacting us at privacy@propertyprofl.com. Upon receiving a verified deletion request:
+You may request deletion of your personal data at any time by contacting us at privacy@getpropertypro.com. Upon receiving a verified deletion request:
 
 - We will delete or de-identify your personal information within thirty (30) calendar days.
 - Certain data may be retained if required by law, including compliance audit logs that Florida law requires associations to maintain.
@@ -117,7 +117,7 @@ While we strive to protect your information, no method of electronic transmissio
 
 ### 7.1 Access and Portability
 
-You have the right to request a copy of your personal information in a structured, commonly used, and machine-readable format. Contact us at privacy@propertyprofl.com to submit an access request.
+You have the right to request a copy of your personal information in a structured, commonly used, and machine-readable format. Contact us at privacy@getpropertypro.com to submit an access request.
 
 ### 7.2 Correction
 
@@ -168,7 +168,7 @@ We may update this Privacy Policy from time to time. We will notify you of mater
 
 If you have questions about this Privacy Policy, wish to exercise your privacy rights, or need to submit a data request, please contact us at:
 
-- **Email:** privacy@propertyprofl.com
+- **Email:** privacy@getpropertypro.com
 - **Address:** PropertyPro Florida, West Palm Beach, FL
 
 For data deletion or access requests, please include your full name, email address associated with your account, and a description of your request.

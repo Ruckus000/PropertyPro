@@ -2,7 +2,15 @@ import type { ReactElement } from 'react';
 import { Resend } from 'resend';
 import type { SendEmailOptions, SendEmailResult } from './types';
 
-const DEFAULT_FROM = 'PropertyPro <noreply@mail.propertyprofl.com>';
+/** Default when `RESEND_FROM` is unset — must match a verified domain in Resend. */
+const DEFAULT_FROM = 'PropertyPro <noreply@getpropertypro.com>';
+
+function resolveFromAddress(explicit?: string): string {
+  if (explicit?.trim()) return explicit.trim();
+  const envFrom = process.env.RESEND_FROM?.trim();
+  if (envFrom) return envFrom;
+  return DEFAULT_FROM;
+}
 
 /**
  * When RESEND_API_KEY is not set (e.g. in tests or local dev),
@@ -55,7 +63,7 @@ function buildHeaders(options: SendEmailOptions): Record<string, string> {
  */
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   const headers = buildHeaders(options);
-  const from = options.from ?? DEFAULT_FROM;
+  const from = resolveFromAddress(options.from);
 
   const resend = getResendClient();
 

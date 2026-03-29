@@ -12,6 +12,7 @@ describe('sendEmail', () => {
   beforeEach(() => {
     clearTestInbox();
     delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM;
   });
 
   it('stores transactional email in test inbox when RESEND_API_KEY is missing', async () => {
@@ -78,6 +79,26 @@ describe('sendEmail', () => {
     ).rejects.toThrow(/List-Unsubscribe URL is required/i);
   });
 
+  it('uses RESEND_FROM when set', async () => {
+    process.env.RESEND_FROM = 'PropertyPro <bulk@mail.getpropertypro.com>';
+    await sendEmail({
+      to: 'resident@example.com',
+      subject: 'Invitation',
+      category: 'transactional',
+      react: (
+        <InvitationEmail
+          branding={branding}
+          inviteeName="Jane Doe"
+          inviterName="John Smith"
+          role="Owner"
+          inviteUrl="https://example.com/invite/abc123"
+        />
+      ),
+    });
+
+    expect(testInbox[0]?.from).toBe('PropertyPro <bulk@mail.getpropertypro.com>');
+  });
+
   it('uses the configured default from address', async () => {
     await sendEmail({
       to: 'resident@example.com',
@@ -94,7 +115,7 @@ describe('sendEmail', () => {
       ),
     });
 
-    expect(testInbox[0]?.from).toBe('PropertyPro <noreply@mail.propertyprofl.com>');
+    expect(testInbox[0]?.from).toBe('PropertyPro <noreply@getpropertypro.com>');
   });
 
   it('clearTestInbox removes all captured messages', async () => {
@@ -122,7 +143,7 @@ describe('sendEmail', () => {
     await sendEmail({
       to: 'resident@example.com',
       subject: 'Invitation',
-      from: 'PropertyPro Support <support@mail.propertyprofl.com>',
+      from: 'PropertyPro Support <support@getpropertypro.com>',
       category: 'transactional',
       react: (
         <InvitationEmail
@@ -135,6 +156,6 @@ describe('sendEmail', () => {
       ),
     });
 
-    expect(testInbox[0]?.from).toBe('PropertyPro Support <support@mail.propertyprofl.com>');
+    expect(testInbox[0]?.from).toBe('PropertyPro Support <support@getpropertypro.com>');
   });
 });

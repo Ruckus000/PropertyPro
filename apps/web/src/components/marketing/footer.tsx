@@ -87,10 +87,10 @@ export function MarketingFooter() {
             <ul className="mt-3 space-y-2">
               <li>
                 <a
-                  href="mailto:support@propertyprofl.com"
+                  href="mailto:support@getpropertypro.com"
                   className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
                 >
-                  support@propertyprofl.com
+                  support@getpropertypro.com
                 </a>
               </li>
               <li>

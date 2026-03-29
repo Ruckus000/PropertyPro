@@ -93,7 +93,7 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 
 ## 7. Authorization + RLS Policy Family Mapping
 
-- ICS public feed: no auth required. Community is resolved via subdomain middleware (same as all other tenant-scoped routes). The feed URL is `https://[slug].propertyprofl.com/api/v1/calendar/meetings.ics`. Calendar apps bookmark this URL directly.
+- ICS public feed: no auth required. Community is resolved via subdomain middleware (same as all other tenant-scoped routes). The feed URL is `https://[slug].getpropertypro.com/api/v1/calendar/meetings.ics`. Calendar apps bookmark this URL directly.
 - ICS user feed: authenticated, returns only user's relevant meetings
 - Google Calendar sync: board_president, cam, site_manager, property_manager_admin only
 - Accounting connectors: cam, site_manager, property_manager_admin only

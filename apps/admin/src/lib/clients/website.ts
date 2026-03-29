@@ -68,7 +68,7 @@ export function getWebsiteDomainInfo(input: WebsiteDomainInput): WebsiteDomainIn
   }
 
   return {
-    displayUrl: `${input.slug}.propertyprofl.com`,
+    displayUrl: `${input.slug}.getpropertypro.com`,
     urlSource: 'slug_fallback',
     ignoredInvalidCustomDomain: Boolean(input.customDomain?.trim()),
   };

@@ -634,7 +634,7 @@ UI elements:
 3. **Acknowledgment checkbox** (required before first enable):
    - "I understand that this page displays factual data about document posting and meeting notices tracked within PropertyPro. It does not constitute a legal certification or audit of compliance. All tracked items will be visible publicly — individual items cannot be hidden."
 4. **Toggle switch:** Enable/disable the transparency page
-5. **URL display:** Shows the public URL when enabled (`[subdomain].propertyprofl.com/transparency`)
+5. **URL display:** Shows the public URL when enabled (`[subdomain].getpropertypro.com/transparency`)
 6. **Status indicator:** "Page is live" (green) / "Page is disabled" (gray)
 
 ### New API route: `apps/web/src/app/api/v1/transparency/settings/route.ts`

@@ -132,9 +132,9 @@ These are answered. Do not revisit or ask for clarification.
 | A | App count | **2 apps only:** `apps/web` (port 3000) + `apps/admin` (port 3001). No `apps/sites`. No `apps/pm`. |
 | B | `turbo dev` behavior | Starts both apps. Individual: `pnpm --filter apps/admin dev` |
 | C | Environment variables | Each app symlinks to root `.env.local` via `scripts/setup.sh`. App-specific vars via `next.config.ts` `env` block: `NEXT_PUBLIC_APP_ROLE=web` or `NEXT_PUBLIC_APP_ROLE=admin` |
-| D | Vercel projects | 2 projects: `apps/web` → `propertyprofl.com`, `apps/admin` → `admin.propertyprofl.com` |
-| E | Public site URL pattern | **Same subdomain, auth-split.** `sunset-condos.propertyprofl.com` shows the public site to unauthenticated visitors and the portal dashboard to authenticated ones. No new subdomain pattern. Middleware already resolves the community from the subdomain. |
-| F | Supabase auth cookie scope | `.propertyprofl.com` (leading dot). Shared across apps. Each app enforces its own authorization independently |
+| D | Vercel projects | 2 projects: `apps/web` → `getpropertypro.com`, `apps/admin` → `admin.getpropertypro.com` |
+| E | Public site URL pattern | **Same subdomain, auth-split.** `sunset-condos.getpropertypro.com` shows the public site to unauthenticated visitors and the portal dashboard to authenticated ones. No new subdomain pattern. Middleware already resolves the community from the subdomain. |
+| F | Supabase auth cookie scope | `.getpropertypro.com` (leading dot). Shared across apps. Each app enforces its own authorization independently |
 | G | Demo data lifecycle | **Demos persist until manually deleted.** No auto-expiry cron. Dashboard card in `apps/admin` shows "Stale Demos" with age badges at 10, 20, 30 days |
 | H | Shared Supabase Storage | Single bucket, path prefixing: `community-assets/{community_id}/`, `admin-assets/`, `demo-assets/{demo_id}/` |
 | I | Rich text in site builder | **No.** Plain text and markdown only |
@@ -143,7 +143,7 @@ These are answered. Do not revisit or ask for clarification.
 | L | PM route behavior | **No changes.** Existing PM routes stay functional as-is |
 | M | Admin DB access | **Service role client** (`createAdminClient()` from `@propertypro/db/supabase/admin`). Same pattern used for Stripe, provisioning, and PM portfolio queries in `apps/web`. No Postgres SECURITY DEFINER functions |
 | N | Admin portal access to real communities | **`platform_observer` role.** Create a new value in the `user_role` enum. When an admin views a community workspace, their auth user is automatically assigned `platform_observer` for that community. This role grants read-only access — no write permissions. Used for the "View as…" feature in the client workspace |
-| O | Demo user email pattern | `demo-resident@{slug}.propertyprofl.com` and `demo-board@{slug}.propertyprofl.com` where `{slug}` is the demo community's slug |
+| O | Demo user email pattern | `demo-resident@{slug}.getpropertypro.com` and `demo-board@{slug}.getpropertypro.com` where `{slug}` is the demo community's slug |
 | P | Demo user roles | Two users per demo: one with `owner` role (resident experience), one with `board_member` role (admin experience) |
 | Q | Seed data volume for demos | **Same as current seed.** Each demo community gets the full data set: document categories, documents, meetings, announcements, compliance checklist, and (for apartments) units, leases, maintenance requests |
 | R | PhoneFrame sharing | Move `PhoneFrame.tsx` to `packages/ui/src/components/PhoneFrame.tsx`. Remove app-specific imports — it should accept only `src: string` as prop (the iframe URL). `apps/admin` and `apps/web` both import from `@propertypro/ui` |
@@ -701,7 +701,7 @@ Agent does NOT need to create a Sentry project or obtain a DSN.
 <a id="phase-1"></a>
 ## 9. Phase 1 — Scaffold `apps/admin`
 
-Goal: A working `admin.propertyprofl.com` with login and client portfolio view.
+Goal: A working `admin.getpropertypro.com` with login and client portfolio view.
 
 ### 1.1 — Bootstrap the app
 
@@ -919,7 +919,7 @@ and run `apps/admin` tests.
 Manual step (not automated by agent):
 - Create Vercel project for `apps/admin`
 - Set root directory to `apps/admin`
-- Point `admin.propertyprofl.com` DNS
+- Point `admin.getpropertypro.com` DNS
 - Set environment variables (same Supabase project, same keys as `apps/web`)
 
 ---
@@ -1032,8 +1032,8 @@ Implementation steps:
    - `branding`: from request body
    - `is_demo`: `true`
 3. Call `seedCommunity()` from Phase 0.8
-4. Create resident demo user: `demo-resident@{slug}.propertyprofl.com`, password: random 32-char string (never stored/shown)
-5. Create board demo user: `demo-board@{slug}.propertyprofl.com`, same approach
+4. Create resident demo user: `demo-resident@{slug}.getpropertypro.com`, password: random 32-char string (never stored/shown)
+5. Create board demo user: `demo-board@{slug}.getpropertypro.com`, same approach
 6. Assign `owner` role to resident user, `board_member` role to board user
 7. Generate HMAC secret: `crypto.randomBytes(32).toString('hex')`
 8. Write `demo_instances` row
@@ -1159,9 +1159,9 @@ Ensure seeded demo data (from `seedCommunity()`) produces enough content:
 
 **Layout:** CSS Grid, two columns: `grid-template-columns: 1fr 430px`
 
-- **Left column:** `<iframe>` loading `https://{slug}.propertyprofl.com/api/v1/auth/demo-login?token={boardToken}`.
+- **Left column:** `<iframe>` loading `https://{slug}.getpropertypro.com/api/v1/auth/demo-login?token={boardToken}`.
   After auto-auth, the iframe shows the board member dashboard. Full height, border.
-- **Right column:** `<PhoneFrame src="https://{slug}.propertyprofl.com/api/v1/auth/demo-login?token={residentToken}" />`
+- **Right column:** `<PhoneFrame src="https://{slug}.getpropertypro.com/api/v1/auth/demo-login?token={residentToken}" />`
   (imported from `@propertypro/ui`). After auto-auth, shows the mobile resident experience.
 
 **Token generation:** On page load, server component queries `demo_instances`, generates
@@ -1202,7 +1202,7 @@ No admin chrome. This page IS the shareable link for prospects.
 <a id="phase-3"></a>
 ## 11. Phase 3 — Public Site Builder
 
-Goal: Each client has a public site at `[slug].propertyprofl.com`.
+Goal: Each client has a public site at `[slug].getpropertypro.com`.
 
 ### 3.1 — Site blocks table
 
@@ -1357,7 +1357,7 @@ All protected by `requirePlatformAdmin`.
 
 ### 3.6 — Domain configuration
 
-Public sites served at `[slug].propertyprofl.com`. This uses the existing subdomain
+Public sites served at `[slug].getpropertypro.com`. This uses the existing subdomain
 routing in middleware. No new Vercel projects, no wildcard DNS changes needed.
 
 The `custom_domain` column on `communities` exists for a future paid tier. Not implemented.
@@ -1481,7 +1481,7 @@ Do NOT implement any of the following. They are explicitly excluded:
 | PM scaffold | New Next.js app | Deferred entirely | Existing PM routes work |
 | Demo lifecycle | Auto-expiry cron | Manual deletion + stale demos dashboard card | Owner preference |
 | Demo schema | Single demo user | Two demo users (resident + board member) | Split-screen preview needs both roles |
-| Public site URL | `*.sites.propertyprofl.com` | `[slug].propertyprofl.com` (auth-split) | Same subdomain, fewer DNS records |
+| Public site URL | `*.sites.getpropertypro.com` | `[slug].getpropertypro.com` (auth-split) | Same subdomain, fewer DNS records |
 | Admin DB access | Unspecified | `createAdminClient()` (service_role) | Consistent with existing patterns |
 | Site blocks storage | JSONB on communities | `site_blocks` table | Granular saves, queryability |
 | Branding defaults | Unspecified | Exact hex values from landing page | Agent needs concrete values |

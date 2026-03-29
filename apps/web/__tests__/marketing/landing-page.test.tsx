@@ -171,7 +171,7 @@ describe('marketing landing page', () => {
 
     it('renders contact information', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
-      expect(html).toContain('support@propertyprofl.com');
+      expect(html).toContain('support@getpropertypro.com');
       expect(html).toContain('West Palm Beach, FL');
     });
 

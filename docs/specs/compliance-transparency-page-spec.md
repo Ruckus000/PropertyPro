@@ -70,10 +70,10 @@ Associations opt in to making their transparency page public. They can disable i
 ### 4.1 URL Pattern
 
 ```
-https://[subdomain].propertyprofl.com/transparency
+https://[subdomain].getpropertypro.com/transparency
 ```
 
-Example: `https://sunset-condos.propertyprofl.com/transparency`
+Example: `https://sunset-condos.getpropertypro.com/transparency`
 
 This extends the existing public route pattern at `/(public)/[subdomain]/`.
 
@@ -219,7 +219,7 @@ This extends the existing public route pattern at `/(public)/[subdomain]/`.
 │                                                         │
 │  ─────────────────────────────────────────────────      │
 │  Powered by PropertyPro · Florida Compliance Platform   │
-│  Learn more at propertyprofl.com                        │
+│  Learn more at getpropertypro.com                        │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -504,13 +504,13 @@ Returns the `TransparencyPageData` shape. This is the single source of truth —
 
 ### 10.1 SEO Value
 
-Each transparency page is a publicly indexable page at `[subdomain].propertyprofl.com/transparency`. For Florida condo buyers searching "[association name] compliance" or "[building name] documents," this page ranks.
+Each transparency page is a publicly indexable page at `[subdomain].getpropertypro.com/transparency`. For Florida condo buyers searching "[association name] compliance" or "[building name] documents," this page ranks.
 
 Structured data (JSON-LD) on the page identifies the organization, address, and page type for search engine rich results.
 
 ### 10.2 Backlink & Referral
 
-The footer includes "Powered by PropertyPro — Florida Compliance Platform" with a link to `propertyprofl.com`. Every transparency page is a backlink and a referral channel.
+The footer includes "Powered by PropertyPro — Florida Compliance Platform" with a link to `getpropertypro.com`. Every transparency page is a backlink and a referral channel.
 
 ### 10.3 Sales Enablement
 

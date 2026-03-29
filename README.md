@@ -10,8 +10,8 @@ PropertyPro helps condo associations, HOAs, and apartments meet Florida statutor
 
 | App | Port | Domain | Description |
 |-----|------|--------|-------------|
-| `apps/web` | 3000 | `[slug].propertyprofl.com` | Community portal (resident, board, PM) |
-| `apps/admin` | 3001 | `admin.propertyprofl.com` | Operator console (platform admin only) |
+| `apps/web` | 3000 | `[slug].getpropertypro.com` | Community portal (resident, board, PM) |
+| `apps/admin` | 3001 | `admin.getpropertypro.com` | Operator console (platform admin only) |
 
 ## Local Development
 

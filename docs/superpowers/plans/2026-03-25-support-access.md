@@ -1150,14 +1150,14 @@ export function StartSessionDialog({ communityId, communitySlug, members, open, 
       const { token } = await res.json();
 
       // Set impersonation cookie for the tenant subdomain
-      // Domain must be .propertyprofl.com so it's readable on [slug].propertyprofl.com
+      // Domain must be .getpropertypro.com so it's readable on [slug].getpropertypro.com
       const cookieDomain = window.location.hostname.includes('localhost')
         ? '' // No domain attribute in dev
-        : '; domain=.propertyprofl.com';
+        : '; domain=.getpropertypro.com';
       document.cookie = `${SUPPORT_SESSION_COOKIE}=${token}; path=/; max-age=3600; SameSite=Lax; Secure${cookieDomain}`;
 
       // Open the community's dashboard in a new tab
-      const tenantUrl = `https://${communitySlug}.propertyprofl.com/dashboard`;
+      const tenantUrl = `https://${communitySlug}.getpropertypro.com/dashboard`;
       window.open(tenantUrl, '_blank');
       onClose();
     } catch {
@@ -2105,7 +2105,7 @@ git commit -m "fix: address lint/type/test issues from support access implementa
 New communities should have consent **opted-in by default**. Add a step to the community onboarding flow (in `apps/web/src/lib/services/onboarding-service.ts`) that creates a `support_consent_grants` row. This can be done as a follow-up task.
 
 ### Cookie Domain Considerations
-The impersonation cookie is set on the admin app's domain. For it to work on tenant subdomains (`[slug].propertyprofl.com`), the cookie domain needs to be `.propertyprofl.com`. This requires the admin app to be on the same root domain or the token to be passed via URL parameter (one-time use, cleared immediately). The implementing agent should check what domain the admin app runs on and adjust the cookie setting in `StartSessionDialog.tsx` accordingly.
+The impersonation cookie is set on the admin app's domain. For it to work on tenant subdomains (`[slug].getpropertypro.com`), the cookie domain needs to be `.getpropertypro.com`. This requires the admin app to be on the same root domain or the token to be passed via URL parameter (one-time use, cleared immediately). The implementing agent should check what domain the admin app runs on and adjust the cookie setting in `StartSessionDialog.tsx` accordingly.
 
 ### jose Dependency
 The `jose` library is needed for JWT operations. Check if it's already in the dependency tree:

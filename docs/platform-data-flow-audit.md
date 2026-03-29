@@ -251,7 +251,7 @@ The PM dashboard at `/pm/dashboard/communities` shows a portfolio overview with 
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| PM-01 | **P1** | **`pm.propertyprofl.com` is a dead end.** The subdomain `pm` is in the reserved list and returns 404. The PM dashboard is accessed via path-based routing (`/pm/dashboard/communities`) on any domain, not via a dedicated subdomain. The CLAUDE.md claim of `pm.propertyprofl.com` is aspirational, not implemented. |
+| PM-01 | **P1** | **`pm.getpropertypro.com` is a dead end.** The subdomain `pm` is in the reserved list and returns 404. The PM dashboard is accessed via path-based routing (`/pm/dashboard/communities`) on any domain, not via a dedicated subdomain. The CLAUDE.md claim of `pm.getpropertypro.com` is aspirational, not implemented. |
 | PM-02 | **P1** | **No community creation from PM dashboard.** A PM admin managing multiple communities cannot add a new community from the portfolio view. They must go through the full public signup flow (new email, new Stripe checkout, new provisioning). There is no "Add Community" button or wizard. |
 | PM-03 | **P1** | **PM admin cannot be assigned during onboarding.** The provisioning service assigns `manager` (board_president/site_manager), not `pm_admin`. A PM company that signs up gets locked out of the portfolio dashboard for their first community until the role is manually patched. |
 | PM-04 | **P2** | **Bulk documents lose metadata.** `fileSize: 0` and `mimeType: 'application/octet-stream'` are hardcoded in the bulk document creation path. Actual file metadata from the upload step is discarded. |

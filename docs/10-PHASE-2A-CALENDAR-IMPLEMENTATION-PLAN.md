@@ -424,7 +424,7 @@ The calendar view replaces the list view. No standalone meeting list is needed. 
 
 **ICS subscribe section:**
 - Below the calendar grid
-- Shows copyable URL: `https://[subdomain].propertyprofl.com/api/v1/calendar/meetings.ics`
+- Shows copyable URL: `https://[subdomain].getpropertypro.com/api/v1/calendar/meetings.ics`
 - Helper text: "Add this URL to Apple Calendar, Google Calendar, or Outlook to stay synced."
 - Uses `Button` secondary variant with a copy icon
 
@@ -464,7 +464,7 @@ export interface IcsAssessmentInput {
 
 ```ics
 BEGIN:VEVENT
-UID:assessment-{assessmentId}-{dueDate}@propertyprofl.com
+UID:assessment-{assessmentId}-{dueDate}@getpropertypro.com
 DTSTAMP:20260318T120000Z
 DTSTART;VALUE=DATE:20260401
 SUMMARY:Q1 Assessment Due

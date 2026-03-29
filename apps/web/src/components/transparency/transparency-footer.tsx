@@ -40,7 +40,7 @@ export function TransparencyFooter({ communityType, generatedAt }: Props) {
       <p className="mt-4">
         Powered by{' '}
         <a
-          href="https://propertyprofl.com/?utm_source=transparency-page&utm_medium=referral&utm_campaign=public-trust"
+          href="https://getpropertypro.com/?utm_source=transparency-page&utm_medium=referral&utm_campaign=public-trust"
           className="font-medium text-content-link underline"
           rel="noreferrer"
           target="_blank"

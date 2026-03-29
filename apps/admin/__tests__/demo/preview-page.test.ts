@@ -34,7 +34,7 @@ describe('DemoPreviewPage URL construction', () => {
     vi.clearAllMocks();
     requireAdminPageSessionMock.mockResolvedValue({
       adminUserId: 'admin-user',
-      email: 'admin@propertyprofl.com',
+      email: 'admin@getpropertypro.com',
     });
     decryptDemoTokenSecretMock.mockReturnValue('decrypted-secret');
     generateDemoTokenMock.mockReturnValue('board-token');

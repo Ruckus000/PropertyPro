@@ -18,7 +18,7 @@ export function PublicSiteFooter({ communityName }: PublicSiteFooterProps) {
         <span>
           Powered by{' '}
           <a
-            href="https://propertyprofl.com"
+            href="https://getpropertypro.com"
             className="text-content-link hover:text-content-link font-medium"
             target="_blank"
             rel="noopener noreferrer"

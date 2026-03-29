@@ -5,7 +5,7 @@ describe('detectDemoInfo', () => {
   it('returns board role for standard slug', () => {
     const result = detectDemoInfo(
       true,
-      'demo-board@demo-acme-corp-a1b2c3.propertyprofl.com',
+      'demo-board@demo-acme-corp-a1b2c3.getpropertypro.com',
     );
     expect(result).toMatchObject({
       isDemoMode: true,
@@ -17,7 +17,7 @@ describe('detectDemoInfo', () => {
   it('returns resident role for standard slug', () => {
     const result = detectDemoInfo(
       true,
-      'demo-resident@demo-acme-corp-a1b2c3.propertyprofl.com',
+      'demo-resident@demo-acme-corp-a1b2c3.getpropertypro.com',
     );
     expect(result).toMatchObject({
       isDemoMode: true,
@@ -29,7 +29,7 @@ describe('detectDemoInfo', () => {
   it('handles slug with dots', () => {
     const result = detectDemoInfo(
       true,
-      'demo-resident@sunset.condos.propertyprofl.com',
+      'demo-resident@sunset.condos.getpropertypro.com',
     );
     expect(result).toMatchObject({
       isDemoMode: true,
@@ -41,7 +41,7 @@ describe('detectDemoInfo', () => {
   it('handles board role with dotted slug', () => {
     const result = detectDemoInfo(
       true,
-      'demo-board@sunset.condos.propertyprofl.com',
+      'demo-board@sunset.condos.getpropertypro.com',
     );
     expect(result).toMatchObject({
       isDemoMode: true,
@@ -53,7 +53,7 @@ describe('detectDemoInfo', () => {
   it('includes lifecycle fields from computeDemoStatus', () => {
     const result = detectDemoInfo(
       true,
-      'demo-board@test.propertyprofl.com',
+      'demo-board@test.getpropertypro.com',
       new Date(Date.now() + 86400000 * 14), // trialEndsAt: 14 days from now
       new Date(Date.now() + 86400000 * 21), // demoExpiresAt: 21 days from now
       'condo_718',
@@ -77,7 +77,7 @@ describe('detectDemoInfo', () => {
   it('returns null when isDemo is false', () => {
     const result = detectDemoInfo(
       false,
-      'demo-board@demo-acme-corp-a1b2c3.propertyprofl.com',
+      'demo-board@demo-acme-corp-a1b2c3.getpropertypro.com',
     );
     expect(result).toBeNull();
   });

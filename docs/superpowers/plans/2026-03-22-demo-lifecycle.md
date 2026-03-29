@@ -424,7 +424,7 @@ export default async function DemoLandingPage({
             This demo is no longer available. Contact us to schedule a new one.
           </p>
           <a
-            href="https://propertyprofl.com"
+            href="https://getpropertypro.com"
             className="mt-4 inline-block text-blue-600 hover:underline"
           >
             Visit PropertyPro

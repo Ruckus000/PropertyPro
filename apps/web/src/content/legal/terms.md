@@ -128,7 +128,7 @@ In the event of an imminent life-safety emergency (such as a building evacuation
 
 ### 6.4 Help and Support
 
-For SMS-related support, reply **HELP** to any message or contact us at support@propertyprofl.com. You can also manage your SMS preferences at any time through your account settings.
+For SMS-related support, reply **HELP** to any message or contact us at support@getpropertypro.com. You can also manage your SMS preferences at any time through your account settings.
 
 ### 6.5 Carriers and Liability
 
@@ -189,7 +189,7 @@ We reserve the right to modify these Terms of Service at any time. We will notif
 
 If you have questions about these Terms of Service, please contact us at:
 
-- **Email:** legal@propertyprofl.com
+- **Email:** legal@getpropertypro.com
 - **Address:** PropertyPro Florida, West Palm Beach, FL
 
 ---

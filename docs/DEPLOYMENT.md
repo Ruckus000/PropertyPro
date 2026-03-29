@@ -10,8 +10,8 @@
 ```
 GitHub (main) ──push──► GitHub Actions CI ──pass──► Vercel Deploy (Production)
                             │                              │
-                            ├─ lint                        ├─ propertyprofl.com
-                            ├─ typecheck                   ├─ *.propertyprofl.com (wildcard)
+                            ├─ lint                        ├─ getpropertypro.com
+                            ├─ typecheck                   ├─ *.getpropertypro.com (wildcard)
                             ├─ test                        └─ SSL via Let's Encrypt
                             └─ build
                                                      Supabase (Managed Postgres)
@@ -23,7 +23,7 @@ PR branch ──push──► GitHub Actions CI ──pass──► Vercel Previ
 
 | Environment | URL | Branch | Auto-deploy |
 |-------------|-----|--------|-------------|
-| Production | `propertyprofl.com` | `main` | Yes (via `deploy.yml` after CI passes) |
+| Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` after CI passes) |
 | Preview | `*.vercel.app` (unique per PR) | PR branches | Yes (via `deploy.yml` on PR events) |
 | Local dev | `localhost:3000` | Any | N/A |
 
@@ -43,7 +43,7 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Supabase Dashboard > Project Settings > API |
 | `DEMO_TOKEN_ENCRYPTION_KEY_HEX` | AES-256-GCM key for demo token-secret encryption | Generated via `openssl rand -hex 32` |
 | `DEMO_DEFAULT_PASSWORD` | Password for demo seed users | Internal documentation |
-| `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://propertyprofl.com` |
+| `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://getpropertypro.com` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
 
 ### Repository Variables
@@ -81,7 +81,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `SENTRY_PROJECT` | Build only | Sentry project slug |
 | `UPSTASH_REDIS_REST_URL` | Server only | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | Server only | Upstash Redis REST token |
-| `NEXT_PUBLIC_APP_URL` | All | `https://propertyprofl.com` (prod) |
+| `NEXT_PUBLIC_APP_URL` | All | `https://getpropertypro.com` (prod) |
 | `NODE_ENV` | All | `production` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
@@ -92,9 +92,9 @@ Set for **Production** and **Preview** environments unless noted.
 ### 5.1 Vercel Domain Setup
 
 1. In Vercel Dashboard > Project > Settings > Domains, add:
-   - `propertyprofl.com` (primary)
-   - `www.propertyprofl.com` (redirect to apex)
-   - `*.propertyprofl.com` (wildcard for tenant subdomains)
+   - `getpropertypro.com` (primary)
+   - `www.getpropertypro.com` (redirect to apex)
+   - `*.getpropertypro.com` (wildcard for tenant subdomains)
 
 2. Vercel will provide DNS records to configure.
 
@@ -116,7 +116,7 @@ Set for **Production** and **Preview** environments unless noted.
 |------|------|---------|
 | `TXT` | `@` | `v=spf1 include:send.resend.com ~all` |
 | `CNAME` | `resend._domainkey` | *(value from Resend dashboard)* |
-| `TXT` | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@propertyprofl.com` |
+| `TXT` | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@getpropertypro.com` |
 
 ## 6. CI/CD Pipeline
 

@@ -6,7 +6,7 @@ export function getWebAppPublicBaseUrl(): string {
   if (process.env.NODE_ENV === 'development') {
     return process.env.NEXT_PUBLIC_WEB_APP_URL ?? 'http://localhost:3000';
   }
-  return process.env.NEXT_PUBLIC_WEB_APP_URL ?? 'https://propertyprofl.com';
+  return process.env.NEXT_PUBLIC_WEB_APP_URL ?? 'https://getpropertypro.com';
 }
 
 export function getClientDemoLandingUrl(slug: string): string {

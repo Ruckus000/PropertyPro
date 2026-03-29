@@ -42,7 +42,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 // Helper: build a mock NextRequest
 // ---------------------------------------------------------------------------
 function makeRequest(pathname: string): NextRequest {
-  return new NextRequest(new URL(`http://admin.propertyprofl.com${pathname}`));
+  return new NextRequest(new URL(`http://admin.getpropertypro.com${pathname}`));
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ describe('admin middleware', () => {
 
   it('passes through authenticated platform admin', async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'admin-456', email: 'admin@propertyprofl.com' } },
+      data: { user: { id: 'admin-456', email: 'admin@getpropertypro.com' } },
     });
     mockSingleFrom.mockResolvedValue({ data: { user_id: 'admin-456' } });
 

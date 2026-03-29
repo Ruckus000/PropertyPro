@@ -1,6 +1,6 @@
 /**
  * Shared cookie options for all Supabase client factories.
- * When NEXT_PUBLIC_COOKIE_DOMAIN is set (e.g. ".propertyprofl.com"),
+ * When NEXT_PUBLIC_COOKIE_DOMAIN is set (e.g. ".getpropertypro.com"),
  * auth cookies are shared across all subdomains.
  *
  * @module supabase/cookie-config
@@ -24,7 +24,7 @@ export function getCookieOptions(): CookieOptionsWithName | undefined {
 
   if (!domain.startsWith('.')) {
     console.warn(
-      `[cookie-config] NEXT_PUBLIC_COOKIE_DOMAIN="${domain}" should start with "." for subdomain sharing (e.g. ".propertyprofl.com")`,
+      `[cookie-config] NEXT_PUBLIC_COOKIE_DOMAIN="${domain}" should start with "." for subdomain sharing (e.g. ".getpropertypro.com")`,
     );
   }
 

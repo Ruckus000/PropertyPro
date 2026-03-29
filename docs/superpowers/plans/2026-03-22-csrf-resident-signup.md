@@ -88,11 +88,11 @@ describe('isAllowedReferer', () => {
     // Use real implementation for these tests
     const { isAllowedReferer: realImpl } = vi.importActual<typeof import('@/lib/middleware/security-headers')>('@/lib/middleware/security-headers');
     isAllowedRefererMock.mockImplementation(realImpl);
-    isAllowedOriginMock.mockImplementation((origin: string) => origin.includes('localhost') || origin.includes('propertyprofl.com'));
+    isAllowedOriginMock.mockImplementation((origin: string) => origin.includes('localhost') || origin.includes('getpropertypro.com'));
   });
 
   it('extracts origin from referer URL and delegates to isAllowedOrigin', () => {
-    expect(isAllowedReferer('https://sunset-condos.propertyprofl.com/dashboard')).toBe(true);
+    expect(isAllowedReferer('https://sunset-condos.getpropertypro.com/dashboard')).toBe(true);
   });
 
   it('rejects referer from unknown origin', () => {

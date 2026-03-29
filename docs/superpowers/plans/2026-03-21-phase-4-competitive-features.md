@@ -22,7 +22,7 @@
 - Migration: `packages/db/migrations/NNNN_add_join_requests.sql`
 
 **Approach:**
-1. Public page at `join.propertyprofl.com/<slug>` or `<slug>.propertyprofl.com/join`
+1. Public page at `join.getpropertypro.com/<slug>` or `<slug>.getpropertypro.com/join`
 2. Collects: name, email, unit number (selected from community's units), phone (optional)
 3. Creates a `join_requests` row (status: `pending`)
 4. Admin sees pending requests in dashboard → approve (creates user + role + invitation) or reject

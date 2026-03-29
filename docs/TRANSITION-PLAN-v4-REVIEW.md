@@ -79,8 +79,8 @@ These are answered once, referenced everywhere.
 | B | `turbo dev` behavior | Starts both apps. Individual: `pnpm --filter apps/admin dev` |
 | C | Environment variables | Each app symlinks to root `.env.local`. App-specific vars via `next.config.ts` `env` block |
 | D | Vercel project plan | Verify team plan supports 2 projects. No fallback needed at this scale |
-| E | Production domain | `propertyprofl.com`. Public sites at `[slug].propertyprofl.com` (same app, subdomain routing) |
-| F | Supabase auth cookie scope | `.propertyprofl.com` (leading dot). Each app enforces its own authorization. See Auth Boundary Model |
+| E | Production domain | `getpropertypro.com`. Public sites at `[slug].getpropertypro.com` (same app, subdomain routing) |
+| F | Supabase auth cookie scope | `.getpropertypro.com` (leading dot). Each app enforces its own authorization. See Auth Boundary Model |
 | G | Demo data lifecycle | `is_demo` boolean on `communities`. Expired demos flagged, not deleted. Daily cron deactivates |
 | H | Shared Supabase Storage | Single bucket, path prefixing: `community-assets/{community_id}/`, `admin-assets/`, `demo-assets/{demo_id}/` |
 | I | Rich text in site builder | No. Plain text and markdown only. Rich text is a future enhancement |
@@ -102,8 +102,8 @@ enforces its own authorization.
 | `apps/web` (PM routes) | Yes | `user_roles` row with `property_manager_admin` | Scoped to assigned communities |
 | `apps/admin` | Yes | `platform_admin_users` row — checked in middleware AND every API route handler | Unscoped — platform admin sees all |
 
-**Cookie sharing:** A session from `sunset-condos.propertyprofl.com` is technically valid
-on `admin.propertyprofl.com`. Safe because admin middleware rejects sessions without
+**Cookie sharing:** A session from `sunset-condos.getpropertypro.com` is technically valid
+on `admin.getpropertypro.com`. Safe because admin middleware rejects sessions without
 a `platform_admin_users` row.
 
 **Mitigation for shared cookie risk:** Set `SameSite=Lax` on auth cookies (Supabase default).
@@ -253,7 +253,7 @@ Add before building new apps:
 
 ## Phase 1 — Scaffold `apps/admin`
 
-Goal: A working `admin.propertyprofl.com` with login and client portfolio view.
+Goal: A working `admin.getpropertypro.com` with login and client portfolio view.
 
 ### 1.1 — Bootstrap the app
 Create `apps/admin` as a new Next.js 15 app. Covered by `apps/*` in `pnpm-workspace.yaml`.
@@ -305,7 +305,7 @@ Click → `/clients/[id]`.
   `platform_admin_users` row. This is security-critical and must be in CI, not manual.
 
 ### 1.8 — Vercel configuration
-Add `apps/admin` as Vercel project. Point `admin.propertyprofl.com`. Same Supabase
+Add `apps/admin` as Vercel project. Point `admin.getpropertypro.com`. Same Supabase
 credentials. Verify cross-subdomain cookie sharing works.
 
 ---
@@ -427,7 +427,7 @@ renew/delete actions. Expired demos greyed out.
 
 ## Phase 3 — Public Site Builder (Route Group, Not Separate App)
 
-Goal: Each client has a public site at `[slug].propertyprofl.com`, built via a block
+Goal: Each client has a public site at `[slug].getpropertypro.com`, built via a block
 editor in `apps/admin`.
 
 ### 3.1 — Site blocks table
@@ -504,7 +504,7 @@ Data flow: Edits save individual blocks via `PUT /api/admin/site-blocks/[blockId
 - CI guard: `(public-site)` route group uses read-only community-scoped queries only.
 
 ### 3.6 — Domain configuration
-Public sites served at `[slug].propertyprofl.com` via the existing subdomain routing.
+Public sites served at `[slug].getpropertypro.com` via the existing subdomain routing.
 `custom_domain` column exists for future use — not built yet.
 
 ---

@@ -75,7 +75,7 @@ Duration: 28.59s
 
 ### Non-blocking stderr warnings
 
-- Resend domain verification warnings (expected in non-production): `mail.propertyprofl.com` domain not verified.
+- Resend domain verification warnings (expected in non-production): `mail.getpropertypro.com` domain not verified.
 - Resend rate limit (2 req/s) hit during test — notifications are best-effort and do not affect test assertions.
 
 ## Summary

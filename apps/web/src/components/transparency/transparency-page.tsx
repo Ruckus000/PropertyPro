@@ -28,7 +28,7 @@ export function TransparencyPage({ data }: Props) {
     isPartOf: {
       '@type': 'Organization',
       name: 'PropertyPro Florida',
-      url: 'https://propertyprofl.com',
+      url: 'https://getpropertypro.com',
     },
   };
 

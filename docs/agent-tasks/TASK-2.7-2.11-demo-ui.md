@@ -131,7 +131,7 @@ This is a **server component** that:
   {/* Left: Desktop board member view */}
   <div className="border-r">
     <iframe
-      src={`https://${instance.slug}.propertyprofl.com/api/v1/auth/demo-login?token=${boardToken}`}
+      src={`https://${instance.slug}.getpropertypro.com/api/v1/auth/demo-login?token=${boardToken}`}
       className="h-full w-full"
       title="Board member dashboard preview"
     />
@@ -140,7 +140,7 @@ This is a **server component** that:
   {/* Right: Mobile resident view in PhoneFrame */}
   <div className="flex items-center justify-center bg-gray-100 p-4">
     <PhoneFrame
-      src={`https://${instance.slug}.propertyprofl.com/api/v1/auth/demo-login?token=${residentToken}`}
+      src={`https://${instance.slug}.getpropertypro.com/api/v1/auth/demo-login?token=${residentToken}`}
     />
   </div>
 </div>
@@ -164,7 +164,7 @@ Server component:
 ```tsx
 <div className="flex min-h-screen items-center justify-center bg-gray-950">
   <PhoneFrame
-    src={`https://${instance.slug}.propertyprofl.com/api/v1/auth/demo-login?token=${residentToken}`}
+    src={`https://${instance.slug}.getpropertypro.com/api/v1/auth/demo-login?token=${residentToken}`}
   />
 </div>
 ```

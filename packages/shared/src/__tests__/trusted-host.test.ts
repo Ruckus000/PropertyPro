@@ -40,8 +40,8 @@ describe('isTrustedHostname', () => {
     expect(isTrustedHostname('evil.com', { primaryHostname: 'getpropertypro.com' })).toBe(false);
   });
 
-  it('allows legacy propertyprofl.com and subdomains without primary', () => {
-    expect(isTrustedHostname('propertyprofl.com')).toBe(true);
-    expect(isTrustedHostname('sunset-condos.propertyprofl.com')).toBe(true);
+  it('allows canonical getpropertypro.com and subdomains without primaryHostname', () => {
+    expect(isTrustedHostname('getpropertypro.com')).toBe(true);
+    expect(isTrustedHostname('sunset-condos.getpropertypro.com')).toBe(true);
   });
 });

@@ -86,7 +86,7 @@ export function buildCalendarIcs(
 
     lines.push(
       'BEGIN:VEVENT',
-      `UID:meeting-${meeting.id}@propertyprofl.com`,
+      `UID:meeting-${meeting.id}@getpropertypro.com`,
       `DTSTAMP:${toIcsTimestamp(generatedAt)}`,
       `DTSTART:${toIcsTimestamp(meeting.startsAt)}`,
       `DTEND:${toIcsTimestamp(endsAt)}`,
@@ -100,7 +100,7 @@ export function buildCalendarIcs(
   for (const assessment of assessments) {
     lines.push(
       'BEGIN:VEVENT',
-      `UID:assessment-${assessment.assessmentId}-${assessment.dueDate}@propertyprofl.com`,
+      `UID:assessment-${assessment.assessmentId}-${assessment.dueDate}@getpropertypro.com`,
       `DTSTAMP:${toIcsTimestamp(generatedAt)}`,
       `DTSTART;VALUE=DATE:${toIcsDate(assessment.dueDate)}`,
       `SUMMARY:${escapeIcsText(assessment.title)}`,

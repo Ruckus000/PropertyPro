@@ -873,7 +873,7 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
     const response = await middleware(
       new NextRequest(apiUrl('/api/v1/documents?tenant=tenant-query-wins'), {
         headers: {
-          host: 'tenant-host-conflict.propertyprofl.com',
+          host: 'tenant-host-conflict.getpropertypro.com',
         },
       }),
     );
@@ -899,7 +899,7 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
     const response = await middleware(
       new NextRequest(apiUrl('/api/v1/documents'), {
         headers: {
-          host: 'tenant-sanitized.propertyprofl.com',
+          host: 'tenant-sanitized.getpropertypro.com',
           'x-community-id': '999',
           'x-tenant-slug': 'spoofed-slug',
           'x-tenant-source': 'spoofed-source',

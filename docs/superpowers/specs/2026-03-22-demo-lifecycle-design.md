@@ -58,7 +58,7 @@ A public page at `/demo/[slug]` on the web app that serves as the stable, sharea
 
 ### Admin App Changes
 
-- **Copy link button** in `TabbedPreviewClient.tsx`: copy `https://propertyprofl.com/demo/[slug]` instead of the raw token URL.
+- **Copy link button** in `TabbedPreviewClient.tsx`: copy `https://getpropertypro.com/demo/[slug]` instead of the raw token URL.
 - Keep existing tab-specific token URLs for admin's own iframe previews (those still use 1-hour tokens for security within the admin panel).
 
 > **Note:** No `token_ttl_seconds` column is added. The new landing page bypasses HMAC tokens entirely (session created server-side via magic link). The admin preview iframes continue to use the hardcoded 1-hour TTL. There is no consumer for a configurable TTL column — adding one would be dead code.

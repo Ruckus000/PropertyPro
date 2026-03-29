@@ -90,7 +90,7 @@ describe('Twilio webhook route', () => {
 
   it('reconstructs the Twilio signature URL from origin and pathname only', async () => {
     const req = createWebhookRequest(
-      'https://propertyprofl.com/api/v1/webhooks/twilio?foo=bar',
+      'https://getpropertypro.com/api/v1/webhooks/twilio?foo=bar',
       {
         MessageSid: 'SM123',
         MessageStatus: 'delivered',
@@ -102,7 +102,7 @@ describe('Twilio webhook route', () => {
     expect(res.status).toBe(200);
     expect(validateSmsWebhookSignatureMock).toHaveBeenCalledWith(
       'test-signature',
-      'https://propertyprofl.com/api/v1/webhooks/twilio',
+      'https://getpropertypro.com/api/v1/webhooks/twilio',
       {
         MessageSid: 'SM123',
         MessageStatus: 'delivered',
@@ -111,7 +111,7 @@ describe('Twilio webhook route', () => {
   });
 
   it('returns 400 when required Twilio fields are missing', async () => {
-    const req = createWebhookRequest('https://propertyprofl.com/api/v1/webhooks/twilio', {
+    const req = createWebhookRequest('https://getpropertypro.com/api/v1/webhooks/twilio', {
       MessageSid: 'SM123',
     });
 
@@ -127,7 +127,7 @@ describe('Twilio webhook route', () => {
     limitMock.mockResolvedValue([]);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    const req = createWebhookRequest('https://propertyprofl.com/api/v1/webhooks/twilio', {
+    const req = createWebhookRequest('https://getpropertypro.com/api/v1/webhooks/twilio', {
       MessageSid: 'SM404',
       MessageStatus: 'failed',
     });
@@ -150,7 +150,7 @@ describe('Twilio webhook route', () => {
     updateRecipientSmsStatusByIdsMock.mockRejectedValue(new Error('db write failed'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const req = createWebhookRequest('https://propertyprofl.com/api/v1/webhooks/twilio', {
+    const req = createWebhookRequest('https://getpropertypro.com/api/v1/webhooks/twilio', {
       MessageSid: 'SM123',
       MessageStatus: 'delivered',
     });

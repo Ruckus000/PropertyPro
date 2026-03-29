@@ -151,7 +151,7 @@ describe('p1-22 session middleware', () => {
   it('returns 404 for reserved tenant subdomains before auth checks', async () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents', {
-        host: 'admin.propertyprofl.com',
+        host: 'admin.getpropertypro.com',
       }),
     );
     const json = (await response.json()) as { error: string };
@@ -169,7 +169,7 @@ describe('p1-22 session middleware', () => {
 
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents', {
-        host: 'unknown.propertyprofl.com',
+        host: 'unknown.getpropertypro.com',
       }),
     );
     const json = (await response.json()) as { error: string };

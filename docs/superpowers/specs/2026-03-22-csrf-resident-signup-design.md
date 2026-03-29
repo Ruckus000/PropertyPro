@@ -78,7 +78,7 @@ export function isAllowedReferer(referer: string): boolean {
 - **Missing both Origin and Referer:** Allow. Some privacy proxies strip both headers. Blocking would break legitimate users. SameSite cookies still protect these requests.
 - **Localhost in development:** `isAllowedOrigin()` already allows `localhost` and `127.0.0.1`.
 - **Vercel preview deployments:** Covered by `NEXT_PUBLIC_APP_URL` check in `isAllowedOrigin()`.
-- **Admin app cross-origin requests:** Admin app at `admin.propertyprofl.com` hits web API. This is a subdomain of `PRODUCTION_DOMAIN` — already allowed by `isAllowedOrigin()`.
+- **Admin app cross-origin requests:** Admin app at `admin.getpropertypro.com` hits web API. This is a subdomain of `PRODUCTION_DOMAIN` — already allowed by `isAllowedOrigin()`.
 
 ---
 
@@ -87,7 +87,7 @@ export function isAllowedReferer(referer: string): boolean {
 ### 3.1 User Flow
 
 ```
-1. Resident visits [slug].propertyprofl.com/request-access
+1. Resident visits [slug].getpropertypro.com/request-access
    (or follows a shareable link with ?ref=<tracking-code>)
 2. Fills form: full name, email, unit number, owner/tenant toggle
 3. Receives 6-digit OTP code via email (Resend, not Supabase auth)
@@ -275,7 +275,7 @@ Both public routes are also exempt from CSRF Origin enforcement (see §2.4) sinc
 
 ### 3.9 Shareable Link
 
-Admins can copy a link from the residents page: `[slug].propertyprofl.com/request-access?ref=<code>`
+Admins can copy a link from the residents page: `[slug].getpropertypro.com/request-access?ref=<code>`
 
 The `ref` code is a short alphanumeric string (8 chars, generated per-admin). It's stored in `ref_code` on the access request for analytics (which admin's link drove signups). It is NOT a secret — the page is public regardless of whether `ref` is present.
 

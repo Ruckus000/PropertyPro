@@ -121,8 +121,8 @@ export async function POST(request: NextRequest) {
   const slug = `demo-${sanitized}-${randomBytes(3).toString('hex')}`;
 
   // Demo user emails
-  const residentEmail = `demo-resident@${slug}.propertyprofl.com`;
-  const boardEmail = `demo-board@${slug}.propertyprofl.com`;
+  const residentEmail = `demo-resident@${slug}.getpropertypro.com`;
+  const boardEmail = `demo-board@${slug}.getpropertypro.com`;
 
   const brandingPayload: CommunityBranding = {
     primaryColor: branding.primaryColor,

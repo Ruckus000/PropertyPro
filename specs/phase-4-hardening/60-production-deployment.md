@@ -13,8 +13,8 @@ P0
 
 ## Functional Requirements
 - Vercel project configured for monorepo (apps/web as root)
-- Custom domain: propertyprofl.com
-- Wildcard subdomain: *.propertyprofl.com
+- Custom domain: getpropertypro.com
+- Wildcard subdomain: *.getpropertypro.com
 - SSL certificates
 - All production environment variables set
 - Database connection to Supabase production instance
@@ -22,7 +22,7 @@ P0
 - Verify build and deployment succeed
 
 ## Acceptance Criteria
-- [ ] Production site loads at propertyprofl.com
+- [ ] Production site loads at getpropertypro.com
 - [ ] Wildcard subdomains resolve correctly
 - [ ] SSL valid
 - [ ] All environment variables present

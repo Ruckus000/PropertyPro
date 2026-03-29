@@ -1,7 +1,7 @@
 /**
  * P1-7: Cross-subdomain session tests.
  *
- * Verifies that a session from .propertyprofl.com is accepted by admin
+ * Verifies that a session from .getpropertypro.com is accepted by admin
  * middleware, and that non-admin accounts are rejected even with valid sessions.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -38,12 +38,12 @@ describe('cross-subdomain session', () => {
   it('accepts session from a platform_admin_users member', async () => {
     const adminUserId = 'platform-admin-uuid';
     mockGetUser.mockResolvedValue({
-      data: { user: { id: adminUserId, email: 'admin@propertyprofl.com' } },
+      data: { user: { id: adminUserId, email: 'admin@getpropertypro.com' } },
     });
     mockSingle.mockResolvedValue({ data: { user_id: adminUserId } });
 
     const { middleware } = await import('@/middleware');
-    const req = new NextRequest('http://admin.propertyprofl.com/clients');
+    const req = new NextRequest('http://admin.getpropertypro.com/clients');
     const res = await middleware(req);
 
     // Should not redirect to login
@@ -54,12 +54,12 @@ describe('cross-subdomain session', () => {
   it('rejects session for user not in platform_admin_users', async () => {
     const nonAdminId = 'regular-user-uuid';
     mockGetUser.mockResolvedValue({
-      data: { user: { id: nonAdminId, email: 'user@sunset-condos.propertyprofl.com' } },
+      data: { user: { id: nonAdminId, email: 'user@sunset-condos.getpropertypro.com' } },
     });
     mockSingle.mockResolvedValue({ data: null }); // No platform_admin_users row
 
     const { middleware } = await import('@/middleware');
-    const req = new NextRequest('http://admin.propertyprofl.com/clients');
+    const req = new NextRequest('http://admin.getpropertypro.com/clients');
     const res = await middleware(req);
 
     expect(res.status).toBe(307);
@@ -71,7 +71,7 @@ describe('cross-subdomain session', () => {
     mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import('@/middleware');
-    const req = new NextRequest('http://admin.propertyprofl.com/clients');
+    const req = new NextRequest('http://admin.getpropertypro.com/clients');
     const res = await middleware(req);
 
     expect(res.status).toBe(307);

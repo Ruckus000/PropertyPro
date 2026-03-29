@@ -126,8 +126,8 @@ import { GET } from '../../src/app/api/v1/auth/demo-login/route';
 const HASHED_TOKEN = 'hashed-token-abc123';
 const BASE_INSTANCE = {
   id: 101,
-  demoResidentEmail: 'demo-resident@test.propertyprofl.com',
-  demoBoardEmail: 'demo-board@test.propertyprofl.com',
+  demoResidentEmail: 'demo-resident@test.getpropertypro.com',
+  demoBoardEmail: 'demo-board@test.getpropertypro.com',
   seededCommunityId: 42,
 };
 
@@ -173,7 +173,7 @@ describe('demo-login route hardening', () => {
   });
 
   it('returns session_error and logs when encrypted secret exists but DEMO_TOKEN_ENCRYPTION_KEY_HEX is missing', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     state.rows = [
@@ -183,10 +183,10 @@ describe('demo-login route hardening', () => {
       },
     ];
 
-    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/auth/login?error=session_error');
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('DEMO_TOKEN_ENCRYPTION_KEY_HEX is required'),
     );
@@ -195,7 +195,7 @@ describe('demo-login route hardening', () => {
   });
 
   it('redirects to computed URL after server-side OTP verification', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', 'a'.repeat(64));
 
     state.rows = [
@@ -209,7 +209,7 @@ describe('demo-login route hardening', () => {
 
     expect(response.status).toBe(307);
     // Should redirect to the computed redirect URL, not to a Supabase action link
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/mobile?communityId=42');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/mobile?communityId=42');
     expect(generateLinkMock).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'magiclink',
@@ -223,7 +223,7 @@ describe('demo-login route hardening', () => {
   });
 
   it('keeps legacy plaintext-secret flow working without encryption key', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     decryptDemoTokenSecretMock.mockReturnValue('legacy-plaintext-secret');
 
     state.rows = [
@@ -233,17 +233,17 @@ describe('demo-login route hardening', () => {
       },
     ];
 
-    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/mobile?communityId=42');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/mobile?communityId=42');
     expect(decryptDemoTokenSecretMock).toHaveBeenCalledWith('legacy-plaintext-secret', '');
     expect(generateLinkMock).toHaveBeenCalledTimes(1);
     expect(verifyOtpMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns invalid_token when decryption fails', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', 'a'.repeat(64));
     decryptDemoTokenSecretMock.mockReturnValue(null);
     validateDemoTokenMock.mockReturnValue(null);
@@ -255,27 +255,27 @@ describe('demo-login route hardening', () => {
       },
     ];
 
-    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=invalid_token');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/auth/login?error=invalid_token');
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 
   it('uses trusted base for login errors and sets hardened redirect headers', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
 
     const response = await GET(makeRequest('https://evil.example/api/v1/auth/demo-login'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/auth/login');
     expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(response.headers.get('Pragma')).toBe('no-cache');
   });
 
   it('returns session_error when OTP verification fails', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     state.rows = [
@@ -287,10 +287,10 @@ describe('demo-login route hardening', () => {
 
     verifyOtpMock.mockResolvedValue({ data: null, error: { message: 'Invalid OTP' } });
 
-    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/auth/login?error=session_error');
     expect(errorSpy).toHaveBeenCalledWith(
       '[demo-session] OTP verification failed:',
       'Invalid OTP',
@@ -298,7 +298,7 @@ describe('demo-login route hardening', () => {
   });
 
   it('returns session_error when hashed_token is missing from generateLink response', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     state.rows = [
@@ -313,15 +313,15 @@ describe('demo-login route hardening', () => {
       error: null,
     });
 
-    const response = await GET(makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test'));
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://propertyprofl.com/auth/login?error=session_error');
+    expect(response.headers.get('location')).toBe('https://getpropertypro.com/auth/login?error=session_error');
     expect(verifyOtpMock).not.toHaveBeenCalled();
   });
 
   it('propagates preview=true to redirect URL via HTML redirect (200)', async () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://propertyprofl.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
 
     state.rows = [
       {
@@ -331,13 +331,13 @@ describe('demo-login route hardening', () => {
     ];
 
     const response = await GET(
-      makeRequest('https://propertyprofl.com/api/v1/auth/demo-login?token=test&preview=true'),
+      makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test&preview=true'),
     );
 
     // Preview mode uses a 200 HTML response with client-side redirect
     // because browsers block Set-Cookie on 307 in cross-origin iframes
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('https://propertyprofl.com/mobile?communityId=42&amp;preview=true');
+    expect(html).toContain('https://getpropertypro.com/mobile?communityId=42&amp;preview=true');
   });
 });

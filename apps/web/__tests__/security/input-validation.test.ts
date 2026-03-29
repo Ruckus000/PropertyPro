@@ -262,7 +262,7 @@ describe('P4-56 / Zod schema primitives', () => {
 
   it('emailSchema accepts valid emails', async () => {
     const { emailSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(emailSchema.safeParse('user@propertyprofl.com').success).toBe(true);
+    expect(emailSchema.safeParse('user@getpropertypro.com').success).toBe(true);
   });
 });
 

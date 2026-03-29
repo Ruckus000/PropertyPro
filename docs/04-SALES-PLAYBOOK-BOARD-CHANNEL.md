@@ -187,7 +187,7 @@ Listen more than you talk. Their answers tell you which pain points to emphasize
 
 **Minutes 10â€“25: Demo their own portal.** Share your screen and show them:
 
-1. **Their public website** â€” already live at `[associationname].propertyprofl.com` with the "Notices" page per statute
+1. **Their public website** â€” already live at `[associationname].getpropertypro.com` with the "Notices" page per statute
 2. **Their compliance dashboard** â€” the traffic-light checklist showing green for the documents you pre-loaded, red/yellow for everything missing. This is the "aha" moment. They see their specific gaps mapped to specific statute sections.
 3. **Their document library** â€” their declaration and bylaws already loaded and categorized
 4. **The owner portal** â€” what their residents would see when they log in
@@ -266,7 +266,7 @@ Lock it in. Send the confirmation email within 2 hours.
 >
 > Great talking with you today. Here's what's happening:
 >
-> Your portal is live at **[associationname].propertyprofl.com**. Admin credentials are below. I've pre-loaded your declaration and bylaws from the county records â€” your compliance score starts at [X]%.
+> Your portal is live at **[associationname].getpropertypro.com**. Admin credentials are below. I've pre-loaded your declaration and bylaws from the county records â€” your compliance score starts at [X]%.
 >
 > **Audit timeline:**
 > - **This week:** Log in, explore the compliance dashboard, upload one or two documents you have handy (meeting minutes, insurance policy)

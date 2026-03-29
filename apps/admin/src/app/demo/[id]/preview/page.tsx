@@ -50,7 +50,7 @@ export default async function DemoPreviewPage({ params }: PageProps) {
   const webBaseUrl =
     process.env.NODE_ENV === 'development'
       ? `http://localhost:3000`
-      : `https://${demo.slug}.propertyprofl.com`;
+      : `https://${demo.slug}.getpropertypro.com`;
 
   // Public landing page URL for sharing (main web app — same helper as demo wizard)
   const landingPageUrl = getClientDemoLandingUrl(demo.slug);

@@ -65,8 +65,8 @@ Implementation steps (in order):
        isDemo: true,
      },
      [
-       { email: `demo-resident@${slug}.propertyprofl.com`, fullName: 'Demo Resident', role: 'owner' },
-       { email: `demo-board@${slug}.propertyprofl.com`, fullName: 'Demo Board Member', role: 'board_member' },
+       { email: `demo-resident@${slug}.getpropertypro.com`, fullName: 'Demo Resident', role: 'owner' },
+       { email: `demo-board@${slug}.getpropertypro.com`, fullName: 'Demo Board Member', role: 'board_member' },
      ],
      { syncAuthUsers: true },
    );

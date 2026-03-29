@@ -26,9 +26,9 @@ describe('calendar ICS builder', () => {
       },
     );
 
-    expect(ics).toContain('UID:meeting-1@propertyprofl.com');
+    expect(ics).toContain('UID:meeting-1@getpropertypro.com');
     expect(ics).toContain('DTEND:20260418T153000Z');
-    expect(ics).toContain('UID:assessment-12-2026-04-20@propertyprofl.com');
+    expect(ics).toContain('UID:assessment-12-2026-04-20@getpropertypro.com');
     expect(ics).toContain('DTSTART;VALUE=DATE:20260420');
   });
 

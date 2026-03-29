@@ -173,7 +173,7 @@ describe('Privacy Policy content', () => {
   });
 
   it('includes contact information for data requests', () => {
-    expect(privacyContent).toContain('privacy@propertyprofl.com');
+    expect(privacyContent).toContain('privacy@getpropertypro.com');
   });
 
   it('includes the effective date', () => {
