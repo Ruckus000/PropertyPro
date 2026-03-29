@@ -24,6 +24,11 @@
       "import": "./src/supabase/admin.ts",
       "default": "./src/supabase/admin.ts"
     },
+    "./supabase/admin-types": {
+      "types": "./src/supabase/admin-types.ts",
+      "import": "./src/supabase/admin-types.ts",
+      "default": "./src/supabase/admin-types.ts"
+    },
     "./supabase/middleware": {
       "types": "./src/supabase/middleware.ts",
       "import": "./src/supabase/middleware.ts",

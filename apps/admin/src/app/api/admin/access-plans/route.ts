@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 function computeStatus(row: {
   revoked_at: string | null;
@@ -22,10 +22,6 @@ function computeStatus(row: {
   return 'expired';
 }
 
-// Supabase untyped client — access_plans is a new table not yet in generated types.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
-
 export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
 
@@ -34,10 +30,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: { message: 'communityId is required' } }, { status: 400 });
   }
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { data, error } = await (db
-    .from('access_plans') as AnyQuery)
+    .from('access_plans'))
     .select('*')
     .eq('community_id', Number(communityId))
     .order('created_at', { ascending: false });
@@ -88,10 +84,10 @@ export async function POST(request: NextRequest) {
   const graceEndsAt = new Date(expiresAt);
   graceEndsAt.setDate(graceEndsAt.getDate() + gracePeriodDays);
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { data, error } = await (db
-    .from('access_plans') as AnyQuery)
+    .from('access_plans'))
     .insert({
       community_id: communityId,
       expires_at: expiresAt.toISOString(),

@@ -5,10 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -26,10 +23,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const body = await request.json();
   const { notes } = body as { notes?: string };
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { data, error } = await (db
-    .from('account_deletion_requests') as AnyQuery)
+    .from('account_deletion_requests'))
     .update({
       status: 'cancelled',
       cancelled_at: new Date().toISOString(),

@@ -19,6 +19,7 @@ import { InvitationEmail, sendEmail } from '@propertypro/email';
 import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
 import { getPresetPermissions, PRESET_METADATA } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
+import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 
 /**
@@ -129,7 +130,7 @@ export async function createOnboardingInvitation(params: {
   userId: string;
   ttlDays?: number;
   actorUserId: string;
-}): Promise<{ token: string; expiresAt: Date }> {
+}): Promise<{ id: number; token: string; expiresAt: Date }> {
   const { communityId, userId, ttlDays = 7, actorUserId } = params;
   const scoped = createScopedClient(communityId);
 
@@ -156,12 +157,13 @@ export async function createOnboardingInvitation(params: {
   const expiresAt = addDays(new Date(), ttlDays);
 
   // Create invitation
-  await scoped.insert(invitationsTable, {
+  const insertedInvitations = await scoped.insert(invitationsTable, {
     userId,
     token,
     invitedBy: actorUserId,
     expiresAt,
   });
+  const invitationId = (insertedInvitations[0] as Record<string, unknown>)?.id as number;
 
   // Send email
   const inviteUrl = `${getBaseUrl()}/auth/accept-invite?token=${encodeURIComponent(token)}&communityId=${communityId}`;
@@ -190,16 +192,10 @@ export async function createOnboardingInvitation(params: {
     newValues: { userId, expiresAt: expiresAt.toISOString() },
   });
 
-  return { token, expiresAt };
+  return { id: invitationId, token, expiresAt };
 }
 
 // --- Helpers ---
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);

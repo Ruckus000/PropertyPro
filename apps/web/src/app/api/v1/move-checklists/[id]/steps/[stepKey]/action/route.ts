@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { createElement } from 'react';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
@@ -10,7 +11,11 @@ import {
   getMoveChecklist,
   updateChecklistStep,
 } from '@/lib/services/move-checklist-service';
-import { ACTIONABLE_STEPS } from '@propertypro/db';
+import { createOnboardingInvitation } from '@/lib/services/onboarding-service';
+import { getBaseUrl } from '@/lib/utils/url';
+import { ACTIONABLE_STEPS, createScopedClient, users, communities, maintenanceRequests } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
+import { WelcomeEmail, sendEmail } from '@propertypro/email';
 
 const actionSchema = z.object({
   communityId: z.number().int().positive(),
@@ -54,28 +59,104 @@ export const POST = withErrorHandler(
     }
 
     // Dispatch integration action
+    const scoped = createScopedClient(communityId);
+
     switch (action) {
-      case 'create_inspection':
-      case 'send_invite': {
-        // These integrations are not yet wired — return without modifying the step
-        // to avoid writing a dangling linkedEntityType with no linkedEntityId.
-        return NextResponse.json({
-          data: checklist,
-          action: {
-            triggered: action,
-            status: 'not_implemented',
-            message: 'Integration pending \u2014 step not modified',
-          },
-        });
-      }
       case 'send_welcome': {
-        // TODO: Wire to email service to send welcome packet
-        // Auto-complete the step on send
+        // Load resident and community for the welcome email
+        const [userRows, communityRows] = await Promise.all([
+          scoped.selectFrom(users, {}, eq(users.id, checklist.residentId)),
+          scoped.selectFrom(communities, {}, eq(communities.id, communityId)),
+        ]);
+        const resident = userRows[0];
+        const community = communityRows[0];
+
+        if (resident && community) {
+          const loginUrl = `${getBaseUrl()}/auth/login`;
+          await sendEmail({
+            to: (resident as Record<string, unknown>).email as string,
+            subject: `Welcome to ${(community as Record<string, unknown>).name as string}`,
+            category: 'transactional',
+            react: createElement(WelcomeEmail, {
+              branding: { communityName: (community as Record<string, unknown>).name as string },
+              primaryContactName: ((resident as Record<string, unknown>).fullName as string) ?? 'Resident',
+              communityName: (community as Record<string, unknown>).name as string,
+              loginUrl,
+            }),
+          });
+        }
+
         const updated = await updateChecklistStep(
           communityId,
           checklistId,
           stepKey,
           { completed: true },
+          userId,
+        );
+
+        return NextResponse.json({
+          data: updated,
+          action: { triggered: action, stepKey },
+        });
+      }
+
+      case 'send_invite': {
+        // Reuse the onboarding invitation flow
+        const result = await createOnboardingInvitation({
+          communityId,
+          userId: checklist.residentId,
+          actorUserId: userId,
+        });
+
+        const updated = await updateChecklistStep(
+          communityId,
+          checklistId,
+          stepKey,
+          {
+            completed: true,
+            linkedEntityType: 'invitation',
+            linkedEntityId: result.id,
+          },
+          userId,
+        );
+
+        return NextResponse.json({
+          data: updated,
+          action: { triggered: action, stepKey },
+        });
+      }
+
+      case 'create_inspection': {
+        // Create a maintenance request of category 'inspection'
+        const title = checklist.type === 'move_in'
+          ? 'Move-In Inspection'
+          : 'Move-Out Inspection';
+
+        const rows = await scoped.insert(maintenanceRequests, {
+          communityId,
+          unitId: checklist.unitId,
+          submittedBy: userId,
+          title,
+          description: `Scheduled ${title.toLowerCase()} for unit.`,
+          category: 'inspection',
+          priority: 'normal',
+          status: 'open',
+        });
+
+        const request = rows[0];
+        if (!request) {
+          throw new Error('Failed to create inspection request');
+        }
+
+        const updated = await updateChecklistStep(
+          communityId,
+          checklistId,
+          stepKey,
+          {
+            completed: true,
+            linkedEntityType: 'maintenance_request',
+            linkedEntityId: (request as Record<string, unknown>).id as number,
+          },
           userId,
         );
 

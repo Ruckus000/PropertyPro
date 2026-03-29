@@ -5,11 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// Supabase untyped client — support tables are not yet in generated types.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
@@ -23,10 +19,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { data, error } = await (db
-    .from('support_access_log') as AnyQuery)
+    .from('support_access_log'))
     .select('*')
     .eq('community_id', communityId)
     .order('created_at', { ascending: false })

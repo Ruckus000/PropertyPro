@@ -7,6 +7,7 @@ import { leases } from '../schema/leases';
 import { maintenanceRequests } from '../schema/maintenance-requests';
 import { units } from '../schema/units';
 import { userRoles } from '../schema/user-roles';
+import { violationFines } from '../schema/violation-fines';
 import { violations } from '../schema/violations';
 
 export interface PortfolioQueryFilters {
@@ -531,7 +532,7 @@ export interface ViolationSummaryRow {
 }
 
 export interface ViolationSummaryReport {
-  kpis: { totalViolations: number; openViolations: number; totalFines: number | null };
+  kpis: { totalViolations: number; openViolations: number; totalFines: number };
   chartData: ViolationSummaryRow[];
   tableData: Array<{
     communityName: string;
@@ -539,7 +540,7 @@ export interface ViolationSummaryReport {
     open: number;
     fined: number;
     resolved: number;
-    totalFinesCents: number | null;
+    totalFinesCents: number;
   }>;
 }
 
@@ -728,7 +729,13 @@ export async function getViolationSummaryReport(
     conditions.push(lte(violations.createdAt, dateRange.to));
   }
 
-  const [categoryData, communityData, kpiData] = await Promise.all([
+  const finesConditions: SQL[] = [
+    inArray(violationFines.communityId, communityIds),
+    isNull(violationFines.deletedAt),
+    sql`${violationFines.status} != 'waived'`,
+  ];
+
+  const [categoryData, communityData, kpiData, totalFinesData, communityFinesData] = await Promise.all([
     db
       .select({
         category: violations.category,
@@ -760,13 +767,33 @@ export async function getViolationSummaryReport(
       })
       .from(violations)
       .where(and(...conditions)),
+
+    // Total fines across portfolio (excluding waived)
+    db
+      .select({
+        totalCents: sql<number>`coalesce(sum(${violationFines.amountCents}), 0)::int`,
+      })
+      .from(violationFines)
+      .where(and(...finesConditions)),
+
+    // Per-community fines (excluding waived)
+    db
+      .select({
+        communityId: violationFines.communityId,
+        totalCents: sql<number>`coalesce(sum(${violationFines.amountCents}), 0)::int`,
+      })
+      .from(violationFines)
+      .where(and(...finesConditions))
+      .groupBy(violationFines.communityId),
   ]);
+
+  const communityFinesMap = new Map(communityFinesData.map((row) => [row.communityId, row.totalCents]));
 
   return {
     kpis: {
       totalViolations: kpiData[0]?.totalViolations ?? 0,
       openViolations: kpiData[0]?.openViolations ?? 0,
-      totalFines: null, // Stub — requires join to violation_fines table (not yet implemented)
+      totalFines: totalFinesData[0]?.totalCents ?? 0,
     },
     chartData: categoryData.map((row) => ({
       category: row.category ?? 'Other',
@@ -780,7 +807,7 @@ export async function getViolationSummaryReport(
       open: row.open,
       fined: row.fined,
       resolved: row.resolved,
-      totalFinesCents: null, // Stub — requires violation_fines join
+      totalFinesCents: communityFinesMap.get(row.communityId) ?? 0,
     })),
   };
 }

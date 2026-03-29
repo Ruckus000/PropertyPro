@@ -6,13 +6,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
 import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
-
-// Supabase untyped client — support tables are not yet in generated types.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
 
 const DAILY_SESSION_LIMIT = 10;
 
@@ -36,11 +32,11 @@ export async function POST(request: NextRequest) {
   }
 
   const { communityId, targetUserId, reason, ticketId } = parsed.data;
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   // 1. Check consent
   const { data: consentRows, error: consentError } = await (db
-    .from('support_consent_grants') as AnyQuery)
+    .from('support_consent_grants'))
     .select('id, access_level')
     .eq('community_id', communityId)
     .is('revoked_at', null)
@@ -59,11 +55,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const consent = consentRows[0];
+  const consent = consentRows[0]!;
 
   // 2. Block impersonation of platform admins
   const { data: adminRow, error: adminLookupError } = await (db
-    .from('platform_admin_users') as AnyQuery)
+    .from('platform_admin_users'))
     .select('user_id')
     .eq('user_id', targetUserId)
     .maybeSingle();
@@ -84,7 +80,7 @@ export async function POST(request: NextRequest) {
   todayStart.setUTCHours(0, 0, 0, 0);
 
   const { count, error: countError } = await (db
-    .from('support_sessions') as AnyQuery)
+    .from('support_sessions'))
     .select('id', { count: 'exact', head: true })
     .eq('admin_user_id', admin.id)
     .gte('created_at', todayStart.toISOString());
@@ -104,7 +100,7 @@ export async function POST(request: NextRequest) {
   const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MAX_TTL_HOURS * 3600 * 1000);
 
   const { data: session, error: insertError } = await (db
-    .from('support_sessions') as AnyQuery)
+    .from('support_sessions'))
     .insert({
       admin_user_id: admin.id,
       target_user_id: targetUserId,
@@ -140,7 +136,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 6. Log to support_access_log
-  await (db.from('support_access_log') as AnyQuery).insert({
+  await (db.from('support_access_log')).insert({
     admin_user_id: admin.id,
     community_id: communityId,
     session_id: session.id,
@@ -158,9 +154,9 @@ export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
 
   const communityIdParam = request.nextUrl.searchParams.get('communityId');
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
-  let query = (db.from('support_sessions') as AnyQuery)
+  let query = (db.from('support_sessions'))
     .select('*')
     .order('created_at', { ascending: false })
     .limit(50);

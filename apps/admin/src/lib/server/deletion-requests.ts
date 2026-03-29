@@ -1,7 +1,5 @@
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import type { AccountDeletionRequestRow } from '@propertypro/db/supabase/admin-types';
 
 export type DeletionStatus = 'cooling' | 'soft_deleted' | 'purged' | 'cancelled' | 'recovered';
 export type RequestType = 'user' | 'community';
@@ -91,18 +89,18 @@ function mapDeletionRequests(
 export async function getDeletionRequestsData(
   filters: DeletionRequestFilters = {},
 ): Promise<{ requests: AdminDeletionRequest[] }> {
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
-  let query = (db.from('account_deletion_requests') as AnyQuery)
+  let query = (db.from('account_deletion_requests'))
     .select('*')
     .order('created_at', { ascending: false });
 
   if (filters.status && filters.status !== 'all') {
-    query = query.eq('status', filters.status);
+    query = query.eq('status', filters.status as AccountDeletionRequestRow['status']);
   }
 
   if (filters.type && filters.type !== 'all') {
-    query = query.eq('request_type', filters.type);
+    query = query.eq('request_type', filters.type as AccountDeletionRequestRow['request_type']);
   }
 
   const { data, error } = await query;
@@ -119,7 +117,7 @@ export async function getDeletionRequestsData(
     const { data: users, error: usersError } = await (db
       .from('users')
       .select('id, email, raw_user_meta_data')
-      .in('id', userIds) as AnyQuery);
+      .in('id', userIds));
 
     throwIfError(usersError, 'Failed to load requester profiles');
 
@@ -139,7 +137,7 @@ export async function getDeletionRequestsData(
     const { data: communities, error: communitiesError } = await (db
       .from('communities')
       .select('id, name')
-      .in('id', communityIds) as AnyQuery);
+      .in('id', communityIds));
 
     throwIfError(communitiesError, 'Failed to load community names');
 
@@ -154,12 +152,12 @@ export async function getDeletionRequestsData(
 }
 
 export async function getCoolingDeletionRequestCount(): Promise<number> {
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { count, error } = await ((db
     .from('account_deletion_requests')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'cooling')) as AnyQuery);
+    .eq('status', 'cooling')));
 
   throwIfError(error, 'Failed to load cooling deletion request count');
 

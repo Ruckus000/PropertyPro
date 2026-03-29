@@ -5,10 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
@@ -33,11 +30,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { message: 'additionalMonths is required and must be >= 1' } }, { status: 400 });
   }
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   // Fetch current plan
   const { data: plan, error: fetchError } = await (db
-    .from('access_plans') as AnyQuery)
+    .from('access_plans'))
     .select('*')
     .eq('id', id)
     .is('revoked_at', null)
@@ -72,7 +69,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     : extensionNote;
 
   const { data: updated, error: updateError } = await (db
-    .from('access_plans') as AnyQuery)
+    .from('access_plans'))
     .update({
       expires_at: newExpires.toISOString(),
       grace_ends_at: newGraceEnds.toISOString(),

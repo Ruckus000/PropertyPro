@@ -54,7 +54,7 @@ const prioritySchema = z
     v === 'emergency' ? 'urgent' : v,
   );
 
-const categoryValues = ['plumbing', 'electrical', 'hvac', 'general', 'other'] as const;
+const categoryValues = ['plumbing', 'electrical', 'hvac', 'general', 'inspection', 'other'] as const;
 
 const createRequestSchema = z.object({
   action: z.literal('create'),

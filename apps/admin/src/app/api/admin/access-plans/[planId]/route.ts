@@ -5,10 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
@@ -26,7 +23,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const body = await request.json().catch(() => ({}));
   const reason = (body as { reason?: string }).reason ?? null;
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const updatePayload: Record<string, unknown> = {
     revoked_at: new Date().toISOString(),
@@ -37,7 +34,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   }
 
   const { data, error } = await (db
-    .from('access_plans') as AnyQuery)
+    .from('access_plans'))
     .update(updatePayload)
     .eq('id', id)
     .is('revoked_at', null)

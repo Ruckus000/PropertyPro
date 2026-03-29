@@ -4,9 +4,10 @@
  *
  * @module supabase/admin
  */
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { AdminDatabase } from './admin-types';
 
-let adminClient: ReturnType<typeof createClient> | null = null;
+let adminClient: SupabaseClient | null = null;
 
 /**
  * Returns a singleton admin Supabase client using the service role key.
@@ -32,4 +33,13 @@ export function createAdminClient() {
   });
 
   return adminClient;
+}
+
+/**
+ * Returns the admin client with typed table definitions.
+ *
+ * Usage: `createAdminTypedClient().from('access_plans')` — no `as any` needed.
+ */
+export function createAdminTypedClient(): SupabaseClient<AdminDatabase> {
+  return createAdminClient() as unknown as SupabaseClient<AdminDatabase>;
 }

@@ -5,10 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = any;
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,10 +20,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { message: 'Invalid request ID' } }, { status: 400 });
   }
 
-  const db = createAdminClient();
+  const db = createAdminTypedClient();
 
   const { data, error } = await (db
-    .from('account_deletion_requests') as AnyQuery)
+    .from('account_deletion_requests'))
     .update({
       status: 'recovered',
       recovered_at: new Date().toISOString(),
