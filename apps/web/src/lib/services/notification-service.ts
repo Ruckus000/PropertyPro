@@ -293,6 +293,12 @@ async function resolveRecipientDeliveries(
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
         inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+        inAppAnnouncements: (row['inAppAnnouncements'] as boolean | undefined) ?? true,
+        inAppDocuments: (row['inAppDocuments'] as boolean | undefined) ?? true,
+        inAppMeetings: (row['inAppMeetings'] as boolean | undefined) ?? true,
+        inAppMaintenance: (row['inAppMaintenance'] as boolean | undefined) ?? true,
+        inAppViolations: (row['inAppViolations'] as boolean | undefined) ?? true,
+        inAppElections: (row['inAppElections'] as boolean | undefined) ?? true,
       });
     }
   }

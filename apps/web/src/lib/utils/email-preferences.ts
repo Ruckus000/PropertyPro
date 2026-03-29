@@ -14,6 +14,13 @@ export interface UserNotificationPreferences {
   emailAnnouncements: boolean;
   emailMeetings: boolean;
   inAppEnabled: boolean;
+  // Per-category in-app muting (default true = unmuted)
+  inAppAnnouncements: boolean;
+  inAppDocuments: boolean;
+  inAppMeetings: boolean;
+  inAppMaintenance: boolean;
+  inAppViolations: boolean;
+  inAppElections: boolean;
 }
 
 /** Default preferences for a new user (P1-26 acceptance). */
@@ -23,6 +30,12 @@ export function getDefaultPreferences(): UserNotificationPreferences {
     emailAnnouncements: true,
     emailMeetings: true,
     inAppEnabled: true,
+    inAppAnnouncements: true,
+    inAppDocuments: true,
+    inAppMeetings: true,
+    inAppMaintenance: true,
+    inAppViolations: true,
+    inAppElections: true,
   };
 }
 
