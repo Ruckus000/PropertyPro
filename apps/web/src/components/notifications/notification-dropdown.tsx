@@ -76,7 +76,7 @@ export function NotificationDropdown({ communityId, onClose }: NotificationDropd
       </div>
       <div className="border-t border-[var(--border-default)] px-4 py-2.5">
         <Link
-          href="/notifications"
+          href={`/notifications?communityId=${communityId}`}
           onClick={onClose}
           className="block text-center text-xs text-[var(--interactive-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
