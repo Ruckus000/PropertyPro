@@ -32,6 +32,7 @@ import {
   queueAnnouncementDelivery,
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
+import { createNotificationsForEvent } from '@/lib/services/notification-service';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
@@ -262,6 +263,27 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
       error: error instanceof Error ? error.message : String(error),
     });
   }
+
+  const audienceFilter: import('@/lib/services/notification-service').RecipientFilter =
+    data.audience === 'owners_only' ? 'owners_only'
+    : data.audience === 'board_only' ? 'board_only'
+    : 'all';
+
+  void createNotificationsForEvent(
+    communityId,
+    {
+      category: 'announcement',
+      title: data.title,
+      body: data.body.replace(/<[^>]+>/g, '').slice(0, 120) || undefined,
+      actionUrl: `/announcements/${created.id}`,
+      sourceType: 'announcement',
+      sourceId: String(created.id),
+    },
+    audienceFilter,
+    audit.userId,
+  ).catch((err: unknown) => {
+    console.error('[announcements] in-app notification failed', { communityId, announcementId: created.id, error: err instanceof Error ? err.message : String(err) });
+  });
 
   return NextResponse.json({ data: created }, { status: 201 });
 }

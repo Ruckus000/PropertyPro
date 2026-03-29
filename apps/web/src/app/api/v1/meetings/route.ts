@@ -25,7 +25,7 @@ import {
   serializeMeetingResponse,
   type MeetingResponseRecord,
 } from '@/lib/meetings/meeting-response';
-import { queueNotification } from '@/lib/services/notification-service';
+import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
@@ -279,6 +279,22 @@ async function handleCreate(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+
+  void createNotificationsForEvent(
+    communityId,
+    {
+      category: 'meeting',
+      title: `New Meeting: ${title}`,
+      body: `${startsAtDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: communityTimezone })} · ${location}`,
+      actionUrl: `/meetings/${createdMeeting.id}`,
+      sourceType: 'meeting',
+      sourceId: String(createdMeeting.id),
+    },
+    'all',
+    actorUserId,
+  ).catch((err: unknown) => {
+    console.error('[meetings] in-app notification failed', { communityId, meetingId: createdMeeting.id, error: err instanceof Error ? err.message : String(err) });
+  });
 
   return NextResponse.json(
     { data: serializeMeetingResponse(createdMeeting, communityType) },
