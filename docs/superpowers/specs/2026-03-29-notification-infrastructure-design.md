@@ -83,7 +83,7 @@ These work with the existing `in_app_enabled` master toggle:
 - RLS: `ALTER TABLE notifications ENABLE ROW LEVEL SECURITY; ALTER TABLE notifications FORCE ROW LEVEL SECURITY;`
 - RLS SELECT policy: `user_id = auth.uid()` (users see only their own)
 - RLS INSERT policy: service role only (server inserts, not client)
-- Write-scope trigger: `enforce_community_scope` (standard tenant isolation)
+- Write-scope trigger: `BEFORE INSERT OR UPDATE` trigger calling `pp_rls_enforce_tenant_community_id()` (matches the canonical pattern from migration 0020, used by `move_checklists`, `access_requests`, and other tenant tables — NOT `enforce_community_write_scope()`)
 - Realtime publication: `ALTER PUBLICATION supabase_realtime ADD TABLE notifications;`
 
 **Migration 0130** — `add_in_app_muting_columns`:
@@ -290,12 +290,14 @@ Each call site already calls `queueNotification()` for email. Add a parallel `cr
 
 | Event | File | Category | Recipients | Source |
 |-------|------|----------|------------|--------|
-| Announcement published | `apps/web/src/app/api/v1/announcements/route.ts` (POST) | `announcement` | `all` | `announcement:{id}` |
-| Document uploaded | `apps/web/src/lib/documents/create-uploaded-document.ts` | `document` | `all` | `document:{id}` |
-| Meeting created | `apps/web/src/app/api/v1/meetings/route.ts` (POST) | `meeting` | `all` or `board_only` | `meeting:{id}` |
-| Maintenance status change | `apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts` (PATCH) | `maintenance` | `specific_user` (submitter) | `maintenance:{id}` |
-| Violation issued | `apps/web/src/lib/services/violations-service.ts` | `violation` | `specific_user` (unit owner) | `violation:{id}` |
-| Election created | `apps/web/src/app/api/v1/elections/route.ts` (POST) | `election` | `owners_only` | `election:{id}` |
+| Announcement published | `apps/web/src/app/api/v1/announcements/route.ts` (POST) — alongside `queueAnnouncementDelivery()` | `announcement` | Map announcement `audience` field to `RecipientFilter` (`'all'` \| `'owners_only'` \| `'board_only'` \| `'tenants_only'` → matching `RecipientFilter` value) | `announcement:{id}` |
+| Document uploaded | `apps/web/src/lib/documents/create-uploaded-document.ts` — inside the `sourceType === 'library'` guard | `document` | `all` | `document:{id}` |
+| Meeting created | `apps/web/src/app/api/v1/meetings/route.ts` (POST) — alongside existing `queueNotification()` | `meeting` | `all` | `meeting:{id}` |
+| Maintenance status change | `apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts` (PATCH) — alongside existing `queueNotification()` | `maintenance` | `specific_user` (submitter, from `existing['submittedById']`) | `maintenance:{id}:status:{newStatus}` |
+| Violation noticed | `apps/web/src/lib/services/violations-service.ts` — inside `notifyViolationNotice()` alongside existing `sendNotification()` | `violation` | `reportedByUserId` if set, else `owners_only` | `violation:{id}` |
+| Violation ARC decision | `apps/web/src/lib/services/violations-service.ts` — inside `notifyArcDecision()` alongside existing `sendNotification()` | `violation` | `specific_user` (submitter) | `violation-arc:{submissionId}:{decision}` |
+
+> **Elections:** No POST handler exists for election creation as of 2026-03-29. Wire in-app notifications here when that endpoint is built.
 
 ### 6.2 Integration Pattern
 
@@ -349,4 +351,8 @@ Update `notification-preferences` type aliases to include the new columns.
 | `apps/web/src/components/layout/app-top-bar.tsx` | MODIFY (replace bell stub) |
 | `apps/web/src/app/(authenticated)/notifications/page.tsx` | CREATE |
 | `apps/web/src/app/mobile/notifications/page.tsx` | CREATE |
-| Event integration files (6 files listed in §6.1) | MODIFY (add `createNotificationsForEvent` calls) |
+| `apps/web/src/app/api/v1/announcements/route.ts` | MODIFY (add call alongside `queueAnnouncementDelivery`) |
+| `apps/web/src/lib/documents/create-uploaded-document.ts` | MODIFY (add call inside library guard) |
+| `apps/web/src/app/api/v1/meetings/route.ts` | MODIFY (add call alongside `queueNotification`) |
+| `apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts` | MODIFY (add call alongside `queueNotification`) |
+| `apps/web/src/lib/services/violations-service.ts` | MODIFY (add calls inside `notifyViolationNotice` and `notifyArcDecision`) |
