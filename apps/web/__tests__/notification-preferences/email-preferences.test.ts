@@ -17,6 +17,12 @@ describe('email-preferences util (p1-26)', () => {
       emailAnnouncements: true,
       emailMeetings: true,
       inAppEnabled: true,
+      inAppAnnouncements: true,
+      inAppDocuments: true,
+      inAppMeetings: true,
+      inAppMaintenance: true,
+      inAppViolations: true,
+      inAppElections: true,
     });
   });
 
