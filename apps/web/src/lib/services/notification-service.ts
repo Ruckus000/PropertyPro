@@ -156,6 +156,14 @@ const CATEGORY_TO_IN_APP_PREF_KEY: Record<
   system: null,
 };
 
+/** Map in-app category to the closest email NotificationKind for recipient resolution. */
+const CATEGORY_TO_EMAIL_KIND: Partial<Record<NotificationCategory, NotificationKind>> = {
+  announcement: 'announcement',
+  document: 'document',
+  meeting: 'meeting',
+  maintenance: 'maintenance',
+};
+
 function isInAppEnabled(
   prefs: UserNotificationPreferences,
   category: NotificationCategory,
@@ -683,7 +691,7 @@ export async function createNotificationsForEvent(
     deliveries = await resolveRecipientDeliveries(
       communityId,
       recipientFilter,
-      'announcement' as NotificationKind, // kind is only used for email preference checks; we do our own in-app check below
+      (CATEGORY_TO_EMAIL_KIND[event.category] ?? 'announcement') as NotificationKind,
       false,
     );
   } catch (error) {

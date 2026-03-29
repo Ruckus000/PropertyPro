@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   useNotifications,
   useMarkRead,
   type NotificationFilters,
+  type NotificationItem,
 } from '@/hooks/use-notifications';
 import { NotificationListItem } from '@/components/notifications/notification-list-item';
 
@@ -25,17 +26,32 @@ const CATEGORIES = [
 export function NotificationsPageClient({ communityId }: NotificationsPageClientProps) {
   const [category, setCategory] = useState('');
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [accumulated, setAccumulated] = useState<NotificationItem[]>([]);
 
   const filters: NotificationFilters = {
     limit: 20,
-    category: category || undefined,
+    category: (category || undefined) as NotificationFilters['category'],
     unreadOnly,
+    cursor,
   };
 
   const { data, isLoading, isFetching } = useNotifications(communityId, filters);
   const markRead = useMarkRead();
 
-  const items = data?.notifications ?? [];
+  const currentPage = data?.notifications ?? [];
+  const allItems = cursor ? [...accumulated, ...currentPage] : currentPage;
+
+  const handleLoadMore = useCallback(() => {
+    if (!data?.nextCursor) return;
+    setAccumulated(allItems);
+    setCursor(Number(data.nextCursor));
+  }, [data?.nextCursor, allItems]);
+
+  const resetPagination = useCallback(() => {
+    setCursor(undefined);
+    setAccumulated([]);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -45,7 +61,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
             <button
               key={c.value}
               type="button"
-              onClick={() => setCategory(c.value)}
+              onClick={() => { setCategory(c.value); resetPagination(); }}
               className={
                 category === c.value
                   ? 'rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] px-3 py-1.5 text-xs font-medium text-white'
@@ -60,7 +76,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
           <input
             type="checkbox"
             checked={unreadOnly}
-            onChange={(e) => setUnreadOnly(e.target.checked)}
+            onChange={(e) => { setUnreadOnly(e.target.checked); resetPagination(); }}
             className="rounded"
           />
           Unread only
@@ -82,7 +98,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
               <div key={i} className="h-14 animate-pulse rounded-[var(--radius-sm)] bg-[var(--surface-muted)]" />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : allItems.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm font-medium text-[var(--text-primary)]">You're all caught up</p>
             <p className="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -91,7 +107,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
           </div>
         ) : (
           <div role="list">
-            {items.map((n) => (
+            {allItems.map((n) => (
               <NotificationListItem key={n.id} notification={n} communityId={communityId} />
             ))}
           </div>
@@ -99,9 +115,14 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
       </div>
 
       {data?.nextCursor && (
-        <div className="text-center text-xs text-[var(--text-tertiary)]">
-          {isFetching ? 'Loading...' : 'Scroll for more'}
-        </div>
+        <button
+          type="button"
+          onClick={handleLoadMore}
+          className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
+          disabled={isFetching}
+        >
+          {isFetching ? 'Loading...' : 'Load more'}
+        </button>
       )}
     </div>
   );

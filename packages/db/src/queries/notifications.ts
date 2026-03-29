@@ -3,6 +3,13 @@
  *
  * Uses Drizzle directly (within packages/db — not subject to the scoped-client
  * CI guard that applies to apps/web).
+ *
+ * AUTHORIZATION CONTRACT: All read/update functions require both communityId
+ * and userId parameters. API routes calling these MUST validate communityId
+ * via resolveEffectiveCommunityId and userId via requireAuthenticatedUserId +
+ * requireCommunityMembership BEFORE calling any function here. The app server
+ * connects as service_role (bypasses RLS), so these WHERE-clause filters are
+ * the primary tenant isolation mechanism — same pattern as notification-digest.ts.
  */
 import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '../drizzle';
@@ -108,14 +115,22 @@ export interface InsertNotificationRow {
   priority?: string;
 }
 
+const INSERT_CHUNK_SIZE = 100;
+
 export async function insertNotifications(
   rows: InsertNotificationRow[],
 ): Promise<{ created: number }> {
   if (rows.length === 0) return { created: 0 };
-  const result = await db
-    .insert(notifications)
-    .values(rows.map((r) => ({ ...r, priority: r.priority ?? 'normal' })))
-    .onConflictDoNothing()
-    .returning({ id: notifications.id });
-  return { created: result.length };
+
+  let created = 0;
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + INSERT_CHUNK_SIZE);
+    const result = await db
+      .insert(notifications)
+      .values(chunk.map((r) => ({ ...r, priority: r.priority ?? 'normal' })))
+      .onConflictDoNothing()
+      .returning({ id: notifications.id });
+    created += result.length;
+  }
+  return { created };
 }
