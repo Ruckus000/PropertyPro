@@ -19,6 +19,7 @@ interface LineItem {
 interface PaymentDialogProps {
   communityId: number;
   lineItem: LineItem;
+  unitId?: number;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -60,11 +61,12 @@ function formatDate(dateStr: string): string {
 async function createPaymentIntent(
   communityId: number,
   lineItemId: number,
+  unitId?: number,
 ): Promise<PaymentIntentResponse> {
   const res = await fetch('/api/v1/payments/create-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, lineItemId }),
+    body: JSON.stringify({ communityId, lineItemId, ...(unitId != null && { unitId }) }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -94,11 +96,11 @@ async function updatePaymentIntentMethod(
 
 /* ─────── Main Dialog ─────── */
 
-export function PaymentDialog({ communityId, lineItem, onClose, onSuccess }: PaymentDialogProps) {
+export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSuccess }: PaymentDialogProps) {
   const totalCents = lineItem.amountCents + lineItem.lateFeeCents;
 
   const intentMutation = useMutation({
-    mutationFn: () => createPaymentIntent(communityId, lineItem.id),
+    mutationFn: () => createPaymentIntent(communityId, lineItem.id, unitId),
   });
 
   // Create intent on mount (useEffect prevents duplicate calls in React 18 strict mode)

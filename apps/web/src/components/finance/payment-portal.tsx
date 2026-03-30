@@ -280,6 +280,7 @@ export function PaymentPortal({
         <PaymentDialog
           communityId={communityId}
           lineItem={payingLineItem}
+          unitId={unitId}
           onClose={() => setPayingLineItem(null)}
           onSuccess={() => {
             setPayingLineItem(null);
