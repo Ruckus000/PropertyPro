@@ -2,8 +2,6 @@ import React from 'react';
 
 /**
  * Pricing section with three tiers for associations and a property manager CTA.
- *
- * Tier pricing is placeholder until Stripe products are configured.
  */
 export function PricingSection() {
   return (
@@ -24,7 +22,7 @@ export function PricingSection() {
         </div>
 
         {/* Pricing cards */}
-        <div className="mt-12 grid gap-6 lg:grid-cols-4">
+        <div className="mt-12 grid gap-6 lg:grid-cols-3">
           {tiers.map((tier) => (
             <div
               key={tier.name}
@@ -105,9 +103,9 @@ const tiers: ReadonlyArray<{
   ctaHref: string;
 }> = [
   {
-    name: 'Compliance Basic',
+    name: 'Essentials',
     audience: 'Condos & HOAs',
-    price: 99,
+    price: 199,
     featured: false,
     features: [
       'Association website with custom subdomain',
@@ -122,35 +120,18 @@ const tiers: ReadonlyArray<{
     ctaHref: '/signup',
   },
   {
-    name: 'Compliance + Mobile',
-    audience: 'Condos & HOAs',
-    price: 199,
-    featured: true,
-    features: [
-      'Everything in Compliance Basic',
-      'Native mobile app for residents',
-      'Push notifications for announcements',
-      'Mobile document viewer',
-      'Meeting reminders via push notification',
-      'Maintenance request submission',
-      'Priority email support',
-    ],
-    ctaText: 'Start Free Trial',
-    ctaHref: '/signup',
-  },
-  {
-    name: 'Full Platform',
+    name: 'Professional',
     audience: 'Condos, HOAs & Apartments',
     price: 349,
-    featured: false,
+    featured: true,
     features: [
-      'Everything in Compliance + Mobile',
-      'Apartment operational dashboard',
-      'Lease tracking and renewal alerts',
-      'CSV resident import',
+      'Everything in Essentials',
+      'Mobile-optimized resident portal',
+      'E-sign document workflows',
+      'Maintenance request management',
+      'Violation and ARC tracking',
       'Advanced reporting and analytics',
-      'Custom branding',
-      'Dedicated account manager',
+      'Priority email support',
     ],
     ctaText: 'Start Free Trial',
     ctaHref: '/signup',

@@ -72,9 +72,9 @@ const features: ReadonlyArray<{
     icon: <UsersIcon />,
   },
   {
-    title: 'Mobile App',
+    title: 'Mobile Access',
     description:
-      'Native mobile application for residents and board members. Push notifications for new announcements, meeting reminders, and document postings.',
+      'Mobile-optimized portal for residents and board members. Email notifications for new announcements, meeting reminders, and document postings.',
     icon: <SmartphoneIcon />,
   },
   {
