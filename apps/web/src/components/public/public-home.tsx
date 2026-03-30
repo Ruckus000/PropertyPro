@@ -72,6 +72,14 @@ export function PublicHome({ community }: PublicHomeProps) {
             Notices
           </Link>
         ) : null}
+        {isNoticesEnabled ? (
+          <Link
+            href={`/${community.slug}/transparency`}
+            className="rounded-md border border-edge-strong px-3 py-2 text-content-secondary hover:bg-surface-page"
+          >
+            Transparency
+          </Link>
+        ) : null}
         <Link href="/legal/terms" className="rounded-md border border-edge-strong px-3 py-2 text-content-secondary hover:bg-surface-page">
           Terms of Service
         </Link>
