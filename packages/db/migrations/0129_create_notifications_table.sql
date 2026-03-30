@@ -51,5 +51,12 @@ CREATE POLICY "notifications_user_update"
 -- INSERT/DELETE: no client policy — service_role bypasses RLS for inserts
 -- (app server connects as postgres/service_role which has BYPASSRLS)
 
--- Realtime publication: enables Supabase Realtime Postgres Changes on this table
-ALTER PUBLICATION "supabase_realtime" ADD TABLE "notifications";
+-- Realtime publication: enables Supabase Realtime Postgres Changes on this table.
+-- Wrapped in DO block because CI test databases don't have the supabase_realtime publication.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    ALTER PUBLICATION "supabase_realtime" ADD TABLE "notifications";
+  END IF;
+END
+$$;
