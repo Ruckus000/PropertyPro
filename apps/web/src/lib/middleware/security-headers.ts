@@ -141,11 +141,12 @@ export function buildCspHeader(options?: { isPreview?: boolean }): string {
   const directives = [
     "default-src 'self'",
     // 'unsafe-inline' is required for Next.js inline scripts; 'unsafe-eval' for dev HMR
-    "script-src 'self' 'unsafe-inline'" +
+    "script-src 'self' 'unsafe-inline' https://js.stripe.com" +
       (process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''),
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://${supabaseHost}`,
     `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
+    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
     "font-src 'self' data:",
     "worker-src 'self'",
     options?.isPreview
