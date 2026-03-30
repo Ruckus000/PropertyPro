@@ -88,6 +88,9 @@ export async function createEmbeddedCheckoutSession(
     line_items: [{ price: priceId, quantity: 1 }],
     customer_email: customerEmail,
     return_url: `${returnBaseUrl}/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+    subscription_data: {
+      trial_period_days: 14,
+    },
     metadata: {
       signupRequestId,
       communityType,
