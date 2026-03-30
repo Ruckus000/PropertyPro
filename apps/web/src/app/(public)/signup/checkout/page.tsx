@@ -39,6 +39,12 @@ function CheckoutInner() {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-status-danger">{error}</p>
+        <a
+          href="/signup"
+          className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
+        >
+          &larr; Back to sign up
+        </a>
       </main>
     );
   }
