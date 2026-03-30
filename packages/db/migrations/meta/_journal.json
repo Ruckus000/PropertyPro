@@ -624,6 +624,20 @@
       "when": 1774830000000,
       "tag": "0128_election_ballot_submissions_rls_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1774840000000,
+      "tag": "0129_create_notifications_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1774850000000,
+      "tag": "0130_add_in_app_muting_columns",
+      "breakpoints": true
     }
   ]
 }

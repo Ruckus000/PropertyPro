@@ -7,7 +7,8 @@
  * while desktop collapses to a single utility row with search, notifications,
  * and the avatar profile menu.
  */
-import { Bell, Menu, Search } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { ProfileMenu } from './profile-menu';
 import { useSidebar } from './sidebar-context';
 
@@ -51,13 +52,7 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:gap-2">
-          <button
-            type="button"
-            className="flex size-11 items-center justify-center rounded-[var(--radius-md)] text-content-tertiary transition-colors duration-quick hover:bg-surface-muted hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus lg:size-9"
-            aria-label="Notifications (coming soon)"
-          >
-            <Bell size={18} aria-hidden="true" />
-          </button>
+          <NotificationBell communityId={communityId} />
           <ProfileMenu userName={userName} userEmail={userEmail} communityId={communityId} />
         </div>
       </div>

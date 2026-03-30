@@ -14,7 +14,7 @@ import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
 import type { ArcSubmissionStatus, ViolationFineStatus, ViolationSeverity, ViolationStatus } from '@propertypro/db';
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
-import { sendNotification } from '@/lib/services/notification-service';
+import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -260,6 +260,25 @@ async function notifyViolationNotice(
         : 'owners_only',
       actorUserId,
     );
+
+    void createNotificationsForEvent(
+      communityId,
+      {
+        category: 'violation',
+        title: 'Violation Notice Issued',
+        body: `Violation #${violation.id} has been noticed.`,
+        actionUrl: `/violations/${violation.id}`,
+        sourceType: 'violation',
+        sourceId: String(violation.id),
+        priority: 'high',
+      },
+      violation.reportedByUserId
+        ? { type: 'specific_user', userId: violation.reportedByUserId }
+        : 'owners_only',
+      actorUserId,
+    ).catch((err: unknown) => {
+      console.error('[violations] in-app violation notice failed', { communityId, violationId: violation.id, error: err instanceof Error ? err.message : String(err) });
+    });
   } catch (error) {
     console.error('[violations-service] failed to send violation notice notification', {
       communityId,
@@ -291,6 +310,23 @@ async function notifyArcDecision(
       { type: 'specific_user', userId: submission.submittedByUserId },
       actorUserId,
     );
+
+    void createNotificationsForEvent(
+      communityId,
+      {
+        category: 'violation',
+        title: approved ? 'ARC Application Approved' : 'ARC Application Denied',
+        body: `Your ARC application #${submission.id} was ${approved ? 'approved' : 'denied'}.`,
+        actionUrl: `/arc/${submission.id}`,
+        sourceType: 'violation',
+        sourceId: `violation-arc:${submission.id}:${submission.status}`,
+        priority: approved ? 'normal' : 'high',
+      },
+      { type: 'specific_user', userId: submission.submittedByUserId },
+      actorUserId,
+    ).catch((err: unknown) => {
+      console.error('[violations] in-app ARC decision failed', { communityId, arcSubmissionId: submission.id, error: err instanceof Error ? err.message : String(err) });
+    });
   } catch (error) {
     console.error('[violations-service] failed to send ARC decision notification', {
       communityId,

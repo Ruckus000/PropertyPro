@@ -36,7 +36,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { queueNotification } from '@/lib/services/notification-service';
+import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
@@ -282,6 +282,22 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
       actorUserId,
     ).catch(() => {
       // Notification failure must not fail the PATCH request
+    });
+
+    void createNotificationsForEvent(
+      communityId,
+      {
+        category: 'maintenance',
+        title: `Maintenance Update: ${existing['title'] as string}`,
+        body: `Status changed to ${newStatus}`,
+        actionUrl: `/maintenance/${id}`,
+        sourceType: 'maintenance',
+        sourceId: `maintenance:${id}:status:${newStatus}`,
+      },
+      { type: 'specific_user', userId: existing['submittedById'] as string },
+      actorUserId,
+    ).catch((err: unknown) => {
+      console.error('[maintenance] in-app notification failed', { communityId, id, error: err instanceof Error ? err.message : String(err) });
     });
   }
 

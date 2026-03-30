@@ -21,6 +21,14 @@ export const notificationPreferences = pgTable(
     emailAnnouncements: boolean('email_announcements').notNull().default(true),
     emailMeetings: boolean('email_meetings').notNull().default(true),
     inAppEnabled: boolean('in_app_enabled').notNull().default(true),
+    // In-app per-category muting toggles (all default true)
+    // Master toggle inAppEnabled takes precedence — if false, none deliver.
+    inAppAnnouncements: boolean('in_app_announcements').notNull().default(true),
+    inAppDocuments: boolean('in_app_documents').notNull().default(true),
+    inAppMeetings: boolean('in_app_meetings').notNull().default(true),
+    inAppMaintenance: boolean('in_app_maintenance').notNull().default(true),
+    inAppViolations: boolean('in_app_violations').notNull().default(true),
+    inAppElections: boolean('in_app_elections').notNull().default(true),
 
     // Phase 1B: SMS consent fields (TCPA compliance)
     /** Master SMS toggle — user must explicitly opt in */

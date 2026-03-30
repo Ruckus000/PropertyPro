@@ -98,3 +98,17 @@ export {
   getDocumentWithAccessCheck,
 } from './queries/document-access';
 export type { DocumentAccessContext } from './queries/document-access';
+
+// Notification query helpers
+export {
+  listNotifications,
+  countUnreadNotifications,
+  markNotificationsRead,
+  archiveNotifications,
+  insertNotifications,
+} from './queries/notifications';
+export type {
+  ListNotificationsParams,
+  InsertNotificationRow,
+  NotificationCategory,
+} from './queries/notifications';

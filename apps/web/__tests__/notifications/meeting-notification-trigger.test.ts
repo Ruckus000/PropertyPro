@@ -18,6 +18,7 @@ const queueNotificationMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/services/notification-service', () => ({
   queueNotification: queueNotificationMock,
+  createNotificationsForEvent: vi.fn().mockResolvedValue({ created: 0, skipped: 0 }),
 }));
 
 const {

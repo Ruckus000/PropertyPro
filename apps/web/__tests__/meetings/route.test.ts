@@ -78,6 +78,7 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 vi.mock('@/lib/services/notification-service', () => ({
   queueNotification: queueNotificationMock,
+  createNotificationsForEvent: vi.fn().mockResolvedValue({ created: 0, skipped: 0 }),
 }));
 
 vi.mock('@/lib/middleware/subscription-guard', () => ({
