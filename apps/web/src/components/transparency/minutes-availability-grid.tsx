@@ -1,3 +1,5 @@
+'use client';
+
 import { Card } from '@propertypro/ui';
 import type { TransparencyMinutesMonth } from '@/lib/services/transparency-service';
 

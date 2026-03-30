@@ -1,3 +1,5 @@
+'use client';
+
 import { Badge, Card } from '@propertypro/ui';
 import type { TransparencyPageData } from '@/lib/services/transparency-service';
 import { ScopeNotice } from './scope-notice';

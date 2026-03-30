@@ -1,3 +1,5 @@
+'use client';
+
 import { Card } from '@propertypro/ui';
 
 export function ScopeNotice() {

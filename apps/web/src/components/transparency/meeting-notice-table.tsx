@@ -1,3 +1,5 @@
+'use client';
+
 import { Card, StatusBadge, type StatusKey } from '@propertypro/ui';
 import type { TransparencyMeetingNotice } from '@/lib/services/transparency-service';
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { Card, StatusBadge } from '@propertypro/ui';
 
 interface Props {
