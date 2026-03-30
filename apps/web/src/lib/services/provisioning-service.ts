@@ -268,7 +268,7 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, 'manager')))
+    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, 'pm_admin')))
     .limit(1);
 
   if (!roleRow) {
@@ -299,7 +299,7 @@ async function stepEmailSent(ctx: JobContext): Promise<void> {
   if (!baseUrl) {
     throw new Error('[provisioning] NEXT_PUBLIC_APP_URL env var not set');
   }
-  const loginUrl = `${baseUrl}/login`;
+  const loginUrl = `${baseUrl}/auth/login`;
 
   await sendEmail({
     to: ctx.signup.email,
