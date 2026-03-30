@@ -2,8 +2,6 @@
 
 **Effective Date:** February 14, 2026
 
-**DRAFT — This document is a placeholder and will be reviewed by legal counsel before launch.**
-
 ---
 
 ## 1. Introduction
