@@ -11,6 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { captureException } from '@sentry/nextjs';
+import { sql } from 'drizzle-orm';
 import { and, eq, isNull } from '@propertypro/db/filters';
 import type Stripe from 'stripe';
 import {
@@ -150,11 +151,25 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
+  // Extract Stripe billing IDs for provisioning (pattern from demo-conversion.ts)
+  const stripeCustomerId =
+    typeof freshSession.customer === 'string'
+      ? freshSession.customer
+      : freshSession.customer?.id ?? null;
+  const stripeSubscriptionId =
+    typeof freshSession.subscription === 'string'
+      ? freshSession.subscription
+      : (freshSession.subscription as { id: string } | null)?.id ?? null;
+
   const db = createUnscopedClient();
 
   await db
     .update(pendingSignups)
-    .set({ status: 'payment_completed', updatedAt: new Date() })
+    .set({
+      status: 'payment_completed',
+      payload: sql`coalesce(${pendingSignups.payload}, '{}'::jsonb) || ${JSON.stringify({ stripeCustomerId, stripeSubscriptionId })}::jsonb`,
+      updatedAt: new Date(),
+    })
     .where(eq(pendingSignups.signupRequestId, signupRequestId));
 
   // Insert provisioning job stub — onConflictDoNothing handles idempotent re-delivery.

@@ -94,6 +94,7 @@ type PendingSignupRow = {
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   address: string;
   candidateSlug: string;
+  payload: Record<string, unknown>;
 };
 
 type JobContext = {
@@ -106,6 +107,10 @@ type JobContext = {
 async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   const db = createUnscopedClient();
 
+  // Extract Stripe billing IDs from the provisioning payload (set by webhook handler).
+  const stripeCustomerId = (ctx.signup.payload as Record<string, unknown>)?.stripeCustomerId as string | null ?? null;
+  const stripeSubscriptionId = (ctx.signup.payload as Record<string, unknown>)?.stripeSubscriptionId as string | null ?? null;
+
   // Insert the community — slug unique constraint prevents duplicates on retry.
   // Use onConflictDoNothing to tolerate exact-duplicate retries.
   const [inserted] = await db
@@ -116,6 +121,8 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       communityType: ctx.signup.communityType,
       addressLine1: ctx.signup.address,
       timezone: 'America/New_York',
+      stripeCustomerId,
+      stripeSubscriptionId,
     })
     .onConflictDoNothing()
     .returning({ id: communities.id });
@@ -388,6 +395,7 @@ export async function runProvisioning(jobId: number): Promise<void> {
       communityType: pendingSignups.communityType,
       address: pendingSignups.address,
       candidateSlug: pendingSignups.candidateSlug,
+      payload: pendingSignups.payload,
     })
     .from(pendingSignups)
     .where(eq(pendingSignups.signupRequestId, job.signupRequestId))
