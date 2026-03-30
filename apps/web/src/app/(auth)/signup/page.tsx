@@ -29,6 +29,29 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const signupRequestId = pickFirst(params.signupRequestId);
   const verified = pickFirst(params.verified) === '1';
 
+  // PM signup → Contact Sales (no self-serve checkout)
+  if (requestedType === 'pm') {
+    return (
+      <main id="main-content" className="min-h-screen bg-surface-page px-4 py-12">
+        <div className="mx-auto w-full max-w-lg space-y-6 text-center">
+          <h1 className="text-3xl font-semibold text-content">Property Manager Plans</h1>
+          <p className="text-sm text-content-secondary">
+            We&apos;ll set up your account with a plan tailored to your portfolio.
+          </p>
+          <a
+            href="mailto:sales@getpropertypro.com?subject=Property%20Manager%20Inquiry"
+            className="inline-block rounded-md bg-interactive px-6 py-3 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+          >
+            Contact Sales
+          </a>
+          <p className="text-xs text-content-tertiary">
+            Or email us directly at sales@getpropertypro.com
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main id="main-content" className="min-h-screen bg-surface-page px-4 py-12">
       <div className="mx-auto w-full max-w-3xl space-y-5">
