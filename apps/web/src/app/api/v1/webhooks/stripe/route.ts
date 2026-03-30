@@ -11,8 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { captureException } from '@sentry/nextjs';
-import { sql } from 'drizzle-orm';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import { and, eq, isNull, sql } from '@propertypro/db/filters';
 import type Stripe from 'stripe';
 import {
   communities,
