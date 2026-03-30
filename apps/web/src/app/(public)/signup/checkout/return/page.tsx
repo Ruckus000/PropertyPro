@@ -5,6 +5,7 @@
  * We retrieve the session status and show the appropriate message.
  * The actual community provisioning happens asynchronously via webhook.
  */
+import { redirect } from 'next/navigation';
 import { retrieveCheckoutSession } from '@/lib/services/stripe-service';
 
 interface CheckoutReturnPageProps {
@@ -20,14 +21,22 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
         <h1 className="text-xl font-semibold text-content">Invalid return URL</h1>
         <p className="mt-2 text-sm text-content-secondary">No session ID found in the URL.</p>
+        <a
+          href="/signup"
+          className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
+        >
+          &larr; Back to sign up
+        </a>
       </main>
     );
   }
 
   let status: string;
+  let signupRequestId: string | null = null;
   try {
     const session = await retrieveCheckoutSession(sessionId);
     status = session.status ?? 'unknown';
+    signupRequestId = session.metadata?.signupRequestId ?? null;
   } catch {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
@@ -35,6 +44,12 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
         <p className="mt-2 text-sm text-content-secondary">
           We could not retrieve your checkout session. Please contact support.
         </p>
+        <a
+          href="/signup"
+          className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
+        >
+          &larr; Back to sign up
+        </a>
       </main>
     );
   }
@@ -51,16 +66,25 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
     );
   }
 
-  // status === 'open' means payment is still in progress (should not normally land here)
-  // status === 'expired' means the session expired
+  // status === 'open' means checkout is still in progress — user navigated here manually.
+  // Redirect them back to the checkout page to finish.
+  if (status === 'open' && signupRequestId) {
+    redirect(`/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`);
+  }
+
+  // status === 'expired' or unknown — session is gone, return to signup with context.
+  const signupHref = signupRequestId
+    ? `/signup?signupRequestId=${encodeURIComponent(signupRequestId)}`
+    : '/signup';
+
   return (
     <main className="mx-auto max-w-lg px-6 py-16 text-center">
       <h1 className="text-xl font-semibold text-content">Checkout not completed</h1>
       <p className="mt-2 text-sm text-content-secondary">
-        Your payment was not processed. Please go back and try again.
+        Your checkout session has expired. You can restart the process below.
       </p>
       <a
-        href="/signup"
+        href={signupHref}
         className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
       >
         Return to signup
