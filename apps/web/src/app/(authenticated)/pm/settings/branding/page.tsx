@@ -25,7 +25,20 @@ export default async function BrandingSettingsPage({ searchParams }: PageProps) 
   const rawId = Number(params['communityId']);
 
   if (!Number.isInteger(rawId) || rawId <= 0) {
-    redirect('/pm/dashboard/communities?reason=invalid-selection');
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+        <h1 className="text-xl font-semibold text-content">Select a Community</h1>
+        <p className="mt-2 text-sm text-content-secondary">
+          Choose a community from the Communities list to manage its branding.
+        </p>
+        <a
+          href="/pm/dashboard/communities"
+          className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+        >
+          Go to Communities
+        </a>
+      </main>
+    );
   }
 
   const communityId = rawId;
