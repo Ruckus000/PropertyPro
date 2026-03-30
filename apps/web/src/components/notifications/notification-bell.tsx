@@ -17,7 +17,7 @@ export function NotificationBell({ communityId }: NotificationBellProps) {
 
   useEffect(() => {
     const supabase = createBrowserClient();
-    void supabase.auth.getUser().then(({ data }) => {
+    void supabase.auth.getUser().then(({ data }: { data: { user: { id: string } | null } }) => {
       setUserId(data.user?.id ?? null);
     });
   }, []);
