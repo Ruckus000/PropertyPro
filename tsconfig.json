@@ -18,5 +18,16 @@
     "skipLibCheck": true,
     "jsx": "react-jsx"
   },
-  "exclude": ["node_modules", "dist", ".next", ".turbo"]
+  "exclude": ["node_modules", "dist", ".next", ".turbo"],
+  "references": [
+    { "path": "apps/web" },
+    { "path": "apps/admin" },
+    { "path": "packages/db" },
+    { "path": "packages/shared" },
+    { "path": "packages/ui" },
+    { "path": "packages/email" },
+    { "path": "packages/theme" },
+    { "path": "packages/tokens" }
+  ],
+  "files": []
 }
