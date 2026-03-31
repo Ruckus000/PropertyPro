@@ -44,7 +44,7 @@ describe('marketing landing page', () => {
       expect(html).toContain('Document Management');
       expect(html).toContain('Meeting Notices');
       expect(html).toContain('Owner Portal');
-      expect(html).toContain('Mobile App');
+      expect(html).toContain('Mobile Access');
       expect(html).toContain('Compliance Dashboard');
       expect(html).toContain('Property Manager Tools');
     });
@@ -61,19 +61,18 @@ describe('marketing landing page', () => {
   });
 
   describe('PricingSection', () => {
-    it('renders all four pricing tiers', () => {
+    it('renders all three pricing tiers', () => {
       const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Compliance Basic');
-      expect(html).toContain('Compliance + Mobile');
-      expect(html).toContain('Full Platform');
+      expect(html).toContain('Essentials');
+      expect(html).toContain('Professional');
       expect(html).toContain('Property Manager');
     });
 
     it('renders pricing amounts', () => {
       const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('$99');
       expect(html).toContain('$199');
       expect(html).toContain('$349');
+      expect(html).toContain('Contact Us');
     });
 
     it('renders Contact Us for property manager tier', () => {

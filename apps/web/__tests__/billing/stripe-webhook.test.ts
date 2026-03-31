@@ -86,6 +86,7 @@ const {
     pendingSignupsTable: {
       signupRequestId: 'pending_signups.signup_request_id',
       status: 'pending_signups.status',
+      payload: 'pending_signups.payload',
       updatedAt: 'pending_signups.updated_at',
     },
     provisioningJobsTable: {
@@ -116,6 +117,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: (...args: unknown[]) => ({ _and: args }),
   isNull: (col: unknown) => ({ _isNull: col }),
+  sql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => ({ _sql: { strings: [...strings], values } }), { raw: (s: string) => ({ _sqlRaw: s }) }),
 }));
 
 vi.mock('@propertypro/db', () => ({

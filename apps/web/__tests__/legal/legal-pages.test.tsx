@@ -114,8 +114,8 @@ describe('Terms of Service content', () => {
     expect(termsContent).toContain('February 14, 2026');
   });
 
-  it('is marked as draft', () => {
-    expect(termsContent).toContain('DRAFT');
+  it('is no longer marked as draft', () => {
+    expect(termsContent).not.toContain('DRAFT');
   });
 
   it('renders to HTML successfully', () => {
@@ -180,8 +180,8 @@ describe('Privacy Policy content', () => {
     expect(privacyContent).toContain('February 14, 2026');
   });
 
-  it('is marked as draft', () => {
-    expect(privacyContent).toContain('DRAFT');
+  it('is no longer marked as draft', () => {
+    expect(privacyContent).not.toContain('DRAFT');
   });
 
   it('renders to HTML successfully', () => {

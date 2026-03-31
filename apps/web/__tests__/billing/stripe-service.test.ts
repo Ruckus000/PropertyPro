@@ -167,6 +167,9 @@ describe('stripe-service', () => {
         customer_email: 'owner@example.com',
         return_url:
           'https://app.example.com/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}',
+        subscription_data: {
+          trial_period_days: 14,
+        },
         metadata: {
           signupRequestId: 'req_001',
           communityType: 'condo_718',
