@@ -68,8 +68,12 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
 
   // status === 'open' means checkout is still in progress — user navigated here manually.
   // Redirect them back to the checkout page to finish.
-  if (status === 'open' && signupRequestId) {
-    redirect(`/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`);
+  if (status === 'open') {
+    if (signupRequestId) {
+      redirect(`/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`);
+    }
+    // Open session but missing metadata — send back to signup start
+    redirect('/signup');
   }
 
   // status === 'expired' or unknown — session is gone, return to signup with context.
