@@ -17,7 +17,7 @@ import {
 } from '../src/schema';
 import { runDemoSeed } from '../../../scripts/seed-demo';
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
@@ -28,16 +28,16 @@ describeDb('demo seed integration', () => {
   beforeAll(async () => {
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
-  });
+
+    await runDemoSeed({ syncAuthUsers: false });
+    await runDemoSeed({ syncAuthUsers: false });
+  }, 300_000);
 
   afterAll(async () => {
     await sql.end();
   });
 
   it('is idempotent and seeds expected demo entities', async () => {
-    await runDemoSeed({ syncAuthUsers: false });
-    await runDemoSeed({ syncAuthUsers: false });
-
     const seededCommunities = await db
       .select()
       .from(communities)
@@ -126,12 +126,12 @@ describeDb('demo seed integration', () => {
         .where(
           and(
             eq(demoSeedRegistry.entityType, 'announcement'),
-            eq(demoSeedRegistry.seedKey, 'sunset-announcement-pinned'),
+            eq(demoSeedRegistry.seedKey, 'sunset-condos-announcement-pool-maintenance'),
           ),
         );
       expect(duplicateRegistry).toHaveLength(1);
     }
-  }, 120_000);
+  }, 30_000);
 
   it('creates correct system category counts per community type', async () => {
     const seededCommunities = await db

@@ -11,7 +11,6 @@ import {
   maintenanceRequests,
   meetingDocuments,
   meetings,
-  notificationPreferences,
   units,
   users,
 } from '../schema';
@@ -265,6 +264,20 @@ function debugSeed(message: string): void {
   }
 }
 
+function calculatePostingDeadline(sourceDate: Date, days: number): Date {
+  const deadline = new Date(sourceDate);
+  deadline.setUTCDate(deadline.getUTCDate() + days);
+
+  const weekday = deadline.getUTCDay();
+  if (weekday === 6) {
+    deadline.setUTCDate(deadline.getUTCDate() + 2);
+  } else if (weekday === 0) {
+    deadline.setUTCDate(deadline.getUTCDate() + 1);
+  }
+
+  return deadline;
+}
+
 function assertValidConfig(config: SeedCommunityConfig): void {
   if (!config.name?.trim()) {
     throw new Error('seedCommunity requires a non-empty config.name');
@@ -377,42 +390,9 @@ async function ensureUser(
 
   if (existing[0]) {
     if (preferredId && existing[0].id !== preferredId) {
-      debugSeed(`syncing public.users.id for user ${existing[0].id} -> ${preferredId}`);
-      const oldId = existing[0].id;
-
-      const restrictFksResult = await db.execute<{ table_name: string; column_name: string }>(sql`
-        SELECT tc.table_name, kcu.column_name
-        FROM information_schema.referential_constraints AS rc
-        JOIN information_schema.key_column_usage AS kcu
-          ON rc.constraint_name = kcu.constraint_name
-          AND rc.constraint_schema = kcu.table_schema
-        JOIN information_schema.table_constraints AS tc
-          ON tc.constraint_name = rc.constraint_name
-          AND tc.table_schema = rc.constraint_schema
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON rc.unique_constraint_name = ccu.constraint_name
-          AND rc.unique_constraint_schema = ccu.table_schema
-        WHERE rc.delete_rule = 'RESTRICT'
-          AND ccu.table_name = 'users'
-          AND ccu.column_name = 'id'
-          AND tc.table_schema = 'public'
-      `);
-      const fks = extractRows<{ table_name: string; column_name: string }>(restrictFksResult);
-      const restrictFkDeletes = fks.map(
-        ({ table_name, column_name }) =>
-          sql`DELETE FROM ${sql.identifier(table_name)} WHERE ${sql.identifier(column_name)} = ${oldId}`,
+      debugSeed(
+        `preserving existing public.users.id=${existing[0].id} for ${normalizedEmail}; auth user id ${preferredId} differs and automatic churn is disabled`,
       );
-      await db.transaction(async (tx) => {
-        await Promise.all(restrictFkDeletes.map((stmt) => tx.execute(stmt)));
-        await tx.execute(sql`DELETE FROM public.users WHERE id = ${oldId}`);
-        await tx.insert(users).values({
-          id: preferredId,
-          email: normalizedEmail,
-          fullName,
-          phone,
-        });
-      });
-      return preferredId;
     }
 
     await db
@@ -495,15 +475,6 @@ export async function seedRoles(
     return;
   }
 
-  const uniqueCommunityIds = [...new Set(assignments.map((a) => a.communityId))];
-  const uniqueUserIds = [...new Set(assignments.map((a) => a.userId))];
-
-  await db.execute(sql`
-    delete from user_roles
-    where community_id in (${sql.join(uniqueCommunityIds.map((id) => sql`${id}`), sql`, `)})
-      and user_id in (${sql.join(uniqueUserIds.map((id) => sql`${id}`), sql`, `)})
-  `);
-
   const values = sql.join(
     assignments.map((a) => {
       const m = mapCanonicalToV2(a.role);
@@ -511,41 +482,51 @@ export async function seedRoles(
         m.presetKey && isPresetKey(m.presetKey)
           ? JSON.stringify(getPresetPermissions(m.presetKey, communityType))
           : null;
-      return sql`(${a.userId}, ${a.communityId}, ${m.role}, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${m.displayTitle})`;
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${m.displayTitle})`;
     }),
     sql`, `,
   );
   await db.execute(sql`
-    insert into user_roles (user_id, community_id, role, is_unit_owner, permissions, preset_key, display_title)
+    insert into user_roles (
+      user_id,
+      community_id,
+      role,
+      unit_id,
+      is_unit_owner,
+      permissions,
+      preset_key,
+      display_title
+    )
     values ${values}
+    on conflict (user_id, community_id) do update
+    set role = excluded.role,
+        unit_id = excluded.unit_id,
+        is_unit_owner = excluded.is_unit_owner,
+        permissions = excluded.permissions,
+        preset_key = excluded.preset_key,
+        display_title = excluded.display_title,
+        updated_at = now()
   `);
 }
 
 export async function ensureNotificationPreference(communityId: number, userId: string): Promise<void> {
-  const existing = await db
-    .select()
-    .from(notificationPreferences)
-    .where(
-      and(
-        eq(notificationPreferences.communityId, communityId),
-        eq(notificationPreferences.userId, userId),
-      ),
+  await db.execute(sql`
+    insert into notification_preferences (
+      community_id,
+      user_id,
+      email_frequency,
+      email_announcements,
+      email_meetings,
+      in_app_enabled
     )
-    .limit(1);
-
-  if (!existing[0]) {
-    await db.insert(notificationPreferences).values({ communityId, userId });
-    return;
-  }
-
-  await db
-    .update(notificationPreferences)
-    .set({
-      emailAnnouncements: true,
-      emailMeetings: true,
-      updatedAt: new Date(),
-    })
-    .where(eq(notificationPreferences.id, existing[0].id));
+    values (${communityId}, ${userId}, 'immediate', true, true, true)
+    on conflict (user_id, community_id) do update
+    set email_frequency = excluded.email_frequency,
+        email_announcements = excluded.email_announcements,
+        email_meetings = excluded.email_meetings,
+        in_app_enabled = excluded.in_app_enabled,
+        updated_at = now()
+  `);
 }
 
 async function lookupRegistry(entityType: string, seedKey: string): Promise<string | null> {
@@ -571,21 +552,13 @@ async function upsertRegistryEntry(
     return;
   }
 
-  const existing = await db
-    .select()
-    .from(demoSeedRegistry)
-    .where(and(eq(demoSeedRegistry.entityType, entityType), eq(demoSeedRegistry.seedKey, seedKey)))
-    .limit(1);
-
-  if (!existing[0]) {
-    await db.insert(demoSeedRegistry).values({ entityType, seedKey, entityId, communityId });
-    return;
-  }
-
-  await db
-    .update(demoSeedRegistry)
-    .set({ entityId, communityId })
-    .where(eq(demoSeedRegistry.id, existing[0].id));
+  await db.execute(sql`
+    insert into demo_seed_registry (entity_type, seed_key, entity_id, community_id)
+    values (${entityType}, ${seedKey}, ${entityId}, ${communityId})
+    on conflict (entity_type, seed_key) do update
+    set entity_id = excluded.entity_id,
+        community_id = excluded.community_id
+  `);
 }
 
 function getDemoCategoryDefinitions(
@@ -737,6 +710,7 @@ async function seedRegistryDocument(
         fileSize,
         searchText,
         categoryId,
+        deletedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(documents.id, id))
@@ -744,29 +718,31 @@ async function seedRegistryDocument(
     if (updated) return updated.id;
   }
 
-  if (!(await hasRegistryTable())) {
-    const existing = await db
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(eq(documents.communityId, communityId), eq(documents.fileName, fileName)))
-      .limit(1);
+  const existing = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.communityId, communityId), eq(documents.filePath, filePath)))
+    .limit(1);
 
-    if (existing[0]) {
-      const [updated] = await db
-        .update(documents)
-        .set({
-          title,
-          fileName,
-          filePath,
-          mimeType: 'application/pdf',
-          fileSize,
-          searchText,
-          categoryId,
-          updatedAt: new Date(),
-        })
-        .where(eq(documents.id, existing[0].id))
-        .returning();
-      if (updated) return updated.id;
+  if (existing[0]) {
+    const [updated] = await db
+      .update(documents)
+      .set({
+        title,
+        fileName,
+        filePath,
+        mimeType: 'application/pdf',
+        fileSize,
+        searchText,
+        categoryId,
+        deletedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, existing[0].id))
+      .returning();
+    if (updated) {
+      await upsertRegistryEntry('document', seedKey, String(updated.id), communityId);
+      return updated.id;
     }
   }
 
@@ -806,6 +782,7 @@ async function seedRegistryMeeting(
         meetingType,
         startsAt,
         location,
+        deletedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(meetings.id, id))
@@ -813,26 +790,28 @@ async function seedRegistryMeeting(
     if (updated) return updated.id;
   }
 
-  if (!(await hasRegistryTable())) {
-    const existing = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(and(eq(meetings.communityId, communityId), eq(meetings.title, title)))
-      .limit(1);
+  const existing = await db
+    .select({ id: meetings.id })
+    .from(meetings)
+    .where(and(eq(meetings.communityId, communityId), eq(meetings.title, title)))
+    .limit(1);
 
-    if (existing[0]) {
-      const [updated] = await db
-        .update(meetings)
-        .set({
-          title,
-          meetingType,
-          startsAt,
-          location,
-          updatedAt: new Date(),
-        })
-        .where(eq(meetings.id, existing[0].id))
-        .returning();
-      if (updated) return updated.id;
+  if (existing[0]) {
+    const [updated] = await db
+      .update(meetings)
+      .set({
+        title,
+        meetingType,
+        startsAt,
+        location,
+        deletedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(meetings.id, existing[0].id))
+      .returning();
+    if (updated) {
+      await upsertRegistryEntry('meeting', seedKey, String(updated.id), communityId);
+      return updated.id;
     }
   }
 
@@ -872,6 +851,7 @@ async function seedRegistryAnnouncement(
         audience,
         isPinned,
         archivedAt: null,
+        deletedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(announcements.id, id))
@@ -879,28 +859,30 @@ async function seedRegistryAnnouncement(
     if (updated) return updated.id;
   }
 
-  if (!(await hasRegistryTable())) {
-    const existing = await db
-      .select({ id: announcements.id })
-      .from(announcements)
-      .where(and(eq(announcements.communityId, communityId), eq(announcements.title, title)))
-      .limit(1);
+  const existing = await db
+    .select({ id: announcements.id })
+    .from(announcements)
+    .where(and(eq(announcements.communityId, communityId), eq(announcements.title, title)))
+    .limit(1);
 
-    if (existing[0]) {
-      const [updated] = await db
-        .update(announcements)
-        .set({
-          title,
-          body,
-          publishedBy,
-          audience,
-          isPinned,
-          archivedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(announcements.id, existing[0].id))
-        .returning();
-      if (updated) return updated.id;
+  if (existing[0]) {
+    const [updated] = await db
+      .update(announcements)
+      .set({
+        title,
+        body,
+        publishedBy,
+        audience,
+        isPinned,
+        archivedAt: null,
+        deletedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(announcements.id, existing[0].id))
+      .returning();
+    if (updated) {
+      await upsertRegistryEntry('announcement', seedKey, String(updated.id), communityId);
+      return updated.id;
     }
   }
 
@@ -941,14 +923,19 @@ async function seedCommunityCompliance(
       category: complianceChecklistItems.category,
       statuteReference: complianceChecklistItems.statuteReference,
       isConditional: complianceChecklistItems.isConditional,
+      deadline: complianceChecklistItems.deadline,
+      rollingWindow: complianceChecklistItems.rollingWindow,
     })
     .from(complianceChecklistItems)
     .where(eq(complianceChecklistItems.communityId, communityId));
   const existingByKey = new Map(existingRows.map((row) => [row.templateKey, row]));
   const inserts: Array<typeof complianceChecklistItems.$inferInsert> = [];
+  const now = new Date();
 
   for (const item of template) {
     const existing = existingByKey.get(item.templateKey);
+    const deadline = item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null;
+    const rollingWindow = item.rollingMonths ? { months: item.rollingMonths } : null;
 
     if (!existing) {
       inserts.push({
@@ -958,7 +945,12 @@ async function seedCommunityCompliance(
         description: item.description,
         category: item.category,
         statuteReference: item.statuteReference,
+        deadline,
+        rollingWindow,
         isConditional: item.isConditional ?? false,
+        documentId: null,
+        documentPostedAt: null,
+        lastModifiedBy: null,
       });
       continue;
     }
@@ -967,7 +959,9 @@ async function seedCommunityCompliance(
       || existing.description !== item.description
       || existing.category !== item.category
       || (existing.statuteReference ?? null) !== (item.statuteReference ?? null)
-      || existing.isConditional !== (item.isConditional ?? false);
+      || existing.isConditional !== (item.isConditional ?? false)
+      || (existing.deadline == null && deadline != null)
+      || ((existing.rollingWindow as { months?: number } | null)?.months ?? null) !== (rollingWindow?.months ?? null);
     if (!changed) {
       continue;
     }
@@ -979,6 +973,8 @@ async function seedCommunityCompliance(
         description: item.description,
         category: item.category,
         statuteReference: item.statuteReference,
+        deadline: existing.deadline ?? deadline,
+        rollingWindow,
         isConditional: item.isConditional ?? false,
         updatedAt: new Date(),
       })
@@ -1237,28 +1233,27 @@ async function seedApartmentMaintenanceRequests(
       }
     }
 
-    if (!(await hasRegistryTable())) {
-      const existing = await db
-        .select({ id: maintenanceRequests.id })
-        .from(maintenanceRequests)
-        .where(and(eq(maintenanceRequests.communityId, communityId), eq(maintenanceRequests.title, request.title)))
-        .limit(1);
+    const existing = await db
+      .select({ id: maintenanceRequests.id })
+      .from(maintenanceRequests)
+      .where(and(eq(maintenanceRequests.communityId, communityId), eq(maintenanceRequests.title, request.title)))
+      .limit(1);
 
-      if (existing[0]) {
-        await db
-          .update(maintenanceRequests)
-          .set({
-            unitId: request.unitId,
-            submittedById: request.submittedById,
-            description: request.description,
-            status: request.status,
-            priority: request.priority,
-            deletedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(maintenanceRequests.id, existing[0].id));
-        continue;
-      }
+    if (existing[0]) {
+      await db
+        .update(maintenanceRequests)
+        .set({
+          unitId: request.unitId,
+          submittedById: request.submittedById,
+          description: request.description,
+          status: request.status,
+          priority: request.priority,
+          deletedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(maintenanceRequests.id, existing[0].id));
+      await upsertRegistryEntry('maintenance_request', request.seedKey, String(existing[0].id), communityId);
+      continue;
     }
 
     const [created] = await db

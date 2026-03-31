@@ -12,7 +12,7 @@ import {
 } from '../src/schema';
 import { runDemoReset } from '../../../scripts/reset-demo';
 
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
@@ -21,9 +21,9 @@ const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments
  * Used to detect both orphaned duplicates and missing data after reset.
  */
 const EXPECTED_DOCS_PER_SLUG: Record<string, number> = {
-  'sunset-condos': 1,           // sunset-bylaws.pdf
-  'palm-shores-hoa': 1,         // palm-budget.pdf
-  'sunset-ridge-apartments': 2, // sunsetridge-rules.pdf, sunsetridge-move-in.pdf
+  'sunset-condos': 25,          // base docs + transparency checklist + 10 rolling minutes samples
+  'palm-shores-hoa': 10,        // base docs + transparency checklist
+  'sunset-ridge-apartments': 3, // rules, move-in instructions, resident handbook
 };
 
 describeDb('demo reset integration', () => {
@@ -33,17 +33,16 @@ describeDb('demo reset integration', () => {
   beforeAll(async () => {
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
-  });
+
+    await runDemoReset();
+    await runDemoReset();
+  }, 300_000);
 
   afterAll(async () => {
     await sql.end();
   });
 
   it('resets and re-seeds demo data idempotently', async () => {
-    // Run reset twice to verify idempotency
-    await runDemoReset();
-    await runDemoReset();
-
     // Verify communities exist after re-seed
     const seededCommunities = await db
       .select()
@@ -81,12 +80,9 @@ describeDb('demo reset integration', () => {
       .from(units)
       .where(eq(units.communityId, sunsetRidge!.id));
     expect(apartmentUnits.length).toBeGreaterThanOrEqual(20);
-  }, 180_000);
+  }, 30_000);
 
   it('leaves no orphaned data from previous seed', async () => {
-    // Seed first, then reset
-    await runDemoReset();
-
     const seededCommunities = await db
       .select()
       .from(communities)
@@ -102,5 +98,5 @@ describeDb('demo reset integration', () => {
       expect(expected, `No expected doc count for slug "${community.slug}"`).toBeDefined();
       expect(docs.length).toBe(expected);
     }
-  }, 180_000);
+  }, 30_000);
 });

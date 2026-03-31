@@ -33,7 +33,6 @@ import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsaf
 import { getComplianceTemplate, type CommunityType } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
-import { runBackfill } from './backfill-compliance-templates';
 
 const db = createUnscopedClient();
 
@@ -101,7 +100,9 @@ const GLOBAL_PREF_USER_EMAILS = [
   'site.manager@sunsetridge.local',
 ] as const;
 
-const demoUsersByEmail = new Map(DEMO_USERS.map((user) => [user.email, user]));
+const demoUsersByEmail = new Map<string, (typeof DEMO_USERS)[number]>(
+  DEMO_USERS.map((user) => [user.email, user]),
+);
 
 function debugSeed(message: string): void {
   if (DEBUG_DEMO_SEED) {
@@ -144,6 +145,120 @@ function resolveUserId(userIdsByEmail: Record<string, string>, email: string): s
     throw new Error(`Missing seeded user ID for ${email}`);
   }
   return userId;
+}
+
+async function ensureDemoUserRecord(email: string, preferredId?: string): Promise<string> {
+  const normalizedEmail = email.toLowerCase();
+  const demoUser = demoUsersByEmail.get(email) ?? demoUsersByEmail.get(normalizedEmail);
+  if (!demoUser) {
+    throw new Error(`Missing demo user config for ${email}`);
+  }
+
+  if (preferredId) {
+    const existingById = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, preferredId))
+      .limit(1);
+
+    if (existingById[0]) {
+      return existingById[0].id;
+    }
+  }
+
+  const existingByEmail = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, normalizedEmail))
+    .limit(1);
+
+  if (existingByEmail[0]) {
+    await db
+      .update(users)
+      .set({
+        fullName: demoUser.fullName,
+        phone: demoUser.phone,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existingByEmail[0].id));
+    return existingByEmail[0].id;
+  }
+
+  const userId = preferredId ?? crypto.randomUUID();
+  await db.insert(users).values({
+    id: userId,
+    email: normalizedEmail,
+    fullName: demoUser.fullName,
+    phone: demoUser.phone,
+  });
+  return userId;
+}
+
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return null;
+  }
+
+  const admin = createAdminClient();
+  let page = 1;
+  const perPage = 200;
+
+  while (page <= 20) {
+    const listed = await admin.auth.admin.listUsers({ page, perPage });
+    if (listed.error) {
+      throw listed.error;
+    }
+
+    const matched = listed.data.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
+    if (matched) {
+      return matched.id;
+    }
+
+    if (listed.data.users.length < perPage) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return null;
+}
+
+async function ensureDemoAuthUser(email: string): Promise<string | null> {
+  const demoUser = demoUsersByEmail.get(email) ?? demoUsersByEmail.get(email.toLowerCase());
+  if (!demoUser) {
+    throw new Error(`Missing demo user config for ${email}`);
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return null;
+  }
+
+  const existingId = await findAuthUserIdByEmail(email);
+  const admin = createAdminClient();
+
+  if (existingId) {
+    const updateResult = await admin.auth.admin.updateUserById(existingId, {
+      user_metadata: { full_name: demoUser.fullName },
+    });
+    if (updateResult.error) {
+      throw updateResult.error;
+    }
+    return existingId;
+  }
+
+  const createResult = await admin.auth.admin.createUser({
+    email: demoUser.email,
+    password: process.env.DEMO_DEFAULT_PASSWORD ?? `Demo-${crypto.randomUUID()}-A1!`,
+    email_confirm: true,
+    user_metadata: { full_name: demoUser.fullName },
+  });
+
+  if (createResult.error) {
+    throw createResult.error;
+  }
+
+  return createResult.data.user.id;
 }
 
 function addDays(source: Date, days: number): Date {
@@ -191,7 +306,6 @@ async function upsertDocument(
       and(
         eq(documents.communityId, communityId),
         eq(documents.filePath, filePath),
-        isNull(documents.deletedAt),
       ),
     )
     .limit(1);
@@ -207,6 +321,7 @@ async function upsertDocument(
         mimeType: 'application/pdf',
         uploadedBy,
         categoryId,
+        deletedAt: null,
         createdAt: postedAt,
         updatedAt: postedAt,
       })
@@ -300,7 +415,6 @@ async function upsertMeeting(
       and(
         eq(meetings.communityId, communityId),
         eq(meetings.title, title),
-        isNull(meetings.deletedAt),
       ),
     )
     .limit(1);
@@ -313,6 +427,7 @@ async function upsertMeeting(
         startsAt,
         noticePostedAt,
         location: 'Community Clubhouse',
+        deletedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(meetings.id, existing[0].id));
@@ -623,8 +738,8 @@ async function uploadSeedEsignSourceDocument(
   templateName: string,
   description: string,
   fieldsSchema: {
-    signerRoles: string[];
-    fields: Array<{ label?: string; type: string; signerRole: string }>;
+    signerRoles: readonly string[];
+    fields: ReadonlyArray<{ label?: string; type: string; signerRole: string }>;
   },
 ): Promise<string> {
   const pdfDoc = await PDFDocument.create();
@@ -778,9 +893,19 @@ const ESIGN_SEED_TEMPLATES = [
  */
 async function seedEsignData(
   communityId: number,
-  createdByUserId: string,
-  ownerUserId?: string,
+  createdByEmail: string,
+  ownerEmail?: string,
 ): Promise<void> {
+  const createdByAuthUserId = await ensureDemoAuthUser(createdByEmail);
+  if (!createdByAuthUserId) {
+    debugSeed(`missing auth context for e-sign seed in community ${communityId}; skipping`);
+    return;
+  }
+
+  const ownerAuthUserId = ownerEmail
+    ? await ensureDemoAuthUser(ownerEmail)
+    : null;
+
   // Idempotent: clear dependent rows before templates to satisfy template_id FKs.
   await db
     .delete(esignSubmissions)
@@ -809,7 +934,7 @@ async function seedEsignData(
         templateType: tpl.templateType,
         fieldsSchema: tpl.fieldsSchema,
         status: 'active',
-        createdBy: createdByUserId,
+        createdBy: createdByAuthUserId,
       })
       .returning({ id: esignTemplates.id, name: esignTemplates.name });
 
@@ -819,7 +944,7 @@ async function seedEsignData(
   debugSeed(`seeded ${insertedTemplates.length} esign templates for community ${communityId}`);
 
   // For Sunset Condos: create a demo submission so the my-pending widget has data
-  if (ownerUserId) {
+  if (ownerAuthUserId) {
     const proxyTemplate = insertedTemplates.find((t) => t.name === 'Proxy Designation Form');
     if (!proxyTemplate) return;
 
@@ -835,7 +960,7 @@ async function seedEsignData(
         messageSubject: 'Annual Meeting Proxy Form',
         messageBody: 'Please designate your proxy holder for the upcoming annual meeting.',
         expiresAt: addDays(new Date(), 30),
-        createdBy: createdByUserId,
+        createdBy: createdByAuthUserId,
       })
       .returning({ id: esignSubmissions.id });
 
@@ -845,7 +970,7 @@ async function seedEsignData(
       communityId,
       submissionId: submission.id,
       externalId: crypto.randomUUID(),
-      userId: ownerUserId,
+      userId: ownerAuthUserId,
       email: 'owner.one@sunset.local',
       name: 'Owner One',
       role: 'owner',
@@ -942,9 +1067,6 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
       });
     }),
   );
-
-  await runBackfill();
-
   const condoAndHoa = await db
     .select({
       id: communities.id,
@@ -959,7 +1081,10 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
       ),
     );
 
-  const boardPresidentId = resolveUserId(userIdsByEmail, 'board.president@sunset.local');
+  const boardPresidentId = await ensureDemoUserRecord(
+    'board.president@sunset.local',
+    resolveUserId(userIdsByEmail, 'board.president@sunset.local'),
+  );
   for (const community of condoAndHoa) {
     if (community.communityType === 'apartment') {
       await db
@@ -993,7 +1118,10 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   debugSeed('cross-community role and notification fixups complete');
 
   // Link owner to unit 1A for Sunset Condos (payments + assessments require unit association)
-  const ownerUserId = resolveUserId(userIdsByEmail, 'owner.one@sunset.local');
+  const ownerUserId = await ensureDemoUserRecord(
+    'owner.one@sunset.local',
+    resolveUserId(userIdsByEmail, 'owner.one@sunset.local'),
+  );
   {
     const firstUnit = await db
       .select({ id: units.id })
@@ -1027,16 +1155,22 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   debugSeed('violations seed complete');
 
   // Seed emergency broadcast data for Sunset Condos
-  const camUserId = resolveUserId(userIdsByEmail, 'cam.one@sunset.local');
-  const tenantUserId = resolveUserId(userIdsByEmail, 'tenant.one@sunset.local');
+  const camUserId = await ensureDemoUserRecord(
+    'cam.one@sunset.local',
+    resolveUserId(userIdsByEmail, 'cam.one@sunset.local'),
+  );
+  const tenantUserId = await ensureDemoUserRecord(
+    'tenant.one@sunset.local',
+    resolveUserId(userIdsByEmail, 'tenant.one@sunset.local'),
+  );
   const emergencyRecipientIds = [ownerUserId, boardPresidentId, tenantUserId];
   await seedEmergencyBroadcastData(sunsetCommunityId, camUserId, emergencyRecipientIds);
   debugSeed('emergency broadcast seed complete');
 
   // Seed e-sign templates for all communities, demo submission for Sunset only
-  await seedEsignData(sunsetCommunityId, boardPresidentId, ownerUserId);
-  await seedEsignData(palmCommunityId, boardPresidentId);
-  await seedEsignData(apartmentCommunityId, resolveUserId(userIdsByEmail, 'site.manager@sunsetridge.local'));
+  await seedEsignData(sunsetCommunityId, 'board.president@sunset.local', 'owner.one@sunset.local');
+  await seedEsignData(palmCommunityId, 'board.president@sunset.local');
+  await seedEsignData(apartmentCommunityId, 'site.manager@sunsetridge.local');
   debugSeed('esign seed complete');
 
   // Seed assessment + line item data for Sunset Condos
@@ -1052,15 +1186,13 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
  * line items for all units in the community.
  */
 async function seedAssessmentData(communityId: number, createdByUserId: string): Promise<void> {
-  // Check if assessments already exist for this community
-  const existing = await db
-    .select({ id: assessments.id })
-    .from(assessments)
-    .where(and(eq(assessments.communityId, communityId), isNull(assessments.deletedAt)));
-  if (existing.length > 0) {
-    debugSeed(`assessments already seeded for community ${communityId}, skipping`);
-    return;
-  }
+  await db
+    .delete(assessmentLineItems)
+    .where(eq(assessmentLineItems.communityId, communityId));
+
+  await db
+    .delete(assessments)
+    .where(eq(assessments.communityId, communityId));
 
   // Get all units for this community
   const communityUnits = await db
@@ -1113,6 +1245,10 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
       createdByUserId,
     })
     .returning({ id: assessments.id });
+
+  if (!monthlyAssessment || !specialAssessment) {
+    throw new Error(`Failed to create seeded assessments for community ${communityId}`);
+  }
 
   // Generate line items for monthly assessment — last month (overdue) + this month (pending)
   const lastMonthDue = `${lastMonthStr}-01`;

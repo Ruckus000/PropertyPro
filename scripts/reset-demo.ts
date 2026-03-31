@@ -15,88 +15,100 @@ import { pathToFileURL } from 'node:url';
 import { inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { DEMO_COMMUNITIES } from './config/demo-data';
 import { runDemoSeed } from './seed-demo';
 
 const db = createUnscopedClient();
 
 /**
- * FK-safe deletion order for the 21 tenant-scoped tables.
- * Children before parents to avoid RESTRICT constraint violations.
+ * FK-safe deletion order for the demo-owned tables that the seed depends on.
+ * This intentionally does not try to vacuum every tenant table in the product:
+ * demo reset now preserves communities, users, and append-only audit rows, then
+ * re-normalizes the mutable demo data that must be reseeded.
  *
- * IMPORTANT: Keep in sync with packages/db/src/schema/. When adding a new
- * tenant-scoped table (one with a community_id column), add it here in the
- * correct position so its children are deleted before it.
+ * IMPORTANT: Keep documents before categories, leases before units, and child
+ * tables before parents so reset stays deterministic under dirty DB state.
  */
-const TENANT_TABLE_DELETION_ORDER = [
-  // Phase 1 — leaf tables (no children depend on them)
+const DEMO_RESET_TABLE_DELETION_ORDER = [
+  // Phase 1 — leaf tables
   'announcement_delivery_log',
+  'assessment_line_items',
   'contract_bids',
+  'emergency_broadcast_recipients',
+  'esign_events',
+  'esign_signers',
   'maintenance_comments',
   'meeting_documents',
-
-  // Phase 2 — mid-level tables with children already deleted above
   'notification_digest_queue',
+  'violation_fines',
+
+  // Phase 2 — parent tables
+  'emergency_broadcasts',
+  'esign_consent',
+  'esign_submissions',
+  'leases', // self-ref FK nulled before delete
+  'maintenance_requests',
   'notification_preferences',
   'user_roles',
   'invitations',
-  'leases',                     // self-ref FK nulled before delete
-  'maintenance_requests',
-  'onboarding_wizard_state',
-  'provisioning_jobs',
-
-  // Phase 3 — content tables
-  'contracts',
+  'violations',
+  'assessments',
+  'esign_templates',
   'compliance_checklist_items',
-  'compliance_audit_log',
   'announcements',
   'documents',
   'document_categories',
   'meetings',
   'units',
+  'onboarding_wizard_state',
+  'provisioning_jobs',
 
-  // Phase 4 — registry (standalone)
+  // Phase 3 — standalone metadata
   'demo_seed_registry',
 ] as const;
+
+const APPEND_ONLY_TABLES = ['compliance_audit_log'] as const;
 
 interface ResetStats {
   table: string;
   deleted: number;
 }
 
-/**
- * Validates that TENANT_TABLE_DELETION_ORDER covers all tenant-scoped tables
- * (tables with a community_id column) in the current database schema. Throws
- * if a table with community_id exists but is missing from the deletion list,
- * preventing silent data leaks after schema changes.
- */
-async function validateDeletionOrder(): Promise<void> {
+interface DemoResetOptions {
+  syncAuthUsers?: boolean;
+}
+
+function extractRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (typeof result === 'object' && result !== null && 'rows' in result) {
+    const rows = (result as { rows?: unknown }).rows;
+    return Array.isArray(rows) ? (rows as T[]) : [];
+  }
+
+  return [];
+}
+
+async function resolveExistingResetTables(): Promise<string[]> {
+  const expectedTables = [...DEMO_RESET_TABLE_DELETION_ORDER, ...APPEND_ONLY_TABLES];
   const rows = await db.execute(sql`
     SELECT table_name
-    FROM information_schema.columns
+    FROM information_schema.tables
     WHERE table_schema = 'public'
-      AND column_name = 'community_id'
-      AND table_name != 'communities'
+      AND table_name IN (${sql.join(expectedTables.map((table) => sql`${table}`), sql`, `)})
     ORDER BY table_name
   `);
 
-  const dbTables = new Set((rows as unknown as { table_name: string }[]).map((r) => r.table_name));
-  const listed = new Set<string>(TENANT_TABLE_DELETION_ORDER);
+  const existingTables = new Set(extractRows<{ table_name: string }>(rows).map((row) => row.table_name));
+  const missing = expectedTables.filter((table) => !existingTables.has(table));
 
-  const missing = [...dbTables].filter((t) => !listed.has(t));
-  const stale = [...listed].filter((t) => !dbTables.has(t));
-
-  if (missing.length > 0 || stale.length > 0) {
-    const parts: string[] = [];
-    if (missing.length > 0) {
-      parts.push(`Tables with community_id missing from TENANT_TABLE_DELETION_ORDER: ${missing.join(', ')}`);
-    }
-    if (stale.length > 0) {
-      parts.push(`Tables in TENANT_TABLE_DELETION_ORDER but not in DB: ${stale.join(', ')}`);
-    }
-    throw new Error(`[reset-demo] Deletion order out of sync with schema.\n${parts.join('\n')}`);
+  if (missing.length > 0) {
+    console.warn(`[reset-demo] Skipping missing reset tables: ${missing.join(', ')}`);
   }
+
+  return DEMO_RESET_TABLE_DELETION_ORDER.filter((table) => existingTables.has(table));
 }
 
 async function resolveDemoCommunityIds(): Promise<number[]> {
@@ -112,7 +124,22 @@ async function resolveDemoCommunityIds(): Promise<number[]> {
   return rows.map((r) => r.id);
 }
 
-async function deleteTenantData(communityIds: number[]): Promise<ResetStats[]> {
+async function countRowsByCommunity(table: string, communityIds: number[]): Promise<number> {
+  const idList = sql.join(communityIds.map((id) => sql`${id}`), sql`, `);
+  const result = await db.execute<{ count: number | string }>(sql`
+    SELECT COUNT(*)::int AS count
+    FROM ${sql.identifier(table)}
+    WHERE community_id IN (${idList})
+  `);
+
+  const rows = extractRows<{ count: number | string }>(result);
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function deleteTenantData(
+  communityIds: number[],
+  tables: string[],
+): Promise<ResetStats[]> {
   if (communityIds.length === 0) {
     return [];
   }
@@ -121,12 +148,14 @@ async function deleteTenantData(communityIds: number[]): Promise<ResetStats[]> {
   const idList = sql.join(communityIds.map((id) => sql`${id}`), sql`, `);
 
   // Null out self-referential FK on leases before deleting
-  await db.execute(sql`
-    UPDATE leases SET previous_lease_id = NULL
-    WHERE community_id IN (${idList}) AND previous_lease_id IS NOT NULL
-  `);
+  if (tables.includes('leases')) {
+    await db.execute(sql`
+      UPDATE leases SET previous_lease_id = NULL
+      WHERE community_id IN (${idList}) AND previous_lease_id IS NOT NULL
+    `);
+  }
 
-  for (const table of TENANT_TABLE_DELETION_ORDER) {
+  for (const table of tables) {
     const result = await db.execute(sql`
       DELETE FROM ${sql.identifier(table)}
       WHERE community_id IN (${idList})
@@ -141,77 +170,95 @@ async function deleteTenantData(communityIds: number[]): Promise<ResetStats[]> {
   return stats;
 }
 
-async function deleteSupabaseAuthUsers(): Promise<number> {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    console.log('[reset-demo] Supabase credentials not configured — skipping auth user cleanup');
+async function countAppendOnlyRows(communityIds: number[]): Promise<number> {
+  if (communityIds.length === 0) {
     return 0;
   }
 
-  const admin = createAdminClient();
-  const demoEmails = new Set(DEMO_USERS.map((u) => u.email.toLowerCase()));
-  let deleted = 0;
-  let page = 1;
-  const perPage = 200;
-
-  // Collect target user IDs first, then delete — avoids pagination shift
-  // when deleting users while paginating through the list.
-  const toDelete: { id: string; email: string }[] = [];
-
-  while (true) {
-    const listed = await admin.auth.admin.listUsers({ page, perPage });
-    if (listed.error) {
-      console.warn('[reset-demo] Failed to list auth users:', listed.error.message);
-      break;
-    }
-
-    for (const authUser of listed.data.users) {
-      if (authUser.email && demoEmails.has(authUser.email.toLowerCase())) {
-        toDelete.push({ id: authUser.id, email: authUser.email });
-      }
-    }
-
-    if (listed.data.users.length < perPage) break;
-    page++;
-  }
-
-  for (const { id, email } of toDelete) {
-    const { error } = await admin.auth.admin.deleteUser(id);
-    if (error) {
-      console.warn(`[reset-demo] Failed to delete auth user ${email}:`, error.message);
-    } else {
-      deleted++;
-    }
-  }
-
-  return deleted;
-}
-
-async function deleteDemoUsers(): Promise<number> {
-  const emails = DEMO_USERS.map((u) => u.email.toLowerCase());
-  const emailList = sql.join(emails.map((e) => sql`${e}`), sql`, `);
-
-  const result = await db.execute(sql`
-    DELETE FROM users WHERE email IN (${emailList})
+  const rows = await db.execute(sql`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = ${APPEND_ONLY_TABLES[0]}
   `);
+  const tableExists = extractRows<{ table_name: string }>(rows).length > 0;
+  if (!tableExists) {
+    return 0;
+  }
 
-  // postgres-js uses .count for affected rows, not .rowCount
-  return (result as unknown as { count: number | null }).count ?? 0;
+  return countRowsByCommunity(APPEND_ONLY_TABLES[0], communityIds);
 }
 
-export async function runDemoReset(): Promise<void> {
+async function collectResiduals(
+  communityIds: number[],
+  tables: string[],
+): Promise<ResetStats[]> {
+  const residuals: ResetStats[] = [];
+
+  for (const table of tables) {
+    residuals.push({
+      table,
+      deleted: await countRowsByCommunity(table, communityIds),
+    });
+  }
+
+  return residuals.filter((entry) => entry.deleted > 0);
+}
+
+async function deleteTenantDataUntilClean(
+  communityIds: number[],
+  tables: string[],
+): Promise<ResetStats[]> {
+  const combined = new Map<string, number>();
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const stats = await deleteTenantData(communityIds, tables);
+    for (const stat of stats) {
+      combined.set(stat.table, (combined.get(stat.table) ?? 0) + stat.deleted);
+    }
+
+    const residuals = await collectResiduals(communityIds, tables);
+    if (residuals.length === 0) {
+      return tables.map((table) => ({ table, deleted: combined.get(table) ?? 0 }));
+    }
+
+    if (attempt < 2) {
+      console.warn(
+        `[reset-demo] Residual demo rows remain after cleanup pass ${attempt}; retrying targeted delete (${residuals
+          .map((entry) => `${entry.table}=${entry.deleted}`)
+          .join(', ')})`,
+      );
+    } else {
+      throw new Error(
+        `[reset-demo] Residual demo rows remain after cleanup: ${residuals
+          .map((entry) => `${entry.table}=${entry.deleted}`)
+          .join(', ')}`,
+      );
+    }
+  }
+
+  return tables.map((table) => ({ table, deleted: combined.get(table) ?? 0 }));
+}
+
+export async function runDemoReset(options: DemoResetOptions = {}): Promise<void> {
   const startTime = Date.now();
+  const syncAuthUsers = options.syncAuthUsers ?? false;
   console.log('[reset-demo] Starting demo reset...');
 
-  // Step 0: Validate deletion order against live schema
-  await validateDeletionOrder();
+  const resetTables = await resolveExistingResetTables();
 
-  // Step 1: Resolve demo community IDs
   const communityIds = await resolveDemoCommunityIds();
   console.log(`[reset-demo] Found ${communityIds.length} demo communities (IDs: ${communityIds.join(', ') || 'none'})`);
 
-  // Step 2: Delete all tenant-scoped data for demo communities
   if (communityIds.length > 0) {
-    const stats = await deleteTenantData(communityIds);
+    const appendOnlyRows = await countAppendOnlyRows(communityIds);
+    if (appendOnlyRows > 0) {
+      console.log(
+        `[reset-demo] Preserving ${appendOnlyRows} append-only compliance audit row(s) and keeping demo communities/users in place`,
+      );
+    }
+
+    const stats = await deleteTenantDataUntilClean(communityIds, resetTables);
     const totalDeleted = stats.reduce((sum, s) => sum + s.deleted, 0);
     console.log(`[reset-demo] Deleted ${totalDeleted} rows across ${stats.length} tables`);
     for (const s of stats) {
@@ -219,24 +266,10 @@ export async function runDemoReset(): Promise<void> {
         console.log(`[reset-demo]   ${s.table}: ${s.deleted} rows`);
       }
     }
-
-    // Step 3: Delete demo community rows themselves
-    const communityIdList = sql.join(communityIds.map((id) => sql`${id}`), sql`, `);
-    await db.execute(sql`DELETE FROM communities WHERE id IN (${communityIdList})`);
-    console.log(`[reset-demo] Deleted ${communityIds.length} demo community rows`);
   }
 
-  // Step 4: Delete Supabase Auth users (before DB users to avoid orphans)
-  const authUsersDeleted = await deleteSupabaseAuthUsers();
-  console.log(`[reset-demo] Deleted ${authUsersDeleted} Supabase Auth user(s)`);
-
-  // Step 5: Delete demo users from DB
-  const usersDeleted = await deleteDemoUsers();
-  console.log(`[reset-demo] Deleted ${usersDeleted} demo user rows`);
-
-  // Step 6: Re-seed
   console.log('[reset-demo] Re-seeding demo data...');
-  await runDemoSeed();
+  await runDemoSeed({ syncAuthUsers });
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`[reset-demo] Reset complete in ${elapsed}s`);
@@ -244,7 +277,7 @@ export async function runDemoReset(): Promise<void> {
 
 async function main(): Promise<void> {
   try {
-    await runDemoReset();
+    await runDemoReset({ syncAuthUsers: true });
   } finally {
     await closeUnscopedClient();
   }
