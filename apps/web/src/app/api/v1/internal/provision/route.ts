@@ -14,8 +14,8 @@ import { eq } from '@propertypro/db/filters';
 import { provisioningJobs } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { UnauthorizedError } from '@/lib/api/errors/UnauthorizedError';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { requireCronSecret } from '@/lib/api/cron-auth';
 import { runProvisioning } from '@/lib/services/provisioning-service';
 import { z } from 'zod';
 
@@ -23,20 +23,8 @@ const bodySchema = z.object({
   signupRequestId: z.string().min(1),
 });
 
-function readBearerToken(req: NextRequest): string | null {
-  const raw = req.headers.get('authorization');
-  if (!raw) return null;
-  if (!raw.toLowerCase().startsWith('bearer ')) return null;
-  return raw.slice('bearer '.length).trim();
-}
-
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  const expectedSecret = process.env.PROVISIONING_RETRY_SECRET;
-  const token = readBearerToken(req);
-
-  if (!expectedSecret || !token || token !== expectedSecret) {
-    throw new UnauthorizedError();
-  }
+  requireCronSecret(req, process.env.PROVISIONING_RETRY_SECRET);
 
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
