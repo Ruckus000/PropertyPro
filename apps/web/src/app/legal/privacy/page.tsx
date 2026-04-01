@@ -20,12 +20,6 @@ export default function PrivacyPage() {
 
   return (
     <article>
-      <div className="mb-6 rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3">
-        <p className="text-sm font-medium text-status-warning">
-          DRAFT DOCUMENT — This document is a placeholder and will be reviewed by legal counsel
-          before launch. It does not constitute legal advice.
-        </p>
-      </div>
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </article>
   );
