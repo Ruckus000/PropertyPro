@@ -60,6 +60,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/contracts',
   '/audit-trail',
   '/announcements',
+  '/notifications',
   '/mobile',
   '/pm',
   '/communities',

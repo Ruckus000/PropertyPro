@@ -7,10 +7,13 @@ import { createElement, type ReactElement } from 'react';
 import {
   communities,
   createScopedClient,
+  insertNotifications,
   logAuditEvent,
   notificationPreferences,
   userRoles,
   users,
+  type InsertNotificationRow,
+  type NotificationCategory,
 } from '@propertypro/db';
 import {
   ComplianceAlertEmail,
@@ -124,6 +127,52 @@ const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   compliance_alert: 'meeting',
   document_posted: 'document',
 };
+
+export interface InAppNotificationEvent {
+  category: NotificationCategory;
+  title: string;
+  body?: string;
+  actionUrl?: string;
+  sourceType: string;
+  sourceId: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+}
+
+export interface CreateNotificationsResult {
+  created: number;
+  skipped: number;
+}
+
+const CATEGORY_TO_IN_APP_PREF_KEY: Record<
+  NotificationCategory,
+  keyof UserNotificationPreferences | null
+> = {
+  announcement: 'inAppAnnouncements',
+  document: 'inAppDocuments',
+  meeting: 'inAppMeetings',
+  maintenance: 'inAppMaintenance',
+  violation: 'inAppViolations',
+  election: 'inAppElections',
+  system: null,
+};
+
+/** Map in-app category to the closest email NotificationKind for recipient resolution. */
+const CATEGORY_TO_EMAIL_KIND: Partial<Record<NotificationCategory, NotificationKind>> = {
+  announcement: 'announcement',
+  document: 'document',
+  meeting: 'meeting',
+  maintenance: 'maintenance',
+};
+
+function isInAppEnabled(
+  prefs: UserNotificationPreferences,
+  category: NotificationCategory,
+): boolean {
+  if (!prefs.inAppEnabled) return false;
+  const prefKey = CATEGORY_TO_IN_APP_PREF_KEY[category];
+  if (prefKey === null) return true;
+  return (prefs[prefKey] as boolean | undefined) !== false;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -293,6 +342,12 @@ async function resolveRecipientDeliveries(
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
         inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+        inAppAnnouncements: (row['inAppAnnouncements'] as boolean | undefined) ?? true,
+        inAppDocuments: (row['inAppDocuments'] as boolean | undefined) ?? true,
+        inAppMeetings: (row['inAppMeetings'] as boolean | undefined) ?? true,
+        inAppMaintenance: (row['inAppMaintenance'] as boolean | undefined) ?? true,
+        inAppViolations: (row['inAppViolations'] as boolean | undefined) ?? true,
+        inAppElections: (row['inAppElections'] as boolean | undefined) ?? true,
       });
     }
   }
@@ -617,4 +672,155 @@ export async function queueNotificationDetailed(
   actorUserId?: string,
 ): Promise<NotificationDispatchResult> {
   return dispatchNotification(communityId, event, recipientFilter, actorUserId);
+}
+
+// ---------------------------------------------------------------------------
+// In-app recipient resolution (bypasses email preference checks)
+// ---------------------------------------------------------------------------
+
+interface InAppRecipient {
+  userId: string;
+  preferences: UserNotificationPreferences;
+}
+
+/**
+ * Resolve recipients eligible for in-app notifications.
+ *
+ * Unlike resolveRecipientDeliveries (which filters by email preferences),
+ * this only resolves users + roles and returns ALL community members matching
+ * the filter. Email preference checks are NOT applied — only in-app preferences
+ * are checked by the caller.
+ */
+async function resolveInAppRecipients(
+  communityId: number,
+  filter: RecipientFilter,
+): Promise<InAppRecipient[]> {
+  const scoped = createScopedClient(communityId);
+
+  const [roleRows, userRows, preferenceRows] = await Promise.all([
+    scoped.query(userRoles),
+    scoped.query(users),
+    scoped.query(notificationPreferences),
+  ]);
+
+  const usersById = new Map<string, Record<string, unknown>>();
+  for (const row of userRows) {
+    const userId = row['id'];
+    if (typeof userId === 'string') {
+      if (row['deletedAt'] != null) continue;
+      usersById.set(userId, row);
+    }
+  }
+
+  const preferencesByUserId = new Map<string, UserNotificationPreferences>();
+  for (const row of preferenceRows) {
+    const userId = row['userId'];
+    if (typeof userId === 'string') {
+      const rawFrequency = row['emailFrequency'];
+      preferencesByUserId.set(userId, {
+        emailFrequency:
+          rawFrequency === 'immediate' ||
+          rawFrequency === 'daily_digest' ||
+          rawFrequency === 'weekly_digest' ||
+          rawFrequency === 'never'
+            ? rawFrequency
+            : 'immediate',
+        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
+        emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
+        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+        inAppAnnouncements: (row['inAppAnnouncements'] as boolean | undefined) ?? true,
+        inAppDocuments: (row['inAppDocuments'] as boolean | undefined) ?? true,
+        inAppMeetings: (row['inAppMeetings'] as boolean | undefined) ?? true,
+        inAppMaintenance: (row['inAppMaintenance'] as boolean | undefined) ?? true,
+        inAppViolations: (row['inAppViolations'] as boolean | undefined) ?? true,
+        inAppElections: (row['inAppElections'] as boolean | undefined) ?? true,
+      });
+    }
+  }
+
+  // Short-circuit for specific_user filter
+  if (typeof filter === 'object' && filter.type === 'specific_user') {
+    const user = usersById.get(filter.userId);
+    if (!user) return [];
+    const prefs = preferencesByUserId.get(filter.userId) ?? getDefaultPreferences();
+    return [{ userId: filter.userId, preferences: prefs }];
+  }
+
+  const recipients: InAppRecipient[] = [];
+  for (const row of roleRows) {
+    const userId = row['userId'];
+    const role = row['role'];
+    const isUnitOwner = row['isUnitOwner'] === true;
+    const presetKey = row['presetKey'] as string | undefined;
+    if (typeof userId !== 'string' || typeof role !== 'string') continue;
+    if (!isRoleMatch(role, filter, userId, { isUnitOwner, presetKey })) continue;
+    if (!usersById.has(userId)) continue;
+
+    const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
+    recipients.push({ userId, preferences: prefs });
+  }
+
+  return recipients;
+}
+
+/**
+ * Create in-app notification rows for all eligible recipients.
+ *
+ * Called alongside queueNotification/email calls — operates as an independent
+ * channel. Uses its own recipient resolution that does NOT filter by email
+ * preferences (a user may disable email but still want in-app notifications).
+ * Failures are logged and do not propagate to callers.
+ */
+export async function createNotificationsForEvent(
+  communityId: number,
+  event: InAppNotificationEvent,
+  recipientFilter: RecipientFilter,
+  actorUserId?: string,
+): Promise<CreateNotificationsResult> {
+  let allRecipients: InAppRecipient[];
+  try {
+    allRecipients = await resolveInAppRecipients(communityId, recipientFilter);
+  } catch (error) {
+    console.error('[notification-service] createNotificationsForEvent: recipient resolution failed', {
+      communityId,
+      category: event.category,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { created: 0, skipped: 0 };
+  }
+
+  const eligible = allRecipients.filter((d) => {
+    if (actorUserId && d.userId === actorUserId) return false;
+    return isInAppEnabled(d.preferences, event.category);
+  });
+
+  if (eligible.length === 0) return { created: 0, skipped: allRecipients.length };
+
+  const rows: InsertNotificationRow[] = eligible.map((d) => ({
+    communityId,
+    userId: d.userId,
+    category: event.category,
+    title: event.title,
+    body: event.body,
+    actionUrl: event.actionUrl,
+    sourceType: event.sourceType,
+    sourceId: event.sourceId,
+    priority: event.priority ?? 'normal',
+  }));
+
+  let created = 0;
+  try {
+    const result = await insertNotifications(rows);
+    created = result.created;
+  } catch (error) {
+    console.error('[notification-service] createNotificationsForEvent: insert failed', {
+      communityId,
+      category: event.category,
+      recipientCount: rows.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { created: 0, skipped: eligible.length };
+  }
+
+  return { created, skipped: allRecipients.length - eligible.length };
 }

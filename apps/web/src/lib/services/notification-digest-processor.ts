@@ -160,6 +160,12 @@ function coercePreferences(row: Record<string, unknown> | undefined): UserNotifi
     emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
     emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
     inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+    inAppAnnouncements: true,
+    inAppDocuments: true,
+    inAppMeetings: true,
+    inAppMaintenance: true,
+    inAppViolations: true,
+    inAppElections: true,
   };
 }
 

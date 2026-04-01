@@ -8,7 +8,7 @@ import {
 import { AppError, UnprocessableEntityError, ValidationError } from '@/lib/api/errors';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
-import { queueNotificationDetailed } from '@/lib/services/notification-service';
+import { createNotificationsForEvent, queueNotificationDetailed } from '@/lib/services/notification-service';
 import type { DocumentMutationResult, DocumentMutationWarning } from './types';
 
 type DocumentSourceType = 'library' | 'violation_evidence';
@@ -224,6 +224,22 @@ export async function createUploadedDocument(
       });
       warnings.push(DOCUMENT_NOTIFICATION_WARNING);
     }
+
+    void createNotificationsForEvent(
+      input.communityId,
+      {
+        category: 'document',
+        title: `New Document: ${input.title}`,
+        body: undefined,
+        actionUrl: `/documents/${created['id']}`,
+        sourceType: 'document',
+        sourceId: String(created['id']),
+      },
+      'all',
+      input.userId,
+    ).catch((err: unknown) => {
+      console.error('[documents] in-app notification failed', { communityId: input.communityId, error: err instanceof Error ? err.message : String(err) });
+    });
   }
 
   return {

@@ -19,6 +19,7 @@ const {
   getAccessibleDocumentsMock,
   requireActiveSubscriptionForMutationMock,
   queueNotificationDetailedMock,
+  createNotificationsForEventMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
@@ -42,6 +43,7 @@ const {
     queuedCount: 0,
     failedCount: 0,
   }),
+  createNotificationsForEventMock: vi.fn().mockResolvedValue({ created: 0, skipped: 0 }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -67,6 +69,7 @@ vi.mock('@/lib/workers/pdf-extraction', () => ({
 
 vi.mock('@/lib/services/notification-service', () => ({
   queueNotificationDetailed: queueNotificationDetailedMock,
+  createNotificationsForEvent: createNotificationsForEventMock,
 }));
 
 vi.mock('@/lib/middleware/subscription-guard', () => ({
@@ -104,6 +107,7 @@ function resetRouteMocks() {
     queuedCount: 0,
     failedCount: 0,
   });
+  createNotificationsForEventMock.mockResolvedValue({ created: 0, skipped: 0 });
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
     query: scopedQueryMock,

@@ -13,6 +13,7 @@ export * from './announcements';
 export * from './announcement-delivery-log';
 export * from './notification-digest-queue';
 export * from './notification-preferences';
+export * from './notifications';
 export * from './pending-signups';
 export * from './platform-admin-users';
 export * from './stripe-webhook-events';
@@ -158,6 +159,11 @@ export type NewNotificationDigestQueue = typeof notificationDigestQueue.$inferIn
 // Notification Preferences
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+// Notifications
+import type { notifications } from './notifications';
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
 
 // Pending Signups
 export type PendingSignup = typeof pendingSignups.$inferSelect;
