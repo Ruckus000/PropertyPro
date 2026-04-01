@@ -81,7 +81,10 @@ Set for **Production** and **Preview** environments unless noted.
 | `SENTRY_PROJECT` | Build only | Sentry project slug |
 | `UPSTASH_REDIS_REST_URL` | Server only | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | Server only | Upstash Redis REST token |
-| `NEXT_PUBLIC_APP_URL` | All | `https://getpropertypro.com` (prod) |
+| `NEXT_PUBLIC_APP_URL` | All | Web: `https://getpropertypro.com` (prod). Admin app: your admin host, e.g. `https://admin.getpropertypro.com` |
+| `NEXT_PUBLIC_WEB_APP_URL` | Admin only | Web apex for tenant URLs/copy, e.g. `https://getpropertypro.com` (omit on web app) |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | All | Production: `.getpropertypro.com` |
+| `ADMIN_ORIGIN` | Web | Optional; CSP framing for admin→web previews, e.g. `https://admin.getpropertypro.com` |
 | `NODE_ENV` | All | `production` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
@@ -91,14 +94,30 @@ Set for **Production** and **Preview** environments unless noted.
 
 ### 5.1 Vercel Domain Setup
 
+**Web app (`apps/web`):**
+
 1. In Vercel Dashboard > Project > Settings > Domains, add:
-   - `getpropertypro.com` (primary)
-   - `www.getpropertypro.com` (redirect to apex)
+   - `getpropertypro.com` (primary apex)
+   - `www.getpropertypro.com` (optional; redirect to apex)
    - `*.getpropertypro.com` (wildcard for tenant subdomains)
+
+**Admin app (`apps/admin`):**
+
+- Add `admin.getpropertypro.com` to the admin Vercel project.
 
 2. Vercel will provide DNS records to configure.
 
-### 5.2 Cloudflare DNS Records
+### 5.2 Supabase Auth (Redirect URLs)
+
+In Supabase Dashboard > Authentication > URL configuration, add redirect patterns for:
+
+- `https://getpropertypro.com/**`
+- `https://*.getpropertypro.com/**` (or enumerate tenant hosts if wildcard is not available)
+- `https://admin.getpropertypro.com/**`
+
+Set **Site URL** to the canonical web apex (e.g. `https://getpropertypro.com`).
+
+### 5.3 Cloudflare DNS Records
 
 | Type | Name | Content | Proxy |
 |------|------|---------|-------|
@@ -110,7 +129,7 @@ Set for **Production** and **Preview** environments unless noted.
 
 > **Trade-off:** DNS-only mode bypasses Cloudflare's WAF and DDoS protection for these records. If you need those features, an alternative is to keep the proxy enabled (orange cloud) and set Cloudflare's SSL/TLS mode to **Full (Strict)**. Full (Strict) encrypts traffic end-to-end and avoids certificate conflicts, but requires additional configuration on the Cloudflare side (an Origin CA certificate or a valid cert on the origin). For a simpler setup, DNS-only is the recommended default.
 
-### 5.3 Email DNS Records (Resend)
+### 5.4 Email DNS Records (Resend)
 
 | Type | Name | Content |
 |------|------|---------|
