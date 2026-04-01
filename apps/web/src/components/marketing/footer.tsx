@@ -78,6 +78,14 @@ export function MarketingFooter() {
                   Privacy Policy
                 </a>
               </li>
+              <li>
+                <a
+                  href="/transparency"
+                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
+                >
+                  Community Transparency
+                </a>
+              </li>
             </ul>
           </div>
 
