@@ -14,6 +14,7 @@ const {
   notificationPreferencesTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  requirePermissionMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -25,7 +26,8 @@ const {
   unitsTable: Symbol('units'),
   notificationPreferencesTable: Symbol('notification_preferences'),
   requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  requireCommunityMembershipMock: vi.fn().mockResolvedValue({ role: 'cam' }),
+  requirePermissionMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -44,6 +46,10 @@ vi.mock('@/lib/api/auth', () => ({
 
 vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/api/user-communities', () => ({

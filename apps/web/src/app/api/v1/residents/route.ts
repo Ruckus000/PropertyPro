@@ -34,7 +34,7 @@ import {
   PRESET_METADATA,
 } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -321,6 +321,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(actorMembership, 'residents', 'write');
+
+  if (userId === actorUserId && role !== undefined) {
+    throw new ForbiddenError('Cannot modify your own role');
+  }
+
   const scoped = createScopedClient(communityId);
 
   const roleRows = await scoped.query(userRoles);

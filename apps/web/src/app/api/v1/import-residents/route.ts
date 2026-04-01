@@ -18,6 +18,7 @@ import type { CommunityRole, CommunityType, NewCommunityRole, PresetKey } from "
 import { getPresetPermissions, PRESET_METADATA, isPresetKey } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
+import { requirePermission } from "@/lib/db/access-control";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { requireCommunityType } from "@/lib/utils/community-validators";
 import { listCommunitiesForUser } from "@/lib/api/user-communities";
@@ -91,7 +92,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
   await assertNotDemoGrace(communityId);
   const { csv, dryRun } = parsed.data;
-  await requireCommunityMembership(communityId, actorUserId);
+  const membership = await requireCommunityMembership(communityId, actorUserId);
+  requirePermission(membership, 'residents', 'write');
   const scoped = createScopedClient(communityId);
 
   // Parse and validate CSV
