@@ -39,6 +39,7 @@ const {
   pendingSignupsTable,
   provisioningJobsTable,
   stripeWebhookEventsTable,
+  accessPlansTable,
 } = vi.hoisted(() => {
   // Chainable builder mock — each method returns `this` (the same object)
   // so callers can chain .select().from().where().limit() etc.
@@ -98,6 +99,11 @@ const {
       eventId: 'stripe_webhook_events.event_id',
       processedAt: 'stripe_webhook_events.processed_at',
     },
+    accessPlansTable: {
+      id: 'access_plans.id',
+      convertedAt: 'access_plans.converted_at',
+      revokedAt: 'access_plans.revoked_at',
+    },
   };
 });
 
@@ -125,6 +131,7 @@ vi.mock('@propertypro/db', () => ({
   pendingSignups: pendingSignupsTable,
   provisioningJobs: provisioningJobsTable,
   stripeWebhookEvents: stripeWebhookEventsTable,
+  accessPlans: accessPlansTable,
 }));
 
 vi.mock('@/lib/services/stripe-service', () => ({
@@ -530,6 +537,107 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(res.status).toBe(200);
       // retrieveCheckoutSession should not be called when metadata lacks signupRequestId
       expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+    });
+
+    it('persists Stripe IDs for self-serve subscribe events with accessPlanId + communityId metadata', async () => {
+      const session = {
+        id: 'cs_live_selfserve_001',
+        status: 'complete',
+        metadata: { accessPlanId: '101', communityId: '42', planId: 'condo_718_monthly' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_selfserve_001');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({
+        ...session,
+        customer: 'cus_selfserve_001',
+        subscription: 'sub_selfserve_001',
+      });
+
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([]),
+          })),
+        })),
+      }));
+
+      const setPayloads: Array<Record<string, unknown>> = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((payload: Record<string, unknown>) => {
+        setPayloads.push(payload);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalledWith('cs_live_selfserve_001');
+
+      const communityUpdate = setPayloads.find(
+        (p) =>
+          p.stripeCustomerId === 'cus_selfserve_001' &&
+          p.stripeSubscriptionId === 'sub_selfserve_001',
+      );
+      expect(communityUpdate).toBeDefined();
+    });
+
+    it('skips Stripe ID persistence when fresh session status is not complete', async () => {
+      const session = {
+        id: 'cs_live_selfserve_002',
+        status: 'complete',
+        metadata: { accessPlanId: '102', communityId: '43', planId: 'condo_718_monthly' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_selfserve_002');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({
+        ...session,
+        status: 'open', // not complete
+        customer: 'cus_selfserve_002',
+        subscription: 'sub_selfserve_002',
+      });
+
+      const setPayloads: Array<Record<string, unknown>> = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((payload: Record<string, unknown>) => {
+        setPayloads.push(payload);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([]),
+          })),
+        })),
+      }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalledWith('cs_live_selfserve_002');
+
+      // No community update should have stripeCustomerId since session was not complete
+      const communityUpdate = setPayloads.find(
+        (p) => p.stripeCustomerId === 'cus_selfserve_002',
+      );
+      expect(communityUpdate).toBeUndefined();
     });
   });
 

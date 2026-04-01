@@ -126,7 +126,47 @@ async function handleCheckoutSessionCompleted(
   }
 
   if (!signupRequestId) {
-    // If we only had an accessPlanId (self-service subscribe), we're done.
+    // Self-serve subscribe flow (existing community) carries accessPlanId + communityId.
+    // Persist Stripe IDs now so later subscription/invoice events can resolve the community.
+    const communityIdRaw = session.metadata?.communityId;
+    const communityId = communityIdRaw ? Number(communityIdRaw) : null;
+    if (accessPlanId && communityId && Number.isFinite(communityId)) {
+      const freshSession = await retrieveCheckoutSession(session.id);
+      if (freshSession.status !== 'complete') {
+        logStripeWebhookEvent('warn', 'self-serve checkout session not yet complete, skipping Stripe ID persistence', {
+          eventId,
+          eventType: 'checkout.session.completed',
+          category: 'validation',
+          outcome: 'skipped',
+          payloadSnippet: { sessionId: session.id, sessionStatus: freshSession.status, communityId },
+        });
+        return;
+      }
+      const stripeCustomerId =
+        typeof freshSession.customer === 'string'
+          ? freshSession.customer
+          : freshSession.customer?.id ?? null;
+      const stripeSubscriptionId =
+        typeof freshSession.subscription === 'string'
+          ? freshSession.subscription
+          : (freshSession.subscription as { id: string } | null)?.id ?? null;
+
+      const db = createUnscopedClient();
+      const updates: {
+        updatedAt: Date;
+        stripeCustomerId?: string;
+        stripeSubscriptionId?: string;
+      } = { updatedAt: new Date() };
+      if (stripeCustomerId) updates.stripeCustomerId = stripeCustomerId;
+      if (stripeSubscriptionId) updates.stripeSubscriptionId = stripeSubscriptionId;
+
+      await db
+        .update(communities)
+        .set(updates)
+        .where(eq(communities.id, communityId));
+      return;
+    }
+
     if (accessPlanId) return;
     logStripeWebhookEvent('warn', 'checkout.session.completed missing demoId/signupRequestId metadata', {
       eventId,

@@ -135,7 +135,7 @@ export const POST = withErrorHandler(
         const rows = await scoped.insert(maintenanceRequests, {
           communityId,
           unitId: checklist.unitId,
-          submittedBy: userId,
+          submittedById: userId,
           title,
           description: `Scheduled ${title.toLowerCase()} for unit.`,
           category: 'inspection',
