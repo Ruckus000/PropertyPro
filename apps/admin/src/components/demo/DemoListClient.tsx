@@ -46,6 +46,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const copyClientLink = useCallback(async (slug: string) => {
     const url = getClientDemoLandingUrl(slug);
@@ -61,12 +62,20 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
+    setDeleteError(null);
     try {
-      await fetch(`/api/admin/demos/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/demos/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setDeleteError(body?.error?.message ?? `Delete failed (${res.status})`);
+        return;
+      }
       setDemos((currentDemos) => currentDemos.filter((demo) => demo.id !== id));
+      setDeleteId(null);
+    } catch {
+      setDeleteError('Network error — please try again.');
     } finally {
       setDeleting(false);
-      setDeleteId(null);
     }
   };
 
@@ -237,6 +246,9 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
               <strong>{demos.find((demo) => demo.id === deleteId)?.prospect_name}</strong>?
               This will remove all demo data.
             </p>
+            {deleteError && (
+              <p className="mt-2 text-sm text-red-600">{deleteError}</p>
+            )}
             <div className="mt-4 flex justify-end gap-3">
               <button
                 type="button"
