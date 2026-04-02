@@ -39,29 +39,35 @@ Navigate to a new `/signup/verify` page after successful signup. This page clear
 
 ## Email Masking
 
-The page fetches the masked email from the server to avoid exposing the full address in the URL or client state.
+The masked email is computed client-side in the signup form before navigating, then passed via Next.js router state — no server endpoint needed.
 
-**New API endpoint:** `GET /api/v1/auth/signup-status?signupRequestId=<uuid>`
+**Masking logic (client-side helper):** First character + `••••` + `@domain`. Example: `lordruckus@gmail.com` → `l••••@gmail.com`.
 
-Returns:
-```json
-{
-  "data": {
-    "maskedEmail": "l••••@gmail.com",
-    "status": "pending_verification",
-    "canResend": true,
-    "cooldownRemainingSeconds": 0
-  }
-}
+```tsx
+// In signup-form.tsx after successful 202:
+router.push(
+  `/signup/verify?signupRequestId=${encodeURIComponent(payload.data.signupRequestId)}`,
+  { state: { maskedEmail: maskEmail(email) } },
+);
 ```
 
-**Masking logic:** First character + `••••` + `@domain`. Applied server-side in the route handler.
+**On page refresh:** The router state is lost. The page still works — it shows "Check your email" without the specific address. This matches how Linear, Notion, and Vercel handle the same flow.
 
-This endpoint also powers the resend cooldown — `canResend` is `false` when a verification email was sent within the last 2 minutes. `cooldownRemainingSeconds` tells the client exactly how long to disable the button (handles page refreshes mid-cooldown).
+No `GET /api/v1/auth/signup-status` endpoint. This avoids a new DB query per page load, an enumeration attack surface, and unnecessary API complexity.
 
 ## Resend Flow
 
-A dedicated `POST /api/v1/auth/resend-verification` endpoint that only requires `signupRequestId`. The verify page doesn't have the full signup form data, so re-submitting to the signup endpoint isn't viable. The resend endpoint looks up the pending signup row, checks the 2-minute cooldown, and re-sends via the existing `createOrLinkAuthAccount` + `sendSignupVerificationEmail` pipeline.
+A dedicated `POST /api/v1/auth/resend-verification` endpoint that only requires `signupRequestId`. The verify page doesn't have the full signup form data, so re-submitting to the signup endpoint isn't viable.
+
+**Implementation:** The resend endpoint does NOT reuse `createOrLinkAuthAccount` (that function is tightly coupled to the full signup flow and handles initial auth user creation). Instead, it:
+
+1. Looks up the `pendingSignups` row by `signupRequestId`
+2. Checks cooldown on `verificationEmailSentAt` (2-minute window)
+3. Calls `admin.auth.admin.generateLink({ type: 'magiclink', ... })` to get a fresh verification link (auth user already exists from initial signup)
+4. Calls `sendSignupVerificationEmail()` directly with the new link
+5. Updates `verificationEmailSentAt` and `verificationEmailId` on the row
+
+**Security note:** The endpoint accepts only a UUID, so there's no proof the caller is the person who signed up. This is acceptable for v1 — UUID v4 has 2^122 entropy (brute-force impractical), the 2-minute cooldown limits email bombing, and the middleware already rate-limits `/signup` paths at 10 req/min per IP.
 
 ### `POST /api/v1/auth/resend-verification`
 
@@ -98,6 +104,17 @@ A dedicated `POST /api/v1/auth/resend-verification` endpoint that only requires 
   }
 }
 ```
+
+**Response (409 — already verified):**
+```json
+{
+  "data": {
+    "alreadyVerified": true,
+    "signupRequestId": "<uuid>"
+  }
+}
+```
+The client uses this to redirect to checkout instead of showing a stale resend UI.
 
 ## Signup Form Change
 
@@ -137,10 +154,11 @@ apps/web/src/components/signup/
 
 | State | Display |
 |-------|---------|
-| Loading | Card with skeleton for email, disabled resend button |
-| Loaded | Full card with masked email, active resend button |
+| Loading | Card with placeholder text, disabled resend button |
+| Loaded | Full card with masked email (if available from router state), active resend button |
+| Loaded (after refresh) | Card without masked email ("Check your email" only), active resend button |
 | Resend clicked | Green confirmation, button disabled with countdown |
-| Cooldown active (on load) | Button disabled with remaining countdown |
+| Already verified | Redirect to `/signup/checkout?signupRequestId=...` (don't show stale "check your email") |
 | Invalid/expired signupRequestId | Error message + "Start a new signup" link |
 | Network error on resend | Red inline error below button, button re-enabled |
 
@@ -162,11 +180,10 @@ apps/web/src/components/signup/
 ## Files to Create
 
 1. `apps/web/src/app/(auth)/signup/verify/page.tsx` — Server component wrapper
-2. `apps/web/src/components/signup/verify-email-content.tsx` — Client component
-3. `apps/web/src/app/api/v1/auth/signup-status/route.ts` — Masked email + status endpoint
-4. `apps/web/src/app/api/v1/auth/resend-verification/route.ts` — Resend verification endpoint
+2. `apps/web/src/components/signup/verify-email-content.tsx` — Client component (useSearchParams, resend, countdown)
+3. `apps/web/src/app/api/v1/auth/resend-verification/route.ts` — Resend verification endpoint
 
 ## Files to Modify
 
-1. `apps/web/src/components/signup/signup-form.tsx` — Add `router.push()` on success, remove `successResult` state/banner
-2. `apps/web/src/middleware.ts` — Ensure `/signup/verify` is in the public (unauthenticated) path list
+1. `apps/web/src/components/signup/signup-form.tsx` — Add `router.push()` on success, add `maskEmail()` helper, remove `successResult` state/banner
+2. `apps/web/src/middleware.ts` — Ensure `/signup/verify` is in the public (unauthenticated) path list (likely already covered by `/signup` startsWith pattern in rate limiting, but verify auth redirect logic)
