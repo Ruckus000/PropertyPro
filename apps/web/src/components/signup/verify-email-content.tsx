@@ -16,6 +16,8 @@ interface ResendErrorData {
   cooldownRemainingSeconds?: number;
 }
 
+const POLL_INTERVAL_MS = 5000;
+
 export function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -27,7 +29,49 @@ export function VerifyEmailContent() {
   const [resendError, setResendError] = useState<string | null>(null);
   const [showResent, setShowResent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [verified, setVerified] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll for email verification — auto-navigate to checkout when confirmed
+  useEffect(() => {
+    if (!signupRequestId || verified) return;
+
+    async function checkVerification() {
+      try {
+        const response = await fetch('/api/v1/auth/confirm-verification', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ signupRequestId }),
+        });
+
+        if (!response.ok) return; // Not verified yet or error — keep polling
+
+        const payload = (await response.json()) as {
+          data?: { success: boolean; signupRequestId: string };
+        };
+
+        if (payload.data?.success) {
+          setVerified(true);
+          if (pollRef.current) clearInterval(pollRef.current);
+          router.push(
+            `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
+          );
+        }
+      } catch {
+        // Network error — keep polling silently
+      }
+    }
+
+    // Check immediately on mount (in case already verified)
+    checkVerification();
+
+    pollRef.current = setInterval(checkVerification, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [signupRequestId, verified, router]);
 
   // Cooldown tick
   useEffect(() => {
@@ -131,7 +175,22 @@ export function VerifyEmailContent() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const isButtonDisabled = isResending || cooldownSeconds > 0;
+  const isButtonDisabled = isResending || cooldownSeconds > 0 || verified;
+
+  // Verified — show brief success before redirect
+  if (verified) {
+    return (
+      <div className="rounded-md border border-status-success-border bg-status-success-bg p-8 text-center shadow-e0">
+        <div className="mb-4 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-status-success" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-semibold text-content">Email verified</h2>
+        <p className="mt-2 text-sm text-content-secondary">Taking you to checkout...</p>
+      </div>
+    );
+  }
 
   return (
     <>
