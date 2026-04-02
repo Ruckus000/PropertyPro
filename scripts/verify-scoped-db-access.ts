@@ -91,6 +91,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/agent-login/route.ts'),
+  // Dev reset-onboarding — resets community onboarding state (dev-only, 404 in production)
+  resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   // O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin
   resolve(repoRoot, 'apps/web/src/app/api/v1/auth/confirm-verification/route.ts'),
   // E-02: Account profile — user-scoped update (no community_id on users table)
