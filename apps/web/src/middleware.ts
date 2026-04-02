@@ -414,16 +414,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
 
     if (tenantContext.isReservedSubdomain) {
-      return notFoundResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
-    }
-
-    // Forward community ID from query param so layouts can read it from headers
-    if (tenantContext.communityId) {
+      // Reserved subdomains (www, admin, pm, etc.) are NOT tenant slugs.
+      // Skip tenant resolution — proceed without community context.
+      // Routes that need tenant context will handle the missing header themselves.
+    } else if (tenantContext.communityId) {
+      // Forward community ID from query param so layouts can read it from headers
       forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
       forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-    }
-
-    if (tenantContext.tenantSlug) {
+    } else if (tenantContext.tenantSlug) {
       try {
         const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
         if (communityId == null) {

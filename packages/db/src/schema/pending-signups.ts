@@ -48,11 +48,11 @@ export const pendingSignups = pgTable(
   (table) => [
     uniqueIndex('pending_signups_signup_request_unique').on(table.signupRequestId),
     uniqueIndex('pending_signups_email_normalized_unique').on(table.emailNormalized),
-    // Partial unique index: only enforce slug uniqueness for active signups.
-    // Expired/completed rows can have their slugs reclaimed by new signups.
+    // Partial unique index: only verified+ signups reserve slugs.
+    // Unverified, expired, and completed rows don't block the slug.
     uniqueIndex('pending_signups_candidate_slug_active_unique')
       .on(table.candidateSlug)
-      .where(sql`${table.status} NOT IN ('expired', 'completed')`),
+      .where(sql`${table.status} NOT IN ('pending_verification', 'expired', 'completed')`),
     index('pending_signups_status_idx').on(table.status, table.createdAt),
     index('pending_signups_auth_user_id_idx').on(table.authUserId),
     check('pending_signups_status_check', sql`${table.status} IN ('pending_verification','email_verified','checkout_started','payment_completed','provisioning','completed','expired')`),

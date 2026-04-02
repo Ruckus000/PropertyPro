@@ -638,6 +638,13 @@
       "when": 1774850000000,
       "tag": "0130_add_in_app_muting_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1775088000000,
+      "tag": "0131_slug_reservation_after_verification",
+      "breakpoints": true
     }
   ]
 }

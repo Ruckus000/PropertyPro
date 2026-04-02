@@ -148,7 +148,7 @@ describe('p1-22 session middleware', () => {
     expect(json.error).toBe('Unauthorized');
   });
 
-  it('returns 404 for reserved tenant subdomains before auth checks', async () => {
+  it('skips tenant resolution for reserved subdomains and falls through to auth', async () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents', {
         host: 'admin.getpropertypro.com',
@@ -156,9 +156,9 @@ describe('p1-22 session middleware', () => {
     );
     const json = (await response.json()) as { error: string };
 
-    expect(response.status).toBe(404);
-    expect(json.error).toBe('Not Found');
-    expect(getUserMock).not.toHaveBeenCalled();
+    // Reserved subdomains proceed without community context; auth check returns 401
+    expect(response.status).toBe(401);
+    expect(json.error).toBe('Unauthorized');
   });
 
   it('returns 404 for unknown tenant subdomains', async () => {

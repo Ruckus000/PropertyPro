@@ -38,6 +38,8 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
+  // Dev-only: reset onboarding wizard state for E2E testing (gated by NODE_ENV)
+  resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),

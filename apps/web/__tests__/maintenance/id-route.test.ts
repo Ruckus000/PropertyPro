@@ -46,6 +46,7 @@ const {
   assertNotDemoGraceMock,
   requirePlanFeatureMock,
   queueNotificationMock,
+  createNotificationsForEventMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),

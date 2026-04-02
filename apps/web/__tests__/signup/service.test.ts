@@ -313,7 +313,8 @@ function createMockDb(state: MockDbState): {
     return null;
   }
 
-  const TERMINAL_STATUSES = ['expired', 'completed'];
+  // Statuses that don't reserve a slug: unverified, expired, and completed.
+  const NON_RESERVING_STATUSES = ['pending_verification', 'expired', 'completed'];
 
   const selectSpy = vi.fn(() => ({
     from: (table: unknown) => ({
@@ -332,8 +333,8 @@ function createMockDb(state: MockDbState): {
             return state.pendingSignups
               .filter((row) => {
                 if (row.candidateSlug !== slugValue) return false;
-                // Mirror the availability check: exclude terminal and expired rows.
-                if (TERMINAL_STATUSES.includes(row.status)) return false;
+                // Mirror the availability check: unverified + terminal don't reserve.
+                if (NON_RESERVING_STATUSES.includes(row.status)) return false;
                 if (row.expiresAt && row.expiresAt < new Date()) return false;
                 return true;
               })
@@ -468,6 +469,43 @@ describe('signup service', () => {
     const availability = await checkSignupSubdomainAvailability('seaside-villas');
     expect(availability.available).toBe(true);
     expect(availability.reason).toBe('available');
+  });
+
+  it('allows reclaiming slugs from unverified pending signups', async () => {
+    state.pendingSignups.push({
+      id: 100,
+      signupRequestId: 'unverified-request',
+      emailNormalized: 'unverified@example.com',
+      candidateSlug: 'ocean-towers',
+      status: 'pending_verification',
+      expiresAt: new Date(Date.now() + 3600_000), // still active
+      authUserId: null,
+      verificationEmailId: null,
+      verificationEmailSentAt: null,
+    });
+
+    // Unverified signups should not reserve slugs — prevents squatting.
+    const availability = await checkSignupSubdomainAvailability('ocean-towers');
+    expect(availability.available).toBe(true);
+    expect(availability.reason).toBe('available');
+  });
+
+  it('blocks slugs held by verified pending signups', async () => {
+    state.pendingSignups.push({
+      id: 101,
+      signupRequestId: 'verified-request',
+      emailNormalized: 'verified@example.com',
+      candidateSlug: 'palm-gardens',
+      status: 'email_verified',
+      expiresAt: new Date(Date.now() + 3600_000),
+      authUserId: 'auth-verified-1',
+      verificationEmailId: 'email_v1',
+      verificationEmailSentAt: new Date(),
+    });
+
+    const availability = await checkSignupSubdomainAvailability('palm-gardens');
+    expect(availability.available).toBe(false);
+    expect(availability.reason).toBe('taken');
   });
 
   it('keeps email uniqueness handling non-enumerating for already-registered users', async () => {

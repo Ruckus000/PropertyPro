@@ -126,7 +126,7 @@ export function normalizeWizardStepData(input: unknown): WizardStepData {
       ? null
       : undefined;
 
-  const inviteSource = input.invite ?? input.inviteEmail;
+  const inviteSource = input.invite !== undefined ? input.invite : input.inviteEmail;
   const invite = isRecord(inviteSource)
     ? (inviteSource as unknown as InviteStepData)
     : inviteSource === null

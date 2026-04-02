@@ -75,8 +75,14 @@ export async function checkSignupSubdomainAvailability(
       .where(
         and(
           eq(pendingSignups.candidateSlug, normalizedSubdomain),
-          // Exclude terminal signups — their slugs are reclaimable.
-          notInArray(pendingSignups.status, ['expired', 'completed']),
+          // Only verified+ signups reserve slugs. Unverified signups
+          // (pending_verification) don't block — prevents squatting by
+          // bots or bad actors who never confirm their email.
+          notInArray(pendingSignups.status, [
+            'pending_verification',
+            'expired',
+            'completed',
+          ]),
           // Exclude implicitly expired rows (cleanup job hasn't run yet).
           or(
             isNull(pendingSignups.expiresAt),
