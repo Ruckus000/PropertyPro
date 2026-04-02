@@ -8,6 +8,9 @@
  *
  * Accepts email_verified or checkout_started status to handle page refreshes
  * gracefully (returns the existing session rather than creating a duplicate).
+ *
+ * Returns a result union instead of throwing so that error messages survive
+ * Next.js production error sanitization and reach the client UI.
  */
 import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -20,10 +23,18 @@ import type { SignupPlanId } from '@/lib/auth/signup-schema';
 import { headers } from 'next/headers';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 
-export interface CheckoutSessionResult {
-  clientSecret: string;
-  sessionId: string;
-}
+export type CheckoutSessionResult =
+  | { ok: true; clientSecret: string; sessionId: string }
+  | { ok: false; error: string };
+
+const STATUS_MESSAGES: Record<string, string> = {
+  pending_verification:
+    'Please verify your email before proceeding to checkout. Check your inbox for a verification link.',
+  expired:
+    'This signup request has expired. Please start a new signup.',
+  completed:
+    'This signup has already been completed.',
+};
 
 export async function createCheckoutSession(
   signupRequestId: string,
@@ -39,11 +50,14 @@ export async function createCheckoutSession(
   const signup = rows[0];
 
   if (!signup) {
-    throw new Error('Signup not found');
+    return { ok: false, error: 'Signup not found. Please start a new signup.' };
   }
 
   if (signup.status !== 'email_verified' && signup.status !== 'checkout_started') {
-    throw new Error(`Cannot start checkout from status "${signup.status}"`);
+    const message =
+      STATUS_MESSAGES[signup.status]
+      ?? `Cannot start checkout from current status. Please verify your email first.`;
+    return { ok: false, error: message };
   }
 
   // If already checkout_started, retrieve the existing session to avoid
@@ -59,12 +73,15 @@ export async function createCheckoutSession(
         : undefined;
 
     if (storedSessionId) {
-      const existingSession = await retrieveCheckoutSession(storedSessionId);
-      if (existingSession.client_secret) {
-        return { clientSecret: existingSession.client_secret, sessionId: storedSessionId };
+      try {
+        const existingSession = await retrieveCheckoutSession(storedSessionId);
+        if (existingSession.client_secret) {
+          return { ok: true, clientSecret: existingSession.client_secret, sessionId: storedSessionId };
+        }
+      } catch {
+        // Session missing or expired — fall through to create a fresh one
       }
     }
-    // Session missing or expired — fall through to create a fresh one
   }
 
   // Determine the base URL for the return_url
@@ -74,31 +91,46 @@ export async function createCheckoutSession(
   const returnBaseUrl = `${protocol}://${host}`;
 
   const planId = signup.planKey as SignupPlanId;
-  const communityType = requireCommunityType(
-    signup.communityType,
-    `createCheckoutSession(signupRequestId=${signupRequestId})`,
-  );
 
-  const result = await createEmbeddedCheckoutSession(
-    signupRequestId,
-    communityType,
-    planId,
-    signup.candidateSlug,
-    signup.email,
-    returnBaseUrl,
-  );
+  let communityType;
+  try {
+    communityType = requireCommunityType(
+      signup.communityType,
+      `createCheckoutSession(signupRequestId=${signupRequestId})`,
+    );
+  } catch {
+    return { ok: false, error: 'Invalid community type on signup record.' };
+  }
 
-  // Persist the sessionId in the payload for page-refresh recovery
-  await db
-    .update(pendingSignups)
-    .set({
-      payload: {
-        ...(typeof signup.payload === 'object' && signup.payload !== null ? signup.payload : {}),
-        stripeCheckoutSessionId: result.sessionId,
-      },
-      updatedAt: new Date(),
-    })
-    .where(eq(pendingSignups.signupRequestId, signupRequestId));
+  try {
+    const result = await createEmbeddedCheckoutSession(
+      signupRequestId,
+      communityType,
+      planId,
+      signup.candidateSlug,
+      signup.email,
+      returnBaseUrl,
+    );
 
-  return result;
+    // Persist the sessionId in the payload for page-refresh recovery
+    await db
+      .update(pendingSignups)
+      .set({
+        payload: {
+          ...(typeof signup.payload === 'object' && signup.payload !== null ? signup.payload : {}),
+          stripeCheckoutSessionId: result.sessionId,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(pendingSignups.signupRequestId, signupRequestId));
+
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: 'checkout.session_creation_failed',
+      signupRequestId,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+    return { ok: false, error: 'Unable to start checkout. Please try again.' };
+  }
 }

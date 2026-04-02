@@ -28,10 +28,15 @@ function CheckoutInner() {
       return;
     }
     createCheckoutSession(signupRequestId)
-      .then(({ clientSecret }) => setClientSecret(clientSecret))
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Failed to start checkout.';
-        setError(msg);
+      .then((result) => {
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setClientSecret(result.clientSecret);
+      })
+      .catch(() => {
+        setError('Failed to start checkout. Please try again.');
       });
   }, [signupRequestId]);
 

@@ -1,11 +1,13 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getSignupPlansForCommunityType,
   isPlanAvailableForCommunityType,
+  normalizeSignupSubdomain,
+  signupSchema,
   suggestSubdomainFromCommunityName,
   type SignupPlanId,
 } from '@/lib/auth/signup-schema';
@@ -68,10 +70,25 @@ export function SignupForm({
   const [unitCount, setUnitCount] = useState('1');
   const [candidateSlug, setCandidateSlug] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const passwordChecks = useMemo(() => ({
+    length: password.length >= 8,
+    lowercase: /[a-z]/.test(password),
+    uppercase: /[A-Z]/.test(password),
+    number: /\d/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  }), [password]);
 
   const plans = useMemo(
     () => getSignupPlansForCommunityType(communityType),
     [communityType],
+  );
+
+  const normalizedCandidateSlug = useMemo(
+    () => normalizeSignupSubdomain(candidateSlug),
+    [candidateSlug],
   );
 
   useEffect(() => {
@@ -134,44 +151,79 @@ export function SignupForm({
   }
 
   const isSubdomainBlocked = Boolean(
-    subdomainAvailability
-    && subdomainAvailability.reason !== 'available'
-    && subdomainAvailability.reason !== 'checking',
+    !normalizedCandidateSlug
+    || normalizedCandidateSlug.length < 3
+    || (
+      subdomainAvailability
+      && subdomainAvailability.reason !== 'available'
+      && subdomainAvailability.reason !== 'checking'
+    ),
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setErrorMessage(null);
+    setFieldErrors({});
     setSuccessResult(null);
     setIsSubmitting(true);
 
     try {
+      const requestBody = {
+        signupRequestId,
+        primaryContactName,
+        email,
+        password,
+        communityName,
+        address,
+        county,
+        unitCount: Number(unitCount),
+        communityType,
+        planKey,
+        candidateSlug,
+        termsAccepted,
+      };
+
+      const parsed = signupSchema.safeParse(requestBody);
+      if (!parsed.success) {
+        const flat = parsed.error.flatten();
+        const errors: Record<string, string | undefined> = {};
+        for (const [field, msgs] of Object.entries(flat.fieldErrors)) {
+          errors[field] = msgs?.[0];
+        }
+        setFieldErrors(errors);
+        const firstMsg = Object.values(errors).find(Boolean)
+          ?? flat.formErrors[0]
+          ?? 'Please check your signup details.';
+        setErrorMessage(firstMsg);
+        return;
+      }
+
       const response = await fetch('/api/v1/auth/signup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          signupRequestId,
-          primaryContactName,
-          email,
-          password,
-          communityName,
-          address,
-          county,
-          unitCount: Number(unitCount),
-          communityType,
-          planKey,
-          candidateSlug,
-          termsAccepted,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const payload = (await response.json()) as {
         data?: SignupApiSuccess;
-        error?: { message?: string };
+        error?: {
+          message?: string;
+          details?: { fieldErrors?: Record<string, string[] | undefined> };
+        };
       };
 
       if (!response.ok || !payload.data) {
-        setErrorMessage(payload.error?.message ?? 'Unable to complete signup right now.');
+        const fieldErrors = payload.error?.details?.fieldErrors;
+        const firstFromFields =
+          fieldErrors
+          && Object.values(fieldErrors)
+            .flat()
+            .find((m): m is string => Boolean(m));
+        setErrorMessage(
+          firstFromFields
+          ?? payload.error?.message
+          ?? 'Unable to complete signup right now.',
+        );
         return;
       }
 
@@ -238,7 +290,7 @@ export function SignupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
 
       {errorMessage ? (
         <div className="rounded-md border border-status-danger bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert">
@@ -259,9 +311,14 @@ export function SignupForm({
             type="text"
             value={primaryContactName}
             onChange={(event) => setPrimaryContactName(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.primaryContactName ? 'border-status-danger' : 'border-edge-strong'}`}
             required
+            minLength={2}
+            maxLength={120}
           />
+          {fieldErrors.primaryContactName ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.primaryContactName}</span>
+          ) : null}
         </label>
 
         <label className="block">
@@ -271,24 +328,52 @@ export function SignupForm({
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.email ? 'border-status-danger' : 'border-edge-strong'}`}
             required
           />
+          {fieldErrors.email ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.email}</span>
+          ) : null}
         </label>
       </div>
 
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-content-secondary">Password</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
-          placeholder="At least 8 chars, mixed case, number, symbol"
-          required
-        />
-      </label>
+      <div className="block">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.password ? 'border-status-danger' : 'border-edge-strong'}`}
+            required
+            minLength={8}
+            maxLength={72}
+          />
+        </label>
+        {fieldErrors.password ? (
+          <span className="mt-1 block text-xs text-status-danger">{fieldErrors.password}</span>
+        ) : null}
+        {password.length > 0 ? (
+          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
+            <li className={passwordChecks.length ? 'text-status-success' : 'text-content-secondary'}>
+              {passwordChecks.length ? '\u2713' : '\u2022'} 8+ characters
+            </li>
+            <li className={passwordChecks.lowercase ? 'text-status-success' : 'text-content-secondary'}>
+              {passwordChecks.lowercase ? '\u2713' : '\u2022'} Lowercase letter
+            </li>
+            <li className={passwordChecks.uppercase ? 'text-status-success' : 'text-content-secondary'}>
+              {passwordChecks.uppercase ? '\u2713' : '\u2022'} Uppercase letter
+            </li>
+            <li className={passwordChecks.number ? 'text-status-success' : 'text-content-secondary'}>
+              {passwordChecks.number ? '\u2713' : '\u2022'} Number
+            </li>
+            <li className={passwordChecks.special ? 'text-status-success' : 'text-content-secondary'}>
+              {passwordChecks.special ? '\u2713' : '\u2022'} Special character
+            </li>
+          </ul>
+        ) : null}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
@@ -297,9 +382,14 @@ export function SignupForm({
             type="text"
             value={communityName}
             onChange={(event) => handleCommunityNameChange(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.communityName ? 'border-status-danger' : 'border-edge-strong'}`}
             required
+            minLength={2}
+            maxLength={160}
           />
+          {fieldErrors.communityName ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.communityName}</span>
+          ) : null}
         </label>
 
         <label className="block">
@@ -308,9 +398,14 @@ export function SignupForm({
             type="text"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.address ? 'border-status-danger' : 'border-edge-strong'}`}
             required
+            minLength={5}
+            maxLength={240}
           />
+          {fieldErrors.address ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.address}</span>
+          ) : null}
         </label>
       </div>
 
@@ -321,9 +416,14 @@ export function SignupForm({
             type="text"
             value={county}
             onChange={(event) => setCounty(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.county ? 'border-status-danger' : 'border-edge-strong'}`}
             required
+            minLength={2}
+            maxLength={120}
           />
+          {fieldErrors.county ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.county}</span>
+          ) : null}
         </label>
 
         <label className="block">
@@ -331,12 +431,16 @@ export function SignupForm({
           <input
             type="number"
             min={1}
+            max={20000}
             step={1}
             value={unitCount}
             onChange={(event) => setUnitCount(event.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.unitCount ? 'border-status-danger' : 'border-edge-strong'}`}
             required
           />
+          {fieldErrors.unitCount ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.unitCount}</span>
+          ) : null}
         </label>
       </div>
 
