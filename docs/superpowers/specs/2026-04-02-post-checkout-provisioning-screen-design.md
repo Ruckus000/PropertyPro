@@ -17,7 +17,7 @@ Convert the checkout return page into a client component that:
 1. Shows an animated provisioning progress screen with user-friendly step labels
 2. Polls a new status API until provisioning completes
 3. Auto-logs the user in via a one-time magic link token
-4. Redirects to the PM dashboard
+4. Redirects to the user's dashboard with community context
 
 The welcome email still sends (informational, for future logins) but is no longer the primary entry point.
 
@@ -72,7 +72,8 @@ Each step renders:
 **Polling:**
 - Calls `GET /api/v1/auth/provisioning-status?signupRequestId=X` every 2 seconds
 - Max 15 attempts (30s timeout)
-- On `completed`: receives `loginToken`, calls `supabase.auth.verifyOtp({ token_hash: loginToken, type: 'magiclink' })`, redirects to `/dashboard`
+- On `pending` (job not yet created — webhook hasn't fired): keeps polling, shows first step as in-progress. This is the expected state for the first few polls due to the race between Stripe redirect (synchronous) and webhook delivery (asynchronous).
+- On `completed`: receives `loginToken` and `communityId`, calls `supabase.auth.verifyOtp({ token_hash: loginToken, type: 'magiclink' })`, redirects to `/dashboard?communityId=X`
 - On `failed` or timeout: shows `AlertBanner` (danger) — "Something went wrong setting up your portal. Our team has been notified — we'll email you when it's ready." with a link to `/auth/login`
 - On verifyOtp failure: redirects to `/auth/login` with query param `?message=portal-ready` so login page can show a toast
 
@@ -99,23 +100,25 @@ function mapProvisioningStep(step: string): number {
 
 **Logic:**
 1. Look up `provisioning_jobs` by `signupRequestId` using unscoped client (this is a cross-tenant admin table)
-2. If no job found: return `404`
+2. If no job found: return `{ status: 'pending', step: 'waiting' }` (webhook hasn't fired yet — this is normal, not an error)
 3. If job status is `completed`:
-   - Look up the `pending_signups` row to get the user's `email`
-   - Generate magic link: `supabase.auth.admin.generateLink({ type: 'magiclink', email })`
-   - Extract `token_hash` from the generated link properties (hashed_token field)
-   - Return `{ status: 'completed', step: 'completed', loginToken: hashedToken }`
+   - Check if `loginToken` is already cached in `pending_signups.payload.loginToken`
+   - If not cached: look up the `pending_signups` row to get the user's `email`, generate magic link via `supabase.auth.admin.generateLink({ type: 'magiclink', email })`, extract `hashed_token`, store it in `pending_signups.payload.loginToken`
+   - Return `{ status: 'completed', step: 'completed', loginToken: cachedOrNewToken, communityId }`
 4. If job status is `failed`: return `{ status: 'failed', step: job.lastSuccessfulStatus }`
 5. Otherwise: return `{ status: 'provisioning', step: job.lastSuccessfulStatus ?? 'initiated' }`
 
-**Rate limiting:** Existing middleware rate limiting applies. Additionally, the endpoint returns the same `loginToken` on repeated calls for the same completed job (Supabase generates a new link each call, but the token is short-lived and one-time-use — only the first verifyOtp succeeds, subsequent calls are no-ops).
+**Token caching:** The magic link token is generated once and stored in the `pending_signups.payload` JSONB field. Subsequent polls return the cached token. This prevents generating multiple valid tokens and reduces Supabase admin API calls. The token is short-lived (Supabase default expiry) and one-time-use (`verifyOtp` consumes it).
+
+**Rate limiting:** Existing middleware rate limiting applies.
 
 **Response shape:**
 ```typescript
 type ProvisioningStatusResponse = {
-  status: 'provisioning' | 'completed' | 'failed';
+  status: 'pending' | 'provisioning' | 'completed' | 'failed';
   step: string;
-  loginToken?: string; // only when status === 'completed'
+  loginToken?: string;   // only when status === 'completed'
+  communityId?: number;  // only when status === 'completed'
 };
 ```
 
@@ -152,7 +155,7 @@ This gives the client component immediate access to `signupRequestId` without an
 | Polling timeout (30s) | AlertBanner (danger) | Same as failure — provisioning may still complete in background, welcome email is backup |
 | verifyOtp fails | Redirect to `/auth/login` | Toast: "Your portal is ready — please sign in" |
 | signupRequestId missing | Static error page | Link back to `/signup` |
-| Job not found (404) | Static error page | Link back to `/signup` |
+| Job not yet created (webhook pending) | First step shown as in-progress | Keeps polling — webhook typically fires within 1-2s |
 
 ---
 
