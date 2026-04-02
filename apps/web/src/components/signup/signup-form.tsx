@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getSignupPlansForCommunityType,
@@ -18,6 +19,12 @@ import {
   SubdomainChecker,
   type SubdomainAvailability,
 } from './subdomain-checker';
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  return `${local[0]}${'•'.repeat(4)}@${domain}`;
+}
 
 interface SignupFormProps {
   initialCommunityType?: CommunityType;
@@ -44,6 +51,7 @@ export function SignupForm({
   initialSignupRequestId,
   verificationReturn = false,
 }: SignupFormProps) {
+  const router = useRouter();
   const [communityType, setCommunityType] = useState<CommunityType>(initialCommunityType);
   const [planKey, setPlanKey] = useState<SignupPlanId>(
     getSignupPlansForCommunityType(initialCommunityType)[0]!.id,
@@ -56,7 +64,6 @@ export function SignupForm({
     useState<SubdomainAvailability | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successResult, setSuccessResult] = useState<SignupApiSuccess | null>(null);
   const [verificationState, setVerificationState] = useState<VerificationState>(
     { status: 'idle' },
   );
@@ -164,7 +171,6 @@ export function SignupForm({
     event.preventDefault();
     setErrorMessage(null);
     setFieldErrors({});
-    setSuccessResult(null);
     setIsSubmitting(true);
 
     try {
@@ -227,9 +233,10 @@ export function SignupForm({
         return;
       }
 
-      setSignupRequestId(payload.data.signupRequestId);
-      setSuccessResult(payload.data);
-      setSubdomainDirty(true);
+      // Navigate to the verify page with masked email in the URL
+      // (sessionStorage would be lost on new tabs; query param is simplest)
+      const verifyUrl = `/signup/verify?signupRequestId=${encodeURIComponent(payload.data.signupRequestId)}&email=${encodeURIComponent(maskEmail(email))}`;
+      router.push(verifyUrl);
     } catch {
       setErrorMessage('Unable to complete signup right now.');
     } finally {
@@ -298,11 +305,6 @@ export function SignupForm({
         </div>
       ) : null}
 
-      {successResult ? (
-        <div className="rounded-md border border-status-success-border bg-status-success-bg px-4 py-3 text-sm text-status-success" role="status">
-          {successResult.message}
-        </div>
-      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
