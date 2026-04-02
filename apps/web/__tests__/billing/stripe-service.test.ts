@@ -166,7 +166,7 @@ describe('stripe-service', () => {
         line_items: [{ price: 'price_test_abc', quantity: 1 }],
         customer_email: 'owner@example.com',
         return_url:
-          'https://app.example.com/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}',
+          'https://app.example.com/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}&signupRequestId=req_001',
         subscription_data: {
           trial_period_days: 14,
         },
