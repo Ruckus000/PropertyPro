@@ -41,7 +41,14 @@ interface UpdateIntentResponse {
 
 /* ─────── Helpers ─────── */
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
+// Lazy-initialize Stripe only in the browser to avoid SSR crashes.
+let _stripePromise: ReturnType<typeof loadStripe> | null = null;
+function getStripePromise() {
+  if (!_stripePromise && typeof window !== 'undefined') {
+    _stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
+  }
+  return _stripePromise;
+}
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -196,7 +203,7 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
 
           {intentMutation.data && (
             <Elements
-              stripe={stripePromise}
+              stripe={getStripePromise()}
               options={{
                 clientSecret: intentMutation.data.clientSecret,
                 appearance: {

@@ -9,12 +9,24 @@
  * The inner component uses useSearchParams(), which requires a Suspense boundary.
  */
 import { Suspense, useEffect, useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 import { useSearchParams } from 'next/navigation';
 import { createCheckoutSession } from '@/lib/actions/checkout';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Lazy-initialize Stripe only in the browser to avoid SSR crashes.
+// Next.js SSR-renders 'use client' components for initial HTML — calling
+// loadStripe at module level can throw if browser APIs are unavailable.
+let stripePromise: Promise<Stripe | null> | null = null;
+function getStripePromise() {
+  if (!stripePromise && typeof window !== 'undefined') {
+    const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+    if (key) {
+      stripePromise = loadStripe(key);
+    }
+  }
+  return stripePromise;
+}
 
 function CheckoutInner() {
   const searchParams = useSearchParams();
@@ -54,17 +66,33 @@ function CheckoutInner() {
     );
   }
 
-  if (!clientSecret) {
+  const stripe = getStripePromise();
+
+  if (!clientSecret || !stripe) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <p className="text-sm text-content-secondary">Loading checkout…</p>
+        {!stripe && clientSecret ? (
+          <>
+            <p className="text-sm text-status-danger">
+              Payment system is temporarily unavailable. Please try again shortly.
+            </p>
+            <a
+              href="/signup"
+              className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
+            >
+              &larr; Back to sign up
+            </a>
+          </>
+        ) : (
+          <p className="text-sm text-content-secondary">Loading checkout…</p>
+        )}
       </main>
     );
   }
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
-      <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
+      <EmbeddedCheckoutProvider stripe={stripe} options={{ clientSecret }}>
         <EmbeddedCheckout />
       </EmbeddedCheckoutProvider>
     </main>
