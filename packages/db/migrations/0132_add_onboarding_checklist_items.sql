@@ -48,4 +48,4 @@ CREATE POLICY "checklist_items_update_own"
 CREATE TRIGGER "enforce_community_scope_onboarding_checklist_items"
   BEFORE INSERT OR UPDATE ON "onboarding_checklist_items"
   FOR EACH ROW
-  EXECUTE FUNCTION enforce_community_scope();
+  EXECUTE FUNCTION pp_rls_enforce_tenant_community_id();
