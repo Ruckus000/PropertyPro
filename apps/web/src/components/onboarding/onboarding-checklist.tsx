@@ -69,7 +69,7 @@ export function OnboardingChecklist({
 
   return (
     <section
-      aria-label="Setup checklist"
+      aria-label={`Setup checklist for ${communityName}`}
       className="rounded-md border border-edge bg-surface-card shadow-sm"
     >
       {/* Header */}
