@@ -213,6 +213,15 @@ const config: Config = {
         exit: 'var(--ease-exit)',
         bounce: 'var(--ease-bounce)',
       },
+
+      keyframes: {
+        draw: {
+          to: { strokeDashoffset: '0' },
+        },
+      },
+      animation: {
+        draw: 'draw 600ms ease-out forwards',
+      },
     },
   },
   plugins: [],
