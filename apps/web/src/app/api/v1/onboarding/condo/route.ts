@@ -1,44 +1,35 @@
 /**
- * Condo onboarding wizard API — P2-39
+ * Condo onboarding wizard API — 2-step flow
  *
  * GET    /api/v1/onboarding/condo  — load or initialize wizard state
  * PATCH  /api/v1/onboarding/condo  — save one wizard step
- * POST   /api/v1/onboarding/condo  — complete or skip wizard
+ * POST   /api/v1/onboarding/condo  — complete wizard
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
     communities,
-    complianceChecklistItems,
     createScopedClient,
-    documentCategories,
-    documents,
     logAuditEvent,
     onboardingWizardState,
-    units,
 } from '@propertypro/db';
-import { and, eq, inArray } from '@propertypro/db/filters';
+import { and, eq } from '@propertypro/db/filters';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
-import { ALLOWED_FONTS } from '@propertypro/theme';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
-import { updateBrandingForCommunity } from '@/lib/api/branding';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import {
-    type CondoWizardStatePayload,
     type ProfileStepData,
-    type StatutoryStepData,
-    type UnitDraftData,
     type CondoWizardStepData,
     normalizeCondoWizardStepData,
     normalizeCondoWizardStepPatch,
 } from '@/lib/onboarding/condo-wizard-types';
 import {
-    type ScopedClient,
     requireMutationAuthorization,
     toIsoString,
     deriveNextStep,
@@ -51,31 +42,9 @@ import {
 } from '@/lib/onboarding/wizard-common';
 
 const WIZARD_TYPE = 'condo';
-const MAX_STEP_INDEX = 3; // 0 Statutory, 1 Profile, 2 Branding, 3 Units
-
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-const allowedFontsSet = new Set<string>(ALLOWED_FONTS);
-
-const brandingSchema = z.object({
-    presetId: z.string().nullable().optional(),
-    primaryColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
-    secondaryColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
-    accentColor: z.string().regex(HEX_RE, 'Must be a valid hex color'),
-    fontHeading: z.string().refine((v) => allowedFontsSet.has(v), 'Invalid font'),
-    fontBody: z.string().refine((v) => allowedFontsSet.has(v), 'Invalid font'),
-});
+const MAX_STEP_INDEX = 1; // 0 Profile, 1 Compliance Preview
 
 const communityIdSchema = z.coerce.number().int().positive();
-
-const statutorySchema = z.object({
-    items: z.array(
-        z.object({
-            templateKey: z.string().trim().min(1),
-            documentId: z.number().int().positive(),
-            categoryId: z.number().int().positive(),
-        })
-    ),
-});
 
 const profileSchema = z.object({
     name: z.string().trim().min(1),
@@ -106,25 +75,6 @@ const profileSchema = z.object({
     logoPath: z.string().trim().optional().nullable(),
 });
 
-const unitSchema = z.object({
-    unitNumber: z.string().trim().min(1),
-    floor: z.number().int().nullable().optional(),
-    bedrooms: z.number().int().nullable().optional(),
-    bathrooms: z.number().int().nullable().optional(),
-    sqft: z.number().int().nullable().optional(),
-    rentAmount: z
-        .union([
-            z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 places'),
-            z.number(),
-        ])
-        .nullable()
-        .optional()
-        .transform((value) => {
-            if (value == null) return null;
-            return typeof value === 'number' ? value.toFixed(2) : value;
-        }),
-});
-
 const patchWizardSchema = z
     .object({
         communityId: z.number().int().positive(),
@@ -134,13 +84,12 @@ const patchWizardSchema = z
     })
     .refine((payload) => payload.step !== undefined || payload.currentStep !== undefined, {
         path: ['step'],
-        message: 'step (0-3) or currentStep (1-4) is required',
+        message: 'step (0-1) or currentStep (1-2) is required',
     });
 
 const completeWizardSchema = z.object({
     communityId: z.number().int().positive(),
-    action: z.enum(['complete', 'skip']).optional(),
-    skip: z.boolean().optional(),
+    action: z.enum(['complete']).optional(),
 });
 
 function requireCondoCommunity(communityType: CommunityType): void {
@@ -150,149 +99,23 @@ function requireCondoCommunity(communityType: CommunityType): void {
     }
 }
 
-async function linkStatutoryDocuments(
-    scoped: ScopedClient,
-    statutory: StatutoryStepData,
-    actorUserId: string,
-): Promise<void> {
-    const now = new Date();
-    const templateKeys = statutory.items.map((item) => item.templateKey);
-    const uniqueTemplateKeys = Array.from(new Set(templateKeys));
-    if (uniqueTemplateKeys.length !== templateKeys.length) {
-        throw new ValidationError('Duplicate template keys detected in submission.', {
-            fields: [{ field: 'templateKey', message: 'Contains duplicate template keys' }],
-        });
-    }
-
-    if (uniqueTemplateKeys.length > 0) {
-        const matchingChecklistItems = await scoped.selectFrom(
-            complianceChecklistItems,
-            { templateKey: complianceChecklistItems.templateKey },
-            inArray(complianceChecklistItems.templateKey, uniqueTemplateKeys),
-        );
-        const existingTemplateKeys = new Set(
-            matchingChecklistItems.map((item) => String(item['templateKey'])),
-        );
-        const missingTemplateKeys = uniqueTemplateKeys.filter((key) => !existingTemplateKeys.has(key));
-        if (missingTemplateKeys.length > 0) {
-            throw new ValidationError(
-                `Checklist template keys not found in this community: ${missingTemplateKeys.join(', ')}`,
-                { fields: [{ field: 'templateKey', message: 'Unknown checklist template key' }] },
-            );
-        }
-    }
-
-    const uniqueCategoryIds = Array.from(new Set(statutory.items.map((item) => item.categoryId)));
-    if (uniqueCategoryIds.length > 0) {
-        const matchingCategories = await scoped.selectFrom(
-            documentCategories,
-            { id: documentCategories.id },
-            inArray(documentCategories.id, uniqueCategoryIds),
-        );
-        const existingCategoryIds = new Set(
-            matchingCategories.map((category) => Number(category['id'])),
-        );
-        const missingCategoryIds = uniqueCategoryIds.filter((id) => !existingCategoryIds.has(id));
-        if (missingCategoryIds.length > 0) {
-            throw new ValidationError(
-                `Document categories not found in this community: ${missingCategoryIds.join(', ')}`,
-                { fields: [{ field: 'categoryId', message: 'Invalid category ID' }] },
-            );
-        }
-    }
-
-    const uniqueDocumentIds = Array.from(new Set(statutory.items.map((item) => item.documentId)));
-    if (uniqueDocumentIds.length > 0) {
-        const matchingDocs = await scoped.selectFrom(
-            documents,
-            { id: documents.id },
-            inArray(documents.id, uniqueDocumentIds),
-        );
-        const docIds = new Set(matchingDocs.map((doc) => Number(doc['id'])));
-        const missingDocIds = uniqueDocumentIds.filter((id) => !docIds.has(id));
-        if (missingDocIds.length > 0) {
-            throw new ValidationError(
-                `Documents not found in this community: ${missingDocIds.join(', ')}`,
-                { fields: [{ field: 'documentId', message: 'Invalid document ID' }] },
-            );
-        }
-    }
-
-    const checklistUpdates = statutory.items.map(item =>
-        scoped.update(complianceChecklistItems, {
-            documentId: item.documentId,
-            documentPostedAt: now,
-            lastModifiedBy: actorUserId,
-            updatedAt: now,
-        }, eq(complianceChecklistItems.templateKey, item.templateKey))
-    );
-
-    const documentUpdates = statutory.items.map(item =>
-        scoped.update(documents,
-            { categoryId: item.categoryId, updatedAt: now },
-            eq(documents.id, item.documentId)
-        )
-    );
-
-    await Promise.all([...checklistUpdates, ...documentUpdates]);
-}
-
-async function persistStepData(
-    scoped: ScopedClient,
-    communityId: number,
-    stepData: CondoWizardStepData,
-): Promise<void> {
-    await scoped.update(
-        onboardingWizardState,
-        {
-            stepData,
-            updatedAt: new Date(),
-        },
-        and(
-            eq(onboardingWizardState.communityId, communityId),
-            eq(onboardingWizardState.wizardType, WIZARD_TYPE),
-        ),
-    );
-}
-
-
-
 function validateStepPatch(step: number, rawStepData: unknown): Partial<CondoWizardStepData> {
     const normalized = normalizeCondoWizardStepPatch(rawStepData);
 
     if (step === 0) {
-        if (normalized.statutory === undefined) {
-            throw new ValidationError('stepData.statutory is required for step 0');
-        }
-        return { statutory: statutorySchema.parse(normalized.statutory) as StatutoryStepData };
-    }
-
-    if (step === 1) {
         if (normalized.profile === undefined) {
-            throw new ValidationError('stepData.profile is required for step 1');
+            throw new ValidationError('stepData.profile is required for step 0');
         }
         return { profile: profileSchema.parse(normalized.profile) as ProfileStepData };
     }
 
-    if (step === 2) {
-        if (normalized.branding === undefined) {
-            throw new ValidationError('stepData.branding is required for step 2');
-        }
-        return { branding: brandingSchema.parse(normalized.branding) };
-    }
-
-    if (normalized.units === undefined) {
-        throw new ValidationError('stepData.units is required for step 3');
-    }
-    const parsedUnits = z.array(unitSchema).min(1).parse(normalized.units) as UnitDraftData[];
-    return { units: parsedUnits };
+    // Step 1 (compliance preview) has no data to save
+    return {};
 }
 
-function sectionLabelForStep(step: number): 'statutory' | 'profile' | 'branding' | 'units' {
-    if (step === 0) return 'statutory';
-    if (step === 1) return 'profile';
-    if (step === 2) return 'branding';
-    return 'units';
+function sectionLabelForStep(step: number): 'profile' | 'compliance_preview' {
+    if (step === 0) return 'profile';
+    return 'compliance_preview';
 }
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -362,22 +185,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     const existingStepData = normalizeCondoWizardStepData(wizard.stepData);
     const mergedStepData = mergeStepData(existingStepData, stepPatch);
 
-    if (step === 0 && mergedStepData.statutory) {
-        await linkStatutoryDocuments(scoped, mergedStepData.statutory, actorUserId);
-    }
-
-    if (step === 1 && mergedStepData.profile) {
+    if (step === 0 && mergedStepData.profile) {
         await updateCommunityProfile(scoped, communityId, mergedStepData.profile);
-    }
-
-    if (step === 2 && mergedStepData.branding) {
-        await updateBrandingForCommunity(communityId, {
-            primaryColor: mergedStepData.branding.primaryColor,
-            secondaryColor: mergedStepData.branding.secondaryColor,
-            accentColor: mergedStepData.branding.accentColor,
-            fontHeading: mergedStepData.branding.fontHeading,
-            fontBody: mergedStepData.branding.fontBody,
-        });
     }
 
     const existingLastStep = wizard.lastCompletedStep ?? -1;
@@ -441,43 +250,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     requireMutationAuthorization(membership.role);
     await requireActiveSubscriptionForMutation(communityId);
 
-    const action = normalizeAction(parseResult.data.action, parseResult.data.skip);
-
     const scoped = createScopedClient(communityId);
     const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
-
-    if (action === 'skip') {
-        if (wizard.status !== 'completed') {
-            await scoped.update(
-                onboardingWizardState,
-                {
-                    status: 'skipped',
-                    completedAt: null,
-                    updatedAt: new Date(),
-                },
-                and(
-                    eq(onboardingWizardState.communityId, communityId),
-                    eq(onboardingWizardState.wizardType, WIZARD_TYPE),
-                ),
-            );
-        }
-
-        await logAuditEvent({
-            userId: actorUserId,
-            action: 'update',
-            resourceType: 'onboarding_wizard',
-            resourceId: `${communityId}-${WIZARD_TYPE}`,
-            communityId,
-            newValues: { status: wizard.status === 'completed' ? 'completed' : 'skipped' },
-        });
-
-        return NextResponse.json({
-            data: {
-                success: true,
-                status: wizard.status === 'completed' ? 'completed' : 'skipped',
-            },
-        });
-    }
 
     if (wizard.status === 'completed') {
         return NextResponse.json({
@@ -492,58 +266,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     const now = new Date();
     const stepData = normalizeCondoWizardStepData(wizard.stepData);
-    const completionMarkers = {
-        ...(stepData.completionMarkers ?? {}),
-    };
 
-    if (!completionMarkers.unitsCreated && (!Array.isArray(stepData.units) || stepData.units.length === 0)) {
-        throw new ValidationError('At least one unit is required before completing onboarding.', {
-            fields: [{ field: 'units', message: 'Add at least one unit before completion' }],
-        });
-    }
-
-    if (!completionMarkers.unitsCreated) {
-        const draftUnits = z.array(unitSchema).min(1).parse(stepData.units) as UnitDraftData[];
-
-        const submittedUnitNumbers = draftUnits.map((unit) => unit.unitNumber.trim().toLowerCase());
-        const uniqueSubmitted = new Set(submittedUnitNumbers);
-
-        if (submittedUnitNumbers.length !== uniqueSubmitted.size) {
-            throw new ValidationError('Duplicate unit numbers detected in submission.', {
-                fields: [{ field: 'units', message: 'Contains duplicate unit numbers' }],
-            });
-        }
-
-        const existingUnits = await scoped.query(units);
-        const existingNumbers = new Set(
-            existingUnits.map((unit) => ((unit['unitNumber'] as string) ?? '').trim().toLowerCase()),
-        );
-
-        const conflicts = submittedUnitNumbers.filter((number) => existingNumbers.has(number));
-        if (conflicts.length > 0) {
-            throw new ValidationError(`Unit numbers already exist in this community: ${conflicts.join(', ')}`, {
-                fields: [{ field: 'units', message: 'Contains existing unit numbers' }],
-            });
-        }
-
-        const unitData = draftUnits.map(unit => ({
-            communityId,
-            unitNumber: unit.unitNumber,
-            floor: unit.floor ?? null,
-            bedrooms: unit.bedrooms ?? null,
-            bathrooms: unit.bathrooms ?? null,
-            sqft: unit.sqft ?? null,
-            rentAmount: unit.rentAmount ?? null,
-        }));
-        await scoped.insert(units, unitData);
-
-        completionMarkers.unitsCreated = true;
-        stepData.completionMarkers = completionMarkers;
-        await persistStepData(scoped, communityId, stepData);
-    }
-
-    // Extracted side-effects to PATCH phase only. We only do the completion markers in POST.
-
+    // Mark wizard as completed
     await scoped.update(
         onboardingWizardState,
         {
@@ -559,6 +283,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         ),
     );
 
+    // Create checklist items for the post-onboarding checklist
+    await createChecklistItems(
+        communityId,
+        actorUserId,
+        membership.role,
+        membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+    );
+
     await logAuditEvent({
         userId: actorUserId,
         action: 'update',
@@ -568,8 +300,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         newValues: {
             status: 'completed',
             completedAt: now.toISOString(),
-            completionMarkers,
-            hasStatutoryDocuments: stepData.statutory != null,
         },
     });
 
