@@ -116,7 +116,7 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
         <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotColor(item.status)}`} />
 
         {/* Title */}
-        <span className="flex-1 min-w-0 text-sm font-medium text-content truncate">
+        <span className="flex-1 min-w-0 text-sm font-medium text-content truncate" title={item.title}>
           {item.title}
         </span>
 
@@ -184,9 +184,11 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
               <button
                 type="button"
                 onClick={() => setShowHelp(!showHelp)}
+                aria-label={`What's required for ${item.title}`}
+                aria-expanded={showHelp}
                 className="flex items-center gap-1.5 text-xs text-[var(--status-info)] hover:underline transition-colors"
               >
-                <Info size={12} />
+                <Info size={12} aria-hidden="true" />
                 What&apos;s required?
               </button>
               {showHelp && (
