@@ -22,36 +22,21 @@ vi.mock('lucide-react', async (importOriginal) => {
     };
 });
 
+vi.mock('@propertypro/shared', () => ({
+    getComplianceTemplate: () => [
+        { templateKey: '718_articles', title: 'Articles of Incorporation', category: 'Governing Documents', statuteReference: '§718.111' },
+    ],
+}));
+
 async function flushEffects(): Promise<void> {
     await Promise.resolve();
     await Promise.resolve();
 }
 
-async function waitForLoadingToFinish(container: HTMLElement) {
-    let tries = 0;
-    while (container.textContent?.includes('Loading compliance requirements') && tries < 20) {
-        await act(async () => {
-            await new Promise(resolve => setTimeout(resolve, 50));
-            await flushEffects();
-        });
-        tries++;
-    }
-}
-
 function createFetchMock() {
-    return vi.fn().mockImplementation((url) => {
-        if (typeof url === 'string' && url.includes('/compliance') && url.includes('communityId=')) {
-            return Promise.resolve({
-                ok: true,
-                json: async () => ({
-                    data: [{ id: 1, templateKey: '718_articles', title: 'Articles of Incorporation', category: 'Governing Documents', documentId: null }]
-                }),
-            });
-        }
-        return Promise.resolve({
-            ok: true,
-            json: async () => ({ data: [] }),
-        });
+    return vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
     });
 }
 
@@ -76,25 +61,20 @@ describe('CondoWizard', () => {
         vi.unstubAllGlobals();
     });
 
-    it('fresh state renders step 0 statutory documents', async () => {
-        const fetchMock = createFetchMock();
-        vi.stubGlobal('fetch', fetchMock);
-
+    it('fresh state renders step 0 profile form', async () => {
         await act(async () => {
             root.render(<CondoWizard communityId={42} communityType="condo_718" />);
             await flushEffects();
         });
 
-        await waitForLoadingToFinish(container);
-
         const heading = container.querySelector('h2');
-        expect(heading?.textContent).toBe('Statutory Documents');
+        expect(heading?.textContent).toBe('Community Profile');
 
         const currentStep = container.querySelector('[aria-current="step"]');
         expect(currentStep?.textContent).toBe('1');
     });
 
-    it('resume from lastCompletedStep=2 lands on units step', async () => {
+    it('resume from lastCompletedStep=1 (nextStep=1) lands on compliance preview', async () => {
         await act(async () => {
             root.render(
                 <CondoWizard
@@ -102,8 +82,8 @@ describe('CondoWizard', () => {
                     communityType="condo_718"
                     initialState={{
                         status: 'in_progress',
-                        lastCompletedStep: 2,
-                        nextStep: 3,
+                        lastCompletedStep: 0,
+                        nextStep: 1,
                         completedAt: null,
                         stepData: {
                             profile: {
@@ -114,9 +94,6 @@ describe('CondoWizard', () => {
                                 zipCode: '33101',
                                 timezone: 'America/New_York',
                             },
-                            statutory: {
-                                items: [],
-                            },
                         },
                     }}
                 />,
@@ -124,14 +101,15 @@ describe('CondoWizard', () => {
             await flushEffects();
         });
 
-        const heading = container.querySelector('h2');
-        expect(heading?.textContent).toBe('Add Units');
+        const headings = Array.from(container.querySelectorAll('h1'));
+        const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+        expect(complianceHeading).toBeDefined();
 
         const currentStep = container.querySelector('[aria-current="step"]');
-        expect(currentStep?.textContent).toBe('4'); // 0: statutory, 1: profile, 2: branding, 3: units. 3 is step '4'.
+        expect(currentStep?.textContent).toBe('2');
     });
 
-    it('clamps malformed persisted nextStep to the last valid step', async () => {
+    it('clamps malformed persisted nextStep to the last valid step (compliance preview)', async () => {
         await act(async () => {
             root.render(
                 <CondoWizard
@@ -139,11 +117,10 @@ describe('CondoWizard', () => {
                     communityType="condo_718"
                     initialState={{
                         status: 'in_progress',
-                        lastCompletedStep: 2,
+                        lastCompletedStep: 0,
                         nextStep: 99,
                         completedAt: null,
                         stepData: {
-                            statutory: { items: [] },
                             profile: {
                                 name: 'Clamped Condo',
                                 addressLine1: '123 Test St',
@@ -152,7 +129,6 @@ describe('CondoWizard', () => {
                                 zipCode: '33101',
                                 timezone: 'America/New_York',
                             },
-                            units: [{ unitNumber: '101' }],
                         },
                     }}
                 />,
@@ -160,55 +136,15 @@ describe('CondoWizard', () => {
             await flushEffects();
         });
 
-        const heading = container.querySelector('h2');
-        expect(heading?.textContent).toBe('Add Units');
+        const headings = Array.from(container.querySelectorAll('h1'));
+        const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+        expect(complianceHeading).toBeDefined();
 
         const currentStep = container.querySelector('[aria-current="step"]');
-        expect(currentStep?.textContent).toBe('4');
+        expect(currentStep?.textContent).toBe('2');
     });
 
-    it('skip wizard sends canonical POST action=skip', async () => {
-        const fetchMock = createFetchMock();
-        vi.stubGlobal('fetch', fetchMock);
-
-        await act(async () => {
-            root.render(<CondoWizard communityId={42} communityType="condo_718" />);
-            await flushEffects();
-        });
-
-        await waitForLoadingToFinish(container);
-
-        const buttons = Array.from(container.querySelectorAll('button'));
-        const skipWizardButton = buttons.find((button) =>
-            button.textContent?.includes('Skip entire setup and go to dashboard'),
-        );
-
-        await act(async () => {
-            skipWizardButton?.click();
-            await flushEffects();
-        });
-
-        const skipCall = fetchMock.mock.calls.find(c => {
-            const options = c[1] as RequestInit;
-            if (options?.method === 'POST' && typeof options.body === 'string') {
-                const body = JSON.parse(options.body);
-                return body.action === 'skip';
-            }
-            return false;
-        });
-
-        expect(skipCall).toBeDefined();
-        if (skipCall) {
-            expect(skipCall[0]).toContain('/api/v1/onboarding/condo');
-            const postBody = JSON.parse(String(skipCall[1]?.body)) as Record<string, unknown>;
-            expect(postBody).toEqual({
-                communityId: 42,
-                action: 'skip',
-            });
-        }
-    });
-
-    it('back navigation on units step does not call API', async () => {
+    it('completing wizard sends canonical POST action=complete', async () => {
         const fetchMock = createFetchMock();
         vi.stubGlobal('fetch', fetchMock);
 
@@ -219,39 +155,103 @@ describe('CondoWizard', () => {
                     communityType="condo_718"
                     initialState={{
                         status: 'in_progress',
-                        lastCompletedStep: 2,
-                        nextStep: 3,
+                        lastCompletedStep: 0,
+                        nextStep: 1,
                         completedAt: null,
-                        stepData: {
-                            statutory: { items: [] },
-                            profile: {
-                                name: 'Test',
-                                addressLine1: '',
-                                city: '',
-                                state: 'FL',
-                                zipCode: '',
-                                timezone: '',
-                            },
-                        },
+                        stepData: {},
                     }}
                 />,
             );
             await flushEffects();
         });
 
-        fetchMock.mockClear();
-
         const buttons = Array.from(container.querySelectorAll('button'));
-        const backButton = buttons.find((button) => button.textContent === 'Back');
+        const continueButton = buttons.find((button) =>
+            button.textContent?.includes('Go to your dashboard'),
+        );
 
         await act(async () => {
-            backButton?.click();
+            continueButton?.click();
             await flushEffects();
         });
 
-        expect(fetchMock).not.toHaveBeenCalled();
+        const completeCall = fetchMock.mock.calls.find(c => {
+            const options = c[1] as RequestInit;
+            if (options?.method === 'POST' && typeof options.body === 'string') {
+                const body = JSON.parse(options.body) as Record<string, unknown>;
+                return body.action === 'complete';
+            }
+            return false;
+        });
 
-        const heading = container.querySelector('h2');
-        expect(heading?.textContent).toBe('Choose Your Branding');
+        expect(completeCall).toBeDefined();
+        if (completeCall) {
+            expect(completeCall[0]).toContain('/api/v1/onboarding/condo');
+            const postBody = JSON.parse(String(completeCall[1]?.body)) as Record<string, unknown>;
+            expect(postBody).toEqual({
+                communityId: 42,
+                action: 'complete',
+            });
+        }
+    });
+
+    it('advancing from profile step calls PATCH then renders compliance preview', async () => {
+        const fetchMock = createFetchMock();
+        vi.stubGlobal('fetch', fetchMock);
+
+        await act(async () => {
+            root.render(<CondoWizard communityId={42} communityType="condo_718" />);
+            await flushEffects();
+        });
+
+        // Fill required fields using native input value setter (React's onChange watches nativeInputValueSetter)
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+        const nameInput = container.querySelector<HTMLInputElement>('#name');
+        const addressInput = container.querySelector<HTMLInputElement>('#addressLine1');
+        const cityInput = container.querySelector<HTMLInputElement>('#city');
+        const zipInput = container.querySelector<HTMLInputElement>('#zipCode');
+
+        await act(async () => {
+            if (nameInput && nativeInputValueSetter) {
+                nativeInputValueSetter.call(nameInput, 'Test Condo');
+                nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (addressInput && nativeInputValueSetter) {
+                nativeInputValueSetter.call(addressInput, '123 Test St');
+                addressInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (cityInput && nativeInputValueSetter) {
+                nativeInputValueSetter.call(cityInput, 'Miami');
+                cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (zipInput && nativeInputValueSetter) {
+                nativeInputValueSetter.call(zipInput, '33101');
+                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+
+        const form = container.querySelector('form');
+        await act(async () => {
+            form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await flushEffects();
+        });
+
+        const patchCall = fetchMock.mock.calls.find(c => {
+            const options = c[1] as RequestInit;
+            return options?.method === 'PATCH';
+        });
+
+        expect(patchCall).toBeDefined();
+        if (patchCall) {
+            expect(patchCall[0]).toContain('/api/v1/onboarding/condo');
+            const patchBody = JSON.parse(String(patchCall[1]?.body)) as Record<string, unknown>;
+            expect(patchBody).toMatchObject({ communityId: 42, step: 0 });
+        }
+
+        // Should now show compliance preview (step 1)
+        const headings = Array.from(container.querySelectorAll('h1'));
+        const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+        expect(complianceHeading).toBeDefined();
     });
 });
