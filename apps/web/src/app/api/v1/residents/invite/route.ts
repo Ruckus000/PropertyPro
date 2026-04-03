@@ -117,11 +117,15 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (sendInvitation) {
     try {
+      const inviterName = req.headers.get('x-user-full-name')
+        || req.headers.get('x-user-email')
+        || 'Your administrator';
       const invitation = await createOnboardingInvitation({
         communityId,
         userId,
         ttlDays,
         actorUserId,
+        inviterName,
       });
       invitationToken = invitation.token;
       invitationExpiresAt = invitation.expiresAt;

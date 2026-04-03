@@ -115,7 +115,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     react: createElement(InvitationEmail, {
       branding: { communityName: community['name'] as string },
       inviteeName: ((user['fullName'] as string) ?? 'there'),
-      inviterName: '',
+      inviterName: req.headers.get('x-user-full-name') || req.headers.get('x-user-email') || 'Your administrator',
       role,
       inviteUrl,
       expiresInDays: ttlDays ?? 7,

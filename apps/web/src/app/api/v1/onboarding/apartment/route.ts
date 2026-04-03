@@ -507,6 +507,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       userId: targetUser['id'] as string,
       ttlDays: 7,
       actorUserId,
+      inviterName: req.headers.get('x-user-full-name') || req.headers.get('x-user-email') || 'Your administrator',
     });
 
     completionMarkers.inviteCreated = true;
