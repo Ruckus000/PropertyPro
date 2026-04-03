@@ -149,11 +149,11 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
 
               {/* Item info */}
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-content block truncate">
+                <span className="text-sm font-medium text-content block truncate" title={item.title}>
                   {item.title}
                 </span>
                 {description && (
-                  <span className="text-xs text-content-tertiary block truncate">
+                  <span className="text-xs text-content-tertiary block truncate" title={description}>
                     {description}
                   </span>
                 )}

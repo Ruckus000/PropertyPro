@@ -57,7 +57,7 @@ export function DeadlineRibbon({ items, onItemClick }: DeadlineRibbonProps) {
               onClick={() => onItemClick?.(item.id)}
               className="flex items-center gap-1.5 shrink-0 text-xs hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] rounded"
             >
-              <span className="font-medium text-content truncate max-w-[120px]">
+              <span className="font-medium text-content truncate max-w-[120px]" title={item.title}>
                 {item.title}
               </span>
               <span
