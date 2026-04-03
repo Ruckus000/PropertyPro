@@ -32,7 +32,7 @@ const STAGES: Stage[] = [
   { label: 'Finalizing your account', Icon: Sparkles },
 ];
 
-const MAX_POLLS = 15;
+const MAX_POLLS = 30; // was 15 — 60 seconds before showing failure
 const POLL_INTERVAL_MS = 2000;
 
 function mapProvisioningStep(step: string): number {
@@ -126,12 +126,16 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     }
   }, [signupRequestId, handleComplete, handleFailure]);
 
-  useEffect(() => {
-    // Kick off immediately, then on interval
+  const startPolling = useCallback(() => {
+    stopPolling();
     void poll();
     intervalRef.current = setInterval(() => void poll(), POLL_INTERVAL_MS);
-    return () => stopPolling();
   }, [poll, stopPolling]);
+
+  useEffect(() => {
+    startPolling();
+    return () => stopPolling();
+  }, [startPolling, stopPolling]);
 
   if (failed) {
     return (
@@ -153,6 +157,25 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
               >
                 Go to login
               </a>
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    pollCount.current = 0;
+                    setFailed(false);
+                    startPolling();
+                  }}
+                  className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
+                >
+                  Check again
+                </button>
+                <a
+                  href="/auth/login"
+                  className="text-sm text-content-secondary transition-colors hover:text-interactive"
+                >
+                  Or log in manually
+                </a>
+              </div>
             </div>
           </div>
         </div>
