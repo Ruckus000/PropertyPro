@@ -55,6 +55,7 @@ export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
 export * from './onboarding-wizard-state';
+export * from './onboarding-checklist-items';
 export * from './rls-config';
 export * from './site-blocks';
 export * from './esign';
@@ -314,6 +315,11 @@ export type NewLedgerEntry = typeof ledgerEntries.$inferInsert;
 // Onboarding Wizard State
 export type OnboardingWizardState = typeof onboardingWizardState.$inferSelect;
 export type NewOnboardingWizardState = typeof onboardingWizardState.$inferInsert;
+
+// Onboarding Checklist Items
+import type { onboardingChecklistItems } from './onboarding-checklist-items';
+export type OnboardingChecklistItem = typeof onboardingChecklistItems.$inferSelect;
+export type NewOnboardingChecklistItem = typeof onboardingChecklistItems.$inferInsert;
 
 // Platform Admin Users
 export type PlatformAdminUser = typeof platformAdminUsers.$inferSelect;
