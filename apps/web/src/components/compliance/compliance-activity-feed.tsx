@@ -100,7 +100,15 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
     staleTime: 2 * 60_000, // 2 minutes
   });
 
-  const entries = data?.data ?? [];
+  const entries = React.useMemo(() => {
+    const raw = data?.data ?? [];
+    const seen = new Set<number>();
+    return raw.filter((entry) => {
+      if (seen.has(entry.id)) return false;
+      seen.add(entry.id);
+      return true;
+    });
+  }, [data]);
 
   // Don't render anything if there are no entries or still loading with no data
   if (isLoading && entries.length === 0) {
