@@ -22,6 +22,7 @@ export function AccessibilitySettings() {
           type="button"
           role="switch"
           aria-checked={largeText}
+          aria-label="Toggle large text"
           onClick={() => setLargeText(!largeText)}
           className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-quick ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 ${
             largeText ? 'bg-[var(--interactive-primary)]' : 'bg-surface-muted'

@@ -120,6 +120,8 @@ export function DocumentLibrary({
                 }
                 openUploadPanel();
               }}
+              aria-expanded={showUpload}
+              aria-label={showUpload ? 'Close upload panel' : 'Open upload panel'}
               className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 showUpload
                   ? 'bg-surface-muted text-content'
