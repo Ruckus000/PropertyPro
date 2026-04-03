@@ -8,6 +8,7 @@ import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context'
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { loadWizardState } from '@/lib/queries/wizard-state';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
+import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
@@ -51,6 +52,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   return (
     <div className="space-y-6">
+      <OnboardingChecklist
+        communityId={context.communityId}
+        communityName={data.communityName}
+      />
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">
         <DashboardAnnouncements items={data.announcements} />
