@@ -362,7 +362,6 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
     return (
       <ComplianceItemActions
         item={item}
-        itemTitle={item.title}
         onUpload={() => setUploadModalItem(item)}
         onLink={() => setLinkModalItem(item)}
         onMarkNA={() => mutations.markNotApplicable.mutate({ itemId: item.id })}

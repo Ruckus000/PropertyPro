@@ -7,7 +7,6 @@ import type { ChecklistItemData } from "./compliance-checklist-item";
 
 interface ComplianceItemActionsProps {
   item: ChecklistItemData;
-  itemTitle: string;
   onUpload: () => void;
   onLink: () => void;
   onMarkNA: () => void;
@@ -17,7 +16,6 @@ interface ComplianceItemActionsProps {
 
 export function ComplianceItemActions({
   item,
-  itemTitle,
   onUpload,
   onLink,
   onMarkNA,
@@ -26,7 +24,7 @@ export function ComplianceItemActions({
 }: ComplianceItemActionsProps) {
   if (item.status === "not_applicable") {
     return (
-      <Button variant="secondary" size="sm" onClick={onMarkApplicable} aria-label={`Mark ${itemTitle} as applicable`}>
+      <Button variant="secondary" size="sm" onClick={onMarkApplicable} aria-label={`Mark ${item.title} as applicable`}>
         <Undo2 size={14} className="mr-1.5" />
         Mark Applicable
       </Button>
@@ -36,7 +34,7 @@ export function ComplianceItemActions({
   if (item.status === "satisfied") {
     return (
       <>
-        <Button variant="ghost" size="sm" onClick={onUnlink} className="text-status-danger" aria-label={`Unlink document from ${itemTitle}`}>
+        <Button variant="ghost" size="sm" onClick={onUnlink} className="text-status-danger" aria-label={`Unlink document from ${item.title}`}>
           Unlink
         </Button>
         {item.documentId && (
@@ -44,7 +42,7 @@ export function ComplianceItemActions({
             variant="ghost"
             size="sm"
             onClick={() => window.open(`/documents/${item.documentId}`, "_blank")}
-            aria-label={`View document for ${itemTitle}`}
+            aria-label={`View document for ${item.title}`}
           >
             <ExternalLink size={14} className="mr-1.5" />
             View Document
@@ -57,15 +55,15 @@ export function ComplianceItemActions({
   // unsatisfied or overdue
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={onMarkNA} aria-label={`Mark ${itemTitle} as not applicable`}>
+      <Button variant="ghost" size="sm" onClick={onMarkNA} aria-label={`Mark ${item.title} as not applicable`}>
         <Ban size={14} className="mr-1.5" />
         N/A
       </Button>
-      <Button variant="secondary" size="sm" onClick={onLink} aria-label={`Link existing document to ${itemTitle}`}>
+      <Button variant="secondary" size="sm" onClick={onLink} aria-label={`Link existing document to ${item.title}`}>
         <Link2 size={14} className="mr-1.5" />
         Link Existing
       </Button>
-      <Button variant="primary" size="sm" onClick={onUpload} aria-label={`Upload document for ${itemTitle}`}>
+      <Button variant="primary" size="sm" onClick={onUpload} aria-label={`Upload document for ${item.title}`}>
         <Upload size={14} className="mr-1.5" />
         Upload
       </Button>
