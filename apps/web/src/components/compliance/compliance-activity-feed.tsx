@@ -100,6 +100,9 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
     staleTime: 2 * 60_000, // 2 minutes
   });
 
+  // Defensive: deduplicate by ID in case the API ever returns duplicate rows.
+  // The "duplicate-looking" entries in Recent Activity were caused by all actions
+  // being logged as generic 'update' — fixed in the compliance PATCH endpoint.
   const entries = React.useMemo(() => {
     const raw = data?.data ?? [];
     const seen = new Set<number>();
