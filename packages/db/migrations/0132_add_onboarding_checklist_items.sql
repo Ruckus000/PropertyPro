@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "onboarding_checklist_items" (
   "item_key" text NOT NULL,
   "completed_at" timestamptz,
   "created_at" timestamptz NOT NULL DEFAULT now(),
+  "deleted_at" timestamptz,
   UNIQUE ("community_id", "user_id", "item_key")
 );
 

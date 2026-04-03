@@ -42,9 +42,9 @@ export function ChecklistCelebration({
 
       <div className="flex flex-col items-center text-center">
         {/* Animated check icon */}
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-50">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-status-success-subtle">
           <svg
-            className="h-10 w-10 text-green-700"
+            className="h-10 w-10 text-status-success"
             viewBox="0 0 24 24"
             fill="none"
             aria-hidden="true"
@@ -75,8 +75,8 @@ export function ChecklistCelebration({
           Your community is set up
         </h2>
         <p className="mt-2 max-w-md text-base text-content-secondary">
-          You&apos;ve uploaded documents, invited members, and your compliance score is
-          live. {communityName} is ready for your residents.
+          You&apos;ve completed your setup checklist for {communityName}.
+          Your dashboard has everything you need going forward.
         </p>
 
         <button

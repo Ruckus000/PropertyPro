@@ -31,27 +31,41 @@ export function OnboardingChecklist({
 }: OnboardingChecklistProps) {
   const router = useRouter();
   const { data: items, isLoading } = useOnboardingChecklist(communityId);
-  const [dismissed, setDismissed] = useState(false);
+  const storageKey = `onboarding-checklist-dismissed-${communityId}`;
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(storageKey) === 'true';
+  });
 
-  if (isLoading || !items || items.length === 0 || dismissed) return null;
+  const handleDismiss = () => {
+    setDismissed(true);
+    try { localStorage.setItem(storageKey, 'true'); } catch { /* quota */ }
+  };
+
+  if (isLoading || !items || items.length === 0) return null;
 
   const completedCount = items.filter((i) => i.completedAt != null).length;
   const totalCount = items.length;
   const allComplete = completedCount === totalCount;
   const progressPct = (completedCount / totalCount) * 100;
 
+  // Show celebration even if previously dismissed — they earned it
   if (allComplete) {
+    // Clear any stale dismissal so the celebration shows
+    try { localStorage.removeItem(storageKey); } catch { /* noop */ }
     return (
       <ChecklistCelebration
         communityName={communityName}
-        onDismiss={() => setDismissed(true)}
+        onDismiss={handleDismiss}
         onViewCompliance={() => {
-          setDismissed(true);
+          handleDismiss();
           router.push('/compliance');
         }}
       />
     );
   }
+
+  if (dismissed) return null;
 
   return (
     <section
@@ -70,7 +84,7 @@ export function OnboardingChecklist({
         </div>
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="flex h-9 w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
           aria-label="Dismiss checklist"
         >
@@ -101,7 +115,7 @@ export function OnboardingChecklist({
           aria-label={`${completedCount} of ${totalCount} steps complete`}
         >
           <div
-            className="h-full rounded-full bg-green-600 transition-all duration-500 motion-reduce:transition-none"
+            className="h-full rounded-full bg-status-success transition-all duration-500 motion-reduce:transition-none"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -124,7 +138,7 @@ export function OnboardingChecklist({
                 className={cn(
                   'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2',
                   isComplete
-                    ? 'border-green-600 bg-green-600 text-white'
+                    ? 'border-status-success bg-status-success text-white'
                     : 'border-edge bg-transparent'
                 )}
               >
@@ -177,7 +191,7 @@ export function OnboardingChecklist({
       <div className="border-t border-edge px-5 py-3">
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="text-sm text-content-tertiary hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
         >
           I&apos;ll handle this later

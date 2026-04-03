@@ -25,6 +25,7 @@ export const onboardingChecklistItems = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     unique('onboarding_checklist_community_user_key').on(
