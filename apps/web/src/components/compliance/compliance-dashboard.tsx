@@ -177,18 +177,20 @@ function CategoryGroup({
       {/* Items */}
       <div
         className={`
-          overflow-hidden transition-all duration-quick ease-out
-          ${open ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"}
+          grid transition-all duration-quick ease-out
+          ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}
         `}
       >
-        <div className="border-t border-edge-subtle">
-          {items.map((item) => (
-            <ComplianceChecklistItem
-              key={item.id}
-              item={item}
-              actions={renderActions?.(item)}
-            />
-          ))}
+        <div className="overflow-hidden">
+          <div className="border-t border-edge-subtle">
+            {items.map((item) => (
+              <ComplianceChecklistItem
+                key={item.id}
+                item={item}
+                actions={renderActions?.(item)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
