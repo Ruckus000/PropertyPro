@@ -21,10 +21,10 @@ export interface EmptyStateConfig {
 }
 
 export const EMPTY_STATE_CONFIGS = {
-  compliance_new_association: {
-    title: "Let's get you compliant",
-    description: "Upload your first document to start tracking Florida Statute compliance.",
-    actionLabel: "Upload Document",
+  compliance_empty: {
+    title: "Your compliance tracker is ready",
+    description: "We've mapped the categories Florida requires. Upload documents to start tracking your score.",
+    actionLabel: "Upload First Document",
     icon: "upload",
   },
   no_owners_registered: {
@@ -60,6 +60,23 @@ export const EMPTY_STATE_CONFIGS = {
     title: "You're all set!",
     description: "No items currently require your attention.",
     icon: "check",
+  },
+  no_residents: {
+    title: "Add the people in your community",
+    description: "Import residents via CSV or add them one by one. They'll get portal access to view documents and announcements.",
+    actionLabel: "Add Residents",
+    icon: "users",
+  },
+  no_meetings: {
+    title: "Schedule and track board meetings",
+    description: "Post meeting notices with the required advance notice. PropertyPro tracks the compliance timeline for you.",
+    actionLabel: "Schedule Meeting",
+    icon: "bell",
+  },
+  no_announcements_yet: {
+    title: "No announcements yet",
+    description: "Your board hasn't posted any announcements. You'll be notified when they do.",
+    icon: "bell",
   },
 } as const satisfies Record<string, EmptyStateConfig>;
 
