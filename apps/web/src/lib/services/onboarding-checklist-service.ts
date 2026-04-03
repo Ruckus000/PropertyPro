@@ -62,13 +62,18 @@ export function getItemKeysForRole(
   role: Role,
   communityType: CommunityType,
 ): readonly ChecklistItemKey[] {
-  if (role === 'property_manager_admin' || role === 'cam' || role === 'board_president') {
+  // Admin roles (legacy + new role model)
+  if (
+    role === 'property_manager_admin' || role === 'pm_admin' ||
+    role === 'cam' || role === 'board_president' ||
+    role === 'manager'
+  ) {
     return communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
   }
   if (role === 'board_member') {
     return BOARD_MEMBER_ITEMS;
   }
-  // owner, tenant, site_manager
+  // owner, tenant, site_manager, resident
   return OWNER_TENANT_ITEMS;
 }
 
