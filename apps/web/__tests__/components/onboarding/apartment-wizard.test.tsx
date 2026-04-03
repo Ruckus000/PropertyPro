@@ -13,25 +13,23 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-vi.mock('lucide-react', () => ({
-  Check: ({ className, strokeWidth }: { className?: string; strokeWidth?: number }) =>
-    React.createElement('svg', {
-      className,
-      strokeWidth,
-      'data-testid': 'check-icon',
-    }),
-}));
+vi.mock('lucide-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('lucide-react')>();
+  return {
+    ...actual,
+    Check: ({ className, strokeWidth }: { className?: string; strokeWidth?: number }) =>
+      React.createElement('svg', {
+        className,
+        strokeWidth,
+        'data-testid': 'check-icon',
+      }),
+  };
+});
 
-vi.mock('@/components/documents/document-upload-area', () => ({
-  DocumentUploadArea: ({ onUploaded }: { onUploaded?: (document: Record<string, unknown>) => void }) =>
-    React.createElement(
-      'button',
-      {
-        type: 'button',
-        onClick: () => onUploaded?.({ id: 77, filePath: 'documents/rules.pdf' }),
-      },
-      'Mock Upload',
-    ),
+vi.mock('@propertypro/shared', () => ({
+  getComplianceTemplate: () => [
+    { templateKey: 'apt_rules', title: 'Community Rules', category: 'Rules', statuteReference: null },
+  ],
 }));
 
 async function flushEffects(): Promise<void> {
@@ -56,6 +54,7 @@ describe('apartment wizard', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     mockPush.mockClear();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -66,9 +65,9 @@ describe('apartment wizard', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fresh state renders step 0 profile', async () => {
+  it('fresh state renders step 0 profile form', async () => {
     await act(async () => {
-      root.render(<ApartmentWizard communityId={42} />);
+      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
       await flushEffects();
     });
 
@@ -79,15 +78,16 @@ describe('apartment wizard', () => {
     expect(currentStep?.textContent).toBe('1');
   });
 
-  it('resume from lastCompletedStep=2 lands on rules step', async () => {
+  it('resume from nextStep=1 lands on compliance preview', async () => {
     await act(async () => {
       root.render(
         <ApartmentWizard
           communityId={42}
+          communityType="apartment"
           initialState={{
             status: 'in_progress',
-            lastCompletedStep: 2,
-            nextStep: 3,
+            lastCompletedStep: 0,
+            nextStep: 1,
             completedAt: null,
             stepData: {
               profile: {
@@ -98,12 +98,6 @@ describe('apartment wizard', () => {
                 zipCode: '33101',
                 timezone: 'America/New_York',
               },
-              units: [
-                {
-                  unitNumber: '101',
-                  bedrooms: 2,
-                },
-              ],
             },
           }}
         />,
@@ -111,29 +105,68 @@ describe('apartment wizard', () => {
       await flushEffects();
     });
 
-    const heading = container.querySelector('h2');
-    expect(heading?.textContent).toBe('Upload Rules Document');
+    const headings = Array.from(container.querySelectorAll('h1'));
+    const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+    expect(complianceHeading).toBeDefined();
 
     const currentStep = container.querySelector('[aria-current="step"]');
-    expect(currentStep?.textContent).toBe('4');
+    expect(currentStep?.textContent).toBe('2');
   });
 
-  it('skip wizard sends canonical POST action=skip', async () => {
+  it('clamps malformed persisted nextStep to the last valid step (compliance preview)', async () => {
+    await act(async () => {
+      root.render(
+        <ApartmentWizard
+          communityId={42}
+          communityType="apartment"
+          initialState={{
+            status: 'in_progress',
+            lastCompletedStep: 0,
+            nextStep: 99,
+            completedAt: null,
+            stepData: {},
+          }}
+        />,
+      );
+      await flushEffects();
+    });
+
+    const headings = Array.from(container.querySelectorAll('h1'));
+    const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+    expect(complianceHeading).toBeDefined();
+
+    const currentStep = container.querySelector('[aria-current="step"]');
+    expect(currentStep?.textContent).toBe('2');
+  });
+
+  it('completing wizard sends canonical POST action=complete', async () => {
     const fetchMock = createFetchMock();
     vi.stubGlobal('fetch', fetchMock);
 
     await act(async () => {
-      root.render(<ApartmentWizard communityId={42} />);
+      root.render(
+        <ApartmentWizard
+          communityId={42}
+          communityType="apartment"
+          initialState={{
+            status: 'in_progress',
+            lastCompletedStep: 0,
+            nextStep: 1,
+            completedAt: null,
+            stepData: {},
+          }}
+        />,
+      );
       await flushEffects();
     });
 
     const buttons = Array.from(container.querySelectorAll('button'));
-    const skipWizardButton = buttons.find((button) =>
-      button.textContent?.includes('Skip entire setup and go to dashboard'),
+    const continueButton = buttons.find((button) =>
+      button.textContent?.includes('Go to your dashboard'),
     );
 
     await act(async () => {
-      skipWizardButton?.click();
+      continueButton?.click();
       await flushEffects();
     });
 
@@ -147,76 +180,45 @@ describe('apartment wizard', () => {
     const postBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
     expect(postBody).toEqual({
       communityId: 42,
-      action: 'skip',
+      action: 'complete',
     });
   });
 
-  it('back navigation does not call API', async () => {
+  it('advancing from profile step calls PATCH then renders compliance preview', async () => {
     const fetchMock = createFetchMock();
     vi.stubGlobal('fetch', fetchMock);
 
     await act(async () => {
-      root.render(
-        <ApartmentWizard
-          communityId={42}
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 2,
-            nextStep: 3,
-            completedAt: null,
-            stepData: {
-              units: [{ unitNumber: '101' }],
-            },
-          }}
-        />,
-      );
+      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
       await flushEffects();
     });
 
-    fetchMock.mockClear();
+    // Fill required fields using native input value setter (React's onChange watches nativeInputValueSetter)
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const backButton = buttons.find((button) => button.textContent === 'Back');
+    const nameInput = container.querySelector<HTMLInputElement>('#name');
+    const addressInput = container.querySelector<HTMLInputElement>('#addressLine1');
+    const cityInput = container.querySelector<HTMLInputElement>('#city');
+    const zipInput = container.querySelector<HTMLInputElement>('#zipCode');
 
     await act(async () => {
-      backButton?.click();
-      await flushEffects();
+      if (nameInput && nativeInputValueSetter) {
+        nativeInputValueSetter.call(nameInput, 'Test Apartments');
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (addressInput && nativeInputValueSetter) {
+        nativeInputValueSetter.call(addressInput, '123 Test St');
+        addressInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (cityInput && nativeInputValueSetter) {
+        nativeInputValueSetter.call(cityInput, 'Miami');
+        cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (zipInput && nativeInputValueSetter) {
+        nativeInputValueSetter.call(zipInput, '33101');
+        zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    const heading = container.querySelector('h2');
-    expect(heading?.textContent).toBe('Add Units');
-  });
-
-  it('invite step requires full fields before submit', async () => {
-    const fetchMock = createFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await act(async () => {
-      root.render(
-        <ApartmentWizard
-          communityId={42}
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 3,
-            nextStep: 4,
-            completedAt: null,
-            stepData: {
-              units: [{ unitNumber: '101' }],
-              invite: {
-                email: 'partial@example.com',
-                fullName: '',
-                unitNumber: '',
-              },
-            },
-          }}
-        />,
-      );
-      await flushEffects();
-    });
-
-    fetchMock.mockClear();
 
     const form = container.querySelector('form');
     await act(async () => {
@@ -224,59 +226,35 @@ describe('apartment wizard', () => {
       await flushEffects();
     });
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Provide email, full name, and unit number');
+    const patchCall = fetchMock.mock.calls.find(c => {
+      const options = c[1] as RequestInit;
+      return options?.method === 'PATCH';
+    });
+
+    expect(patchCall).toBeDefined();
+    if (patchCall) {
+      expect(patchCall[0]).toContain('/api/v1/onboarding/apartment');
+      const patchBody = JSON.parse(String(patchCall[1]?.body)) as Record<string, unknown>;
+      expect(patchBody).toMatchObject({ communityId: 42, step: 0 });
+    }
+
+    // Should now show compliance preview (step 1)
+    const headings = Array.from(container.querySelectorAll('h1'));
+    const complianceHeading = headings.find(h => h.textContent?.includes("Here's what Florida requires"));
+    expect(complianceHeading).toBeDefined();
   });
 
-  it('invite skip persists null invite then completes', async () => {
-    const fetchMock = createFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-
+  it('only 2 steps are shown in the progress indicator', async () => {
     await act(async () => {
-      root.render(
-        <ApartmentWizard
-          communityId={42}
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 3,
-            nextStep: 4,
-            completedAt: null,
-            stepData: {
-              units: [{ unitNumber: '101' }],
-            },
-          }}
-        />,
-      );
+      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
       await flushEffects();
     });
 
-    fetchMock.mockClear();
-
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const skipInviteButton = buttons.find((button) => button.textContent === 'Skip Invite');
-
-    await act(async () => {
-      skipInviteButton?.click();
-      await flushEffects();
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    const firstCallBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
-    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('PATCH');
-    expect(firstCallBody).toEqual({
-      communityId: 42,
-      step: 4,
-      stepData: {
-        invite: null,
-      },
-    });
-
-    const secondCallBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as Record<string, unknown>;
-    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST');
-    expect(secondCallBody).toEqual({
-      communityId: 42,
-      action: 'complete',
-    });
+    // ProgressIndicator renders step circles; there should be exactly 2
+    const stepCircles = container.querySelectorAll('[aria-current="step"], [aria-current]');
+    // Only one circle has aria-current="step" at a time, but we can count list items
+    const progressNav = container.querySelector('nav[aria-label="Progress"]');
+    const stepItems = progressNav?.querySelectorAll('li');
+    expect(stepItems?.length).toBe(2);
   });
 });

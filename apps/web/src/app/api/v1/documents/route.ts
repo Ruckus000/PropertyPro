@@ -18,6 +18,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -96,6 +97,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     fileSize: payload.fileSize,
     sourceType: 'library',
   });
+
+  void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
+  void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
 
   return NextResponse.json(
     {

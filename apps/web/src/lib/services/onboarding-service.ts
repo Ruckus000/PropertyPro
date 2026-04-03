@@ -130,6 +130,7 @@ export async function createOnboardingInvitation(params: {
   userId: string;
   ttlDays?: number;
   actorUserId: string;
+  inviterName: string;
 }): Promise<{ id: number; token: string; expiresAt: Date }> {
   const { communityId, userId, ttlDays = 7, actorUserId } = params;
   const scoped = createScopedClient(communityId);
@@ -175,7 +176,7 @@ export async function createOnboardingInvitation(params: {
     react: createElement(InvitationEmail, {
       branding: { communityName: community['name'] as string },
       inviteeName: (user['fullName'] as string) ?? 'there',
-      inviterName: '',
+      inviterName: params.inviterName,
       role,
       inviteUrl,
       expiresInDays: ttlDays,

@@ -28,6 +28,7 @@ import {
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 const emailFrequencySchema = z.enum([
@@ -163,6 +164,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       ...(smsEnabled !== undefined ? { consentMethod: 'web_form' } : {}),
     },
   });
+
+  void tryAutoComplete(communityId, userId, 'update_preferences');
 
   return NextResponse.json({
     data: { userId, communityId, ...updateValues },

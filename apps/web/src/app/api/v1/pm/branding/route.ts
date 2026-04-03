@@ -25,6 +25,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo } from '@/lib/services/image-processor';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const PRESIGN_TTL_SECONDS = 60 * 60; // 1 hour for logo read
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -161,6 +162,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     communityId,
     newValues: updated as Record<string, unknown>,
   });
+
+  void tryAutoComplete(communityId, userId, 'customize_portal');
 
   return NextResponse.json({ data: updated });
 });

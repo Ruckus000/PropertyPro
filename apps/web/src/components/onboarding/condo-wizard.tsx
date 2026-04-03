@@ -1,21 +1,19 @@
 'use client';
 
 /**
- * Condo Onboarding Wizard — P2-39
+ * Condo Onboarding Wizard — 2-step flow
  *
- * 4-step flow:
- * 0 Statutory -> 1 Profile -> 2 Branding -> 3 Units
+ * 0 Profile -> 1 Compliance Preview
  */
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getComplianceTemplate } from '@propertypro/shared';
 import { ProgressIndicator } from './progress-indicator';
-import { StatutoryDocumentsStep } from './steps/statutory-documents-step';
-import { ProfileStep, UnitsStep, BrandingStep } from './steps';
-import type { UnitData, BrandingStepData } from './steps';
+import { ProfileStep } from './steps';
+import { CompliancePreview } from './compliance-preview';
 import type {
     CondoWizardStatePayload,
-    StatutoryStepData,
     ProfileStepData,
     CondoWizardStepData,
 } from '@/lib/onboarding/condo-wizard-types';
@@ -26,7 +24,7 @@ interface CondoWizardProps {
     initialState?: CondoWizardStatePayload;
 }
 
-const STEP_TITLES = ['Statutory Documents', 'Community Profile', 'Branding', 'Unit Roster'];
+const STEP_TITLES = ['Community Profile', 'Compliance Preview'];
 
 interface ApiErrorResponse {
     error?: string | { code?: string; message?: string };
@@ -62,6 +60,15 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const complianceCategories = getComplianceTemplate(
+        communityType as 'condo_718' | 'hoa_720' | 'apartment',
+    ).map((item) => ({
+        templateKey: item.templateKey,
+        title: item.title,
+        category: item.category,
+        statuteReference: item.statuteReference,
+    }));
+
     async function saveStep(step: number, patch: Partial<CondoWizardStepData>): Promise<void> {
         setIsSaving(true);
         setError(null);
@@ -90,7 +97,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
         }
     }
 
-    async function completeWizard(action: 'complete' | 'skip'): Promise<void> {
+    async function completeWizard(): Promise<void> {
         setIsSaving(true);
         setError(null);
 
@@ -102,7 +109,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                 },
                 body: JSON.stringify({
                     communityId,
-                    action,
+                    action: 'complete',
                 }),
             });
 
@@ -120,52 +127,24 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
         }
     }
 
-    async function handleStatutoryNext(data: StatutoryStepData): Promise<void> {
-        try {
-            await saveStep(0, { statutory: data });
-        } catch (saveError) {
-            setError(saveError instanceof Error ? saveError.message : 'Failed to save statutory step');
-            setIsSaving(false);
-        }
-    }
-
     async function handleProfileNext(data: ProfileStepData): Promise<void> {
         try {
-            await saveStep(1, { profile: data });
+            await saveStep(0, { profile: data });
         } catch (saveError) {
             setError(saveError instanceof Error ? saveError.message : 'Failed to save profile step');
             setIsSaving(false);
         }
     }
 
-    async function handleBrandingNext(data: BrandingStepData): Promise<void> {
-        try {
-            await saveStep(2, { branding: data });
-        } catch (saveError) {
-            setError(saveError instanceof Error ? saveError.message : 'Failed to save branding step');
-            setIsSaving(false);
-        }
-    }
-
-    async function handleUnitsNext(units: UnitData[]): Promise<void> {
-        try {
-            await saveStep(3, { units });
-            await completeWizard('complete');
-        } catch (saveError) {
-            setError(saveError instanceof Error ? saveError.message : 'Failed to save units step');
-            setIsSaving(false);
-        }
-    }
-
-    async function handleSkipWizard(): Promise<void> {
-        await completeWizard('skip');
+    async function handleComplianceContinue(): Promise<void> {
+        await completeWizard();
     }
 
     return (
         <div className="mx-auto max-w-4xl px-6 py-8">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-content">Welcome to PropertyPro</h1>
-                <p className="mt-2 text-content-secondary">Set up your community compliance and profile in four quick steps.</p>
+                <p className="mt-2 text-content-secondary">Set up your community profile and review compliance requirements.</p>
             </div>
 
             <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
@@ -184,14 +163,6 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
 
             <div className="mt-8">
                 {currentStep === 0 && (
-                    <StatutoryDocumentsStep
-                        communityId={communityId}
-                        onNext={handleStatutoryNext}
-                        initialData={stepData.statutory}
-                    />
-                )}
-
-                {currentStep === 1 && (
                     <ProfileStep
                         communityId={communityId}
                         onNext={handleProfileNext}
@@ -199,32 +170,14 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                     />
                 )}
 
-                {currentStep === 2 && (
-                    <BrandingStep
-                        onNext={handleBrandingNext}
-                        onBack={() => setCurrentStep(1)}
-                        initialData={stepData.branding}
+                {currentStep === 1 && (
+                    <CompliancePreview
+                        communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
+                        categories={complianceCategories}
+                        onContinue={handleComplianceContinue}
+                        isLoading={isSaving}
                     />
                 )}
-
-                {currentStep === 3 && (
-                    <UnitsStep
-                        onNext={handleUnitsNext}
-                        onBack={() => setCurrentStep(2)}
-                        initialData={stepData.units}
-                    />
-                )}
-            </div>
-
-            <div className="mt-8 border-t pt-6">
-                <button
-                    type="button"
-                    onClick={handleSkipWizard}
-                    disabled={isSaving}
-                    className="text-sm text-content-secondary hover:text-content disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                    Skip entire setup and go to dashboard
-                </button>
             </div>
         </div>
     );

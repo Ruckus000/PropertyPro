@@ -1,30 +1,30 @@
 'use client';
 
 /**
- * Apartment Onboarding Wizard — P2-38 closeout
+ * Apartment Onboarding Wizard — 2-step flow
  *
- * 5-step flow:
- * 0 Profile -> 1 Branding -> 2 Units -> 3 Rules -> 4 Invite
+ * 0 Profile -> 1 Compliance Preview
  */
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getComplianceTemplate } from '@propertypro/shared';
 import { ProgressIndicator } from './progress-indicator';
-import { ProfileStep, UnitsStep, RulesStep, InviteStep, BrandingStep } from './steps';
-import type { InviteData, UnitData, BrandingStepData } from './steps';
+import { ProfileStep } from './steps';
+import { CompliancePreview } from './compliance-preview';
 import type {
   ApartmentWizardStatePayload,
   ProfileStepData,
-  RulesStepData,
   WizardStepData,
 } from '@/lib/onboarding/apartment-wizard-types';
 
 interface ApartmentWizardProps {
   communityId: number;
+  communityType: string;
   initialState?: ApartmentWizardStatePayload;
 }
 
-const STEP_TITLES = ['Profile', 'Branding', 'Units', 'Rules', 'Invite'];
+const STEP_TITLES = ['Community Profile', 'Compliance Preview'];
 
 interface ApiErrorResponse {
   error?: string | { code?: string; message?: string };
@@ -52,12 +52,22 @@ async function readApiError(response: Response): Promise<string> {
   }
 }
 
-export function ApartmentWizard({ communityId, initialState }: ApartmentWizardProps) {
+export function ApartmentWizard({ communityId, communityType, initialState }: ApartmentWizardProps) {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState<number>(initialState?.nextStep ?? 0);
+  const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEP_TITLES.length - 1));
+  const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [stepData, setStepData] = useState<WizardStepData>(initialState?.stepData ?? {});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const complianceCategories = getComplianceTemplate(
+    communityType as 'condo_718' | 'hoa_720' | 'apartment',
+  ).map((item) => ({
+    templateKey: item.templateKey,
+    title: item.title,
+    category: item.category,
+    statuteReference: item.statuteReference,
+  }));
 
   async function saveStep(step: number, patch: Partial<WizardStepData>): Promise<void> {
     setIsSaving(true);
@@ -87,7 +97,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
     }
   }
 
-  async function completeWizard(action: 'complete' | 'skip'): Promise<void> {
+  async function completeWizard(): Promise<void> {
     setIsSaving(true);
     setError(null);
 
@@ -99,7 +109,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
         },
         body: JSON.stringify({
           communityId,
-          action,
+          action: 'complete',
         }),
       });
 
@@ -107,7 +117,7 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
         throw new Error(await readApiError(response));
       }
 
-      router.push(`/dashboard/apartment?communityId=${communityId}`);
+      router.push(`/dashboard?communityId=${communityId}`);
       return;
     } catch (completeError) {
       setError(
@@ -126,56 +136,15 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
     }
   }
 
-  async function handleBrandingNext(data: BrandingStepData): Promise<void> {
-    try {
-      await saveStep(1, { branding: data });
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save branding step');
-      setIsSaving(false);
-    }
-  }
-
-  async function handleUnitsNext(units: UnitData[]): Promise<void> {
-    try {
-      await saveStep(2, { units });
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save units step');
-      setIsSaving(false);
-    }
-  }
-
-  async function handleRulesNext(rules: RulesStepData | null): Promise<void> {
-    try {
-      await saveStep(3, { rules });
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save rules step');
-      setIsSaving(false);
-    }
-  }
-
-  async function handleInviteSubmit(data: InviteData | null): Promise<void> {
-    try {
-      await saveStep(4, { invite: data });
-      await completeWizard('complete');
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save invite step');
-      setIsSaving(false);
-    }
-  }
-
-  async function handleSkipInvite(): Promise<void> {
-    await handleInviteSubmit(null);
-  }
-
-  async function handleSkipWizard(): Promise<void> {
-    await completeWizard('skip');
+  async function handleComplianceContinue(): Promise<void> {
+    await completeWizard();
   }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-content">Welcome to PropertyPro</h1>
-        <p className="mt-2 text-content-secondary">Set up your apartment community in five quick steps.</p>
+        <p className="mt-2 text-content-secondary">Set up your community profile and review compliance requirements.</p>
       </div>
 
       <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
@@ -202,50 +171,13 @@ export function ApartmentWizard({ communityId, initialState }: ApartmentWizardPr
         )}
 
         {currentStep === 1 && (
-          <BrandingStep
-            onNext={handleBrandingNext}
-            onBack={() => setCurrentStep(0)}
-            initialData={stepData.branding}
+          <CompliancePreview
+            communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
+            categories={complianceCategories}
+            onContinue={handleComplianceContinue}
+            isLoading={isSaving}
           />
         )}
-
-        {currentStep === 2 && (
-          <UnitsStep
-            onNext={handleUnitsNext}
-            onBack={() => setCurrentStep(1)}
-            initialData={stepData.units}
-          />
-        )}
-
-        {currentStep === 3 && (
-          <RulesStep
-            communityId={communityId}
-            onNext={handleRulesNext}
-            onBack={() => setCurrentStep(2)}
-            initialData={stepData.rules ?? null}
-          />
-        )}
-
-        {currentStep === 4 && (
-          <InviteStep
-            units={stepData.units ?? []}
-            initialData={stepData.invite ?? null}
-            onNext={handleInviteSubmit}
-            onBack={() => setCurrentStep(3)}
-            onSkip={handleSkipInvite}
-          />
-        )}
-      </div>
-
-      <div className="mt-8 border-t pt-6">
-        <button
-          type="button"
-          onClick={handleSkipWizard}
-          disabled={isSaving}
-          className="text-sm text-content-secondary hover:text-content disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Skip entire setup and go to dashboard
-        </button>
       </div>
     </div>
   );

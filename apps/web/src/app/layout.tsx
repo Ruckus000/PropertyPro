@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from 'sonner';
 import "./globals.css";
 
 const inter = Inter({
@@ -36,6 +37,13 @@ export default function RootLayout({
           Skip to main content
         </a>
         {children}
+        <Toaster
+          position="top-right"
+          richColors
+          toastOptions={{
+            className: 'font-sans',
+          }}
+        />
       </body>
     </html>
   );

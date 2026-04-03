@@ -318,7 +318,7 @@ export function VerifyEmailContent() {
       {/* Footer link */}
       <p className="text-center">
         <Link
-          href="/signup"
+          href={`/signup${signupRequestId ? `?signupRequestId=${signupRequestId}` : ''}`}
           className="text-sm text-content-secondary transition-colors hover:text-interactive"
         >
           Wrong email? Go back and update it

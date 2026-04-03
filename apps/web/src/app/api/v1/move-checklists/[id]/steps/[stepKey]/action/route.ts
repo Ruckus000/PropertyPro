@@ -106,6 +106,7 @@ export const POST = withErrorHandler(
           communityId,
           userId: checklist.residentId,
           actorUserId: userId,
+          inviterName: req.headers.get('x-user-full-name') || req.headers.get('x-user-email') || 'Your administrator',
         });
 
         const updated = await updateChecklistStep(
