@@ -140,11 +140,6 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
-      {/* Skip link for keyboard users */}
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-
       {/* Desktop sidebar */}
       <div className="hidden lg:block">
         <AppSidebar
