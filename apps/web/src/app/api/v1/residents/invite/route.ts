@@ -27,6 +27,7 @@ import {
   createOnboardingResident,
   createOnboardingInvitation,
 } from '@/lib/services/onboarding-service';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const createAndInviteSchema = z.object({
   communityId: z.number().int().positive(),
@@ -146,6 +147,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       });
     }
   }
+
+  void tryAutoComplete(communityId, actorUserId, 'invite_first_member');
 
   return NextResponse.json(
     {

@@ -23,6 +23,7 @@ import {
   calculatePostingDeadline,
 } from '@/lib/utils/compliance-calculator';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
@@ -94,6 +95,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       }),
     };
   });
+
+  if (data.length > 0) {
+    void tryAutoComplete(communityId, userId, 'review_compliance');
+  }
 
   return NextResponse.json({ data });
 });

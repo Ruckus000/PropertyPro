@@ -30,6 +30,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -173,6 +174,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     communityId,
     newValues: { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount },
   });
+
+  void tryAutoComplete(communityId, actorUserId, 'add_units');
 
   return NextResponse.json(
     {

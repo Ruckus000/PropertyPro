@@ -38,6 +38,7 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import { applyDemoAnnouncementProvenancePolicy } from '@/lib/announcements/demo-announcement-provenance';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -284,6 +285,8 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
   ).catch((err: unknown) => {
     console.error('[announcements] in-app notification failed', { communityId, announcementId: created.id, error: err instanceof Error ? err.message : String(err) });
   });
+
+  void tryAutoComplete(communityId, audit.userId, 'post_announcement');
 
   return NextResponse.json({ data: created }, { status: 201 });
 }
