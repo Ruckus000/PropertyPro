@@ -294,11 +294,12 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   await logAuditEvent({
     userId,
-    action: 'update',
+    action: patchAction,
     resourceType: 'compliance_checklist_item',
     resourceId: String(id),
     communityId,
-    newValues: { action: patchAction, documentId: documentId ?? null },
+    metadata: { itemTitle: row['title'] as string },
+    newValues: { documentId: documentId ?? null },
   });
 
   return NextResponse.json({ data: result });

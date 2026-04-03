@@ -41,7 +41,10 @@ export type AuditAction =
   | 'access_request.approved' | 'access_request.denied'
   // Support access audit actions
   | 'support_session_started' | 'support_session_ended'
-  | 'support_consent_granted' | 'support_consent_revoked';
+  | 'support_consent_granted' | 'support_consent_revoked'
+  // Compliance checklist audit actions
+  | 'link_document' | 'unlink_document'                          // Document linking
+  | 'mark_not_applicable' | 'mark_applicable';                   // Applicability toggling
 
 export interface AuditEventParams {
   userId: string | null;
