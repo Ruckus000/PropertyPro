@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 
 interface AnnouncementListProps {
   items: Announcement[];
+  isAdmin?: boolean;
 }
 
 /**
@@ -97,7 +98,7 @@ function AnnouncementCard({ item }: { item: Announcement }) {
   );
 }
 
-export function AnnouncementList({ items }: AnnouncementListProps) {
+export function AnnouncementList({ items, isAdmin }: AnnouncementListProps) {
   const { pinned, unpinned } = items.reduce<{
     pinned: Announcement[];
     unpinned: Announcement[];
@@ -112,8 +113,23 @@ export function AnnouncementList({ items }: AnnouncementListProps) {
   if (items.length === 0) {
     return (
       <EmptyState
+        icon="bell"
         title="No announcements yet"
-        description="Announcements from your community will appear here."
+        description={
+          isAdmin
+            ? "Post your first announcement to keep residents informed."
+            : "Announcements from your community will appear here."
+        }
+        action={
+          isAdmin ? (
+            <a
+              href="/dashboard"
+              className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
+            >
+              Go to Dashboard
+            </a>
+          ) : undefined
+        }
       />
     );
   }
