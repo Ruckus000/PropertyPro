@@ -49,10 +49,10 @@ export function BoardChrome({
     <div className="space-y-6">
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
-          Community board
+          {communityName}
         </p>
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold text-content">{communityName}</h1>
+          <h1 className="text-3xl font-semibold text-content">Community Board</h1>
           <p className="max-w-2xl text-sm text-content-secondary">
             {description}
           </p>
