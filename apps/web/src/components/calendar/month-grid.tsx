@@ -106,6 +106,7 @@ export function MonthGrid({
               <button
                 key={dateKey}
                 type="button"
+                aria-label={format(day, 'MMMM d, yyyy')}
                 onClick={() => onSelectDate(day)}
                 onKeyDown={(event) => {
                   if (event.key === 'ArrowRight') {
