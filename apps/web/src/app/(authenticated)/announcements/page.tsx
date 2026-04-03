@@ -42,7 +42,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   }
 
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(context.communityId, userId);
+  const membership = await requireCommunityMembership(context.communityId, userId);
 
   const scoped = createScopedClient(context.communityId);
   const items = await scoped
@@ -53,5 +53,5 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
     )
     .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
 
-  return <AnnouncementList items={items} />;
+  return <AnnouncementList items={items} isAdmin={membership.isAdmin} />;
 }
