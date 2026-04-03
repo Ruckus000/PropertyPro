@@ -145,11 +145,12 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
       {/* Expanded detail */}
       <div
         className={`
-          overflow-hidden transition-all duration-quick ease-out
-          ${expanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}
+          grid transition-all duration-quick ease-out
+          ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}
         `}
       >
-        <div className="px-4 pb-4 pt-1 ml-5">
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4 pt-1 ml-5">
           {/* Description */}
           {item.description && (
             <p className="text-sm text-content-secondary leading-relaxed mb-3">
@@ -204,6 +205,7 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
               {actions}
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
