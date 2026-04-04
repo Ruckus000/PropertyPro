@@ -61,6 +61,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/pm-communities.ts'),
   // P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/communities/route.ts'),
+  // P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
+  resolve(repoRoot, 'apps/web/src/lib/pm/create-community.ts'),
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
   resolve(repoRoot, 'apps/web/src/lib/services/provisioning-service.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/provision/route.ts'),

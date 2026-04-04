@@ -1,15 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { Plus } from 'lucide-react';
 import type { PaginationState, SortingState } from '@tanstack/react-table';
 import type { CommunityType } from '@propertypro/shared';
 import { usePortfolioDashboard } from '@/hooks/use-portfolio-dashboard';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
 import { CommunityFilters } from './CommunityFilters';
-import { PortfolioKpiRow } from './PortfolioKpiRow';
+import { KpiSummaryBar } from './KpiSummaryBar';
+import { CommunityCardGrid } from './CommunityCardGrid';
 import { PortfolioTable } from './PortfolioTable';
+import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
@@ -21,12 +25,21 @@ export function PmDashboardClient() {
     rawType && VALID_TYPES.has(rawType) ? (rawType as CommunityType) : undefined;
   const search = searchParams.get('search') ?? undefined;
 
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 20,
   });
-
   const [sorting, setSorting] = useState<SortingState>([]);
+
+  useEffect(() => {
+    setViewMode(getStoredViewMode());
+  }, []);
+
+  function handleViewChange(mode: ViewMode) {
+    setViewMode(mode);
+    storeViewMode(mode);
+  }
 
   const { data, isLoading, isError } = usePortfolioDashboard({
     communityType,
@@ -44,15 +57,25 @@ export function PmDashboardClient() {
         description={
           isLoading
             ? 'Loading...'
-            : `${data?.totalCount ?? 0} ${(data?.totalCount ?? 0) === 1 ? 'community' : 'communities'}`
+            : `${data?.totalCount ?? 0} ${(data?.totalCount ?? 0) === 1 ? 'community' : 'communities'} in your portfolio`
         }
-        actions={<CommunityFilters />}
+        actions={
+          <div className="flex items-center gap-2">
+            <CommunityFilters />
+            <ViewToggle value={viewMode} onChange={handleViewChange} />
+            <Link
+              href="/pm/dashboard/communities/new"
+              className="inline-flex items-center gap-1.5 rounded-md bg-interactive-primary px-3 py-2 text-sm font-semibold text-white hover:bg-interactive-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add Community
+            </Link>
+          </div>
+        }
       />
 
-      {/* KPI Row */}
-      <PortfolioKpiRow kpis={data?.kpis} isLoading={isLoading} />
+      <KpiSummaryBar kpis={data?.kpis} isLoading={isLoading} />
 
-      {/* Error Banner — uses semantic tokens + icon + role="alert" */}
       {isError && (
         <AlertBanner
           status="danger"
@@ -61,16 +84,22 @@ export function PmDashboardClient() {
         />
       )}
 
-      {/* Portfolio Table */}
-      <PortfolioTable
-        data={data?.communities ?? []}
-        totalCount={data?.totalCount ?? 0}
-        isLoading={isLoading}
-        pagination={pagination}
-        onPaginationChange={setPagination}
-        sorting={sorting}
-        onSortingChange={setSorting}
-      />
+      {viewMode === 'cards' ? (
+        <CommunityCardGrid
+          communities={data?.communities ?? []}
+          isLoading={isLoading}
+        />
+      ) : (
+        <PortfolioTable
+          data={data?.communities ?? []}
+          totalCount={data?.totalCount ?? 0}
+          isLoading={isLoading}
+          pagination={pagination}
+          onPaginationChange={setPagination}
+          sorting={sorting}
+          onSortingChange={setSorting}
+        />
+      )}
     </div>
   );
 }

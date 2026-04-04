@@ -1,13 +1,12 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, ExternalLink, FileText, Megaphone } from 'lucide-react';
+import { MoreHorizontal, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DataTableColumnHeader } from '@/components/shared/data-table-column-header';
@@ -22,12 +21,6 @@ const TYPE_LABELS: Record<string, string> = {
   condo_718: 'Condo',
   hoa_720: 'HOA',
   apartment: 'Apartment',
-};
-
-const TYPE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
-  condo_718: 'default',
-  hoa_720: 'secondary',
-  apartment: 'outline',
 };
 
 function formatCurrency(cents: number): string {
@@ -70,7 +63,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
       return (
         <div className="flex items-center gap-2">
           <span className="font-medium">{name}</span>
-          <Badge variant={TYPE_VARIANTS[type] ?? 'outline'} className="text-[10px]">
+          <Badge variant="secondary" className="text-xs">
             {TYPE_LABELS[type] ?? type}
           </Badge>
         </div>
@@ -163,7 +156,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-surface-hover"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-surface-hover"
               aria-label={`Actions for ${community.communityName}`}
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -175,15 +168,6 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
                 <ExternalLink className="mr-2 h-4 w-4" />
                 View Dashboard
               </a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <FileText className="mr-2 h-4 w-4" />
-              Upload Document
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Megaphone className="mr-2 h-4 w-4" />
-              Send Announcement
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
