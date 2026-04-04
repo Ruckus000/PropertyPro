@@ -4,6 +4,10 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { searchViolationsByTrigram } from '@propertypro/db';
+import {
+  requireViolationsEnabled,
+  requireViolationsReadPermission,
+} from '@/lib/violations/common';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -13,6 +17,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     Number(searchParams.get('communityId')) || null,
   );
   const membership = await requireCommunityMembership(communityId, userId);
+  await requireViolationsEnabled(membership);
+  requireViolationsReadPermission(membership);
   const q = searchParams.get('q')?.trim() ?? '';
   const limit = Math.min(Math.max(Number(searchParams.get('limit')) || 3, 1), 20);
 

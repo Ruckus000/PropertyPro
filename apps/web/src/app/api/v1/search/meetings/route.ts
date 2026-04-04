@@ -3,6 +3,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requirePermission } from '@/lib/db/access-control';
 import { searchMeetingsByTrigram } from '@propertypro/db';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -12,7 +13,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     req,
     Number(searchParams.get('communityId')) || null,
   );
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
+  requirePermission(membership, 'meetings', 'read');
   const q = searchParams.get('q')?.trim() ?? '';
   const limit = Math.min(Math.max(Number(searchParams.get('limit')) || 3, 1), 20);
 
