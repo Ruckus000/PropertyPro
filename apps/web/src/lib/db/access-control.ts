@@ -13,7 +13,7 @@
  * location; the file itself has no database access.
  */
 import type { NewCommunityRole, CommunityType, ManagerPermissions } from '@propertypro/shared';
-import type { RbacResource, RbacAction } from '@propertypro/shared';
+import { RBAC_RESOURCES, type RbacResource, type RbacAction } from '@propertypro/shared';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 

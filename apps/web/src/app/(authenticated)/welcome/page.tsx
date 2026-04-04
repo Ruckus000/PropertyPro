@@ -29,6 +29,7 @@ import {
   complianceChecklistItems,
   createScopedClient,
   units,
+  type Announcement,
 } from '@propertypro/db';
 import { eq, isNull } from '@propertypro/db/filters';
 import { getBrandingForCommunity } from '@/lib/api/branding';
@@ -156,7 +157,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
     getAnnouncementCommunityContext(membership),
     membership,
-    announcementRows,
+    announcementRows as Announcement[],
     { limit: 1 },
   );
   const latestAnnouncement = visibleAnnouncements[0]

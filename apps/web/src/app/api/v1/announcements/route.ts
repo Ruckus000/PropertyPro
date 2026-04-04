@@ -16,7 +16,9 @@ import {
   announcements,
   logAuditEvent,
   users,
+  type Announcement,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { withAuditLog } from '@/lib/middleware/audit-middleware';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
