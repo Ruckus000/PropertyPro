@@ -4,21 +4,21 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ADMIN_APARTMENT_ITEMS } from '../../src/lib/services/onboarding-checklist-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
   type TestKitState,
-  initTestKit,
-  seedCommunities,
-  seedUsers,
-  teardownTestKit,
-  trackUserForCleanup,
-  requireCommunity,
-  setActor,
-  requireCurrentActor,
   apiUrl,
+  initTestKit,
   jsonRequest,
   parseJson,
+  requireCommunity,
+  requireCurrentActor,
+  seedCommunities,
+  seedUsers,
+  setActor,
+  teardownTestKit,
 } from './helpers/multi-tenant-test-kit';
 
 if (process.env.CI && !process.env.DATABASE_URL) {
@@ -27,18 +27,12 @@ if (process.env.CI && !process.env.DATABASE_URL) {
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-const { requireAuthenticatedUserIdMock, sendEmailMock } = vi.hoisted(() => ({
+const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
-  sendEmailMock: vi.fn().mockResolvedValue({ id: 'mock-email-id' }),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@propertypro/email', () => ({
-  sendEmail: sendEmailMock,
-  InvitationEmail: vi.fn(),
 }));
 
 type OnboardingRouteModule = typeof import('../../src/app/api/v1/onboarding/apartment/route');
@@ -60,11 +54,19 @@ function requireRoutes(): RouteModules {
   return routes;
 }
 
-async function clearWizardState(kit: TestKitState, communityId: number): Promise<void> {
+async function clearOnboardingArtifacts(
+  kit: TestKitState,
+  communityId: number,
+  userId: string,
+): Promise<void> {
   const scoped = kit.dbModule.createScopedClient(communityId);
   await scoped.hardDelete(
     kit.dbModule.onboardingWizardState,
     eq(kit.dbModule.onboardingWizardState.wizardType, 'apartment'),
+  );
+  await scoped.hardDelete(
+    kit.dbModule.onboardingChecklistItems,
+    eq(kit.dbModule.onboardingChecklistItems.userId, userId),
   );
 }
 
@@ -106,53 +108,15 @@ describeDb('onboarding flow (db-backed integration)', () => {
     if (state) await teardownTestKit(state);
   });
 
-  it('step progression persists and completion creates units/resident/invitation', async () => {
+  it('GET initializes, PATCH saves profile, and POST completes the 2-step flow', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();
     const communityC = requireCommunity(kit, 'communityC');
+    const siteManagerC = kit.users.get('siteManagerC');
 
-    await clearWizardState(kit, communityC.id);
+    if (!siteManagerC) throw new Error('siteManagerC not seeded');
 
-    const profileData = {
-      name: `Wizard Progression ${kit.runSuffix}`,
-      addressLine1: '123 Main Street',
-      addressLine2: null,
-      city: 'Miami',
-      state: 'FL',
-      zipCode: '33101',
-      timezone: 'America/New_York',
-      logoPath: null,
-    };
-
-    const unitsData = [
-      {
-        unitNumber: `P2-38-A101-${kit.runSuffix}`,
-        floor: 1,
-        bedrooms: 2,
-        bathrooms: 1,
-        sqft: 850,
-        rentAmount: '1400.00',
-      },
-      {
-        unitNumber: `P2-38-A102-${kit.runSuffix}`,
-        floor: 1,
-        bedrooms: 1,
-        bathrooms: 1,
-        sqft: 650,
-        rentAmount: '1200.00',
-      },
-    ];
-
-    const rulesData = {
-      documentId: 12345,
-      path: `documents/rules-${kit.runSuffix}.pdf`,
-    };
-
-    const inviteData = {
-      email: `p238.flow+${kit.runSuffix}@example.com`,
-      fullName: `P2-38 Flow Resident ${kit.runSuffix}`,
-      unitNumber: unitsData[0].unitNumber,
-    };
+    await clearOnboardingArtifacts(kit, communityC.id, siteManagerC.id);
 
     const getResponse = await appRoutes.onboarding.GET(
       new NextRequest(apiUrl(`/api/v1/onboarding/apartment?communityId=${communityC.id}`)),
@@ -163,111 +127,131 @@ describeDb('onboarding flow (db-backed integration)', () => {
         status: string;
         lastCompletedStep: number | null;
         nextStep: number;
+        stepData: {
+          profile?: {
+            name?: string;
+            timezone?: string;
+          };
+        };
       };
     }>(getResponse);
+
     expect(getJson.data.status).toBe('in_progress');
     expect(getJson.data.lastCompletedStep).toBeNull();
     expect(getJson.data.nextStep).toBe(0);
+    expect(getJson.data.stepData.profile?.name).toBe(`${communityC.fixture.name} ${kit.runSuffix}`);
+    expect(getJson.data.stepData.profile?.timezone).toBe(communityC.fixture.timezone);
 
-    const patchStep0 = await appRoutes.onboarding.PATCH(
+    const profileData = {
+      name: `Apartment Wizard ${kit.runSuffix}`,
+      addressLine1: '500 Harbor Drive',
+      addressLine2: null,
+      city: 'Miami',
+      state: 'FL',
+      zipCode: '33131',
+      timezone: 'America/New_York',
+      logoPath: null,
+    };
+
+    const patchResponse = await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 0,
         stepData: { profile: profileData },
       }),
     );
-    expect(patchStep0.status).toBe(200);
+    expect(patchResponse.status).toBe(200);
+    const patchJson = await parseJson<{
+      data: {
+        lastCompletedStep: number;
+        nextStep: number;
+        status: string;
+        stepData: {
+          profile?: {
+            name?: string;
+          };
+        };
+      };
+    }>(patchResponse);
 
-    const patchBranding = await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 1,
-        stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
-      }),
-    );
-    expect(patchBranding.status).toBe(200);
+    expect(patchJson.data.status).toBe('in_progress');
+    expect(patchJson.data.lastCompletedStep).toBe(0);
+    expect(patchJson.data.nextStep).toBe(1);
+    expect(patchJson.data.stepData.profile?.name).toBe(profileData.name);
 
-    const patchStep2 = await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 2,
-        stepData: { units: unitsData },
-      }),
-    );
-    expect(patchStep2.status).toBe(200);
+    const scoped = kit.dbModule.createScopedClient(communityC.id);
+    const communityRows = await scoped.query(kit.dbModule.communities);
+    const updatedCommunity = communityRows.find((row) => row['id'] === communityC.id);
+    expect(updatedCommunity?.['name']).toBe(profileData.name);
+    expect(updatedCommunity?.['addressLine1']).toBe(profileData.addressLine1);
+    expect(updatedCommunity?.['city']).toBe(profileData.city);
+    expect(updatedCommunity?.['timezone']).toBe(profileData.timezone);
 
-    const patchStep3 = await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 3,
-        stepData: { rules: rulesData },
-      }),
-    );
-    expect(patchStep3.status).toBe(200);
-
-    const resumeGet = await appRoutes.onboarding.GET(
+    const resumeResponse = await appRoutes.onboarding.GET(
       new NextRequest(apiUrl(`/api/v1/onboarding/apartment?communityId=${communityC.id}`)),
     );
-    expect(resumeGet.status).toBe(200);
+    expect(resumeResponse.status).toBe(200);
     const resumeJson = await parseJson<{
       data: {
         lastCompletedStep: number | null;
         nextStep: number;
         stepData: {
-          profile?: Record<string, unknown>;
-          units?: Array<Record<string, unknown>>;
-          rules?: Record<string, unknown> | null;
+          profile?: {
+            name?: string;
+          };
         };
       };
-    }>(resumeGet);
+    }>(resumeResponse);
 
-    expect(resumeJson.data.lastCompletedStep).toBe(3);
-    expect(resumeJson.data.nextStep).toBe(4);
+    expect(resumeJson.data.lastCompletedStep).toBe(0);
+    expect(resumeJson.data.nextStep).toBe(1);
     expect(resumeJson.data.stepData.profile?.name).toBe(profileData.name);
-    expect(resumeJson.data.stepData.units).toHaveLength(2);
-    expect(resumeJson.data.stepData.rules).toEqual(rulesData);
 
-    const patchStep4 = await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 4,
-        stepData: { invite: inviteData },
-      }),
-    );
-    expect(patchStep4.status).toBe(200);
-
-    const complete = await appRoutes.onboarding.POST(
+    const completeResponse = await appRoutes.onboarding.POST(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
         communityId: communityC.id,
         action: 'complete',
       }),
     );
-    expect(complete.status).toBe(201);
+    expect(completeResponse.status).toBe(201);
+    const completeJson = await parseJson<{
+      data: {
+        status: string;
+        completedAt: string | null;
+      };
+    }>(completeResponse);
 
-    const scoped = kit.dbModule.createScopedClient(communityC.id);
-    const unitRows = await scoped.query(kit.dbModule.units);
-    const createdUnits = unitRows.filter((row) =>
-      unitsData.some((unit) => unit.unitNumber === row['unitNumber']),
+    expect(completeJson.data.status).toBe('completed');
+    expect(completeJson.data.completedAt).toBeTruthy();
+
+    const secondCompleteResponse = await appRoutes.onboarding.POST(
+      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
+        communityId: communityC.id,
+        action: 'complete',
+      }),
     );
-    expect(createdUnits).toHaveLength(2);
+    expect(secondCompleteResponse.status).toBe(200);
+    const secondCompleteJson = await parseJson<{
+      data: {
+        status: string;
+        noop?: boolean;
+      };
+    }>(secondCompleteResponse);
 
-    const allUsers = await scoped.query(kit.dbModule.users);
-    const residentUser = allUsers.find(
-      (row) => ((row['email'] as string) ?? '').toLowerCase() === inviteData.email.toLowerCase(),
-    );
-    expect(residentUser).toBeDefined();
-
-    if (residentUser) {
-      trackUserForCleanup(kit, residentUser['id'] as string);
-    }
-
-    const invitations = await scoped.query(kit.dbModule.invitations);
-    const invitation = invitations.find((row) => row['userId'] === residentUser?.['id']);
-    expect(invitation).toBeDefined();
+    expect(secondCompleteJson.data.status).toBe('completed');
+    expect(secondCompleteJson.data.noop).toBe(true);
 
     const wizardRows = await scoped.query(kit.dbModule.onboardingWizardState);
     const wizard = wizardRows.find((row) => row['wizardType'] === 'apartment');
     expect(wizard?.['status']).toBe('completed');
+    expect(wizard?.['lastCompletedStep']).toBe(1);
+
+    const checklistRows = await scoped.query(kit.dbModule.onboardingChecklistItems);
+    const actorChecklist = checklistRows.filter((row) => row['userId'] === siteManagerC.id);
+    expect(actorChecklist.map((row) => String(row['itemKey'])).sort()).toEqual(
+      [...ADMIN_APARTMENT_ITEMS].sort(),
+    );
+    expect(actorChecklist.every((row) => row['completedAt'] == null)).toBe(true);
   });
 
   it('feature gate: condo community returns 403 on GET', async () => {
@@ -319,149 +303,38 @@ describeDb('onboarding flow (db-backed integration)', () => {
       .where(eq(kit.dbModule.communities.id, communityC.id));
   });
 
-  it('first-visit skip succeeds without prior GET and creates skipped state', async () => {
+  it('rejects step 0 PATCH requests without profile data', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();
     const communityC = requireCommunity(kit, 'communityC');
+    const siteManagerC = kit.users.get('siteManagerC');
 
-    await clearWizardState(kit, communityC.id);
+    if (!siteManagerC) throw new Error('siteManagerC not seeded');
 
-    const scoped = kit.dbModule.createScopedClient(communityC.id);
-    const unitsBefore = await scoped.query(kit.dbModule.units);
+    await clearOnboardingArtifacts(kit, communityC.id, siteManagerC.id);
 
-    const response = await appRoutes.onboarding.POST(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
-        communityId: communityC.id,
-        action: 'skip',
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    const json = await parseJson<{ data: { status: string } }>(response);
-    expect(json.data.status).toBe('skipped');
-
-    const wizardRows = await scoped.query(kit.dbModule.onboardingWizardState);
-    const wizard = wizardRows.find((row) => row['wizardType'] === 'apartment');
-    expect(wizard).toBeDefined();
-    expect(wizard?.['status']).toBe('skipped');
-
-    const unitsAfter = await scoped.query(kit.dbModule.units);
-    expect(unitsAfter.length).toBe(unitsBefore.length);
-  });
-
-  it('idempotent complete does not create duplicates', async () => {
-    const kit = requireState();
-    const appRoutes = requireRoutes();
-    const communityC = requireCommunity(kit, 'communityC');
-
-    await clearWizardState(kit, communityC.id);
-
-    const unitsData = [
-      {
-        unitNumber: `IDEMP-101-${kit.runSuffix}`,
-        floor: 1,
-        bedrooms: 2,
-        bathrooms: 1,
-        sqft: 900,
-        rentAmount: '1500.00',
-      },
-    ];
-
-    const inviteData = {
-      email: `p238.idempotent+${kit.runSuffix}@example.com`,
-      fullName: `P2-38 Idempotent ${kit.runSuffix}`,
-      unitNumber: unitsData[0].unitNumber,
-    };
-
-    const profileData = {
-      name: `Idempotent Profile ${kit.runSuffix}`,
-      addressLine1: '100 Stable Dr',
-      city: 'Orlando',
-      state: 'FL',
-      zipCode: '32801',
-      timezone: 'America/New_York',
-    };
-
-    await appRoutes.onboarding.PATCH(
+    const response = await appRoutes.onboarding.PATCH(
       jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
         communityId: communityC.id,
         step: 0,
-        stepData: { profile: profileData },
-      }),
-    );
-    await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 1,
-        stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
-      }),
-    );
-    await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 2,
-        stepData: { units: unitsData },
-      }),
-    );
-    await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 3,
-        stepData: { rules: null },
-      }),
-    );
-    await appRoutes.onboarding.PATCH(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'PATCH', {
-        communityId: communityC.id,
-        step: 4,
-        stepData: { invite: inviteData },
+        stepData: {},
       }),
     );
 
-    const first = await appRoutes.onboarding.POST(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
-        communityId: communityC.id,
-        action: 'complete',
-      }),
-    );
-    expect(first.status).toBe(201);
-
-    const second = await appRoutes.onboarding.POST(
-      jsonRequest(apiUrl('/api/v1/onboarding/apartment'), 'POST', {
-        communityId: communityC.id,
-        action: 'complete',
-      }),
-    );
-    expect(second.status).toBe(200);
-
-    const scoped = kit.dbModule.createScopedClient(communityC.id);
-
-    const createdUnits = (await scoped.query(kit.dbModule.units)).filter(
-      (row) => row['unitNumber'] === unitsData[0].unitNumber,
-    );
-    expect(createdUnits).toHaveLength(1);
-
-    const createdUsers = (await scoped.query(kit.dbModule.users)).filter(
-      (row) => ((row['email'] as string) ?? '').toLowerCase() === inviteData.email.toLowerCase(),
-    );
-    expect(createdUsers).toHaveLength(1);
-
-    if (createdUsers[0]) {
-      trackUserForCleanup(kit, createdUsers[0]['id'] as string);
-    }
-
-    const createdInvitations = (await scoped.query(kit.dbModule.invitations)).filter(
-      (row) => row['userId'] === createdUsers[0]?.['id'],
-    );
-    expect(createdInvitations).toHaveLength(1);
+    expect(response.status).toBe(400);
+    const json = await parseJson<{ error?: { message?: string } }>(response);
+    expect(json.error?.message ?? '').toContain('stepData.profile is required for step 0');
   });
 
   it('concurrent GET initialization creates only one wizard row', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();
     const communityC = requireCommunity(kit, 'communityC');
+    const siteManagerC = kit.users.get('siteManagerC');
 
-    await clearWizardState(kit, communityC.id);
+    if (!siteManagerC) throw new Error('siteManagerC not seeded');
+
+    await clearOnboardingArtifacts(kit, communityC.id, siteManagerC.id);
 
     const [responseA, responseB] = await Promise.all([
       appRoutes.onboarding.GET(

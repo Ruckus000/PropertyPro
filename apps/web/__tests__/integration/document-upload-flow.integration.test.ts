@@ -94,9 +94,23 @@ vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
   return originalFetch(input, init);
 });
 
-vi.mock('@/lib/services/notification-service', () => ({
-  queueNotification: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('@/lib/services/notification-service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/notification-service')>();
+  return {
+    ...actual,
+    queueNotification: vi.fn().mockResolvedValue(1),
+    queueNotificationDetailed: vi.fn().mockResolvedValue({
+      recipientsCount: 1,
+      sentCount: 1,
+      queuedCount: 0,
+      failedCount: 0,
+    }),
+    createNotificationsForEvent: vi.fn().mockResolvedValue({
+      created: 1,
+      skipped: 0,
+    }),
+  };
+});
 
 vi.mock('@/lib/workers/pdf-extraction', () => ({
   queuePdfExtraction: vi.fn(),

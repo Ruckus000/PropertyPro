@@ -14,14 +14,9 @@ jobs:
           VISITOR_AUTO_CHECKOUT_CRON_BASE_URL: ${{ secrets.VISITOR_AUTO_CHECKOUT_CRON_BASE_URL }}
           VISITOR_AUTO_CHECKOUT_CRON_SECRET: ${{ secrets.VISITOR_AUTO_CHECKOUT_CRON_SECRET }}
         run: |
-          if [ -z "$VISITOR_AUTO_CHECKOUT_CRON_BASE_URL" ]; then
-            echo "Missing VISITOR_AUTO_CHECKOUT_CRON_BASE_URL secret"
-            exit 1
-          fi
-
-          if [ -z "$VISITOR_AUTO_CHECKOUT_CRON_SECRET" ]; then
-            echo "Missing VISITOR_AUTO_CHECKOUT_CRON_SECRET secret"
-            exit 1
+          if [ -z "$VISITOR_AUTO_CHECKOUT_CRON_BASE_URL" ] || [ -z "$VISITOR_AUTO_CHECKOUT_CRON_SECRET" ]; then
+            echo "::warning::Skipping visitor auto-checkout because required secrets are not configured"
+            exit 0
           fi
 
           curl -fsS \
