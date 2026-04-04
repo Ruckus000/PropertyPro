@@ -13,13 +13,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   createScopedClient,
-  type Announcement,
   announcements,
-  communities,
   logAuditEvent,
   users,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { withAuditLog } from '@/lib/middleware/audit-middleware';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -37,7 +34,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
-import { applyDemoAnnouncementProvenancePolicy } from '@/lib/announcements/demo-announcement-provenance';
+import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 // ---------------------------------------------------------------------------
@@ -93,47 +90,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('communityId must be a positive integer');
   }
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  await requireCommunityMembership(communityId, userId);
-
-  const scoped = createScopedClient(communityId);
-  const [rows, communityRows] = await Promise.all([
-    scoped.query(announcements),
-    scoped.selectFrom(
-      communities,
-      {
-        id: communities.id,
-        isDemo: communities.isDemo,
-        trialEndsAt: communities.trialEndsAt,
-        demoExpiresAt: communities.demoExpiresAt,
-      },
-      eq(communities.id, communityId),
-    ),
-  ]);
-  const community = communityRows[0];
-  const visibleRows = community
-    ? await applyDemoAnnouncementProvenancePolicy(
-        {
-          id: Number(community['id']),
-          isDemo: Boolean(community['isDemo']),
-          trialEndsAt: (community['trialEndsAt'] as Date | null | undefined) ?? null,
-          demoExpiresAt: (community['demoExpiresAt'] as Date | null | undefined) ?? null,
-        },
-        rows as Announcement[],
-      )
-    : [];
-
-  // Filter out archived unless requested, then sort: pinned first, then by publishedAt desc
-  const filtered = includeArchived
-    ? visibleRows
-    : visibleRows.filter((r) => r['archivedAt'] == null);
-
-  const sorted = (filtered as Announcement[]).sort((a, b) => {
-    if (a.isPinned && !b.isPinned) return -1;
-    if (!a.isPinned && b.isPinned) return 1;
-    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+  const membership = await requireCommunityMembership(communityId, userId);
+  requirePermission(membership, 'announcements', 'read');
+  const query = searchParams.get('q')?.trim() ?? '';
+  const { rows } = await listVisibleAnnouncements(communityId, membership, {
+    includeArchived,
+    query,
   });
 
-  return NextResponse.json({ data: sorted });
+  return NextResponse.json({ data: rows });
 });
 
 // ---------------------------------------------------------------------------

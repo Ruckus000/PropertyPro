@@ -21,11 +21,16 @@ import {
   type Lease,
   type Unit,
 } from '@propertypro/db';
+import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
   selectRecentAnnouncements,
   toFirstName,
   type DashboardAnnouncement,
 } from '../dashboard/dashboard-selectors';
+import {
+  filterVisibleAnnouncements,
+  getAnnouncementCommunityContext,
+} from '../announcements/read-visibility';
 import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface LeaseExpirationWindows {
@@ -64,6 +69,7 @@ function utcDaysFromNow(days: number): number {
 export async function loadApartmentMetrics(
   communityId: number,
   userId: string,
+  membership: CommunityMembership,
 ): Promise<ApartmentMetrics> {
   const scoped = createScopedClient(communityId);
 
@@ -134,7 +140,12 @@ export async function loadApartmentMetrics(
   ).filter((r) => r.status === 'open' && r.deletedAt == null).length;
 
   // Recent announcements
-  const recentAnnouncements = selectRecentAnnouncements(announcementRows as Announcement[]);
+  const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
+    getAnnouncementCommunityContext(membership),
+    membership,
+    announcementRows as Announcement[],
+  );
+  const recentAnnouncements = selectRecentAnnouncements(visibleAnnouncements);
 
   return {
     firstName: toFirstName(fullName),

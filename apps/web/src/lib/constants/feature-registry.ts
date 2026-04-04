@@ -40,6 +40,8 @@ import {
 } from 'lucide-react';
 import type { CommunityRole, AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
+import type { RbacAction, RbacResource } from '@propertypro/shared';
+import type { ResourceAccessMap } from '@/lib/db/access-control';
 
 const FINANCE_READ_REGISTRY_ROLES: readonly CommunityRole[] = [
   'owner',
@@ -69,6 +71,10 @@ export interface FeatureRegistryItem {
   category: RegistryCategory;
   group: string;
   featureFlag?: keyof CommunityFeatures;
+  requiredPermission?: {
+    resource: RbacResource;
+    action: RbacAction;
+  };
 }
 
 export interface ResolvedRegistryItem extends Omit<FeatureRegistryItem, 'href'> {
@@ -107,6 +113,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'all',
     category: 'page',
     group: 'General',
+    requiredPermission: { resource: 'documents', action: 'read' },
   },
   {
     id: 'page-meetings',
@@ -120,6 +127,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'page',
     group: 'General',
     featureFlag: 'hasMeetings',
+    requiredPermission: { resource: 'meetings', action: 'read' },
   },
   {
     id: 'page-announcements',
@@ -132,6 +140,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'all',
     category: 'page',
     group: 'General',
+    requiredPermission: { resource: 'announcements', action: 'read' },
   },
   {
     id: 'page-maintenance',
@@ -145,6 +154,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'page',
     group: 'General',
     featureFlag: 'hasMaintenanceRequests',
+    requiredPermission: { resource: 'maintenance', action: 'read' },
   },
   {
     id: 'page-payments',
@@ -238,6 +248,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'page',
     group: 'Compliance',
     featureFlag: 'hasViolations',
+    requiredPermission: { resource: 'violations', action: 'read' },
   },
   {
     id: 'page-maintenance-inbox',
@@ -251,6 +262,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'page',
     group: 'Operations',
     featureFlag: 'hasMaintenanceRequests',
+    requiredPermission: { resource: 'maintenance', action: 'read' },
   },
   {
     id: 'page-esign',
@@ -352,6 +364,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'admin',
     category: 'page',
     group: 'Operations',
+    requiredPermission: { resource: 'residents', action: 'read' },
   },
   {
     id: 'page-voting',
@@ -473,6 +486,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasMaintenanceRequests',
+    requiredPermission: { resource: 'maintenance', action: 'write' },
   },
   {
     id: 'action-report-violation',
@@ -528,6 +542,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
+    requiredPermission: { resource: 'documents', action: 'write' },
   },
   {
     id: 'action-post-announcement',
@@ -540,6 +555,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
+    requiredPermission: { resource: 'announcements', action: 'write' },
   },
   {
     id: 'action-schedule-meeting',
@@ -553,6 +569,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasMeetings',
+    requiredPermission: { resource: 'meetings', action: 'write' },
   },
   {
     id: 'action-create-esign-template',
@@ -753,6 +770,7 @@ export function useFilteredRegistry(
   role: AnyCommunityRole | null,
   features: CommunityFeatures | null,
   communityId: number | null,
+  resourceAccess: ResourceAccessMap | null = null,
 ): ResolvedRegistryItem[] {
   return useMemo(() => {
     return (FEATURE_REGISTRY as readonly FeatureRegistryItem[])
@@ -765,6 +783,11 @@ export function useFilteredRegistry(
         // Feature flag check
         if (item.featureFlag && features) {
           if (!features[item.featureFlag]) return false;
+        }
+        if (item.requiredPermission && resourceAccess) {
+          if (!resourceAccess[item.requiredPermission.resource]?.[item.requiredPermission.action]) {
+            return false;
+          }
         }
         return true;
       })
@@ -782,5 +805,5 @@ export function useFilteredRegistry(
           resolvedHref,
         };
       });
-  }, [role, features, communityId]);
+  }, [role, features, communityId, resourceAccess]);
 }

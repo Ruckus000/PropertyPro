@@ -4,15 +4,13 @@
  * Route: /announcements?communityId=X
  * Auth: any community member.
  */
-import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { and, desc, isNull, sql } from '@propertypro/db/filters';
-import { createScopedClient, announcements } from '@propertypro/db';
-import type { Announcement } from '@propertypro/db';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { requirePermission } from '@/lib/db/access-control';
+import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { AnnouncementList } from '@/components/announcements/announcement-list';
 
 interface PageProps {
@@ -43,15 +41,12 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
-
-  const scoped = createScopedClient(context.communityId);
-  const items = await scoped
-    .selectFrom<Announcement>(
-      announcements,
-      {},
-      and(isNull(announcements.archivedAt)),
-    )
-    .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
+  requirePermission(membership, 'announcements', 'read');
+  const query =
+    typeof resolvedSearchParams['q'] === 'string' ? resolvedSearchParams['q'] : undefined;
+  const { rows: items } = await listVisibleAnnouncements(context.communityId, membership, {
+    query,
+  });
 
   return <AnnouncementList items={items} isAdmin={membership.isAdmin} />;
 }

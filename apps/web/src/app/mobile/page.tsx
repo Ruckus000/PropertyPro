@@ -101,7 +101,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     );
   }
 
-  const data = await loadDashboardData(communityId, userId!);
+  const data = await loadDashboardData(communityId, userId!, membership!);
   const features = getFeaturesForCommunity(membership!.communityType);
   const nextMeeting = data.meetings[0] ?? null;
 

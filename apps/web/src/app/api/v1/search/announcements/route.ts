@@ -4,14 +4,10 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { searchAnnouncementsByTrigram } from '@propertypro/db';
-
-/** Map role to announcement audience filter value */
-function roleToAudience(role: string, isUnitOwner: boolean): string {
-  if (role === 'resident' && isUnitOwner) return 'owners_only';
-  if (role === 'resident' && !isUnitOwner) return 'tenants_only';
-  return 'all';
-}
+import {
+  formatAnnouncementAudienceLabel,
+  searchVisibleAnnouncements,
+} from '@/lib/announcements/read-visibility';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -30,20 +26,22 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     return NextResponse.json({ results: [], totalCount: 0, status: 'ok' });
   }
 
-  const { results, totalCount } = await searchAnnouncementsByTrigram(communityId, q, limit, {
-    isAdmin: membership.isAdmin,
-    userAudience: roleToAudience(membership.role, membership.isUnitOwner),
-  });
+  const { rows: results, totalCount } = await searchVisibleAnnouncements(
+    communityId,
+    membership,
+    q,
+    limit,
+  );
 
   return NextResponse.json({
     results: results.map((r) => ({
       id: r.id,
       title: r.title,
-      subtitle: r.audience,
-      href: `/announcements/${r.id}`,
+      subtitle: formatAnnouncementAudienceLabel(r.audience),
+      href: `/announcements/${r.id}?communityId=${communityId}`,
       entityType: 'announcement' as const,
       audience: r.audience,
-      publishedAt: r.published_at,
+      publishedAt: r.publishedAt,
       relevance: r.relevance,
     })),
     totalCount,

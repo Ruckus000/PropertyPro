@@ -10,6 +10,7 @@ import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getMembershipResourceAccess } from '@/lib/db/access-control';
 import { MobileSearchContent } from '@/components/mobile/MobileSearchContent';
 
 interface PageProps {
@@ -41,6 +42,7 @@ export default async function MobileSearchPage({ searchParams }: PageProps) {
       communityId={communityId}
       role={membership.role}
       features={features}
+      resourceAccess={getMembershipResourceAccess(membership)}
     />
   );
 }

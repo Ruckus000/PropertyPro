@@ -15,6 +15,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requireActiveSubscriptionForMutationMock,
+  listVisibleAnnouncementsMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   auditLogMock: vi.fn().mockResolvedValue(undefined),
@@ -38,6 +39,7 @@ const {
     communityType: 'condo_718',
   }),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
+  listVisibleAnnouncementsMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -54,6 +56,10 @@ vi.mock('@/lib/api/auth', () => ({
 
 vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
+vi.mock('@/lib/announcements/read-visibility', () => ({
+  listVisibleAnnouncements: listVisibleAnnouncementsMock,
 }));
 
 vi.mock('@/lib/middleware/audit-middleware', () => ({
@@ -88,6 +94,7 @@ describe('p1-17 announcements route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
+    listVisibleAnnouncementsMock.mockResolvedValue({ rows: [], totalCount: 0 });
 
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockImplementation(async (table) => {
@@ -103,38 +110,9 @@ describe('p1-17 announcements route', () => {
   });
 
   it('GET uses scoped client with requested communityId and excludes archived by default', async () => {
-    const query = vi.fn().mockResolvedValue([
-      {
-        id: 1,
-        title: 'Pinned',
-        body: 'Pinned body',
-        audience: 'all',
-        isPinned: true,
-        archivedAt: null,
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
-        publishedAt: '2026-02-11T18:00:00.000Z',
-        createdAt: '2026-02-11T18:00:00.000Z',
-        updatedAt: '2026-02-11T18:00:00.000Z',
-      },
-      {
-        id: 2,
-        title: 'Archived',
-        body: 'Old',
-        audience: 'all',
-        isPinned: false,
-        archivedAt: '2026-02-01T18:00:00.000Z',
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
-        publishedAt: '2026-02-10T18:00:00.000Z',
-        createdAt: '2026-02-10T18:00:00.000Z',
-        updatedAt: '2026-02-10T18:00:00.000Z',
-      },
-    ]);
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      selectFrom: vi.fn().mockResolvedValue([{ id: 42, isDemo: false, trialEndsAt: null, demoExpiresAt: null }]),
-      insert: vi.fn(),
-      update: vi.fn(),
+    listVisibleAnnouncementsMock.mockResolvedValueOnce({
+      rows: [{ id: 1, title: 'Pinned' }],
+      totalCount: 1,
     });
 
     const req = new NextRequest('http://localhost:3000/api/v1/announcements?communityId=42');
@@ -143,42 +121,33 @@ describe('p1-17 announcements route', () => {
       data: Array<{ id: number }>;
     };
 
-    expect(createScopedClientMock).toHaveBeenCalledWith(42);
-    expect(query).toHaveBeenCalledWith(announcementsTableMock);
+    expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ userId: 'session-user-1' }),
+      { includeArchived: false, query: '' },
+    );
     expect(json.data.map((x) => x.id)).toEqual([1]);
   });
 
-  it('GET includes archived entries when includeArchived=true', async () => {
-    const query = vi.fn().mockResolvedValue([
-      {
-        id: 2,
-        title: 'Archived',
-        body: 'Old',
-        audience: 'all',
-        isPinned: false,
-        archivedAt: '2026-02-01T18:00:00.000Z',
-        publishedBy: 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81',
-        publishedAt: '2026-02-10T18:00:00.000Z',
-        createdAt: '2026-02-10T18:00:00.000Z',
-        updatedAt: '2026-02-10T18:00:00.000Z',
-      },
-    ]);
-
-    createScopedClientMock.mockReturnValue({
-      query,
-      selectFrom: vi.fn().mockResolvedValue([{ id: 42, isDemo: false, trialEndsAt: null, demoExpiresAt: null }]),
-      insert: vi.fn(),
-      update: vi.fn(),
+  it('GET forwards includeArchived and query filters to shared visibility lookup', async () => {
+    listVisibleAnnouncementsMock.mockResolvedValueOnce({
+      rows: [{ id: 2, title: 'Archived' }],
+      totalCount: 1,
     });
 
     const req = new NextRequest(
-      'http://localhost:3000/api/v1/announcements?communityId=42&includeArchived=true',
+      'http://localhost:3000/api/v1/announcements?communityId=42&includeArchived=true&q=board',
     );
     const res = await GET(req);
     const json = (await res.json()) as {
       data: Array<{ id: number }>;
     };
 
+    expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ userId: 'session-user-1' }),
+      { includeArchived: true, query: 'board' },
+    );
     expect(json.data.map((x) => x.id)).toEqual([2]);
   });
 

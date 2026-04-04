@@ -48,7 +48,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }
   }
 
-  const data = await loadDashboardData(context.communityId, userId);
+  const data = await loadDashboardData(context.communityId, userId, membership);
 
   return (
     <div className="space-y-6">

@@ -4,7 +4,7 @@
  * Command Palette V2 — Custom implementation using Radix Dialog + custom listbox.
  *
  * Phase 1: Feature registry search + keyboard navigation + role-aware empty states
- * Phase 2: Progressive data search across 6 entity endpoints + "View all" links
+ * Phase 2: Aggregated server search across authorized entity groups + "View all" links
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -22,9 +22,11 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
+import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
 import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/feature-registry';
+import { getEnabledSearchGroups } from '@/lib/search/group-config';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { CommandInput } from './CommandInput';
 import { CommandGroup } from './CommandGroup';
@@ -124,6 +126,7 @@ export interface CommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
 }
 
@@ -133,9 +136,10 @@ export function CommandPalette({
   communityId,
   role,
   features,
+  resourceAccess,
   enableGlobalShortcut = true,
 }: CommandPaletteProps) {
-  const registryItems = useFilteredRegistry(role, features, communityId);
+  const registryItems = useFilteredRegistry(role, features, communityId, resourceAccess);
   const router = useRouter();
   const { recentPages, addPage } = useRecentPages();
   const [query, setQuery] = useState('');
@@ -145,7 +149,14 @@ export function CommandPalette({
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const admin = isAdminRole(role);
-  const { groups: dataGroups, search: fireDataSearch, reset: resetDataSearch, isSearching } = useDataSearch(admin, communityId);
+  const searchGroups = useMemo(
+    () => getEnabledSearchGroups(admin, features, resourceAccess),
+    [admin, features, resourceAccess],
+  );
+  const { groups: dataGroups, search: fireDataSearch, reset: resetDataSearch, isSearching } = useDataSearch(
+    communityId,
+    searchGroups,
+  );
 
   // -----------------------------------------------------------------------
   // Debounced data search trigger
@@ -234,7 +245,7 @@ export function CommandPalette({
 
       // 2. Data results (progressive)
       for (const group of dataGroups) {
-        if (group.status !== 'loaded' || group.results.length === 0) continue;
+        if (group.status !== 'ok' || group.results.length === 0) continue;
         for (const result of group.results) {
           items.push({
             type: 'data',
@@ -415,8 +426,10 @@ export function CommandPalette({
   const activeDescendant = activeIndex >= 0 ? navItems[activeIndex]?.domId : undefined;
   const hasQuery_ = query.trim().length > 0;
   const noRegistryResults = hasQuery_ && filtered.length === 0;
-  const hasDataResults = dataGroups.some((g) => g.results.length > 0);
-  const allDoneNoResults = hasQuery_ && noRegistryResults && !isSearching && !hasDataResults;
+  const hasDataResults = dataGroups.some((g) => g.status === 'ok' && g.results.length > 0);
+  const hasDataErrors = dataGroups.some((g) => g.status === 'error');
+  const allDoneNoResults =
+    hasQuery_ && noRegistryResults && !isSearching && !hasDataResults && !hasDataErrors;
 
   const showRecent = !hasQuery_ && hasEnoughRecent;
   const showSuggested = !hasQuery_ && hasEnoughRecent && suggestedItems.length > 0;
@@ -504,7 +517,7 @@ export function CommandPalette({
                     }
 
                     // Loaded with results
-                    if (group.status === 'loaded' && group.results.length > 0) {
+                    if (group.status === 'ok' && group.results.length > 0) {
                       const entityType = group.results[0]?.entityType ?? 'document';
                       const Icon = ENTITY_ICONS[entityType] ?? FileText;
                       const listPath = getEntityListPath(group.key, {
@@ -556,7 +569,16 @@ export function CommandPalette({
                       );
                     }
 
-                    // Error or empty — hide
+                    if (group.status === 'error') {
+                      return (
+                        <CommandGroup key={group.key} label={group.label}>
+                          <div className="rounded-lg border border-edge-subtle bg-surface-muted px-3 py-2 text-sm text-content-secondary">
+                            {group.error ?? 'Search is temporarily unavailable for this section.'}
+                          </div>
+                        </CommandGroup>
+                      );
+                    }
+
                     return null;
                   })}
 

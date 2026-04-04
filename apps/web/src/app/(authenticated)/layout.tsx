@@ -23,6 +23,7 @@ export default async function AuthenticatedLayout({
   const role = shellContext.role;
   const subscriptionStatus = shellContext.subscriptionStatus;
   const freeAccessExpiresAt = shellContext.freeAccessExpiresAt;
+  const resourceAccess = shellContext.resourceAccess;
 
   // If the user is on a community subdomain but has no role in that community,
   // redirect to /select-community so they can pick a community they belong to.
@@ -58,7 +59,7 @@ export default async function AuthenticatedLayout({
         <IdleSessionManager role={role} />
         <AppQueryProvider>
           <MotionProvider>
-            <AppShell user={user} community={community} role={role} features={features} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
+            <AppShell user={user} community={community} role={role} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
               {children}
             </AppShell>
           </MotionProvider>

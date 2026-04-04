@@ -1,4 +1,4 @@
-import { createScopedClient, demoSeedRegistry, type Announcement, type Community } from '@propertypro/db';
+import { createScopedClient, demoSeedRegistry, type Community } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 
 function hasDemoLineage(community: Pick<Community, 'isDemo' | 'trialEndsAt' | 'demoExpiresAt'>): boolean {
@@ -26,10 +26,10 @@ async function listSeededAnnouncementIds(communityId: number): Promise<Set<numbe
   }
 }
 
-export async function applyDemoAnnouncementProvenancePolicy(
+export async function applyDemoAnnouncementProvenancePolicy<T extends { id: number }>(
   community: Pick<Community, 'id' | 'isDemo' | 'trialEndsAt' | 'demoExpiresAt'>,
-  rows: Announcement[],
-): Promise<Announcement[]> {
+  rows: T[],
+): Promise<T[]> {
   if (!hasDemoLineage(community)) {
     return rows;
   }

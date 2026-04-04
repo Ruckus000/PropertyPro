@@ -14,6 +14,7 @@ import {
   getFeaturesForCommunity,
   type CommunityType,
 } from '@propertypro/shared';
+import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
   selectRecentAnnouncements,
   selectUpcomingMeetings,
@@ -25,7 +26,10 @@ import {
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { listMyPendingSigners } from '@/lib/services/esign-service';
-import { applyDemoAnnouncementProvenancePolicy } from '@/lib/announcements/demo-announcement-provenance';
+import {
+  filterVisibleAnnouncements,
+  getAnnouncementCommunityContext,
+} from '@/lib/announcements/read-visibility';
 
 export interface DashboardPendingSigner {
   signerId: number;
@@ -51,6 +55,7 @@ export interface DashboardData {
 export async function loadDashboardData(
   communityId: number,
   userId: string,
+  membership: CommunityMembership,
 ): Promise<DashboardData> {
   const scoped = createScopedClient(communityId);
   const [announcementRows, meetingRows, communityRows, userRows, violationRows, maintenanceRows] = await Promise.all([
@@ -95,17 +100,11 @@ export async function loadDashboardData(
     }
   }
 
-  const visibleAnnouncements = community
-    ? await applyDemoAnnouncementProvenancePolicy(
-        {
-          id: communityId,
-          isDemo: Boolean(community?.['isDemo']),
-          trialEndsAt: (community?.['trialEndsAt'] as Date | null | undefined) ?? null,
-          demoExpiresAt: (community?.['demoExpiresAt'] as Date | null | undefined) ?? null,
-        },
-        announcementRows as Announcement[],
-      )
-    : [];
+  const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
+    getAnnouncementCommunityContext(membership),
+    membership,
+    announcementRows as Announcement[],
+  );
 
   return {
     communityName,

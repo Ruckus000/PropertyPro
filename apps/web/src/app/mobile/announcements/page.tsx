@@ -4,9 +4,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { and, desc, isNull, sql } from '@propertypro/db/filters';
-import { createScopedClient, announcements } from '@propertypro/db';
-import type { Announcement } from '@propertypro/db';
+import { requirePermission } from '@/lib/db/access-control';
+import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { MobileAnnouncementsContent } from '@/components/mobile/MobileAnnouncementsContent';
 
@@ -32,15 +31,9 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
     redirect('/auth/login');
   }
 
+  requirePermission(membership, 'announcements', 'read');
   const timezone = resolveTimezone(membership!.timezone);
-  const scoped = createScopedClient(communityId);
-  const active = await scoped
-    .selectFrom<Announcement>(
-      announcements,
-      {},
-      and(isNull(announcements.archivedAt)),
-    )
-    .orderBy(desc(sql`${announcements.isPinned}`), desc(announcements.publishedAt));
+  const { rows: active } = await listVisibleAnnouncements(communityId, membership);
 
   const serialized = active.map((a) => ({
     id: a.id,

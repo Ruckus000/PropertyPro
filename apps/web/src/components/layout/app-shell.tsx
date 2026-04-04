@@ -21,6 +21,7 @@ import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
+import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
 import { SidebarProvider, useSidebar } from './sidebar-context';
@@ -39,6 +40,7 @@ interface LazyCommandPaletteProps {
   communityId: number | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
 }
 
@@ -70,12 +72,13 @@ interface AppShellProps {
   community: AppShellCommunity | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  resourceAccess: ResourceAccessMap | null;
   subscriptionStatus?: string | null;
   freeAccessExpiresAt?: Date | null;
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, features, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -255,6 +258,7 @@ function ShellInner({ children, user, community, role, features, subscriptionSta
           communityId={community?.id ?? null}
           role={role}
           features={features}
+          resourceAccess={resourceAccess}
           enableGlobalShortcut={false}
         />
       )}

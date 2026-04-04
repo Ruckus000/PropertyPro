@@ -30,8 +30,12 @@ import {
   createScopedClient,
   units,
 } from '@propertypro/db';
-import { eq, and, isNull, desc } from '@propertypro/db/filters';
+import { eq, isNull } from '@propertypro/db/filters';
 import { getBrandingForCommunity } from '@/lib/api/branding';
+import {
+  filterVisibleAnnouncements,
+  getAnnouncementCommunityContext,
+} from '@/lib/announcements/read-visibility';
 import { WelcomeScreen } from '@/components/onboarding/welcome-screen';
 
 interface WelcomePageProps {
@@ -119,19 +123,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   // Fetch data in parallel
   const scoped = createScopedClient(communityId);
   const [announcementRows, complianceRows, unitRows, branding] = await Promise.all([
-    // Latest announcement
-    scoped.selectFrom(
-      announcements,
-      {
-        id: announcements.id,
-        title: announcements.title,
-        publishedAt: announcements.publishedAt,
-      },
-      and(
-        isNull(announcements.archivedAt),
-        isNull(announcements.deletedAt),
-      ),
-    ).orderBy(desc(announcements.publishedAt)).limit(1),
+    scoped.query(announcements),
 
     // Compliance checklist items for score computation
     scoped.selectFrom(
@@ -161,11 +153,17 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   ]);
 
   // Process results
-  const latestAnnouncement = announcementRows[0]
+  const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
+    getAnnouncementCommunityContext(membership),
+    membership,
+    announcementRows,
+    { limit: 1 },
+  );
+  const latestAnnouncement = visibleAnnouncements[0]
     ? {
-        id: announcementRows[0].id as number,
-        title: announcementRows[0].title as string,
-        publishedAt: (announcementRows[0].publishedAt as Date).toISOString(),
+        id: visibleAnnouncements[0].id,
+        title: visibleAnnouncements[0].title,
+        publishedAt: visibleAnnouncements[0].publishedAt.toISOString(),
       }
     : null;
 

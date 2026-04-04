@@ -94,3 +94,35 @@ export function requirePermission(
     );
   }
 }
+
+export type ResourceAccessMap = Record<RbacResource, Record<RbacAction, boolean>>;
+
+export function getMembershipResourceAccess(
+  membership: CommunityMembership,
+): ResourceAccessMap {
+  return RBAC_RESOURCES.reduce<ResourceAccessMap>((acc, resource) => {
+    acc[resource] = {
+      read: checkPermissionV2(
+        membership.role,
+        membership.communityType,
+        resource,
+        'read',
+        {
+          isUnitOwner: membership.isUnitOwner,
+          permissions: membership.permissions,
+        },
+      ),
+      write: checkPermissionV2(
+        membership.role,
+        membership.communityType,
+        resource,
+        'write',
+        {
+          isUnitOwner: membership.isUnitOwner,
+          permissions: membership.permissions,
+        },
+      ),
+    };
+    return acc;
+  }, {} as ResourceAccessMap);
+}

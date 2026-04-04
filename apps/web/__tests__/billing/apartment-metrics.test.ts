@@ -61,6 +61,23 @@ function offsetDate(days: number): string {
 
 const COMMUNITY_ID = 42;
 const USER_ID = 'user-abc';
+const DEFAULT_MEMBERSHIP = {
+  userId: USER_ID,
+  communityId: COMMUNITY_ID,
+  communityName: 'Test Community',
+  role: 'manager',
+  communityType: 'apartment',
+  timezone: 'America/Chicago',
+  isUnitOwner: false,
+  isAdmin: true,
+  displayTitle: 'Manager',
+  city: null,
+  state: null,
+  isDemo: false,
+  trialEndsAt: null,
+  demoExpiresAt: null,
+  electionsAttorneyReviewed: false,
+} as const;
 
 interface MockData {
   units?: object[];
@@ -126,7 +143,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(0); // today
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(1);
     expect(metrics.leaseExpirations.within60Days).toBe(1);
@@ -137,7 +154,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(-1); // yesterday
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(0);
     expect(metrics.leaseExpirations.within60Days).toBe(0);
@@ -148,7 +165,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(30);
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(1);
   });
@@ -157,7 +174,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(31);
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(0);
     expect(metrics.leaseExpirations.within60Days).toBe(1);
@@ -167,7 +184,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(60);
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(0);
     expect(metrics.leaseExpirations.within60Days).toBe(1);
@@ -178,7 +195,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
     const endDate = offsetDate(61);
     buildScopedMock({ leases: [activeLease({ endDate })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(0);
     expect(metrics.leaseExpirations.within60Days).toBe(0);
@@ -188,7 +205,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
   it('does not count a lease with an invalid endDate format', async () => {
     buildScopedMock({ leases: [activeLease({ endDate: 'invalid' })] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations.within30Days).toBe(0);
     expect(metrics.leaseExpirations.within60Days).toBe(0);
@@ -198,7 +215,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
   it('returns all-zero expiration windows when there are no leases', async () => {
     buildScopedMock({ leases: [] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.leaseExpirations).toEqual({ within30Days: 0, within60Days: 0, within90Days: 0 });
   });
@@ -222,7 +239,7 @@ describe('loadApartmentMetrics — occupancy', () => {
   it('returns occupancyRate = 0 when totalUnits = 0 (no division by zero)', async () => {
     buildScopedMock({ units: [], leases: [] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalUnits).toBe(0);
     expect(metrics.occupancyRate).toBe(0);
@@ -242,7 +259,7 @@ describe('loadApartmentMetrics — occupancy', () => {
     ];
     buildScopedMock({ units: unitRows, leases: leaseRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalUnits).toBe(4);
     expect(metrics.occupiedUnits).toBe(2);
@@ -257,7 +274,7 @@ describe('loadApartmentMetrics — occupancy', () => {
     ];
     buildScopedMock({ units: unitRows, leases: [] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalUnits).toBe(1);
   });
@@ -285,7 +302,7 @@ describe('loadApartmentMetrics — revenue', () => {
     ];
     buildScopedMock({ units: [{ id: 1, deletedAt: null }, { id: 2, deletedAt: null }], leases: leaseRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalMonthlyRevenue).toBe(3000);
   });
@@ -294,7 +311,7 @@ describe('loadApartmentMetrics — revenue', () => {
     const leaseRows = [activeLease({ rentAmount: 'NaN' })];
     buildScopedMock({ leases: leaseRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalMonthlyRevenue).toBe(0);
   });
@@ -303,7 +320,7 @@ describe('loadApartmentMetrics — revenue', () => {
     const leaseRows = [activeLease({ rentAmount: null })];
     buildScopedMock({ leases: leaseRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.totalMonthlyRevenue).toBe(0);
   });
@@ -332,7 +349,7 @@ describe('loadApartmentMetrics — maintenance requests', () => {
     ];
     buildScopedMock({ maintenanceRequests: mrRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.openMaintenanceRequests).toBe(2);
   });
@@ -344,7 +361,7 @@ describe('loadApartmentMetrics — maintenance requests', () => {
     ];
     buildScopedMock({ maintenanceRequests: mrRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.openMaintenanceRequests).toBe(1);
   });
@@ -356,7 +373,7 @@ describe('loadApartmentMetrics — maintenance requests', () => {
     ];
     buildScopedMock({ maintenanceRequests: mrRows });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.openMaintenanceRequests).toBe(0);
   });
@@ -382,7 +399,7 @@ describe('loadApartmentMetrics — metadata', () => {
       communities: [{ id: COMMUNITY_ID, name: 'Palm Gardens', timezone: 'America/New_York' }],
     });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.communityName).toBe('Palm Gardens');
   });
@@ -390,7 +407,7 @@ describe('loadApartmentMetrics — metadata', () => {
   it('falls back to "Community" when no matching community row is found', async () => {
     buildScopedMock({ communities: [] });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.communityName).toBe('Community');
   });
@@ -400,7 +417,7 @@ describe('loadApartmentMetrics — metadata', () => {
       users: [{ id: USER_ID, fullName: 'Henry Higgins' }],
     });
 
-    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID);
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
     expect(metrics.firstName).toBe('Henry');
   });

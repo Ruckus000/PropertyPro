@@ -52,7 +52,7 @@ export default async function ApartmentDashboardPage({
     redirect(`/onboarding/apartment?communityId=${context.communityId}`);
   }
 
-  const metrics = await loadApartmentMetrics(context.communityId, userId);
+  const metrics = await loadApartmentMetrics(context.communityId, userId, membership);
 
   return (
     <div className="space-y-6">

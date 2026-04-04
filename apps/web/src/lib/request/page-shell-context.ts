@@ -7,7 +7,8 @@ import type {
 } from '@propertypro/shared';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
-import { getOptionalPageCommunityId } from './page-community-context';
+import { getMembershipResourceAccess, type ResourceAccessMap } from '@/lib/db/access-control';
+import { getOptionalPageCommunityId, requirePageCommunityMembership } from './page-community-context';
 import { getOptionalPageAuthenticatedUser } from './page-auth-context';
 
 export interface PageShellUser {
@@ -28,6 +29,7 @@ export interface PageShellContext {
   community: PageShellCommunity | null;
   role: AnyCommunityRole | null;
   features: CommunityFeatures | null;
+  resourceAccess: ResourceAccessMap | null;
   subscriptionStatus: string | null;
   freeAccessExpiresAt: Date | null;
   isDemo: boolean;
@@ -43,6 +45,7 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       community: null,
       role: null,
       features: null,
+      resourceAccess: null,
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
@@ -64,6 +67,7 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       community: null,
       role: null,
       features: null,
+      resourceAccess: null,
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
@@ -81,6 +85,7 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       community: null,
       role: null,
       features: null,
+      resourceAccess: null,
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
@@ -100,6 +105,7 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       community: null,
       role: null,
       features: null,
+      resourceAccess: null,
       subscriptionStatus: null,
       freeAccessExpiresAt: null,
       isDemo: false,
@@ -107,6 +113,8 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       demoExpiresAt: null,
     };
   }
+
+  const membership = await requirePageCommunityMembership(match.communityId, user.id);
 
   return {
     user: shellUser,
@@ -116,8 +124,9 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
       type: communityType as CommunityType,
       plan: match.subscriptionPlan ?? null,
     },
-    role: role as AnyCommunityRole,
+    role: membership.role,
     features: getFeaturesForCommunity(communityType as CommunityType),
+    resourceAccess: getMembershipResourceAccess(membership),
     subscriptionStatus: match.subscriptionStatus ?? null,
     freeAccessExpiresAt: match.freeAccessExpiresAt ?? null,
     isDemo: match.isDemo,
