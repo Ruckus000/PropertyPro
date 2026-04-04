@@ -48,7 +48,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
 const createCommunitySchema = z.object({
   name: z.string().trim().min(1).max(200),
-  communityType: z.enum(['condo_718', 'hoa_720', 'apartment']),
+  communityType: z.enum(COMMUNITY_TYPES),
   addressLine1: z.string().trim().min(1).max(200),
   addressLine2: z.string().trim().max(200).optional(),
   city: z.string().trim().min(1).max(100),

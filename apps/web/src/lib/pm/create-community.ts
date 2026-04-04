@@ -51,57 +51,63 @@ export async function createCommunityForPm(
 ): Promise<CreateCommunityResult> {
   const db = createUnscopedClient();
 
-  // 1. Insert community
-  const rows = await db
-    .insert(communities)
-    .values({
-      name: input.name,
-      slug: input.subdomain,
-      communityType: input.communityType,
-      addressLine1: input.addressLine1,
-      addressLine2: input.addressLine2 ?? null,
-      city: input.city,
-      state: input.state,
-      zipCode: input.zipCode,
-      timezone: input.timezone,
-    })
-    .returning({ id: communities.id, slug: communities.slug });
+  // Wrap core inserts in a transaction to ensure atomicity.
+  // If any step fails, all changes are rolled back.
+  const { communityId, slug } = await db.transaction(async (tx) => {
+    // 1. Insert community
+    const rows = await tx
+      .insert(communities)
+      .values({
+        name: input.name,
+        slug: input.subdomain,
+        communityType: input.communityType,
+        addressLine1: input.addressLine1,
+        addressLine2: input.addressLine2 ?? null,
+        city: input.city,
+        state: input.state,
+        zipCode: input.zipCode,
+        timezone: input.timezone,
+      })
+      .returning({ id: communities.id, slug: communities.slug });
 
-  const community = rows[0];
-  if (!community) throw new Error('Failed to insert community');
+    const community = rows[0];
+    if (!community) throw new Error('Failed to insert community');
 
-  const communityId = Number(community.id);
+    const cId = Number(community.id);
 
-  // 2. Link PM as admin
-  await db.insert(userRoles).values({
-    userId: input.userId,
-    communityId,
-    role: 'pm_admin',
-    displayTitle: 'Administrator',
+    // 2. Link PM as admin
+    await tx.insert(userRoles).values({
+      userId: input.userId,
+      communityId: cId,
+      role: 'pm_admin',
+      displayTitle: 'Administrator',
+    });
+
+    // 3. Insert default document categories
+    const templates =
+      input.communityType === 'apartment' ? APARTMENT_CATEGORIES : CONDO_HOA_CATEGORIES;
+    await tx.insert(documentCategories).values(
+      templates.map((t) => ({
+        communityId: cId,
+        name: t.name,
+        description: t.description,
+      })),
+    );
+
+    // 4. Insert default notification preferences
+    await tx.insert(notificationPreferences).values({
+      userId: input.userId,
+      communityId: cId,
+      emailFrequency: 'immediate',
+    });
+
+    return { communityId: cId, slug: community.slug };
   });
 
-  // 3. Generate onboarding checklist
+  // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent)
   await createChecklistItems(communityId, input.userId, 'pm_admin', input.communityType);
 
-  // 4. Insert default document categories
-  const templates =
-    input.communityType === 'apartment' ? APARTMENT_CATEGORIES : CONDO_HOA_CATEGORIES;
-  await db.insert(documentCategories).values(
-    templates.map((t) => ({
-      communityId,
-      name: t.name,
-      description: t.description,
-    })),
-  );
-
-  // 5. Insert default notification preferences
-  await db.insert(notificationPreferences).values({
-    userId: input.userId,
-    communityId,
-    emailFrequency: 'immediate',
-  });
-
-  // 6. Audit log
+  // 6. Audit log (outside transaction — best-effort, should not fail community creation)
   await logAuditEvent({
     userId: input.userId,
     communityId,
@@ -111,5 +117,5 @@ export async function createCommunityForPm(
     newValues: { name: input.name, slug: input.subdomain, type: input.communityType },
   });
 
-  return { communityId, slug: community.slug };
+  return { communityId, slug };
 }

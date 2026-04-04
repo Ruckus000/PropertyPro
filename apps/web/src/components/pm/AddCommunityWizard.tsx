@@ -343,11 +343,7 @@ export function AddCommunityWizard() {
       }
 
       const { communityId } = json.data;
-      const dashboardPath =
-        data.communityType === 'apartment'
-          ? `/dashboard/apartment?communityId=${communityId}`
-          : `/dashboard?communityId=${communityId}`;
-      router.push(dashboardPath);
+      router.push(`/pm/dashboard/${communityId}`);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
