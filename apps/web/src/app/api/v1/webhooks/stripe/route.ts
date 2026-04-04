@@ -61,7 +61,7 @@ function logStripeWebhookEvent(
     errorCode?: StripeWebhookErrorCode;
     category?: StripeWebhookCategory;
     metricName?: string;
-    outcome?: 'success' | 'failure' | 'duplicate' | 'skipped';
+    outcome?: 'success' | 'failure' | 'duplicate' | 'skipped' | 'retry';
     reason?: string;
     errorMessage?: string;
     payloadSnippet?: Record<string, unknown>;
@@ -517,54 +517,61 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  // 3. Idempotency check [AGENTS #26]
+  // 3. Idempotency check — distinguish processed vs failed vs new
   const db = createUnscopedClient();
   const existing = await db
-    .select({ eventId: stripeWebhookEvents.eventId })
+    .select({
+      eventId: stripeWebhookEvents.eventId,
+      processedAt: stripeWebhookEvents.processedAt,
+    })
     .from(stripeWebhookEvents)
     .where(eq(stripeWebhookEvents.eventId, event.id))
     .limit(1);
 
-  if (existing.length > 0) {
-    logStripeWebhookEvent('info', 'Stripe webhook duplicate skipped at pre-check', {
-      eventId: event.id,
-      eventType: event.type,
-      errorCode: STRIPE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT_PRECHECK,
-      category: 'idempotency',
-      metricName: 'stripe_webhook_event',
-      outcome: 'duplicate',
-    });
-    return NextResponse.json({ received: true });
-  }
+  const priorAttempt = existing[0];
+  let isRetry = false;
 
-  // 4. Record BEFORE processing (idempotency fence)
-  // Race condition: two deliveries may race past the select — the second
-  // will hit a unique constraint, which is expected (not an error).
-  try {
-    await db.insert(stripeWebhookEvents).values({ eventId: event.id });
-  } catch (err) {
-    if (isUniqueConstraintError(err)) {
-      logStripeWebhookEvent('info', 'Stripe webhook duplicate skipped at insert fence', {
+  if (priorAttempt) {
+    if (priorAttempt.processedAt !== null) {
+      // Already processed successfully — true duplicate, skip
+      logStripeWebhookEvent('info', 'Stripe webhook duplicate skipped (already processed)', {
         eventId: event.id,
         eventType: event.type,
-        errorCode: STRIPE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT_INSERT_FENCE,
+        errorCode: STRIPE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT_PRECHECK,
         category: 'idempotency',
         metricName: 'stripe_webhook_event',
         outcome: 'duplicate',
       });
       return NextResponse.json({ received: true });
     }
-    logStripeWebhookEvent('error', 'Stripe webhook insert fence failed', {
+    // processedAt is null — prior attempt failed, allow retry
+    isRetry = true;
+    logStripeWebhookEvent('info', 'Stripe webhook retrying previously failed event', {
       eventId: event.id,
       eventType: event.type,
-      errorCode: STRIPE_WEBHOOK_ERROR_CODES.INSERT_FENCE_FAILED,
-      category: 'database',
+      category: 'idempotency',
       metricName: 'stripe_webhook_event',
-      outcome: 'failure',
-      errorMessage: err instanceof Error ? err.message : String(err),
+      outcome: 'retry',
     });
-    captureException(err);
-    return NextResponse.json({ received: true });
+  }
+
+  // 4. Insert idempotency fence (skip on retry — row already exists)
+  if (!isRetry) {
+    try {
+      await db.insert(stripeWebhookEvents).values({ eventId: event.id });
+    } catch (insertErr) {
+      // Race condition: another request already inserted this event
+      const [raceCheck] = await db
+        .select({ processedAt: stripeWebhookEvents.processedAt })
+        .from(stripeWebhookEvents)
+        .where(eq(stripeWebhookEvents.eventId, event.id))
+        .limit(1);
+
+      if (raceCheck?.processedAt !== null) {
+        return NextResponse.json({ received: true });
+      }
+      // processedAt is null — continue processing (idempotent handlers are safe)
+    }
   }
 
   // 5. Process event — catch unexpected errors, log to Sentry, never re-throw
@@ -591,7 +598,11 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     captureException(err, { extra: { eventType: event.type, eventId: event.id } });
-    // processedAt stays null — safe to retry via Stripe dashboard if needed
+    // processedAt stays null — Stripe will retry on 500
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ received: true });
