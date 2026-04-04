@@ -23,7 +23,8 @@ interface ConvertDemoDialogProps {
   onClose: () => void;
   slug: string;
   prospectName: string;
-  webAppBaseUrl: string;
+  /** @deprecated No longer needed — conversion route is now same-origin. */
+  webAppBaseUrl?: string;
 }
 
 export function ConvertDemoDialog({
@@ -31,7 +32,6 @@ export function ConvertDemoDialog({
   onClose,
   slug,
   prospectName,
-  webAppBaseUrl,
 }: ConvertDemoDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [planId, setPlanId] = useState<string>(PLAN_IDS[0]);
@@ -73,10 +73,9 @@ export function ConvertDemoDialog({
     setSubmitting(true);
 
     try {
-      const res = await fetch(`${webAppBaseUrl}/api/v1/admin/demo/${slug}/convert`, {
+      const res = await fetch(`/api/admin/demos/${slug}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ planId, customerEmail, customerName }),
       });
 
@@ -86,8 +85,9 @@ export function ConvertDemoDialog({
         throw new Error(json.error?.message ?? `Request failed (${res.status})`);
       }
 
-      if (json.checkoutUrl) {
-        window.open(json.checkoutUrl, '_blank');
+      const checkoutUrl = json.data?.checkoutUrl ?? json.checkoutUrl;
+      if (checkoutUrl) {
+        window.open(checkoutUrl, '_blank');
         onClose();
       } else {
         throw new Error('No checkout URL returned');

@@ -108,7 +108,6 @@ export default async function DemoPreviewPage({ params }: PageProps) {
         prospectName={demo.prospect_name}
         landingPageUrl={landingPageUrl}
         slug={demo.slug}
-        webAppBaseUrl={webBaseUrl}
       />
     </div>
   );

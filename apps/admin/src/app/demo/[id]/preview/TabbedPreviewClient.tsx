@@ -27,7 +27,8 @@ interface TabbedPreviewClientProps {
   prospectName: string;
   landingPageUrl: string;
   slug: string;
-  webAppBaseUrl: string;
+  /** @deprecated No longer needed — conversion route is now same-origin. */
+  webAppBaseUrl?: string;
 }
 
 export function TabbedPreviewClient({
@@ -39,7 +40,6 @@ export function TabbedPreviewClient({
   prospectName,
   landingPageUrl,
   slug,
-  webAppBaseUrl,
 }: TabbedPreviewClientProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('public');
   const [copyOnboardingState, setCopyOnboardingState] = useState<'idle' | 'copied' | 'error'>('idle');
@@ -327,7 +327,6 @@ export function TabbedPreviewClient({
         onClose={() => setConvertOpen(false)}
         slug={slug}
         prospectName={prospectName}
-        webAppBaseUrl={webAppBaseUrl}
       />
     </div>
   );

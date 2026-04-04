@@ -101,6 +101,9 @@ importers:
       sanitize-html:
         specifier: ^2.14.0
         version: 2.17.2
+      stripe:
+        specifier: ^20.3.1
+        version: 20.3.1(@types/node@22.19.10)
       sucrase:
         specifier: ^3.35.0
         version: 3.35.1
