@@ -24,6 +24,14 @@ vi.mock('@propertypro/db/unsafe', () => ({
   isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock,
 }));
 
+vi.mock('@/lib/auth/signup', () => ({
+  checkSignupSubdomainAvailability: vi.fn(),
+}));
+
+vi.mock('@/lib/pm/create-community', () => ({
+  createCommunityForPm: vi.fn(),
+}));
+
 import { GET } from '../../src/app/api/v1/pm/communities/route';
 
 describe('pm communities route', () => {
