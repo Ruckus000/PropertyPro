@@ -34,12 +34,10 @@ export default async function AuthenticatedLayout({
   }
 
   const features = shellContext.features;
-  const demoInfo = detectDemoInfo(
+  const demoInfo = await detectDemoInfo(
     shellContext.isDemo,
-    user?.email ?? null,
-    shellContext.trialEndsAt,
-    shellContext.demoExpiresAt,
-    community?.type ?? 'condo_718',
+    user?.id ?? '',
+    community?.id ?? 0,
   );
 
   const branding = community ? await getPageShellBranding(community.id) : null;

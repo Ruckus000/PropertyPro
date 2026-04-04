@@ -43,24 +43,20 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
   let communityName = '';
   let communityType: CommunityType = 'condo_718';
   let isDemo = false;
-  let userEmail: string | null = null;
-  let trialEndsAt: Date | null = null;
-  let demoExpiresAt: Date | null = null;
+  let userId = '';
 
   try {
     const user = await requireAuthenticatedUser();
-    userEmail = user.email ?? null;
+    userId = user.id;
     const membership = await requireCommunityMembership(communityId, user.id);
     communityType = membership.communityType;
     communityName = membership.communityName;
     isDemo = membership.isDemo;
-    trialEndsAt = membership.trialEndsAt;
-    demoExpiresAt = membership.demoExpiresAt;
   } catch {
     redirect('/auth/login');
   }
 
-  const demoInfo = detectDemoInfo(isDemo, userEmail, trialEndsAt, demoExpiresAt, communityType);
+  const demoInfo = await detectDemoInfo(isDemo, userId, communityId);
 
   const branding = await getBrandingForCommunity(communityId);
   const theme = resolveTheme(branding, communityName, communityType);

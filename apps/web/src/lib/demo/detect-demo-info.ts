@@ -1,14 +1,13 @@
 /**
- * Detect demo session info from community + user email.
- *
- * Demo users have emails like:
- *   - `demo-board@[slug].getpropertypro.com` (board role)
- *   - `demo-resident@[slug].getpropertypro.com` (resident role)
- *
- * Returns null if not a demo session or the email doesn't match.
+ * Detects whether the current user is a demo user by querying the
+ * demo_instances table. Replaces the previous email-regex approach
+ * with authoritative DB-backed detection.
  */
-import type { CommunityType } from '@propertypro/shared';
+import { and, eq, isNull, or } from '@propertypro/db/filters';
+import { demoInstances, communities } from '@propertypro/db';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { computeDemoStatus, type DemoLifecycleStatus } from '@propertypro/shared';
+import type { CommunityType } from '@propertypro/shared';
 
 export interface DemoDetectionResult {
   isDemoMode: true;
@@ -20,44 +19,58 @@ export interface DemoDetectionResult {
   communityType: CommunityType;
 }
 
-export function detectDemoInfo(
+export async function detectDemoInfo(
   isDemo: boolean,
-  userEmail: string | null,
-  trialEndsAt: Date | null = null,
-  demoExpiresAt: Date | null = null,
-  communityType: CommunityType = 'condo_718',
-): DemoDetectionResult | null {
-  if (!isDemo || !userEmail) return null;
+  userId: string,
+  communityId: number,
+): Promise<DemoDetectionResult | null> {
+  if (!isDemo || !userId) return null;
 
-  const boardMatch = userEmail.match(
-    /^demo-board@(.+)\.getpropertypro\.com$/,
-  );
-  const residentMatch = userEmail.match(
-    /^demo-resident@(.+)\.getpropertypro\.com$/,
-  );
+  const db = createUnscopedClient();
 
-  const currentRole: 'board' | 'resident' | null =
-    boardMatch?.[1] ? 'board' :
-    residentMatch?.[1] ? 'resident' :
-    null;
+  const [demo] = await db
+    .select({
+      slug: demoInstances.slug,
+      demoBoardUserId: demoInstances.demoBoardUserId,
+      demoResidentUserId: demoInstances.demoResidentUserId,
+      demoExpiresAt: communities.demoExpiresAt,
+      trialEndsAt: communities.trialEndsAt,
+      communityType: communities.communityType,
+      deletedAt: communities.deletedAt,
+    })
+    .from(demoInstances)
+    .innerJoin(communities, eq(demoInstances.seededCommunityId, communities.id))
+    .where(
+      and(
+        eq(demoInstances.seededCommunityId, communityId),
+        isNull(demoInstances.deletedAt),
+        or(
+          eq(demoInstances.demoBoardUserId, userId),
+          eq(demoInstances.demoResidentUserId, userId),
+        ),
+      ),
+    )
+    .limit(1);
 
-  const slug = boardMatch?.[1] ?? residentMatch?.[1] ?? null;
-  if (!currentRole || !slug) return null;
+  if (!demo) return null;
+
+  const currentRole: 'board' | 'resident' =
+    demo.demoBoardUserId === userId ? 'board' : 'resident';
 
   const status = computeDemoStatus({
     isDemo: true,
-    trialEndsAt,
-    demoExpiresAt,
-    deletedAt: null,
+    trialEndsAt: demo.trialEndsAt,
+    demoExpiresAt: demo.demoExpiresAt,
+    deletedAt: demo.deletedAt,
   });
 
   return {
     isDemoMode: true,
     currentRole,
-    slug,
+    slug: demo.slug,
     status,
-    trialEndsAt,
-    demoExpiresAt,
-    communityType,
+    trialEndsAt: demo.trialEndsAt,
+    demoExpiresAt: demo.demoExpiresAt,
+    communityType: demo.communityType,
   };
 }
