@@ -16,6 +16,8 @@ import { and, eq, isNull } from '@propertypro/db/filters';
 import { communities, demoInstances, users, userRoles } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { getPresetPermissions } from '@propertypro/shared';
+import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
 // ---------------------------------------------------------------------------
@@ -62,7 +64,8 @@ export async function handleDemoConversion(
   }
 
   // Step 4: Create founding user (independently idempotent)
-  await ensureFoundingUser(Number(demoId), Number(communityId), customerEmail, customerName);
+  const communityType = await fetchCommunityType(Number(communityId));
+  await ensureFoundingUser(Number(demoId), Number(communityId), customerEmail, customerName, communityType);
 
   console.info(
     `[demo-conversion] completed for demo=${demoId} community=${communityId} converted=${converted}`,
@@ -96,6 +99,23 @@ function extractMetadata(session: Stripe.Checkout.Session): DemoConversionMetada
   }
 
   return { demoId, communityId, planId, customerEmail, customerName };
+}
+
+// ---------------------------------------------------------------------------
+// Community type lookup
+// ---------------------------------------------------------------------------
+
+async function fetchCommunityType(communityId: number): Promise<CommunityType> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ communityType: communities.communityType })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  if (!row) {
+    throw new Error(`[demo-conversion] community ${communityId} not found`);
+  }
+  return row.communityType;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +216,7 @@ async function ensureFoundingUser(
   communityId: number,
   email: string,
   name: string,
+  communityType: CommunityType,
 ): Promise<void> {
   const db = createUnscopedClient();
 
@@ -263,6 +284,7 @@ async function ensureFoundingUser(
   // Create board_president (manager) + pm_admin roles for the founding user.
   // manager+board_president: community management authority (V2 role model)
   // pm_admin: PM portfolio dashboard access (fixes PM-03 audit gap)
+  const permissions = getPresetPermissions('board_president', communityType);
   await db
     .insert(userRoles)
     .values([
@@ -273,6 +295,7 @@ async function ensureFoundingUser(
         presetKey: 'board_president',
         displayTitle: 'Board President',
         isUnitOwner: false,
+        permissions,
       },
       {
         userId,
@@ -299,6 +322,7 @@ async function ensureFoundingUser(
     await admin.auth.admin.generateLink({
       type: 'magiclink',
       email,
+      options: { redirectTo: '/dashboard' },
     });
     console.info(`[demo-conversion] magic link sent to founding user ${email}`);
   } catch (err) {
