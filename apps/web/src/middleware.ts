@@ -92,6 +92,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/transparency', method: 'GET' },
   // Public tenant ICS feed (community-scoped via middleware tenant headers)
   { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
+  // Token-authenticated personalized ICS feed (or session-authenticated in-browser)
+  { path: '/api/v1/calendar/my-meetings.ics', method: 'GET' },
   // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
   { path: '/api/v1/webhooks/twilio', method: 'POST' },
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]

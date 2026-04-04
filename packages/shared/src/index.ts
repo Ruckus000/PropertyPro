@@ -109,4 +109,5 @@ export * from './demo-templates';
 export * from './demo-content-strategies';
 export * from './reauth';
 export * from './support-access';
+export * from './public-site-url';
 export * from './demo/lifecycle';

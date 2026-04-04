@@ -5,7 +5,7 @@ import {
   meetings,
   units,
 } from '@propertypro/db';
-import { and, asc, eq, gte, inArray, lt, lte } from '@propertypro/db/filters';
+import { and, asc, gte, inArray, lt, lte } from '@propertypro/db/filters';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import type { AssessmentLineItemStatus } from '@/lib/services/finance-service';
 import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
@@ -66,6 +66,51 @@ function formatUnitLabel(row: UnitLabelRow): string {
   return row.building ? `${row.building} ${row.unitNumber}` : row.unitNumber;
 }
 
+const OPEN_ASSESSMENT_STATUSES: readonly AssessmentLineItemStatus[] = ['pending', 'overdue'];
+
+function summarizeAggregateAssessmentDueRecords(
+  lineItems: readonly AssessmentLineItemRow[],
+  assessmentTitleById: ReadonlyMap<number, string>,
+): AggregateAssessmentDueRecord[] {
+  const buckets = new Map<string, AggregateAssessmentDueRecord & { unitIds: Set<number> }>();
+
+  for (const row of lineItems) {
+    if (typeof row.assessmentId !== 'number') {
+      continue;
+    }
+
+    const key = `${row.assessmentId}:${row.dueDate}`;
+    const current = buckets.get(key) ?? {
+      assessmentId: row.assessmentId,
+      dueDate: row.dueDate,
+      assessmentTitle: assessmentTitleById.get(row.assessmentId) ?? 'Assessment Due',
+      unitCount: 0,
+      pendingCount: 0,
+      totalAmountCents: 0,
+      unitIds: new Set<number>(),
+    };
+
+    current.unitIds.add(row.unitId);
+    current.pendingCount += row.status === 'pending' ? 1 : 0;
+    current.totalAmountCents += row.amountCents + row.lateFeeCents;
+    buckets.set(key, current);
+  }
+
+  return [...buckets.values()]
+    .map((entry) => ({
+      assessmentId: entry.assessmentId,
+      dueDate: entry.dueDate,
+      assessmentTitle: entry.assessmentTitle,
+      unitCount: entry.unitIds.size,
+      pendingCount: entry.pendingCount,
+      totalAmountCents: entry.totalAmountCents,
+    }))
+    .sort((left, right) =>
+      left.dueDate.localeCompare(right.dueDate)
+      || left.assessmentTitle.localeCompare(right.assessmentTitle),
+    );
+}
+
 export async function listCommunityCalendarMeetings(
   communityId: number,
   range?: { startUtc: Date; endUtcExclusive: Date },
@@ -105,7 +150,7 @@ export async function listAggregateAssessmentDueRecords(
 ): Promise<AggregateAssessmentDueRecord[]> {
   const scoped = createScopedClient(communityId);
   const filters = [
-    inArray(assessmentLineItems.status, ['pending', 'overdue']),
+    inArray(assessmentLineItems.status, [...OPEN_ASSESSMENT_STATUSES]),
   ];
 
   if (range) {
@@ -151,44 +196,7 @@ export async function listAggregateAssessmentDueRecords(
   const assessmentTitleById = new Map(
     assessmentRows.map((row) => [row.id, row.title]),
   );
-
-  const buckets = new Map<string, AggregateAssessmentDueRecord & { unitIds: Set<number> }>();
-
-  for (const row of lineItems) {
-    if (typeof row.assessmentId !== 'number') {
-      continue;
-    }
-
-    const key = `${row.assessmentId}:${row.dueDate}`;
-    const current = buckets.get(key) ?? {
-      assessmentId: row.assessmentId,
-      dueDate: row.dueDate,
-      assessmentTitle: assessmentTitleById.get(row.assessmentId) ?? 'Assessment Due',
-      unitCount: 0,
-      pendingCount: 0,
-      totalAmountCents: 0,
-      unitIds: new Set<number>(),
-    };
-
-    current.unitIds.add(row.unitId);
-    current.pendingCount += (row.status === 'pending' || row.status === 'overdue') ? 1 : 0;
-    current.totalAmountCents += row.amountCents + row.lateFeeCents;
-    buckets.set(key, current);
-  }
-
-  return [...buckets.values()]
-    .map((entry) => ({
-      assessmentId: entry.assessmentId,
-      dueDate: entry.dueDate,
-      assessmentTitle: entry.assessmentTitle,
-      unitCount: entry.unitIds.size,
-      pendingCount: entry.pendingCount,
-      totalAmountCents: entry.totalAmountCents,
-    }))
-    .sort((left, right) =>
-      left.dueDate.localeCompare(right.dueDate)
-      || left.assessmentTitle.localeCompare(right.assessmentTitle),
-    );
+  return summarizeAggregateAssessmentDueRecords(lineItems, assessmentTitleById);
 }
 
 export async function listOwnerAssessmentDueRecords(
@@ -203,7 +211,10 @@ export async function listOwnerAssessmentDueRecords(
     return [];
   }
 
-  const filters = [inArray(assessmentLineItems.unitId, actorUnitIds)];
+  const filters = [
+    inArray(assessmentLineItems.unitId, actorUnitIds),
+    inArray(assessmentLineItems.status, [...OPEN_ASSESSMENT_STATUSES]),
+  ];
 
   if (range) {
     filters.push(gte(assessmentLineItems.dueDate, range.start));

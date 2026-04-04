@@ -5,18 +5,24 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   redirectMock,
+  headersMock,
   createScopedClientMock,
   meetingsPageShellMock,
   compactCardMock,
+  buildCalendarSubscribeUrlMock,
+  generateMyMeetingsSubscriptionTokenMock,
   meetingsTableMock,
   communitiesTableMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   redirectMock: vi.fn(),
+  headersMock: vi.fn(),
   createScopedClientMock: vi.fn(),
   meetingsPageShellMock: vi.fn(() => null),
   compactCardMock: vi.fn(() => null),
+  buildCalendarSubscribeUrlMock: vi.fn(),
+  generateMyMeetingsSubscriptionTokenMock: vi.fn(),
   meetingsTableMock: {
     id: Symbol('meetings.id'),
     startsAt: Symbol('meetings.startsAt'),
@@ -43,6 +49,10 @@ vi.mock('next/navigation', () => ({
   redirect: redirectMock,
 }));
 
+vi.mock('next/headers', () => ({
+  headers: headersMock,
+}));
+
 vi.mock('@/lib/request/page-auth-context', () => ({
   requirePageAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
@@ -63,6 +73,14 @@ vi.mock('@/components/meetings/meetings-page-shell', () => ({
 
 vi.mock('@/components/mobile/MobileMeetingsContent', () => ({
   MobileMeetingsContent: compactCardMock,
+}));
+
+vi.mock('@/lib/calendar/subscribe-url', () => ({
+  buildCalendarSubscribeUrl: buildCalendarSubscribeUrlMock,
+}));
+
+vi.mock('@/lib/calendar/subscription-token', () => ({
+  generateMyMeetingsSubscriptionToken: generateMyMeetingsSubscriptionTokenMock,
 }));
 
 vi.mock('@propertypro/shared', async (importOriginal) => {
@@ -94,6 +112,16 @@ describe('meetings pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
+    headersMock.mockResolvedValue(
+      new Headers([
+        ['host', 'metro-apartments.getpropertypro.com'],
+        ['x-forwarded-proto', 'https'],
+      ]),
+    );
+    buildCalendarSubscribeUrlMock
+      .mockReturnValueOnce('https://metro-apartments.getpropertypro.com/api/v1/calendar/meetings.ics')
+      .mockReturnValueOnce('https://metro-apartments.getpropertypro.com/api/v1/calendar/my-meetings.ics?token=secret');
+    generateMyMeetingsSubscriptionTokenMock.mockReturnValue('secret');
   });
 
   it('desktop page passes apartment manager props into the meetings page shell', async () => {
@@ -122,7 +150,9 @@ describe('meetings pages', () => {
         userId: 'user-1',
         role: 'manager',
         canWrite: true,
-        communitySlug: 'metro-apartments',
+        canSubscribe: true,
+        publicSubscribeUrl: 'https://metro-apartments.getpropertypro.com/api/v1/calendar/meetings.ics',
+        personalSubscribeUrl: 'https://metro-apartments.getpropertypro.com/api/v1/calendar/my-meetings.ics?token=secret',
       }),
     });
   });

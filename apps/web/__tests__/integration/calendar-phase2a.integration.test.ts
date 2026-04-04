@@ -76,6 +76,7 @@ let inRangeMeetingId = 0;
 let outOfRangeMeetingId = 0;
 let apartmentMeetingId = 0;
 let assessmentTitle = '';
+let settledAssessmentTitle = '';
 
 function requireState(): TestKitState {
   if (!state) {
@@ -210,6 +211,24 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
       },
     ]);
 
+    settledAssessmentTitle = `Settled Assessment ${state.runSuffix}`;
+    const [settledAssessmentRow] = await scopedA.insert(state.dbModule.assessments, {
+      title: settledAssessmentTitle,
+      amountCents: 9000,
+      frequency: 'one_time',
+      startDate: '2026-04-01',
+      isActive: true,
+    });
+
+    await scopedA.insert(state.dbModule.assessmentLineItems, {
+      assessmentId: Number(settledAssessmentRow?.id),
+      unitId: ownerUnitId,
+      amountCents: 9000,
+      dueDate: '2026-04-15',
+      status: 'paid',
+      lateFeeCents: 0,
+    });
+
     const [inRangeMeetingRow] = await scopedA.insert(state.dbModule.meetings, {
       title: `April Board Meeting ${state.runSuffix}`,
       meetingType: 'board',
@@ -326,8 +345,9 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
 
     setActorById(testState, ownerResidentUserId);
     const ownerResponse = await routeModules.calendarEvents.GET(new NextRequest(apiUrl(url)));
-    const ownerJson = await parseJson<{ data: Array<{ type: string; unitLabel?: string }> }>(ownerResponse);
+    const ownerJson = await parseJson<{ data: Array<{ type: string; unitLabel?: string; assessmentTitle?: string }> }>(ownerResponse);
     expect(ownerJson.data.some((event) => event.type === 'my_assessment_due' && event.unitLabel === ownerUnitLabel)).toBe(true);
+    expect(ownerJson.data.some((event) => event.assessmentTitle === settledAssessmentTitle)).toBe(false);
 
     setActor(testState, 'tenantA');
     const tenantResponse = await routeModules.calendarEvents.GET(new NextRequest(apiUrl(url)));
@@ -351,6 +371,7 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
     expect(publicResponse.status).toBe(200);
     const publicBody = await publicResponse.text();
     expect(publicBody).toContain(assessmentTitle);
+    expect(publicBody).toContain('1 pending\\, 1 overdue');
     expect(publicBody).not.toContain(ownerUnitLabel);
     expect(publicBody).not.toContain('$125.00');
 
@@ -369,6 +390,7 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
     const ownerBody = await ownerResponse.text();
     expect(ownerBody).toContain(ownerUnitLabel);
     expect(ownerBody).toContain('$125.00');
+    expect(ownerBody).not.toContain(settledAssessmentTitle);
 
     setActor(testState, 'tenantA');
     const tenantResponse = await routeModules.calendarMy.GET(
