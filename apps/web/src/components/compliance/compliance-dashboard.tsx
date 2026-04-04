@@ -178,7 +178,7 @@ function CategoryGroup({
       <div
         className={`
           grid transition-all duration-quick ease-out
-          ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}
+          ${open ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"}
         `}
       >
         <div className="overflow-hidden">
@@ -478,8 +478,8 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
         </div>
       )}
 
-      {/* ── Checklist ── */}
-      <section>
+      {/* ── Checklist (stack above activity feed so collapsed rows cannot be covered by later siblings) ── */}
+      <section className="relative z-[1] isolate">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-edge py-12 text-center">
             <Shield size={32} className="text-content-tertiary mb-2" />
@@ -510,7 +510,9 @@ export function ComplianceDashboard({ communityId }: ComplianceDashboardProps) {
       </section>
 
       {/* ── Activity Feed ── */}
-      <ComplianceActivityFeed communityId={communityId} />
+      <div className="relative z-0">
+        <ComplianceActivityFeed communityId={communityId} />
+      </div>
 
       {/* ── Modals ── */}
       {linkModalItem && (

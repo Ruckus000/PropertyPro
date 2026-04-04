@@ -146,7 +146,7 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
       <div
         className={`
           grid transition-all duration-quick ease-out
-          ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}
+          ${expanded ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"}
         `}
       >
         <div className="overflow-hidden">
