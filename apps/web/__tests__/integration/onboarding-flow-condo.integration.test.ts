@@ -1,478 +1,291 @@
 /**
- * Condo Onboarding flow integration test — P2-39
+ * Condo onboarding flow integration test — P2-39
  */
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ADMIN_CONDO_ITEMS } from '../../src/lib/services/onboarding-checklist-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
-    type TestKitState,
-    initTestKit,
-    seedCommunities,
-    seedUsers,
-    teardownTestKit,
-    requireCommunity,
-    setActor,
-    requireCurrentActor,
-    apiUrl,
-    jsonRequest,
-    parseJson,
+  type TestKitState,
+  apiUrl,
+  initTestKit,
+  jsonRequest,
+  parseJson,
+  requireCommunity,
+  requireCurrentActor,
+  seedCommunities,
+  seedUsers,
+  setActor,
+  teardownTestKit,
 } from './helpers/multi-tenant-test-kit';
 
 if (process.env.CI && !process.env.DATABASE_URL) {
-    throw new Error('Onboarding flow integration tests require DATABASE_URL in CI');
+  throw new Error('Onboarding flow integration tests require DATABASE_URL in CI');
 }
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
 const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-    requireAuthenticatedUserIdMock: vi.fn(),
+  requireAuthenticatedUserIdMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
-    requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
 
 type OnboardingRouteModule = typeof import('../../src/app/api/v1/onboarding/condo/route');
-type ComplianceRouteModule = typeof import('../../src/app/api/v1/compliance/route');
 
 interface RouteModules {
-    onboarding: OnboardingRouteModule;
-    compliance: ComplianceRouteModule;
+  onboarding: OnboardingRouteModule;
 }
 
 let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 
 function requireState(): TestKitState {
-    if (!state) throw new Error('Test state not initialized');
-    return state;
+  if (!state) throw new Error('Test state not initialized');
+  return state;
 }
 
 function requireRoutes(): RouteModules {
-    if (!routes) throw new Error('Routes not loaded');
-    return routes;
+  if (!routes) throw new Error('Routes not loaded');
+  return routes;
 }
 
-async function clearWizardState(kit: TestKitState, communityId: number): Promise<void> {
-    const scoped = kit.dbModule.createScopedClient(communityId);
-    await scoped.hardDelete(
-        kit.dbModule.onboardingWizardState,
-        eq(kit.dbModule.onboardingWizardState.wizardType, 'condo'),
-    );
+async function clearOnboardingArtifacts(
+  kit: TestKitState,
+  communityId: number,
+  userId: string,
+): Promise<void> {
+  const scoped = kit.dbModule.createScopedClient(communityId);
+  await scoped.hardDelete(
+    kit.dbModule.onboardingWizardState,
+    eq(kit.dbModule.onboardingWizardState.wizardType, 'condo'),
+  );
+  await scoped.hardDelete(
+    kit.dbModule.onboardingChecklistItems,
+    eq(kit.dbModule.onboardingChecklistItems.userId, userId),
+  );
 }
 
 describeDb('condo onboarding flow (db-backed integration)', () => {
-    let testDocumentId: number;
-    let communityACategoryId: number;
-    let communityCCategoryId: number;
+  beforeAll(async () => {
+    if (!process.env.DATABASE_URL) return;
 
-    beforeAll(async () => {
-        if (!process.env.DATABASE_URL) return;
+    state = await initTestKit();
 
-        state = await initTestKit();
+    const communityA = MULTI_TENANT_COMMUNITIES.find((community) => community.key === 'communityA');
+    const communityC = MULTI_TENANT_COMMUNITIES.find((community) => community.key === 'communityC');
+    if (!communityA || !communityC) {
+      throw new Error('Required community fixtures not found');
+    }
 
-        const communityA = MULTI_TENANT_COMMUNITIES.find((community) => community.key === 'communityA');
-        const communityC = MULTI_TENANT_COMMUNITIES.find((community) => community.key === 'communityC');
-        if (!communityA || !communityC) {
-            throw new Error('Required community fixtures not found');
-        }
+    await seedCommunities(state, [communityA, communityC]);
 
-        await seedCommunities(state, [communityA, communityC]);
+    const actorA = MULTI_TENANT_USERS.find((user) => user.key === 'actorA');
+    const siteManagerC = MULTI_TENANT_USERS.find((user) => user.key === 'siteManagerC');
+    if (!actorA || !siteManagerC) {
+      throw new Error('Required user fixtures not found');
+    }
 
-        const siteManagerA = MULTI_TENANT_USERS.find((user) => user.key === 'siteManagerA');
-        const siteManagerC = MULTI_TENANT_USERS.find((user) => user.key === 'siteManagerC');
-        const actorA = MULTI_TENANT_USERS.find((user) => user.key === 'actorA');
-        if (!siteManagerA || !siteManagerC || !actorA) {
-            throw new Error('Required user fixtures not found');
-        }
+    await seedUsers(state, [actorA, siteManagerC]);
 
-        await seedUsers(state, [siteManagerA, siteManagerC, actorA]);
+    routes = {
+      onboarding: await import('../../src/app/api/v1/onboarding/condo/route'),
+    };
+  });
 
-        const seededCommunityA = requireCommunity(state, 'communityA');
-        const seededCommunityC = requireCommunity(state, 'communityC');
-        const seededSiteManagerA = state.users.get('siteManagerA');
-        if (!seededSiteManagerA) throw new Error('siteManagerA not seeded');
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const kit = requireState();
+    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
+    setActor(kit, 'actorA');
+  });
 
-        // Setup a dummy document for step 0
-        const scopedAdmin = state.dbModule.createScopedClient(seededCommunityA.id);
-        const insertedDocs = await scopedAdmin.insert(state.dbModule.documents, {
-            title: 'Dummy Statutory Doc',
-            filePath: 'documents/dummy.pdf',
-            fileName: 'dummy.pdf',
-            fileSize: 1024,
-            mimeType: 'application/pdf',
-            uploadedBy: seededSiteManagerA.id,
-            extractionStatus: 'pending',
-        });
+  afterAll(async () => {
+    if (state) await teardownTestKit(state);
+  });
 
-        testDocumentId = Number(insertedDocs[0].id);
+  it('GET initializes, PATCH saves profile, and POST completes the 2-step flow', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const actorA = kit.users.get('actorA');
 
-        const insertedCategoryA = await scopedAdmin.insert(state.dbModule.documentCategories, {
-            name: `P2-39 Governing A ${state.runSuffix}`,
-            description: 'Category for condo onboarding integration tests',
-            isSystem: false,
-        });
-        communityACategoryId = Number(insertedCategoryA[0].id);
+    if (!actorA) throw new Error('actorA not seeded');
 
-        const scopedCommunityC = state.dbModule.createScopedClient(seededCommunityC.id);
-        const insertedCategoryC = await scopedCommunityC.insert(state.dbModule.documentCategories, {
-            name: `P2-39 Ops C ${state.runSuffix}`,
-            description: 'Category for cross-tenant validation tests',
-            isSystem: false,
-        });
-        communityCCategoryId = Number(insertedCategoryC[0].id);
+    await clearOnboardingArtifacts(kit, communityA.id, actorA.id);
 
-        routes = {
-            onboarding: await import('../../src/app/api/v1/onboarding/condo/route'),
-            compliance: await import('../../src/app/api/v1/compliance/route'),
+    const getResponse = await appRoutes.onboarding.GET(
+      new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityA.id}`)),
+    );
+    expect(getResponse.status).toBe(200);
+    const getJson = await parseJson<{
+      data: {
+        status: string;
+        lastCompletedStep: number | null;
+        nextStep: number;
+        stepData: {
+          profile?: {
+            name?: string;
+            timezone?: string;
+          };
         };
-    });
+      };
+    }>(getResponse);
 
-    beforeEach(() => {
-        vi.clearAllMocks();
-        const kit = requireState();
-        requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
-        setActor(kit, 'actorA');
-    });
+    expect(getJson.data.status).toBe('in_progress');
+    expect(getJson.data.lastCompletedStep).toBeNull();
+    expect(getJson.data.nextStep).toBe(0);
+    expect(getJson.data.stepData.profile?.name).toBe(`${communityA.fixture.name} ${kit.runSuffix}`);
+    expect(getJson.data.stepData.profile?.timezone).toBe(communityA.fixture.timezone);
 
-    afterAll(async () => {
-        if (state) await teardownTestKit(state);
-    });
+    const profileData = {
+      name: `Condo Wizard ${kit.runSuffix}`,
+      addressLine1: '123 Condo Street',
+      addressLine2: 'Suite 300',
+      city: 'Miami',
+      state: 'FL',
+      zipCode: '33101',
+      timezone: 'America/New_York',
+      logoPath: null,
+    };
 
-    it('3-step condo progression persists and links compliance items', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-        const communityA = requireCommunity(kit, 'communityA'); // condo_718
-
-        await clearWizardState(kit, communityA.id);
-
-        // 1. Generate compliance items so they exist for linking
-        const generateRes = await appRoutes.compliance.POST(
-            jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
-                communityId: communityA.id,
-            })
-        );
-        expect(generateRes.status).toBe(201); // Created
-
-        // Get them just to find a template key
-        const scoped = kit.dbModule.createScopedClient(communityA.id);
-        const checklistItems = await scoped.query(kit.dbModule.complianceChecklistItems);
-        expect(checklistItems.length).toBeGreaterThan(0);
-        const targetTemplateKey = checklistItems[0]['templateKey'] as string;
-
-        const statutoryData = {
-            items: [
-                {
-                    templateKey: targetTemplateKey,
-                    documentId: testDocumentId,
-                    categoryId: communityACategoryId,
-                },
-            ],
+    const patchResponse = await appRoutes.onboarding.PATCH(
+      jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
+        communityId: communityA.id,
+        step: 0,
+        stepData: { profile: profileData },
+      }),
+    );
+    expect(patchResponse.status).toBe(200);
+    const patchJson = await parseJson<{
+      data: {
+        lastCompletedStep: number;
+        nextStep: number;
+        status: string;
+        stepData: {
+          profile?: {
+            name?: string;
+          };
         };
+      };
+    }>(patchResponse);
 
-        const profileData = {
-            name: `Condo Wizard Progression ${kit.runSuffix}`,
-            addressLine1: '123 Condo Street',
-            city: 'Miami',
-            state: 'FL',
-            zipCode: '33101',
-            timezone: 'America/New_York',
+    expect(patchJson.data.status).toBe('in_progress');
+    expect(patchJson.data.lastCompletedStep).toBe(0);
+    expect(patchJson.data.nextStep).toBe(1);
+    expect(patchJson.data.stepData.profile?.name).toBe(profileData.name);
+
+    const scoped = kit.dbModule.createScopedClient(communityA.id);
+    const communityRows = await scoped.query(kit.dbModule.communities);
+    const updatedCommunity = communityRows.find((row) => row['id'] === communityA.id);
+    expect(updatedCommunity?.['name']).toBe(profileData.name);
+    expect(updatedCommunity?.['addressLine1']).toBe(profileData.addressLine1);
+    expect(updatedCommunity?.['city']).toBe(profileData.city);
+    expect(updatedCommunity?.['timezone']).toBe(profileData.timezone);
+
+    const resumeResponse = await appRoutes.onboarding.GET(
+      new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityA.id}`)),
+    );
+    expect(resumeResponse.status).toBe(200);
+    const resumeJson = await parseJson<{
+      data: {
+        lastCompletedStep: number | null;
+        nextStep: number;
+        stepData: {
+          profile?: {
+            name?: string;
+          };
         };
+      };
+    }>(resumeResponse);
 
-        const unitsData = [
-            {
-                unitNumber: `P2-39-C101-${kit.runSuffix}`,
-                floor: 1,
-                bedrooms: 2,
-                bathrooms: 2,
-            },
-            {
-                unitNumber: `P2-39-C102-${kit.runSuffix}`,
-                floor: 1,
-                bedrooms: 3,
-                bathrooms: 2,
-            },
-        ];
+    expect(resumeJson.data.lastCompletedStep).toBe(0);
+    expect(resumeJson.data.nextStep).toBe(1);
+    expect(resumeJson.data.stepData.profile?.name).toBe(profileData.name);
 
-        // GET empty state
-        const getResponse = await appRoutes.onboarding.GET(
-            new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityA.id}`)),
-        );
-        expect(getResponse.status).toBe(200);
-        const getJson = await parseJson<{
-            data: { status: string; lastCompletedStep: number | null; nextStep: number };
-        }>(getResponse);
-        expect(getJson.data.status).toBe('in_progress');
-        expect(getJson.data.lastCompletedStep).toBeNull();
-        expect(getJson.data.nextStep).toBe(0);
+    const completeResponse = await appRoutes.onboarding.POST(
+      jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'POST', {
+        communityId: communityA.id,
+        action: 'complete',
+      }),
+    );
+    expect(completeResponse.status).toBe(201);
+    const completeJson = await parseJson<{
+      data: {
+        status: string;
+        completedAt: string | null;
+      };
+    }>(completeResponse);
 
-        // Step 0: Statutory
-        const patchStep0 = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 0,
-                stepData: { statutory: statutoryData },
-            }),
-        );
-        expect(patchStep0.status).toBe(200);
+    expect(completeJson.data.status).toBe('completed');
+    expect(completeJson.data.completedAt).toBeTruthy();
 
-        // Verify statutory linked
-        const updatedItems = await scoped.query(kit.dbModule.complianceChecklistItems);
-        const linkedItem = updatedItems.find(i => i['templateKey'] === targetTemplateKey);
-        expect(linkedItem?.['documentId']).toBe(testDocumentId);
+    const secondCompleteResponse = await appRoutes.onboarding.POST(
+      jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'POST', {
+        communityId: communityA.id,
+        action: 'complete',
+      }),
+    );
+    expect(secondCompleteResponse.status).toBe(200);
+    const secondCompleteJson = await parseJson<{
+      data: {
+        status: string;
+        noop?: boolean;
+      };
+    }>(secondCompleteResponse);
 
-        // Step 1: Profile
-        const patchStep1 = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 1,
-                stepData: { profile: profileData },
-            }),
-        );
-        expect(patchStep1.status).toBe(200);
+    expect(secondCompleteJson.data.status).toBe('completed');
+    expect(secondCompleteJson.data.noop).toBe(true);
 
-        // Step 2: Branding
-        const patchBranding = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 2,
-                stepData: { branding: { primaryColor: '#3B82F6', secondaryColor: '#6B7280', accentColor: '#BFDBFE', fontHeading: 'Inter', fontBody: 'Inter' } },
-            }),
-        );
-        expect(patchBranding.status).toBe(200);
+    const wizardRows = await scoped.query(kit.dbModule.onboardingWizardState);
+    const wizard = wizardRows.find((row) => row['wizardType'] === 'condo');
+    expect(wizard?.['status']).toBe('completed');
+    expect(wizard?.['lastCompletedStep']).toBe(1);
 
-        // Step 3: Units
-        const patchStep3 = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 3,
-                stepData: { units: unitsData },
-            }),
-        );
-        expect(patchStep3.status).toBe(200);
+    const checklistRows = await scoped.query(kit.dbModule.onboardingChecklistItems);
+    const actorChecklist = checklistRows.filter((row) => row['userId'] === actorA.id);
+    expect(actorChecklist.map((row) => String(row['itemKey'])).sort()).toEqual(
+      [...ADMIN_CONDO_ITEMS].sort(),
+    );
+    expect(actorChecklist.every((row) => row['completedAt'] == null)).toBe(true);
+  });
 
-        // Resume from GET
-        const resumeGet = await appRoutes.onboarding.GET(
-            new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityA.id}`)),
-        );
-        expect(resumeGet.status).toBe(200);
-        const resumeJson = await parseJson<{
-            data: {
-                lastCompletedStep: number | null;
-                nextStep: number;
-                stepData: {
-                    statutory?: Record<string, unknown>;
-                    profile?: Record<string, unknown>;
-                    units?: Array<Record<string, unknown>>;
-                };
-            };
-        }>(resumeGet);
+  it('feature gate: apartment community returns 403 on GET condo wizard', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
 
-        expect(resumeJson.data.lastCompletedStep).toBe(3);
-        expect(resumeJson.data.nextStep).toBe(3); // max 3
-        expect(resumeJson.data.stepData.profile?.name).toBe(profileData.name);
-        expect(resumeJson.data.stepData.units).toHaveLength(2);
+    setActor(kit, 'siteManagerC');
+    const response = await appRoutes.onboarding.GET(
+      new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityC.id}`)),
+    );
+    expect(response.status).toBe(403);
+  });
 
-        // Complete
-        const complete = await appRoutes.onboarding.POST(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'POST', {
-                communityId: communityA.id,
-                action: 'complete',
-            }),
-        );
-        expect(complete.status).toBe(201);
+  it('rejects step 0 PATCH requests without profile data', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const actorA = kit.users.get('actorA');
 
-        // Verify Units Created
-        const unitRows = await scoped.query(kit.dbModule.units);
-        const createdUnits = unitRows.filter((row) =>
-            unitsData.some((unit) => unit.unitNumber === row['unitNumber']),
-        );
-        expect(createdUnits).toHaveLength(2);
+    if (!actorA) throw new Error('actorA not seeded');
 
-        // Verify Wizard State
-        const wizardRows = await scoped.query(kit.dbModule.onboardingWizardState);
-        const wizard = wizardRows.find((row) => row['wizardType'] === 'condo');
-        expect(wizard?.['status']).toBe('completed');
-    });
+    await clearOnboardingArtifacts(kit, communityA.id, actorA.id);
 
-    it('feature gate: apartment community returns 403 on GET condo wizard', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-        const communityC = requireCommunity(kit, 'communityC'); // apartment
+    const response = await appRoutes.onboarding.PATCH(
+      jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
+        communityId: communityA.id,
+        step: 0,
+        stepData: {},
+      }),
+    );
 
-        setActor(kit, 'siteManagerC');
-        const response = await appRoutes.onboarding.GET(
-            new NextRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityC.id}`)),
-        );
-        expect(response.status).toBe(403);
-    });
-
-    it('rejects invalid statutory template keys without partial updates', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-        const communityA = requireCommunity(kit, 'communityA');
-        await clearWizardState(kit, communityA.id);
-
-        const generateRes = await appRoutes.compliance.POST(
-            jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
-                communityId: communityA.id,
-            }),
-        );
-        expect([200, 201]).toContain(generateRes.status);
-
-        const scopedA = kit.dbModule.createScopedClient(communityA.id);
-        const checklistBefore = await scopedA.query(kit.dbModule.complianceChecklistItems);
-        const docIdsBeforeByTemplate = new Map(
-            checklistBefore.map((row) => [
-                String(row['templateKey']),
-                (row['documentId'] as number | null) ?? null,
-            ]),
-        );
-
-        const response = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 0,
-                stepData: {
-                    statutory: {
-                        items: [
-                            {
-                                templateKey: 'missing_template_key',
-                                documentId: testDocumentId,
-                                categoryId: communityACategoryId,
-                            },
-                        ],
-                    },
-                },
-            }),
-        );
-        expect(response.status).toBe(400);
-        const json = await parseJson<{ error?: { code: string; message: string; details?: unknown } }>(response);
-        expect(json.error?.message ?? '').toContain('Checklist template keys not found');
-
-        const checklistAfter = await scopedA.query(kit.dbModule.complianceChecklistItems);
-        for (const row of checklistAfter) {
-            const templateKey = String(row['templateKey']);
-            const before = docIdsBeforeByTemplate.get(templateKey);
-            expect((row['documentId'] as number | null) ?? null).toBe(before ?? null);
-        }
-    });
-
-    it('rejects categoryId from another community', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-        const communityA = requireCommunity(kit, 'communityA');
-
-        const generateRes = await appRoutes.compliance.POST(
-            jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
-                communityId: communityA.id,
-            }),
-        );
-        expect([200, 201]).toContain(generateRes.status);
-
-        const scopedA = kit.dbModule.createScopedClient(communityA.id);
-        const checklistItems = await scopedA.query(kit.dbModule.complianceChecklistItems);
-        const targetTemplateKey = String(checklistItems[0]?.['templateKey']);
-        if (!targetTemplateKey) {
-            throw new Error('Expected at least one checklist item in community A');
-        }
-
-        const response = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 0,
-                stepData: {
-                    statutory: {
-                        items: [{
-                            templateKey: targetTemplateKey,
-                            documentId: testDocumentId,
-                            categoryId: communityCCategoryId,
-                        }],
-                    },
-                },
-            }),
-        );
-        expect(response.status).toBe(400);
-        const json = await parseJson<{ error?: { code: string; message: string; details?: unknown } }>(response);
-        expect(json.error?.message ?? '').toContain('Document categories not found in this community');
-    });
-
-    it('rejects documentId from another community', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-
-        // Create document in Community C
-        const communityC = requireCommunity(kit, 'communityC');
-        const scopedC = kit.dbModule.createScopedClient(communityC.id);
-        const siteManagerC = kit.users.get('siteManagerC');
-        if (!siteManagerC) {
-            throw new Error('siteManagerC not seeded');
-        }
-        const docC = await scopedC.insert(kit.dbModule.documents, {
-            title: 'Cross-Tenant Doc',
-            filePath: 'documents/cross.pdf',
-            fileName: 'cross.pdf',
-            fileSize: 1024,
-            mimeType: 'application/pdf',
-            uploadedBy: siteManagerC.id,
-            extractionStatus: 'pending',
-        });
-
-        // Try to use that document in Community A's wizard
-        const communityA = requireCommunity(kit, 'communityA');
-        const generateRes = await appRoutes.compliance.POST(
-            jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
-                communityId: communityA.id,
-            }),
-        );
-        expect([200, 201]).toContain(generateRes.status);
-
-        const scopedA = kit.dbModule.createScopedClient(communityA.id);
-        const checklistItems = await scopedA.query(kit.dbModule.complianceChecklistItems);
-        const targetTemplateKey = String(checklistItems[0]?.['templateKey']);
-        if (!targetTemplateKey) {
-            throw new Error('Expected at least one checklist item in community A');
-        }
-
-        const res = await appRoutes.onboarding.PATCH(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-                communityId: communityA.id,
-                step: 0,
-                stepData: {
-                    statutory: {
-                        items: [{
-                            templateKey: targetTemplateKey,
-                            documentId: Number(docC[0].id), // From Community C!
-                            categoryId: communityACategoryId,
-                        }],
-                    },
-                },
-            }),
-        );
-
-        expect(res.status).toBe(400);
-        const json = await parseJson<{ error?: { code: string; message: string; details?: unknown } }>(res);
-        expect(json.error?.message ?? '').toContain('Documents not found in this community');
-    });
-
-    it('rejects completing wizard when units are missing', async () => {
-        const kit = requireState();
-        const appRoutes = requireRoutes();
-        const communityA = requireCommunity(kit, 'communityA');
-
-        await clearWizardState(kit, communityA.id);
-
-        const response = await appRoutes.onboarding.POST(
-            jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'POST', {
-                communityId: communityA.id,
-                action: 'complete',
-            }),
-        );
-
-        expect(response.status).toBe(400);
-        const json = await parseJson<{ error?: { code: string; message: string; details?: unknown } }>(response);
-        expect(json.error?.message ?? '').toContain('At least one unit is required before completing onboarding.');
-    });
+    expect(response.status).toBe(400);
+    const json = await parseJson<{ error?: { message?: string } }>(response);
+    expect(json.error?.message ?? '').toContain('stepData.profile is required for step 0');
+  });
 });
