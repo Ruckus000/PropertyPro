@@ -438,6 +438,18 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         return internalErrorResponse(request, response as unknown as NextResponse, requestId, origin, isPreviewRequest);
       }
     }
+
+    // Fallback: extract community ID from /communities/[id]/... URL path.
+    // Pages under this route receive the ID via params, but the shell layout
+    // reads it from the x-community-id header. Without this, the notification
+    // bell and other shell features show as disabled on these pages.
+    if (!forwardedHeaders.has(COMMUNITY_ID_HEADER)) {
+      const pathCommunityMatch = /^\/communities\/(\d+)/.exec(pathname);
+      if (pathCommunityMatch?.[1]) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, pathCommunityMatch[1]);
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, 'path_segment');
+      }
+    }
   }
 
   // --- Mobile preview bypass (demo iframe) ---
