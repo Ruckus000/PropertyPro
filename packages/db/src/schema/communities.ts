@@ -2,8 +2,9 @@
  * Communities table — the core tenant entity.
  * Every tenant-scoped table references communities.id.
  */
-import { bigserial, boolean, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
+import { billingGroups } from './billing-groups';
 
 export const communities = pgTable('communities', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -41,6 +42,11 @@ export const communities = pgTable('communities', {
     }>()
     .notNull()
     .default({}),
+  /** Billing group for PM volume discount consolidation. Null = community billed independently. */
+  billingGroupId: bigint('billing_group_id', { mode: 'number' }).references(
+    () => billingGroups.id,
+    { onDelete: 'set null' },
+  ),
   stripeCustomerId: text('stripe_customer_id').unique(),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),

@@ -666,6 +666,13 @@
       "when": 1775370000000,
       "tag": "0134_ledger_rent_payable_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1775550000000,
+      "tag": "0135_billing_groups",
+      "breakpoints": true
     }
   ]
 }
