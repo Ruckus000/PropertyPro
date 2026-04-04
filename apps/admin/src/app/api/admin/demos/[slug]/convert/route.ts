@@ -233,5 +233,13 @@ export async function POST(
     console.warn('[convert/POST] Failed to emit conversion event:', err);
   }
 
+  if (!session.url) {
+    console.error('[convert/POST] Stripe session created but url is null', { sessionId: session.id });
+    return NextResponse.json(
+      { error: { code: 'STRIPE_ERROR', message: 'Checkout session URL unavailable' } },
+      { status: 500 },
+    );
+  }
+
   return NextResponse.json({ data: { checkoutUrl: session.url } });
 }
