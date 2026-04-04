@@ -560,17 +560,29 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     try {
       await db.insert(stripeWebhookEvents).values({ eventId: event.id });
     } catch (insertErr) {
-      // Race condition: another request already inserted this event
+      if (!isUniqueConstraintError(insertErr)) {
+        // Not a unique constraint violation — genuine DB error
+        logStripeWebhookEvent('error', 'Stripe webhook fence insert failed', {
+          eventId: event.id,
+          eventType: event.type,
+          errorCode: STRIPE_WEBHOOK_ERROR_CODES.HANDLER_FAILED,
+          category: 'processing',
+          metricName: 'stripe_webhook_event',
+          outcome: 'failure',
+        });
+        return NextResponse.json({ error: 'Webhook fence insert failed' }, { status: 500 });
+      }
+      // Unique violation — race condition, another request inserted first
       const [raceCheck] = await db
         .select({ processedAt: stripeWebhookEvents.processedAt })
         .from(stripeWebhookEvents)
         .where(eq(stripeWebhookEvents.eventId, event.id))
         .limit(1);
 
-      if (raceCheck?.processedAt !== null) {
+      if (raceCheck && raceCheck.processedAt !== null) {
         return NextResponse.json({ received: true });
       }
-      // processedAt is null — continue processing (idempotent handlers are safe)
+      // processedAt is null — another attempt also failed or in progress, continue
     }
   }
 
