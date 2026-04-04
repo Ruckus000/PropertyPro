@@ -5,7 +5,7 @@ import {
   notificationPreferences,
   logAuditEvent,
 } from '@propertypro/db';
-import { db } from '@propertypro/db/drizzle';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -49,8 +49,10 @@ const APARTMENT_CATEGORIES: CategoryTemplate[] = [
 export async function createCommunityForPm(
   input: CreateCommunityInput,
 ): Promise<CreateCommunityResult> {
+  const db = createUnscopedClient();
+
   // 1. Insert community
-  const [community] = await db
+  const rows = await db
     .insert(communities)
     .values({
       name: input.name,
@@ -65,6 +67,9 @@ export async function createCommunityForPm(
     })
     .returning({ id: communities.id, slug: communities.slug });
 
+  const community = rows[0];
+  if (!community) throw new Error('Failed to insert community');
+
   const communityId = Number(community.id);
 
   // 2. Link PM as admin
@@ -76,7 +81,7 @@ export async function createCommunityForPm(
   });
 
   // 3. Generate onboarding checklist
-  await createChecklistItems(communityId, input.userId, 'pm_admin');
+  await createChecklistItems(communityId, input.userId, 'pm_admin', input.communityType);
 
   // 4. Insert default document categories
   const templates =
