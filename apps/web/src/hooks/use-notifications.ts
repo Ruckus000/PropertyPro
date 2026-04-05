@@ -95,6 +95,49 @@ export function useMarkRead() {
   });
 }
 
+export interface CrossNotificationItem {
+  id: number;
+  category: string;
+  title: string;
+  body: string | null;
+  actionUrl: string | null;
+  sourceType: string;
+  sourceId: string;
+  priority: string;
+  readAt: string | null;
+  createdAt: string;
+  community: { id: number; name: string; slug: string };
+}
+
+interface CrossListResponse {
+  notifications: CrossNotificationItem[];
+  nextCursor: number | null;
+  totalUnread: number;
+}
+
+export const CROSS_NOTIFICATION_KEYS = {
+  all: () => ['notifications', 'cross'] as const,
+  list: (filters?: NotificationFilters) =>
+    ['notifications', 'cross', 'list', filters ?? {}] as const,
+};
+
+export function useCrossNotifications(filters: NotificationFilters = {}) {
+  return useQuery<CrossListResponse>({
+    queryKey: CROSS_NOTIFICATION_KEYS.list(filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.cursor != null) params.set('cursor', String(filters.cursor));
+      if (filters.limit != null) params.set('limit', String(filters.limit));
+      if (filters.unreadOnly) params.set('unreadOnly', 'true');
+      const res = await fetch(`/api/v1/notifications/all?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch cross-community notifications');
+      const json = (await res.json()) as { data: CrossListResponse };
+      return json.data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 export function useArchiveNotifications() {
   const queryClient = useQueryClient();
   return useMutation({
