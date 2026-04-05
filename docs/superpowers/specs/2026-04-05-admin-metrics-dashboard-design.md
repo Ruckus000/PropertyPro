@@ -50,10 +50,10 @@ Cancel flow captures     GET /api/admin/metrics/        dropdown
 
 | Phase | PR | Contents |
 |---|---|---|
-| 1 | Schema & cron | Migrations 0131 (cancellation_reason), 0132 (revenue_snapshots), 0133 (indexes). Snapshot cron route. Backfill script. Runbook. |
+| 1 | Schema & cron | Migrations 0131 (cancellation_reason + subscription-status constants), 0132 (stripe_prices.unit_amount_cents + backfill + webhook sync), 0133 (revenue_snapshots), 0134 (indexes). Snapshot cron route with sanity checks. Cancel-route body fields. Backfill scripts. Runbook. |
 | 2 | Metrics API | 6 metrics endpoints + health endpoint. Shared Zod types. Contract + invariant tests. Load tests. |
 | 3 | Dashboard refresh | 8 new cards as drill-down links. StatCard + Sparkline components. Recent signups table. Empty/loading/error states. Staleness banner. |
-| 4 | Metrics pages + cancel flow | `/metrics/*` routes with Recharts. Cohort table. Funnel view. Cancel-flow reason dropdown. Playwright E2E drill-down tests. |
+| 4 | Metrics pages | `/metrics/*` routes with Recharts (add recharts to admin package.json). Cohort table. Funnel view. Playwright E2E drill-down tests. No cancel UI work — reason capture lives at the API boundary from PR 1. |
 
 ---
 
@@ -68,24 +68,46 @@ ALTER TABLE communities
   ADD COLUMN cancellation_captured_at timestamptz;
 ```
 
-**Reason enum** lives in app code at `packages/shared/src/constants/cancellation-reasons.ts`:
+**Reason enum** lives in app code at `packages/shared/src/constants/cancellation-reasons.ts`. Starter set (subject to product approval before PR 4): `price`, `switched_provider`, `shutting_down`, `missing_features`, `not_using`, `other`. Not a DB enum type — easier to evolve without migrations. Zod validation at API boundary enforces allowed values.
+
+**Subscription status constants** — new file `packages/shared/src/constants/subscription-statuses.ts`:
 ```ts
-export const CANCELLATION_REASONS = [
-  'price', 'switched_provider', 'shutting_down',
-  'missing_features', 'not_using', 'other'
+export const ALL_STATUSES = [
+  'active', 'trialing', 'past_due',
+  'canceled', 'expired', 'unpaid', 'incomplete_expired'
 ] as const;
+export const BILLABLE_STATUSES = ['active', 'past_due'] as const;   // counts toward mrr_cents
+export const TRIAL_STATUSES = ['trialing'] as const;                 // counts toward potential_mrr_cents only
+export const CHURNED_STATUSES = ['canceled', 'expired', 'unpaid', 'incomplete_expired'] as const;
+```
+Snapshot job throws loud error on any `subscription_status` value not in `ALL_STATUSES`.
+
+### Migration 0132 — denormalize `unit_amount_cents` into `stripe_prices`
+
+The existing `stripe_prices` table stores only the Stripe Price ID, not the amount. Snapshots need the amount on every run; calling Stripe API each time adds a failure mode. Denormalize:
+
+```sql
+ALTER TABLE stripe_prices
+  ADD COLUMN unit_amount_cents bigint;  -- nullable until backfilled
 ```
 
-Not a DB enum type — easier to evolve without migrations. Zod validation at API boundary enforces allowed values.
+**Backfill script:** `scripts/backfill-stripe-price-amounts.ts` — reads all `stripe_prices` rows, fetches `unit_amount` from Stripe API, updates. Run once post-migration. After backfill, follow-up migration sets `NOT NULL`:
 
-### Migration 0132 — `revenue_snapshots` table (new)
+```sql
+ALTER TABLE stripe_prices ALTER COLUMN unit_amount_cents SET NOT NULL;
+```
+
+**Ongoing sync:** Add `price.updated` handler to `apps/web/src/app/api/v1/webhooks/stripe/route.ts` — updates `unit_amount_cents` when a Stripe price changes. Rare event; safe to sync reactively.
+
+### Migration 0133 — `revenue_snapshots` table (new)
 
 ```sql
 CREATE TABLE revenue_snapshots (
   id bigserial PRIMARY KEY,
   snapshot_date date NOT NULL,
   computed_at timestamptz NOT NULL DEFAULT now(),
-  mrr_cents bigint NOT NULL,
+  mrr_cents bigint NOT NULL,                     -- BILLABLE_STATUSES only (active, past_due)
+  potential_mrr_cents bigint NOT NULL,           -- mrr_cents + trials at list price
   active_subscriptions int NOT NULL,
   trialing_subscriptions int NOT NULL,
   past_due_subscriptions int NOT NULL,
@@ -103,11 +125,13 @@ CREATE INDEX idx_revenue_snapshots_date_computed
   ON revenue_snapshots (snapshot_date DESC, computed_at DESC);
 ```
 
+`mrr_cents` includes only `BILLABLE_STATUSES`. `potential_mrr_cents` adds `TRIAL_STATUSES` at list price. Dashboard shows `mrr_cents` as primary; `potential_mrr_cents` surfaces as an annotation.
+
 **Append-only.** No UNIQUE on `snapshot_date`. Queries use `DISTINCT ON (snapshot_date) ... ORDER BY snapshot_date DESC, computed_at DESC` to fetch latest per day. Re-running the job accrues rows, never overwrites.
 
 **Platform-wide, not tenant-scoped.** No `community_id` FK. Lives outside RLS like `stripe_prices`. Access requires `requirePlatformAdmin()`.
 
-### Migration 0133 — metrics query indexes
+### Migration 0134 — metrics query indexes
 
 ```sql
 CREATE INDEX idx_communities_created_at_real
@@ -123,9 +147,9 @@ Partial indexes keep them small and fast.
 
 ### Price resolution for MRR
 
-MRR is computed at snapshot time by joining `communities` → `stripe_prices` on `(subscription_plan, community_type, billing_interval='monthly')`. The `stripe_prices` table already has `unit_amount_cents`. No denormalization onto `communities` — join is cheap (~247 rows today, well under 100K at 5-year horizon).
+After migrations 0132, MRR is computed at snapshot time by joining `communities` → `stripe_prices` on `(subscription_plan, community_type, billing_interval='month')` and reading `unit_amount_cents`. Project only supports monthly billing (`billing_interval` has CHECK constraint on `'month'`), so no annual-to-monthly conversion is needed.
 
-`prices_version` in each snapshot row is `sha256(sorted stripe_prices rows as JSON)` for reproducibility: if prices change tomorrow, we can tell which snapshot used which price set.
+`prices_version` in each snapshot row is `sha256(sorted stripe_prices rows as JSON including unit_amount_cents)` for reproducibility: if a price changes tomorrow, the hash differs and we can tell which snapshot used which price set.
 
 ---
 
@@ -138,20 +162,30 @@ MRR is computed at snapshot time by joining `communities` → `stripe_prices` on
 ### Handler logic
 
 ```
-1. Compute prices_version hash from current stripe_prices rows
-2. Query active communities (active | trialing | past_due; real, not soft-deleted, not demo)
+1. Compute prices_version hash from current stripe_prices rows (including unit_amount_cents)
+2. Query live communities: WHERE deleted_at IS NULL AND is_demo = false
+                           AND subscription_status IN ALL_STATUSES
 3. For each community (try/catch per community for failure isolation):
-   - Join to stripe_prices; resolve unit_amount_cents
+   - Assert subscription_status is in ALL_STATUSES; if not, throw loud error
+   - Resolve unit_amount_cents via stripe_prices join
+   - If status in BILLABLE_STATUSES: add to mrr_cents + potential_mrr_cents
+   - If status in TRIAL_STATUSES: add to potential_mrr_cents only
+   - If status in CHURNED_STATUSES: skip (churn accounting is query-time, not snapshot)
    - Accumulate into by_plan, by_community_type buckets
-   - If billing_group: apply volume discount, add to savings counter
+   - If billing_group: compute discount savings delta (list - discounted)
 4. Query active access_plans; compute free_access_cost_cents
 5. Reconciliation: call Stripe API for active subscription count + sum, compute drift_pct
 6. Compute mrr_delta_pct vs latest prior snapshot
-7. INSERT into revenue_snapshots (no ON CONFLICT — append-only)
-8. Audit log: compliance_audit_log entry with entity_type='revenue_snapshot',
-   payload={mrr_cents, drift_pct, delta_pct, communities_skipped}
-9. If drift_pct > 5.0 OR |delta_pct| > 20.0: log warning (future: alert)
-10. Return 200 with snapshot summary
+7. Sanity checks BEFORE insert:
+   - mrr_cents >= 0 (reject negative)
+   - mrr_cents <= 10x prior snapshot OR prior snapshot is null (reject 10x jumps)
+   - If rejected: log structured error to Sentry, return 500, DO NOT INSERT
+8. INSERT into revenue_snapshots (no ON CONFLICT — append-only)
+9. Emit structured log + Sentry breadcrumb: {event:'revenue_snapshot',mrr_cents,drift_pct,
+   delta_pct,communities_skipped,prices_version}. No DB audit log table used — this
+   event is platform-level, and compliance_audit_log requires a community_id FK.
+10. If drift_pct > 5.0 OR |delta_pct| > 20.0: log Sentry warning (future: PagerDuty alert)
+11. Return 200 with snapshot summary
 ```
 
 ### Backfill script
@@ -174,7 +208,7 @@ Wired into external uptime monitor post-deploy.
 - How to read drift logs
 - What to do if the job stops running
 
-Tested in staging before PR 1 merges.
+**Test criterion for PR 1 merge:** On staging, (a) manually trigger the snapshot route, verify a row is written, (b) simulate a gap by setting `computed_at` of latest row to 30h ago, verify `/health` returns 503, (c) write a corrective snapshot per the runbook, verify `/health` returns 200. All three steps pass = runbook accepted. Recorded in the PR description.
 
 ---
 
@@ -205,7 +239,7 @@ UI uses `as_of` for "Updated 2m ago" display. If `now - as_of > ttl_seconds * 2`
 |---|---|---|
 | `GET /summary` | `tz` | All dashboard card data in one call: signups {7d,30d,delta}, churn {30d,reasons[]}, mrr {current,delta_30d}, access_plans {expiring_30d,active}, at_risk_count |
 | `GET /signups` | `tz`, `range=7d\|30d\|90d`, `cursor?` | `{series[{date,count,by_type}], list[{community_id,name,type,created_at,plan,status,owner_email}], next_cursor}` |
-| `GET /churn` | `tz`, `range=30d\|90d\|365d` | `{series[], list[{community_id,name,canceled_at,reason,note,mrr_lost_cents}], reasons[{reason,count,pct}]}` |
+| `GET /churn` | `tz`, `range=30d\|90d\|365d` | `{series[], list[{community_id,name,canceled_at,reason,note,mrr_lost_cents,reactivated:bool}], reasons[{reason,count,pct}], reactivations_count}` — query filters `subscription_status IN CHURNED_STATUSES AND subscription_canceled_at BETWEEN ...`; reactivations (status now `active` with non-null canceled_at) surfaced as a separate count |
 | `GET /revenue` | `tz`, `range=30d\|90d\|365d` | `{series[{date,mrr_cents,active_subs,reconciliation_drift_pct}], by_plan[], by_community_type[]}` |
 | `GET /cohorts` | `tz`, `period=month\|quarter`, `count=6\|12` | `{cohorts[{cohort_date,size,retention[{period_offset,active,pct}]}]}` |
 | `GET /funnel` | `tz`, `range=30d\|90d` | `{stages[{name,count,conversion_pct}], drop_offs[]}` from conversion_events + pending_signups |
@@ -285,11 +319,17 @@ Two new query-param filters added to existing `apps/admin/src/app/clients/page.t
 
 No new page. Reuses existing filter pattern.
 
-### Cancel flow — reason capture
+### Cancel flow — reason capture at API boundary
 
-**Location:** cancel flow UI (exact path TBD during implementation — either in user-facing settings or admin-facing community detail).
+**Problem:** `POST /api/v1/communities/[id]/cancel` (`apps/web/src/app/api/v1/communities/[id]/cancel/route.ts`) currently has no caller UI visible in the codebase. Building a dedicated cancel UI is scope creep on a metrics spec.
 
-Dropdown with `CANCELLATION_REASONS` options + optional free-text note. Written to `communities.cancellation_reason`, `cancellation_note`, `cancellation_captured_at` at cancel time. Enforced at API boundary with Zod.
+**Solution:** Capture reason at the API boundary, not the UI.
+
+- Add required `reason` field + optional `note` field to the cancel route's request body. Zod-validate `reason` against `CANCELLATION_REASONS`.
+- Write `cancellation_reason`, `cancellation_note`, `cancellation_captured_at` alongside the existing `deletedAt` mutation (`cancel/route.ts:70`).
+- Whatever UI eventually calls this route (self-service settings, admin community detail, or both) wires a dropdown to the request body. That UI work is a **separate ticket**, owned by whoever builds the cancel button.
+
+**Follow-up backfill ticket:** Historical `subscription_canceled_at IS NOT NULL` rows will have NULL reasons. Separate remediation script can backfill a best-guess reason based on billing history if product decides it's worth the effort. Not in scope here.
 
 ---
 
@@ -304,6 +344,8 @@ File: `packages/db/src/__tests__/metrics-invariants.test.ts`
 - `signups - churn === net change in active count` over any window
 - `cohort retention pct <= 100` always
 - Every active subscription joins to a row in `stripe_prices`
+- No community has `deleted_at IS NOT NULL AND subscription_status IN BILLABLE_STATUSES` (invariant violation = webhook race; alert, don't just filter)
+- `potential_mrr_cents >= mrr_cents` for every snapshot (trials never subtract)
 
 Run against real seed + 1000 fuzzed communities. CI gate.
 
@@ -328,9 +370,9 @@ All CI gates.
 
 ### Layer 3 — Load / performance
 
-- 10K synthesized communities in isolated test DB → all 6 endpoints p95 < 500ms
-- Cohort query 36 months × 500/month → single query, uses index (EXPLAIN verified)
-- Snapshot job completes < 30s at 10K active communities (Vercel cron timeout 60s)
+- 1K synthesized communities in isolated test DB → all 6 endpoints p95 < 500ms (realistic 1-2 year horizon)
+- Cohort query 24 months × 50/month → single query, uses index (EXPLAIN verified)
+- Snapshot job completes < 10s at 1K active communities (Vercel cron timeout 60s, plenty of headroom)
 
 ### Layer 4 — Contract tests
 
@@ -370,9 +412,13 @@ Dashboard + all `/metrics/*` pages scanned in CI. Fails on `serious` or `critica
 
 **Create:**
 - `packages/db/migrations/0131_add_cancellation_reason.sql`
-- `packages/db/migrations/0132_revenue_snapshots.sql`
-- `packages/db/migrations/0133_metrics_indexes.sql`
+- `packages/db/migrations/0132_stripe_prices_unit_amount.sql` (add column, nullable)
+- `packages/db/migrations/0132a_stripe_prices_unit_amount_not_null.sql` (after backfill; may split into follow-up PR)
+- `packages/db/migrations/0133_revenue_snapshots.sql`
+- `packages/db/migrations/0134_metrics_indexes.sql`
 - `packages/shared/src/constants/cancellation-reasons.ts`
+- `packages/shared/src/constants/subscription-statuses.ts`
+- `scripts/backfill-stripe-price-amounts.ts`
 - `packages/shared/src/types/metrics.ts`
 - `apps/web/src/app/api/v1/internal/revenue-snapshot/route.ts`
 - `apps/web/src/app/api/v1/internal/revenue-snapshot/health/route.ts`
@@ -395,14 +441,17 @@ Dashboard + all `/metrics/*` pages scanned in CI. Fails on `serious` or `critica
 - Test files per Testing Strategy section
 
 **Modify:**
-- `packages/db/src/schema/communities.ts` — add 3 columns
+- `packages/db/src/schema/communities.ts` — add 3 cancellation columns
+- `packages/db/src/schema/stripe-prices.ts` — add `unit_amount_cents` column
 - `packages/db/src/schema/index.ts` — export revenue_snapshots
-- `packages/db/migrations/meta/_journal.json` — register 3 new migrations
+- `packages/db/migrations/meta/_journal.json` — register new migrations
+- `apps/admin/package.json` — add `recharts` dependency
 - `apps/admin/src/components/dashboard/PlatformDashboard.tsx` — add new sections
 - `apps/admin/src/lib/server/dashboard.ts` — add fetchers for new cards
-- `apps/admin/src/app/clients/page.tsx` — add 2 filter options
+- `apps/admin/src/app/clients/page.tsx` — add 2 filter options (`past_due`, `access_expiring_30d`)
 - `apps/web/vercel.json` — register `/api/v1/internal/revenue-snapshot` cron alongside existing `account-lifecycle` entry
-- Cancel flow file(s) — add reason dropdown. PR 4 begins with a grep for the current cancel UI entry point (search terms: "cancel subscription", "subscription_canceled_at", "stripe.subscriptions.cancel") and decides whether the dropdown lives in user settings, admin community detail, or both
+- `apps/web/src/app/api/v1/communities/[id]/cancel/route.ts` — accept `reason` (required) + `note` (optional) in body; write to new community columns
+- `apps/web/src/app/api/v1/webhooks/stripe/route.ts` — handle `price.updated` event to sync `unit_amount_cents`
 
 **Reuse:**
 - `stripe_prices` table and lookup helpers (no changes)
