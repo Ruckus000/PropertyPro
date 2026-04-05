@@ -3,6 +3,7 @@ import { billingGroups, communities } from '@propertypro/db';
 import { eq, and, isNull, sql } from '@propertypro/db/filters';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
+import { notifyDowngrade } from './downgrade-notifications';
 
 export interface RecalculateResult {
   billingGroupId: number;
@@ -20,7 +21,20 @@ export interface RecalculateResult {
  * Uses a PostgreSQL advisory lock to serialize concurrent recalculations
  * for the same group.
  */
-export async function recalculateVolumeTier(billingGroupId: number): Promise<RecalculateResult> {
+function tierRank(t: VolumeTier): number {
+  const ranks: Record<VolumeTier, number> = {
+    none: 0,
+    tier_10: 1,
+    tier_15: 2,
+    tier_20: 3,
+  };
+  return ranks[t];
+}
+
+export async function recalculateVolumeTier(
+  billingGroupId: number,
+  context?: { canceledCommunityName?: string },
+): Promise<RecalculateResult> {
   const db = createUnscopedClient();
 
   // Phase 1: Acquire advisory lock, read counts, and update DB — all in one transaction.
@@ -81,6 +95,15 @@ export async function recalculateVolumeTier(billingGroupId: number): Promise<Rec
     .update(billingGroups)
     .set({ couponSyncStatus: 'synced', updatedAt: new Date() })
     .where(eq(billingGroups.id, billingGroupId));
+
+  if (tierChanged && tierRank(previousTier) > tierRank(newTier) && context?.canceledCommunityName) {
+    await notifyDowngrade({
+      billingGroupId,
+      previousTier,
+      newTier,
+      canceledCommunityName: context.canceledCommunityName,
+    });
+  }
 
   return { billingGroupId, previousTier, newTier, activeCount: count, tierChanged };
 }
