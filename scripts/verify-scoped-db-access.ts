@@ -158,6 +158,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/route.ts'),
   // Account lifecycle cron — cross-community deletion + notification processing
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts'),
+  // Coupon sync retry cron — billing group tier recalculation and Stripe discount sync
+  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts'),
   // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts'),
   // Support access consent — uses createAdminClient for cross-community consent/log queries
@@ -168,6 +170,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
   // Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available
   resolve(repoRoot, 'apps/web/src/lib/billing/billing-group-service.ts'),
+  // Downgrade notifications — queries communities and admins in a billing group for notification dispatch
+  resolve(repoRoot, 'apps/web/src/lib/billing/downgrade-notifications.ts'),
   // Pricing preview — queries all communities in a billing group; authorized by billing group ownership
   resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts'),
   // Cancel preview — queries communities in a billing group; authorized by billing group ownership
