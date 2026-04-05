@@ -50,7 +50,11 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
               <p className="text-sm font-medium truncate">{item.title}</p>
               <p className="text-xs text-secondary">
                 {item.communityName} &middot;{' '}
-                {new Date(item.occurredAt).toLocaleDateString()}
+                {new Date(item.occurredAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
               </p>
             </div>
           </li>

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useUserCommunities } from '@/hooks/use-user-communities';
+import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
 
 /**
  * CommunitySwitcher — dropdown that lets a multi-community user jump to
@@ -49,7 +50,7 @@ export function CommunitySwitcher() {
         {communities.map((c) => (
           <DropdownMenuItem key={c.id} asChild>
             <a
-              href={`https://${c.slug}.getpropertypro.com/dashboard`}
+              href={buildCommunityDashboardUrl(c.slug)}
               className="cursor-pointer"
             >
               <span className="flex-1 truncate">{c.name}</span>
