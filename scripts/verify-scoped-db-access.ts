@@ -166,6 +166,18 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/support/impersonation.ts'),
   // Auth helper hydrates the effective support-session actor from the users table
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
+  // Self-service community linking: pre-tenant eligibility checks + cross-community lookups
+  // authorization contract: caller authenticates userId before invoking these helpers
+  resolve(repoRoot, 'apps/web/src/lib/join-requests/eligibility.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/join-requests/approve-request.ts'),
+  // Public community search: discovery endpoint intentionally queries across all communities,
+  // returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/public/communities/search/route.ts'),
+  // Authenticated user's own join requests (own-user scoped, no community context yet)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/account/join-requests/route.ts'),
+  // Admin approve/deny endpoints: cross-community service dispatched after permission check
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/approve/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
