@@ -49,6 +49,10 @@
     {
       "path": "/api/v1/internal/coupon-sync-retry",
       "schedule": "15 5 * * *"
+    },
+    {
+      "path": "/api/v1/internal/revenue-snapshot",
+      "schedule": "0 2 * * *"
     }
   ]
 }
