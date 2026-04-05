@@ -168,6 +168,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
   // Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available
   resolve(repoRoot, 'apps/web/src/lib/billing/billing-group-service.ts'),
+  // Pricing preview — queries all communities in a billing group; authorized by billing group ownership
+  resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts'),
+  // Cancel preview — queries communities in a billing group; authorized by billing group ownership
+  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel-preview/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

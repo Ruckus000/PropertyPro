@@ -108,6 +108,19 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
 };
 
 /**
+ * Base monthly prices (USD) keyed by plan ID.
+ *
+ * For UI pricing previews and volume-discount calculations.
+ * These mirror the monthlyPriceUsd fields in PLAN_FEATURES — keep in sync.
+ * Authoritative pricing still lives in the stripe_prices table.
+ */
+export const PLAN_MONTHLY_PRICES_USD = {
+  essentials: 199,
+  professional: 349,
+  operations_plus: 499,
+} as const satisfies Record<PlanId, number>;
+
+/**
  * Finds the cheapest plan that includes a specific feature.
  * Returns null if no plan includes the feature.
  */
