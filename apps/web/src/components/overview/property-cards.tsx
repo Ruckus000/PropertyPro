@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/status-badge';
 import type { CommunityCard } from '@/lib/queries/cross-community.types';
+import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
 
 function scoreStatus(score: number): 'compliant' | 'pending' | 'overdue' {
   if (score >= 90) return 'compliant';
@@ -70,11 +70,12 @@ export function PropertyCards({ cards }: { cards: CommunityCard[] }) {
           )}
           <div className="mt-4">
             <Button asChild variant="outline" size="sm">
-              <Link
-                href={`https://${card.communitySlug}.getpropertypro.com/dashboard`}
-              >
+              {/* Cross-subdomain navigation: use a standard <a> for a clean
+                  full-page transition. next/link's client-side router is
+                  tuned for same-origin routing. */}
+              <a href={buildCommunityDashboardUrl(card.communitySlug)}>
                 Go to Dashboard
-              </Link>
+              </a>
             </Button>
           </div>
         </li>
