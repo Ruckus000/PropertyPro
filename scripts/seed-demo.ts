@@ -365,8 +365,12 @@ async function ensureDemoPortfolioCustomer(
 
   const customerFromDb = existingCustomerIds[0];
   if (customerFromDb) {
-    const customer = await stripe.customers.retrieve(customerFromDb);
-    if (isStripeCustomer(customer)) {
+    // In dev envs the Stripe customer may have been deleted out from under us;
+    // fall through to list/create a fresh one instead of crashing the seed.
+    const customer = await stripe.customers
+      .retrieve(customerFromDb)
+      .catch(() => null);
+    if (customer && isStripeCustomer(customer)) {
       await stripe.customers.update(customer.id, {
         email: DEMO_PM_PORTFOLIO_EMAIL,
         name: DEMO_PM_PORTFOLIO_NAME,

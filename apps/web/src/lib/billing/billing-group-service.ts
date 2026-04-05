@@ -178,6 +178,10 @@ export async function getOrCreateBillingGroupForPm(
         eq(userRoles.userId, userId),
         eq(userRoles.role, 'pm_admin'),
         isNull(communities.deletedAt),
+        // Only consider communities that aren't already in a billing group —
+        // we never want to silently yank a community out of an existing
+        // portfolio it belongs to.
+        isNull(communities.billingGroupId),
       ),
     );
 
