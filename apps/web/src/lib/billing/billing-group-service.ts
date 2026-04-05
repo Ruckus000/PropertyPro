@@ -36,7 +36,7 @@ export async function recalculateVolumeTier(billingGroupId: number): Promise<Rec
 
     if (!grp) throw new Error(`Billing group ${billingGroupId} not found`);
 
-    const [{ count }] = await tx
+    const countRows = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(communities)
       .where(
@@ -45,6 +45,7 @@ export async function recalculateVolumeTier(billingGroupId: number): Promise<Rec
           isNull(communities.deletedAt),
         ),
       );
+    const count = countRows[0]?.count ?? 0;
 
     const prev = grp.volumeTier as VolumeTier;
     const next = determineTier(count);
@@ -93,6 +94,7 @@ export interface CreateBillingGroupInput {
 export async function createBillingGroup(input: CreateBillingGroupInput): Promise<number> {
   const db = createUnscopedClient();
   const [row] = await db.insert(billingGroups).values(input).returning({ id: billingGroups.id });
+  if (!row) throw new Error('Failed to create billing group');
   return row.id;
 }
 
@@ -115,4 +117,90 @@ export async function getBillingGroupByOwner(ownerUserId: string) {
     .where(and(eq(billingGroups.ownerUserId, ownerUserId), isNull(billingGroups.deletedAt)))
     .limit(1);
   return row ?? null;
+}
+
+import { pendingSignups } from '@propertypro/db';
+
+export async function getOrCreateBillingGroupForPm(
+  userId: string,
+): Promise<{ billingGroupId: number; stripeCustomerId: string }> {
+  const db = createUnscopedClient();
+
+  const existing = await getBillingGroupByOwner(userId);
+  if (existing) {
+    return { billingGroupId: existing.id, stripeCustomerId: existing.stripeCustomerId };
+  }
+
+  // Find PM's first community (from signup) to get its Stripe Customer
+  const [firstCommunity] = await db
+    .select({
+      id: communities.id,
+      stripeCustomerId: communities.stripeCustomerId,
+      name: communities.name,
+    })
+    .from(communities)
+    .innerJoin(sql`user_roles ur`, sql`ur.community_id = ${communities.id}`)
+    .where(and(sql`ur.user_id = ${userId}::uuid`, sql`ur.role = 'pm_admin'`, isNull(communities.deletedAt)))
+    .limit(1);
+
+  if (!firstCommunity?.stripeCustomerId) {
+    throw new Error('PM has no community with a Stripe customer ID; cannot create billing group');
+  }
+
+  const billingGroupId = await createBillingGroup({
+    name: firstCommunity.name + ' Portfolio',
+    stripeCustomerId: firstCommunity.stripeCustomerId,
+    ownerUserId: userId,
+  });
+
+  await linkCommunityToBillingGroup(firstCommunity.id, billingGroupId);
+
+  return { billingGroupId, stripeCustomerId: firstCommunity.stripeCustomerId };
+}
+
+export async function createPendingAddToGroupSignup(input: {
+  userId: string;
+  billingGroupId: number;
+  input: {
+    name: string;
+    communityType: string;
+    planId: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    subdomain: string;
+    timezone: string;
+    unitCount: number;
+  };
+}): Promise<number> {
+  const db = createUnscopedClient();
+  const signupRequestId = `add-${input.billingGroupId}-${Date.now()}`;
+  const [row] = await db
+    .insert(pendingSignups)
+    .values({
+      signupRequestId,
+      authUserId: input.userId,
+      primaryContactName: 'PM Admin',
+      email: 'pm-add@placeholder.local',
+      emailNormalized: `pm-add-${signupRequestId}@placeholder.local`,
+      communityName: input.input.name,
+      address: `${input.input.addressLine1}, ${input.input.city}, ${input.input.state} ${input.input.zipCode}`,
+      county: input.input.state,
+      unitCount: input.input.unitCount,
+      communityType: input.input.communityType as any,
+      planKey: input.input.planId,
+      candidateSlug: input.input.subdomain,
+      termsAcceptedAt: new Date(),
+      status: 'checkout_started',
+      payload: {
+        kind: 'add_to_group',
+        billingGroupId: input.billingGroupId,
+        fullInput: input.input,
+      },
+    })
+    .returning({ id: pendingSignups.id });
+  if (!row) throw new Error('Failed to insert pending signup');
+  return Number(row.id);
 }

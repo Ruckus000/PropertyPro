@@ -151,3 +151,42 @@ export async function createBillingPortalSession(
 export function getStripeClient(): Stripe {
   return getStripe();
 }
+
+/**
+ * Create an Embedded Checkout session for a PM adding a community to their
+ * existing billing group. No trial (PM is already a paying customer).
+ */
+export async function createAddCommunityCheckout(input: {
+  billingGroupId: number;
+  stripeCustomerId: string;
+  pendingSignupId: number;
+  communityType: CommunityType;
+  planId: PlanId;
+  candidateSlug: string;
+  returnBaseUrl: string;
+}): Promise<{ clientSecret: string; sessionId: string }> {
+  const stripe = getStripe();
+  const priceId = await resolveStripePrice(input.planId, input.communityType, 'month');
+
+  const session = await stripe.checkout.sessions.create({
+    ui_mode: 'embedded',
+    mode: 'subscription',
+    customer: input.stripeCustomerId,
+    line_items: [{ price: priceId, quantity: 1 }],
+    return_url: `${input.returnBaseUrl}/pm/dashboard?added_session_id={CHECKOUT_SESSION_ID}`,
+    metadata: {
+      kind: 'add_to_group',
+      billingGroupId: String(input.billingGroupId),
+      pendingSignupId: String(input.pendingSignupId),
+      communityType: input.communityType,
+      selectedPlan: input.planId,
+      candidateSlug: input.candidateSlug,
+    },
+  });
+
+  if (!session.client_secret) {
+    throw new AppError('Stripe did not return client_secret', 500, 'STRIPE_NO_CLIENT_SECRET');
+  }
+
+  return { clientSecret: session.client_secret, sessionId: session.id };
+}

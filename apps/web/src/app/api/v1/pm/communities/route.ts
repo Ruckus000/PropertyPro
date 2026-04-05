@@ -9,6 +9,8 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
 import { createCommunityForPm } from '@/lib/pm/create-community';
+import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
+import { getOrCreateBillingGroupForPm, createPendingAddToGroupSignup } from '@/lib/billing/billing-group-service';
 
 const querySchema = z.object({
   communityType: z.enum(COMMUNITY_TYPES).optional(),
@@ -49,6 +51,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 const createCommunitySchema = z.object({
   name: z.string().trim().min(1).max(200),
   communityType: z.enum(COMMUNITY_TYPES),
+  planId: z.enum(['essentials', 'professional', 'operations_plus']),
   addressLine1: z.string().trim().min(1).max(200),
   addressLine2: z.string().trim().max(200).optional(),
   city: z.string().trim().min(1).max(100),
@@ -70,9 +73,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = await req.json();
   const parseResult = createCommunitySchema.safeParse(body);
   if (!parseResult.success) {
-    throw new ValidationError('Invalid community data', {
-      issues: parseResult.error.issues,
-    });
+    throw new ValidationError('Invalid community data', { issues: parseResult.error.issues });
   }
 
   const input = parseResult.data;
@@ -86,11 +87,29 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const result = await createCommunityForPm({
-    ...input,
-    subdomain: slugCheck.normalizedSubdomain,
+  // 1. Get or create billing group for this PM
+  const { billingGroupId, stripeCustomerId } = await getOrCreateBillingGroupForPm(userId);
+
+  // 2. Create pending_signups row for add-to-group flow
+  const pendingSignupId = await createPendingAddToGroupSignup({
     userId,
+    billingGroupId,
+    input: { ...input, subdomain: slugCheck.normalizedSubdomain },
   });
 
-  return NextResponse.json({ data: result }, { status: 201 });
+  // 3. Create Stripe Checkout session (no trial)
+  const { clientSecret } = await createAddCommunityCheckout({
+    billingGroupId,
+    stripeCustomerId,
+    pendingSignupId,
+    communityType: input.communityType,
+    planId: input.planId,
+    candidateSlug: slugCheck.normalizedSubdomain,
+    returnBaseUrl: process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+  });
+
+  return NextResponse.json(
+    { data: { clientSecret, pendingSignupId, billingGroupId } },
+    { status: 202 },
+  );
 });
