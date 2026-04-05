@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/demos/[slug]/convert
+ * POST /api/admin/demos/[id]/convert (where [id] carries the demo slug)
  *
  * Creates a Stripe checkout session for converting a demo community
  * into a paid subscription. The Stripe webhook handler (in the web app)
@@ -61,7 +61,7 @@ function getWebAppOrigin(): string {
 
 export async function POST(
   request: NextRequest,
-  context: { params: Promise<{ slug: string }> },
+  context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   // 0. Auth — requirePlatformAdmin throws Response(401/403) on failure
   let admin;
@@ -77,7 +77,7 @@ export async function POST(
     throw err;
   }
 
-  const { slug } = await context.params;
+  const { id: slug } = await context.params;
 
   // 1. Validate request body
   let body: unknown;
