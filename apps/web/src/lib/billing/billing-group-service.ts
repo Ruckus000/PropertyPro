@@ -37,64 +37,75 @@ export async function recalculateVolumeTier(
 ): Promise<RecalculateResult> {
   const db = createUnscopedClient();
 
-  // Phase 1: Acquire advisory lock, read counts, and update DB — all in one transaction.
-  // The advisory lock serializes concurrent recalculations for the same group.
-  const { group, previousTier, newTier, count, tierChanged } = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(${billingGroupId})`);
+  // Serialize concurrent recalculations for the same group for the entire
+  // duration — including the Stripe API call. Because pg_advisory_xact_lock
+  // is released when the transaction ends, we must wrap the Stripe sync
+  // inside the transaction. This keeps a DB connection open for the Stripe
+  // round-trip, but avoids the race where two out-of-order Stripe updates
+  // leave Stripe and DB disagreeing about the active tier.
+  let group!: typeof billingGroups.$inferSelect;
+  let previousTier!: VolumeTier;
+  let newTier!: VolumeTier;
+  let count = 0;
+  let tierChanged = false;
 
-    const [grp] = await tx
-      .select()
-      .from(billingGroups)
-      .where(eq(billingGroups.id, billingGroupId))
-      .limit(1);
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${billingGroupId})`);
 
-    if (!grp) throw new Error(`Billing group ${billingGroupId} not found`);
+      const [grp] = await tx
+        .select()
+        .from(billingGroups)
+        .where(eq(billingGroups.id, billingGroupId))
+        .limit(1);
 
-    const countRows = await tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(communities)
-      .where(
-        and(
-          eq(communities.billingGroupId, billingGroupId),
-          isNull(communities.deletedAt),
-        ),
-      );
-    const count = countRows[0]?.count ?? 0;
+      if (!grp) throw new Error(`Billing group ${billingGroupId} not found`);
+      group = grp;
 
-    const prev = grp.volumeTier as VolumeTier;
-    const next = determineTier(count);
+      const countRows = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(communities)
+        .where(
+          and(
+            eq(communities.billingGroupId, billingGroupId),
+            isNull(communities.deletedAt),
+          ),
+        );
+      count = countRows[0]?.count ?? 0;
 
-    await tx
-      .update(billingGroups)
-      .set({
-        activeCommunityCount: count,
-        volumeTier: next,
-        couponSyncStatus: 'pending',
-        updatedAt: new Date(),
-      })
-      .where(eq(billingGroups.id, billingGroupId));
+      previousTier = grp.volumeTier as VolumeTier;
+      newTier = determineTier(count);
+      tierChanged = previousTier !== newTier;
 
-    return { group: grp, previousTier: prev, newTier: next, count, tierChanged: prev !== next };
-  });
-
-  // Phase 2: Apply Stripe discount outside the transaction so that a Stripe failure
-  // can be durably recorded (the transaction would roll back any update inside it).
-  if (tierChanged) {
-    try {
-      await applyVolumeDiscountToSubscriptions(group.stripeCustomerId, newTier);
-    } catch (err) {
-      await db
+      await tx
         .update(billingGroups)
-        .set({ couponSyncStatus: 'failed', updatedAt: new Date() })
+        .set({
+          activeCommunityCount: count,
+          volumeTier: newTier,
+          couponSyncStatus: tierChanged ? 'pending' : 'synced',
+          updatedAt: new Date(),
+        })
         .where(eq(billingGroups.id, billingGroupId));
-      throw err;
-    }
-  }
 
-  await db
-    .update(billingGroups)
-    .set({ couponSyncStatus: 'synced', updatedAt: new Date() })
-    .where(eq(billingGroups.id, billingGroupId));
+      if (tierChanged) {
+        // Stripe call happens inside the txn so the advisory lock still holds.
+        await applyVolumeDiscountToSubscriptions(grp.stripeCustomerId, newTier);
+
+        await tx
+          .update(billingGroups)
+          .set({ couponSyncStatus: 'synced', updatedAt: new Date() })
+          .where(eq(billingGroups.id, billingGroupId));
+      }
+    });
+  } catch (err) {
+    // Stripe (or DB) failed inside the txn — record 'failed' in a fresh
+    // transaction so the cron retry worker can pick it up.
+    await db
+      .update(billingGroups)
+      .set({ couponSyncStatus: 'failed', updatedAt: new Date() })
+      .where(eq(billingGroups.id, billingGroupId));
+    throw err;
+  }
 
   if (tierChanged && tierRank(previousTier) > tierRank(newTier) && context?.canceledCommunityName) {
     await notifyDowngrade({
@@ -199,7 +210,7 @@ export async function createPendingAddToGroupSignup(input: {
   };
 }): Promise<number> {
   const db = createUnscopedClient();
-  const signupRequestId = `add-${input.billingGroupId}-${Date.now()}`;
+  const signupRequestId = `add-${input.billingGroupId}-${crypto.randomUUID()}`;
   const [row] = await db
     .insert(pendingSignups)
     .values({
