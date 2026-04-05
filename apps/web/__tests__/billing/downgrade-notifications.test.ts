@@ -61,7 +61,7 @@ describe('notifyDowngrade', () => {
     expect(firstCall[0]).toBe(1); // communityId
     expect(firstCall[1]).toMatchObject({
       category: 'system',
-      title: 'Portfolio discount changed',
+      title: 'Your volume discount is decreasing',
       body: expect.stringContaining('from 15% to 10%'),
     });
     expect(firstCall[2]).toMatchObject({ type: 'specific_user', userId: 'u1' });

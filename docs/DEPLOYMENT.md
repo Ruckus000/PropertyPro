@@ -45,6 +45,7 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `DEMO_DEFAULT_PASSWORD` | Password for demo seed users | Internal documentation |
 | `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://getpropertypro.com` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
+| `COUPON_SYNC_RETRY_CRON_SECRET` | Bearer token for coupon sync retry cron endpoint | Generated shared secret |
 
 ### Repository Variables
 
@@ -88,6 +89,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `NODE_ENV` | All | `production` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
+| `COUPON_SYNC_RETRY_CRON_SECRET` | Server only | Shared bearer secret |
 | `PROVISIONING_RETRY_SECRET` | Server only | Shared bearer secret |
 
 ## 5. Domain & DNS Configuration

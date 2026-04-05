@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import Stripe from 'stripe';
 import {
   assessmentLineItems,
   assessments,
@@ -11,6 +12,7 @@ import {
   esignSigners,
   esignSubmissions,
   esignTemplates,
+  stripePrices,
   meetings,
   notificationPreferences,
   units,
@@ -30,9 +32,13 @@ import {
   type SeedUserConfig,
 } from '@propertypro/db/seed/seed-community';
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
-import { getComplianceTemplate, type CommunityType } from '@propertypro/shared';
+import { getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import {
+  getOrCreateBillingGroupForPm,
+  recalculateVolumeTier,
+} from '../apps/web/src/lib/billing/billing-group-service';
 
 const db = createUnscopedClient();
 
@@ -104,11 +110,60 @@ const demoUsersByEmail = new Map<string, (typeof DEMO_USERS)[number]>(
   DEMO_USERS.map((user) => [user.email, user]),
 );
 
+const DEMO_PM_PORTFOLIO_EMAIL = 'pm.admin@sunset.local';
+const DEMO_PM_PORTFOLIO_NAME = 'Pat PM Demo Portfolio';
+const DEMO_PM_PORTFOLIO_KEY = 'demo_pm_portfolio';
+const DEMO_PM_PORTFOLIO_ORIGIN = 'demo_seed_pm_portfolio';
+const DEMO_PM_PORTFOLIO_CUSTOMER_METADATA = {
+  origin: DEMO_PM_PORTFOLIO_ORIGIN,
+  portfolioKey: DEMO_PM_PORTFOLIO_KEY,
+};
+
+const PM_PORTFOLIO_PLAN_BY_SLUG: Record<DemoCommunitySlug, PlanId> = {
+  'sunset-condos': 'essentials',
+  'palm-shores-hoa': 'essentials',
+  'sunset-ridge-apartments': 'operations_plus',
+};
+
+const REUSABLE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>([
+  'active',
+  'trialing',
+  'past_due',
+  'unpaid',
+]);
+
+interface DemoPortfolioCommunity {
+  id: number;
+  slug: DemoCommunitySlug;
+  name: string;
+  communityType: CommunityType;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  billingGroupId: number | null;
+  subscriptionPlan: string | null;
+  subscriptionStatus: string | null;
+}
+
+let stripeClient: Stripe | null = null;
+
 function debugSeed(message: string): void {
   if (DEBUG_DEMO_SEED) {
     // eslint-disable-next-line no-console
     console.log(`[seed-demo] ${message}`);
   }
+}
+
+function getStripeClient(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    return null;
+  }
+
+  if (!stripeClient) {
+    stripeClient = new Stripe(key, { apiVersion: '2026-01-28.clover' });
+  }
+
+  return stripeClient;
 }
 
 function buildSeedUsers(assignments: CommunityRoleAssignment[]): SeedUserConfig[] {
@@ -259,6 +314,308 @@ async function ensureDemoAuthUser(email: string): Promise<string | null> {
   }
 
   return createResult.data.user.id;
+}
+
+function isStripeCustomer(
+  customer: Stripe.Customer | Stripe.DeletedCustomer,
+): customer is Stripe.Customer {
+  return !('deleted' in customer && customer.deleted);
+}
+
+async function resolveSeedStripePriceId(
+  planId: PlanId,
+  communityType: CommunityType,
+): Promise<string> {
+  const [row] = await db
+    .select({ stripePriceId: stripePrices.stripePriceId })
+    .from(stripePrices)
+    .where(
+      and(
+        eq(stripePrices.planId, planId),
+        eq(stripePrices.communityType, communityType),
+        eq(stripePrices.billingInterval, 'month'),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    throw new Error(
+      `Missing stripe_prices row for seeded demo billing (${planId}/${communityType}/month)`,
+    );
+  }
+
+  return row.stripePriceId;
+}
+
+async function ensureDemoPortfolioCustomer(
+  stripe: Stripe,
+  seededCommunities: DemoPortfolioCommunity[],
+): Promise<string> {
+  const existingCustomerIds = [...new Set(
+    seededCommunities
+      .map((community) => community.stripeCustomerId)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+  )];
+
+  if (existingCustomerIds.length > 1) {
+    throw new Error(
+      `Demo PM communities already reference multiple Stripe customers: ${existingCustomerIds.join(', ')}`,
+    );
+  }
+
+  const customerFromDb = existingCustomerIds[0];
+  if (customerFromDb) {
+    const customer = await stripe.customers.retrieve(customerFromDb);
+    if (isStripeCustomer(customer)) {
+      await stripe.customers.update(customer.id, {
+        email: DEMO_PM_PORTFOLIO_EMAIL,
+        name: DEMO_PM_PORTFOLIO_NAME,
+        metadata: {
+          ...customer.metadata,
+          ...DEMO_PM_PORTFOLIO_CUSTOMER_METADATA,
+        },
+      });
+      return customer.id;
+    }
+  }
+
+  const listedCustomers = await stripe.customers.list({
+    email: DEMO_PM_PORTFOLIO_EMAIL,
+    limit: 100,
+  });
+  const seededCustomer = listedCustomers.data.find(
+    (customer) =>
+      customer.metadata.origin === DEMO_PM_PORTFOLIO_ORIGIN &&
+      customer.metadata.portfolioKey === DEMO_PM_PORTFOLIO_KEY,
+  );
+
+  if (seededCustomer) {
+    await stripe.customers.update(seededCustomer.id, {
+      email: DEMO_PM_PORTFOLIO_EMAIL,
+      name: DEMO_PM_PORTFOLIO_NAME,
+      metadata: {
+        ...seededCustomer.metadata,
+        ...DEMO_PM_PORTFOLIO_CUSTOMER_METADATA,
+      },
+    });
+    return seededCustomer.id;
+  }
+
+  const createdCustomer = await stripe.customers.create({
+    email: DEMO_PM_PORTFOLIO_EMAIL,
+    name: DEMO_PM_PORTFOLIO_NAME,
+    metadata: DEMO_PM_PORTFOLIO_CUSTOMER_METADATA,
+  });
+
+  return createdCustomer.id;
+}
+
+async function ensureDemoPortfolioPaymentMethod(
+  stripe: Stripe,
+  customerId: string,
+): Promise<string> {
+  const paymentMethods = await stripe.paymentMethods.list({
+    customer: customerId,
+    type: 'card',
+  });
+
+  let paymentMethodId = paymentMethods.data[0]?.id;
+  if (!paymentMethodId) {
+    const paymentMethod = await stripe.paymentMethods.create({
+      type: 'card',
+      card: { token: 'tok_visa' },
+    });
+    await stripe.paymentMethods.attach(paymentMethod.id, { customer: customerId });
+    paymentMethodId = paymentMethod.id;
+  }
+
+  await stripe.customers.update(customerId, {
+    invoice_settings: {
+      default_payment_method: paymentMethodId,
+    },
+  });
+
+  return paymentMethodId;
+}
+
+function buildSeededSubscriptionMetadata(
+  community: DemoPortfolioCommunity,
+  planId: PlanId,
+): Record<string, string> {
+  return {
+    origin: DEMO_PM_PORTFOLIO_ORIGIN,
+    portfolioKey: DEMO_PM_PORTFOLIO_KEY,
+    communitySlug: community.slug,
+    communityId: String(community.id),
+    planId,
+  };
+}
+
+function matchesSeededSubscription(
+  subscription: Stripe.Subscription,
+  community: DemoPortfolioCommunity,
+): boolean {
+  return (
+    subscription.metadata.origin === DEMO_PM_PORTFOLIO_ORIGIN &&
+    subscription.metadata.portfolioKey === DEMO_PM_PORTFOLIO_KEY &&
+    subscription.metadata.communitySlug === community.slug
+  );
+}
+
+async function ensureDemoPortfolioSubscription(input: {
+  stripe: Stripe;
+  community: DemoPortfolioCommunity;
+  customerId: string;
+  defaultPaymentMethodId: string;
+  planId: PlanId;
+}): Promise<Stripe.Subscription> {
+  const { stripe, community, customerId, defaultPaymentMethodId, planId } = input;
+  const priceId = await resolveSeedStripePriceId(planId, community.communityType);
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100,
+    expand: ['data.items.data.price'],
+  });
+
+  const candidates = subscriptions.data.filter(
+    (subscription) =>
+      subscription.id === community.stripeSubscriptionId ||
+      matchesSeededSubscription(subscription, community),
+  );
+  const reusable = candidates.find((subscription) =>
+    REUSABLE_SUBSCRIPTION_STATUSES.has(subscription.status),
+  );
+
+  if (reusable) {
+    const primaryItem = reusable.items.data[0];
+    if (!primaryItem) {
+      throw new Error(`Subscription ${reusable.id} has no items for seeded community ${community.slug}`);
+    }
+
+    const nextMetadata = {
+      ...reusable.metadata,
+      ...buildSeededSubscriptionMetadata(community, planId),
+    };
+
+    if (primaryItem.price.id !== priceId) {
+      return stripe.subscriptions.update(reusable.id, {
+        default_payment_method: defaultPaymentMethodId,
+        items: [{ id: primaryItem.id, price: priceId }],
+        metadata: nextMetadata,
+        proration_behavior: 'none',
+        expand: ['items.data.price'],
+      });
+    }
+
+    await stripe.subscriptions.update(reusable.id, {
+      default_payment_method: defaultPaymentMethodId,
+      metadata: nextMetadata,
+    });
+
+    return reusable;
+  }
+
+  const created = await stripe.subscriptions.create({
+    customer: customerId,
+    collection_method: 'charge_automatically',
+    default_payment_method: defaultPaymentMethodId,
+    items: [{ price: priceId }],
+    metadata: buildSeededSubscriptionMetadata(community, planId),
+    payment_settings: {
+      save_default_payment_method: 'on_subscription',
+    },
+    expand: ['items.data.price'],
+  });
+
+  if (!REUSABLE_SUBSCRIPTION_STATUSES.has(created.status)) {
+    throw new Error(
+      `Seeded subscription ${created.id} for ${community.slug} was created with unexpected status ${created.status}`,
+    );
+  }
+
+  return created;
+}
+
+async function seedPmPortfolioBilling(
+  userIdsByEmail: Record<string, string>,
+): Promise<void> {
+  const stripe = getStripeClient();
+  if (!stripe) {
+    debugSeed('STRIPE_SECRET_KEY is not set; skipping demo PM portfolio billing seed');
+    return;
+  }
+
+  const seededCommunities = await db
+    .select({
+      id: communities.id,
+      slug: communities.slug,
+      name: communities.name,
+      communityType: communities.communityType,
+      stripeCustomerId: communities.stripeCustomerId,
+      stripeSubscriptionId: communities.stripeSubscriptionId,
+      billingGroupId: communities.billingGroupId,
+      subscriptionPlan: communities.subscriptionPlan,
+      subscriptionStatus: communities.subscriptionStatus,
+    })
+    .from(communities)
+    .where(
+      and(
+        inArray(communities.slug, [...DEMO_COMMUNITIES.map((community) => community.slug)]),
+        isNull(communities.deletedAt),
+      ),
+    );
+
+  const typedSeededCommunities = seededCommunities as DemoPortfolioCommunity[];
+  if (typedSeededCommunities.length !== DEMO_COMMUNITIES.length) {
+    throw new Error('Missing one or more seeded demo communities for PM portfolio billing setup');
+  }
+
+  const customerId = await ensureDemoPortfolioCustomer(stripe, typedSeededCommunities);
+  const defaultPaymentMethodId = await ensureDemoPortfolioPaymentMethod(stripe, customerId);
+
+  for (const community of typedSeededCommunities) {
+    const planId = PM_PORTFOLIO_PLAN_BY_SLUG[community.slug];
+    const subscription = await ensureDemoPortfolioSubscription({
+      stripe,
+      community,
+      customerId,
+      defaultPaymentMethodId,
+      planId,
+    });
+
+    await db
+      .update(communities)
+      .set({
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        subscriptionPlan: planId,
+        subscriptionStatus: subscription.status,
+        updatedAt: new Date(),
+      })
+      .where(eq(communities.id, community.id));
+  }
+
+  const pmUserId = resolveUserId(userIdsByEmail, DEMO_PM_PORTFOLIO_EMAIL);
+  const { billingGroupId, stripeCustomerId } = await getOrCreateBillingGroupForPm(pmUserId);
+  if (stripeCustomerId !== customerId) {
+    throw new Error(
+      `PM billing group customer mismatch: expected ${customerId}, got ${stripeCustomerId}`,
+    );
+  }
+
+  await db
+    .update(communities)
+    .set({
+      billingGroupId,
+      updatedAt: new Date(),
+    })
+    .where(inArray(communities.id, typedSeededCommunities.map((community) => community.id)));
+
+  const result = await recalculateVolumeTier(billingGroupId);
+  debugSeed(
+    `pm portfolio billing seeded: group=${billingGroupId}, customer=${customerId}, count=${result.activeCount}, tier=${result.newTier}`,
+  );
 }
 
 function addDays(source: Date, days: number): Date {
@@ -1176,6 +1533,9 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   // Seed assessment + line item data for Sunset Condos
   await seedAssessmentData(sunsetCommunityId, boardPresidentId);
   debugSeed('assessment seed complete');
+
+  await seedPmPortfolioBilling(userIdsByEmail);
+  debugSeed('pm portfolio billing seed complete');
 
   debugSeed('runDemoSeed complete');
 }

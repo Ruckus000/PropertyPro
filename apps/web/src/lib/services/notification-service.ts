@@ -31,12 +31,12 @@ import {
   isNotificationTypeEnabled,
   type NotificationKind,
   type UserNotificationPreferences,
-} from '@/lib/utils/email-preferences';
+} from '../utils/email-preferences';
 import {
   enqueueDigestItems,
   type EnqueueDigestItemInput,
   type DigestSourceType,
-} from '@/lib/services/notification-digest-queue';
+} from './notification-digest-queue';
 
 // ---------------------------------------------------------------------------
 // Types

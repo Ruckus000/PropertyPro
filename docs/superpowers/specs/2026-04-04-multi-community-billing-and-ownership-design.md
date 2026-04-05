@@ -239,7 +239,7 @@ async function recalculateVolumeTier(billingGroupId: number) {
 
 ### Retry Worker
 
-A scheduled job (`/api/v1/internal/coupon-sync-retry`) runs every 10 minutes, finds billing groups with `coupon_sync_status='failed'` or `'pending'` older than 5 minutes, and retries.
+A scheduled job (`/api/v1/internal/coupon-sync-retry`) runs every 10 minutes, finds billing groups with `coupon_sync_status='failed'` or `'pending'` older than 5 minutes, and retries. The route uses `COUPON_SYNC_RETRY_CRON_SECRET` as its canonical bearer secret in deployed environments.
 
 ### Proration
 

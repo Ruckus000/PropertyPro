@@ -47,7 +47,7 @@ export const communities = pgTable('communities', {
     () => billingGroups.id,
     { onDelete: 'set null' },
   ),
-  stripeCustomerId: text('stripe_customer_id').unique(),
+  stripeCustomerId: text('stripe_customer_id'),
   stripeSubscriptionId: text('stripe_subscription_id').unique(),
   subscriptionPlan: text('subscription_plan'),
   subscriptionStatus: text('subscription_status'),

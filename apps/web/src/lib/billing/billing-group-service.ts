@@ -1,6 +1,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { billingGroups, communities } from '@propertypro/db';
-import { eq, and, isNull, sql } from '@propertypro/db/filters';
+import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
+import { eq, and, isNull, sql, inArray } from '@propertypro/db/filters';
+import { AppError } from '../api/errors';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
@@ -153,8 +154,6 @@ export async function getBillingGroupByOwner(ownerUserId: string) {
   return row ?? null;
 }
 
-import { pendingSignups } from '@propertypro/db';
-
 export async function getOrCreateBillingGroupForPm(
   userId: string,
 ): Promise<{ billingGroupId: number; stripeCustomerId: string }> {
@@ -165,31 +164,79 @@ export async function getOrCreateBillingGroupForPm(
     return { billingGroupId: existing.id, stripeCustomerId: existing.stripeCustomerId };
   }
 
-  // Find PM's first community (from signup) to get its Stripe Customer
-  const [firstCommunity] = await db
+  const managedCommunities = await db
     .select({
       id: communities.id,
       stripeCustomerId: communities.stripeCustomerId,
       name: communities.name,
+      billingGroupId: communities.billingGroupId,
     })
     .from(communities)
-    .innerJoin(sql`user_roles ur`, sql`ur.community_id = ${communities.id}`)
-    .where(and(sql`ur.user_id = ${userId}::uuid`, sql`ur.role = 'pm_admin'`, isNull(communities.deletedAt)))
-    .limit(1);
+    .innerJoin(userRoles, eq(userRoles.communityId, communities.id))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        eq(userRoles.role, 'pm_admin'),
+        isNull(communities.deletedAt),
+      ),
+    );
 
-  if (!firstCommunity?.stripeCustomerId) {
-    throw new Error('PM has no community with a Stripe customer ID; cannot create billing group');
+  const communitiesWithStripeCustomer = managedCommunities.filter(
+    (community): community is typeof community & { stripeCustomerId: string } =>
+      typeof community.stripeCustomerId === 'string' && community.stripeCustomerId.length > 0,
+  );
+
+  const distinctStripeCustomerIds = [...new Set(
+    communitiesWithStripeCustomer.map((community) => community.stripeCustomerId),
+  )];
+
+  if (distinctStripeCustomerIds.length === 0) {
+    throw new AppError(
+      'Portfolio billing can’t be initialized yet because none of your active communities have a Stripe customer.',
+      409,
+      'BILLING_GROUP_BOOTSTRAP_REQUIRES_STRIPE_CUSTOMER',
+      { managedCommunityCount: managedCommunities.length },
+    );
   }
 
+  if (distinctStripeCustomerIds.length > 1) {
+    throw new AppError(
+      'Portfolio billing can’t be initialized automatically because your active communities span multiple Stripe customers.',
+      409,
+      'BILLING_GROUP_BOOTSTRAP_MULTIPLE_STRIPE_CUSTOMERS',
+      {
+        stripeCustomerIds: distinctStripeCustomerIds,
+        managedCommunityCount: managedCommunities.length,
+      },
+    );
+  }
+
+  const stripeCustomerId = distinctStripeCustomerIds[0]!;
+  const bootstrapCommunities = communitiesWithStripeCustomer.filter(
+    (community) => community.stripeCustomerId === stripeCustomerId,
+  );
   const billingGroupId = await createBillingGroup({
-    name: firstCommunity.name + ' Portfolio',
-    stripeCustomerId: firstCommunity.stripeCustomerId,
+    name: `${bootstrapCommunities[0]!.name} Portfolio`,
+    stripeCustomerId,
     ownerUserId: userId,
   });
 
-  await linkCommunityToBillingGroup(firstCommunity.id, billingGroupId);
+  await db
+    .update(communities)
+    .set({ billingGroupId })
+    .where(
+      and(
+        inArray(
+          communities.id,
+          bootstrapCommunities.map((community) => community.id),
+        ),
+        eq(communities.stripeCustomerId, stripeCustomerId),
+      ),
+    );
 
-  return { billingGroupId, stripeCustomerId: firstCommunity.stripeCustomerId };
+  await recalculateVolumeTier(billingGroupId);
+
+  return { billingGroupId, stripeCustomerId };
 }
 
 export async function createPendingAddToGroupSignup(input: {

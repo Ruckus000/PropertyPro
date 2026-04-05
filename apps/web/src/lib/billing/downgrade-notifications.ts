@@ -1,7 +1,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, userRoles } from '@propertypro/db';
 import { eq, and, isNull, inArray } from '@propertypro/db/filters';
-import { createNotificationsForEvent } from '@/lib/services/notification-service';
+import { createNotificationsForEvent } from '../services/notification-service';
 import { tierToPercentOff, type VolumeTier } from './tier-calculator';
 
 export async function notifyDowngrade(input: {
@@ -37,7 +37,7 @@ export async function notifyDowngrade(input: {
 
   if (adminRows.length === 0) return;
 
-  const title = 'Portfolio discount changed';
+  const title = 'Your volume discount is decreasing';
   const body = `Your volume discount dropped from ${prevPct}% to ${newPct}% because ${input.canceledCommunityName} was canceled. Your next invoice will reflect the new rate.`;
 
   // Group admins by community so we can dispatch per-community in-app notifications
