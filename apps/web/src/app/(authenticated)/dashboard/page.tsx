@@ -7,6 +7,7 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { loadWizardState } from '@/lib/queries/wizard-state';
+import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
@@ -27,11 +28,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     host: requestHeaders.get('host'),
   });
 
+  const userId = await requireAuthenticatedUserId();
+
   if (!context.communityId) {
+    // Multi-community users see the unified overview; single-community
+    // users use the community picker.
+    const communityIds = await getAuthorizedCommunityIds(userId);
+    if (communityIds.length >= 2) {
+      redirect('/dashboard/overview');
+    }
     redirect('/select-community');
   }
-
-  const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
 
   // Redirect apartment communities to specialized dashboard [P2-38]
