@@ -166,6 +166,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/support/impersonation.ts'),
   // Auth helper hydrates the effective support-session actor from the users table
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
+  // Unified owner dashboard — cross-community query module for overview page
+  resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
+  // Unified owner dashboard — lists user's communities (authorization-driven)
+  resolve(repoRoot, 'apps/web/src/app/api/v1/me/communities/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
