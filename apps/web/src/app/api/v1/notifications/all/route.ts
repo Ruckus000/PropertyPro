@@ -3,8 +3,9 @@
  *
  * Aggregated notification feed across all communities the current user belongs
  * to. The user is the authorization anchor: we resolve their authorized
- * community ids, then filter by `user_id = current` AND
- * `community_id IN (authorizedIds)`.
+ * community ids via user_roles, then run per-community scoped queries so the
+ * RLS-enforced `createScopedClient` boundary is preserved for every row we
+ * return. Results are merged in-memory by notification id (descending).
  *
  * Response shape:
  *   data: {
@@ -18,16 +19,35 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { notifications, communities } from '@propertypro/db';
-import { and, desc, eq, inArray, isNull, lt, sql } from '@propertypro/db/filters';
+import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
+import { createScopedClient, notifications } from '@propertypro/db';
+import { and, desc, eq, isNull, lt, sql } from '@propertypro/db/filters';
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.coerce.number().int().positive().optional(),
   unreadOnly: z.enum(['true', 'false']).optional(),
 });
+
+type Row = Record<string, unknown>;
+
+interface NotificationListRow {
+  id: number;
+  category: string;
+  title: string;
+  body: string | null;
+  actionUrl: string | null;
+  sourceType: string;
+  sourceId: string;
+  priority: string;
+  readAt: Date | null;
+  createdAt: Date;
+  communityId: number;
+}
+
+interface CountRow {
+  count: number;
+}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -42,87 +62,110 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query', { issues: parsed.error.issues });
   }
 
-  const communityIds = await getAuthorizedCommunityIds(userId);
-  if (communityIds.length === 0) {
+  // Resolve the user's authorized community set (via user_roles, scoped by user).
+  const userCommunities = await findUserCommunitiesUnscoped(userId);
+  if (userCommunities.length === 0) {
     return NextResponse.json({
       data: { notifications: [], nextCursor: null, totalUnread: 0 },
     });
   }
 
-  const db = createUnscopedClient();
-
-  // Authorization: user_id anchor + community_id in authorized set.
-  const conditions = [
-    eq(notifications.userId, userId),
-    inArray(notifications.communityId, communityIds),
-    isNull(notifications.archivedAt),
-    isNull(notifications.deletedAt),
-  ];
-  if (parsed.data.cursor != null) {
-    conditions.push(lt(notifications.id, parsed.data.cursor));
+  // De-dup communities (a user can have multiple roles per community).
+  const meta = new Map<number, { id: number; name: string; slug: string }>();
+  for (const row of userCommunities) {
+    if (!meta.has(row.communityId)) {
+      meta.set(row.communityId, {
+        id: row.communityId,
+        name: row.communityName,
+        slug: row.slug,
+      });
+    }
   }
-  if (parsed.data.unreadOnly === 'true') {
-    conditions.push(isNull(notifications.readAt));
-  }
+  const communityIds = [...meta.keys()];
 
-  const [rows, unreadCountRows] = await Promise.all([
-    db
-      .select({
-        id: notifications.id,
-        category: notifications.category,
-        title: notifications.title,
-        body: notifications.body,
-        actionUrl: notifications.actionUrl,
-        sourceType: notifications.sourceType,
-        sourceId: notifications.sourceId,
-        priority: notifications.priority,
-        readAt: notifications.readAt,
-        createdAt: notifications.createdAt,
-        communityId: notifications.communityId,
-        communityName: communities.name,
-        communitySlug: communities.slug,
-      })
-      .from(notifications)
-      .innerJoin(communities, eq(communities.id, notifications.communityId))
-      .where(and(...conditions))
-      .orderBy(desc(notifications.id))
-      .limit(parsed.data.limit + 1),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, userId),
-          inArray(notifications.communityId, communityIds),
-          isNull(notifications.readAt),
-          isNull(notifications.archivedAt),
-          isNull(notifications.deletedAt),
-        ),
-      ),
-  ]);
+  const { limit, cursor, unreadOnly } = parsed.data;
 
-  const hasMore = rows.length > parsed.data.limit;
-  const page = hasMore ? rows.slice(0, parsed.data.limit) : rows;
+  // Per-community list + unread-count queries run through the scoped client so
+  // the RLS-enforced community_id boundary is preserved for every row.
+  const perCommunity = await Promise.all(
+    communityIds.map(async (communityId) => {
+      const scoped = createScopedClient(communityId);
+
+      const listFilters = [
+        eq(notifications.userId, userId),
+        isNull(notifications.archivedAt),
+      ];
+      if (cursor != null) listFilters.push(lt(notifications.id, cursor));
+      if (unreadOnly === 'true') listFilters.push(isNull(notifications.readAt));
+
+      const listPromise = scoped
+        .selectFrom<Row>(
+          notifications,
+          {
+            id: notifications.id,
+            category: notifications.category,
+            title: notifications.title,
+            body: notifications.body,
+            actionUrl: notifications.actionUrl,
+            sourceType: notifications.sourceType,
+            sourceId: notifications.sourceId,
+            priority: notifications.priority,
+            readAt: notifications.readAt,
+            createdAt: notifications.createdAt,
+            communityId: notifications.communityId,
+          },
+          and(...listFilters),
+        )
+        .orderBy(desc(notifications.id))
+        .limit(limit + 1)
+        .then((rows) => rows as unknown as NotificationListRow[]);
+
+      const countPromise = scoped
+        .selectFrom<Row>(
+          notifications,
+          { count: sql<number>`count(*)::int` },
+          and(
+            eq(notifications.userId, userId),
+            isNull(notifications.readAt),
+            isNull(notifications.archivedAt),
+          ),
+        )
+        .then((rows) => (rows as unknown as CountRow[])[0]?.count ?? 0);
+
+      const [list, unread] = await Promise.all([listPromise, countPromise]);
+      return { list, unread };
+    }),
+  );
+
+  // Merge + sort by id desc globally, then take the page.
+  const merged = perCommunity
+    .flatMap((c) => c.list)
+    .sort((a, b) => b.id - a.id);
+  const hasMore = merged.length > limit;
+  const page = hasMore ? merged.slice(0, limit) : merged;
   const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
-  const totalUnread = unreadCountRows[0]?.count ?? 0;
+  const totalUnread = perCommunity.reduce((sum, c) => sum + c.unread, 0);
 
-  const items = page.map((n) => ({
-    id: n.id,
-    category: n.category,
-    title: n.title,
-    body: n.body,
-    actionUrl: n.actionUrl,
-    sourceType: n.sourceType,
-    sourceId: n.sourceId,
-    priority: n.priority,
-    readAt: n.readAt,
-    createdAt: n.createdAt,
-    community: {
-      id: n.communityId,
-      name: n.communityName,
-      slug: n.communitySlug,
-    },
-  }));
+  const items = page.map((n) => {
+    const c = meta.get(n.communityId);
+    return {
+      id: n.id,
+      category: n.category,
+      title: n.title,
+      body: n.body,
+      actionUrl: n.actionUrl,
+      sourceType: n.sourceType,
+      sourceId: n.sourceId,
+      priority: n.priority,
+      readAt: n.readAt,
+      createdAt: n.createdAt,
+      community: {
+        id: n.communityId,
+        name: c?.name ?? '',
+        slug: c?.slug ?? '',
+      },
+    };
+  });
 
   return NextResponse.json({
     data: {
