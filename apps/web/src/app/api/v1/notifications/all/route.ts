@@ -21,7 +21,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { notifications, communities } from '@propertypro/db';
-import { and, desc, eq, inArray, isNull, lt } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNull, lt, sql } from '@propertypro/db/filters';
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -91,8 +91,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const page = hasMore ? rows.slice(0, parsed.data.limit) : rows;
   const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
 
-  const unreadRows = await db
-    .select({ id: notifications.id })
+  const unreadCountRows = await db
+    .select({ count: sql<number>`count(*)::int` })
     .from(notifications)
     .where(
       and(
@@ -103,6 +103,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         isNull(notifications.deletedAt),
       ),
     );
+  const totalUnread = unreadCountRows[0]?.count ?? 0;
 
   const items = page.map((n) => ({
     id: n.id,
@@ -126,7 +127,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     data: {
       notifications: items,
       nextCursor,
-      totalUnread: unreadRows.length,
+      totalUnread,
     },
   });
 });

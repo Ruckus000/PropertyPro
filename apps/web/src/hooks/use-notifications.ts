@@ -91,6 +91,9 @@ export function useMarkRead() {
       void queryClient.invalidateQueries({
         queryKey: NOTIFICATION_KEYS.all(variables.communityId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: CROSS_NOTIFICATION_KEYS.all(),
+      });
     },
   });
 }

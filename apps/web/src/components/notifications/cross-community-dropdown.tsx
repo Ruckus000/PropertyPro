@@ -22,7 +22,9 @@ import {
 } from '@/hooks/use-notifications';
 
 function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const diff = Date.now() - date.getTime();
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -31,7 +33,7 @@ function formatRelative(iso: string): string {
   const days = Math.floor(hours / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 interface CommunityGroup {
@@ -67,6 +69,7 @@ function groupByCommunity(
 export function CrossCommunityNotificationDropdown() {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const { data, isLoading, isError } = useCrossNotifications({ limit: 30 });
   const markRead = useMarkRead();
 
@@ -80,8 +83,10 @@ export function CrossCommunityNotificationDropdown() {
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (!panelRef.current) return;
-      if (!panelRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
@@ -109,6 +114,7 @@ export function CrossCommunityNotificationDropdown() {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ''}`}
         aria-expanded={open}
