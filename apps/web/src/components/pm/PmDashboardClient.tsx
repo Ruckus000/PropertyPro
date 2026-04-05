@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import type { PaginationState, SortingState } from '@tanstack/react-table';
 import type { CommunityType } from '@propertypro/shared';
@@ -14,6 +14,7 @@ import { KpiSummaryBar } from './KpiSummaryBar';
 import { CommunityCardGrid } from './CommunityCardGrid';
 import { PortfolioTable } from './PortfolioTable';
 import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
+import { AddCommunityModal } from './add-community-modal';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
@@ -26,6 +27,18 @@ export function PmDashboardClient() {
   const search = searchParams.get('search') ?? undefined;
 
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  const billingGroupQuery = useQuery<{ data: { billingGroupId: number } }>({
+    queryKey: ['billing-group', 'mine'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/billing-groups/mine');
+      if (!res.ok) throw new Error('Failed to fetch billing group');
+      return res.json();
+    },
+  });
+  const billingGroupId = billingGroupQuery.data?.data.billingGroupId ?? null;
+
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 20,
@@ -63,13 +76,15 @@ export function PmDashboardClient() {
           <div className="flex items-center gap-2">
             <CommunityFilters />
             <ViewToggle value={viewMode} onChange={handleViewChange} />
-            <Link
-              href="/pm/dashboard/communities/new"
-              className="inline-flex items-center gap-1.5 rounded-md bg-interactive-primary px-3 py-2 text-sm font-semibold text-white hover:bg-interactive-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              disabled={!billingGroupId}
+              className="inline-flex items-center gap-1.5 rounded-md bg-interactive-primary px-3 py-2 text-sm font-semibold text-white hover:bg-interactive-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add Community
-            </Link>
+            </button>
           </div>
         }
       />
@@ -100,6 +115,12 @@ export function PmDashboardClient() {
           onSortingChange={setSorting}
         />
       )}
+
+      <AddCommunityModal
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        billingGroupId={billingGroupId}
+      />
     </div>
   );
 }

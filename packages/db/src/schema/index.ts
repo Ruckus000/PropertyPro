@@ -66,6 +66,7 @@ export * from './faqs';
 export * from './stripe-prices';
 export * from './conversion-events';
 export * from './public-site-templates';
+export * from './billing-groups';
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types via Drizzle $inferSelect / $inferInsert

@@ -29,7 +29,7 @@ import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '@/lib/services/payment-alert-scheduler';
-import { runProvisioning } from '@/lib/services/provisioning-service';
+import { runProvisioning, runAddToGroupProvisioning } from '@/lib/services/provisioning-service';
 import { processFinanceStripeEvent } from '@/lib/services/finance-service';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 
@@ -99,6 +99,49 @@ async function handleCheckoutSessionCompleted(
   eventId: string,
   eventCreatedEpoch: number,
 ): Promise<void> {
+  // add_to_group: existing PM adding a new community to their billing group
+  if (session.metadata?.kind === 'add_to_group') {
+    const billingGroupId = Number(session.metadata.billingGroupId);
+    const pendingSignupId = Number(session.metadata.pendingSignupId);
+    const stripeSubscriptionId =
+      typeof session.subscription === 'string'
+        ? session.subscription
+        : (session.subscription as { id: string } | null)?.id;
+
+    if (!stripeSubscriptionId) {
+      logStripeWebhookEvent('error', 'add_to_group checkout missing subscription', {
+        eventId,
+        eventType: 'checkout.session.completed',
+        category: 'validation',
+        outcome: 'failure',
+        payloadSnippet: { sessionId: session.id },
+      });
+      return;
+    }
+
+    void runAddToGroupProvisioning({
+      pendingSignupId,
+      billingGroupId,
+      stripeSubscriptionId,
+      stripeCustomerId:
+        typeof session.customer === 'string'
+          ? session.customer
+          : (session.customer as { id: string } | null)?.id,
+    }).catch((err) => {
+      captureException(err, { extra: { pendingSignupId, billingGroupId } });
+      logStripeWebhookEvent('error', 'add_to_group provisioning failed', {
+        eventId,
+        eventType: 'checkout.session.completed',
+        category: 'processing',
+        outcome: 'failure',
+        errorMessage: err instanceof Error ? err.message : String(err),
+        payloadSnippet: { pendingSignupId, billingGroupId },
+      });
+    });
+
+    return;
+  }
+
   const demoId = session.metadata?.demoId;
   const signupRequestId = session.metadata?.signupRequestId;
 
