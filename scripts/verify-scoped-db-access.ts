@@ -176,6 +176,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts'),
   // Cancel preview — queries communities in a billing group; authorized by billing group ownership
   resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel-preview/route.ts'),
+  // Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
+  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts'),
+  // Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
+  resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/mine/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
