@@ -84,6 +84,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing
   resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
+  // Cross-community notifications — aggregated feed across all communities the user belongs to.
+  // User is the authorization anchor; endpoint filters by user_id + community_id in
+  // (authorizedIds from getAuthorizedCommunityIds).
+  resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/notifications/all/route.ts'),
   // Invitation acceptance — creates Supabase auth user via admin client (service_role)
   resolve(repoRoot, 'apps/web/src/app/api/v1/invitations/route.ts'),
   // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
