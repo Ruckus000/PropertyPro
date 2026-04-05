@@ -50,7 +50,7 @@ Cancel flow captures     GET /api/admin/metrics/        dropdown
 
 | Phase | PR | Contents |
 |---|---|---|
-| 1 | Schema & cron | Migrations 0131 (cancellation_reason + subscription-status constants), 0132 (stripe_prices.unit_amount_cents + backfill + webhook sync), 0133 (revenue_snapshots), 0134 (indexes). Snapshot cron route with sanity checks. Cancel-route body fields. Backfill scripts. Runbook. |
+| 1 | Schema & cron | Migrations 0138 (cancellation_reason + subscription-status constants), 0139 (stripe_prices.unit_amount_cents + backfill + webhook sync), 0140 (revenue_snapshots), 0141 (indexes). Snapshot cron route with sanity checks. Cancel-route body fields. Backfill scripts. Runbook. |
 | 2 | Metrics API | 6 metrics endpoints + health endpoint. Shared Zod types. Contract + invariant tests. Load tests. |
 | 3 | Dashboard refresh | 8 new cards as drill-down links. StatCard + Sparkline components. Recent signups table. Empty/loading/error states. Staleness banner. |
 | 4 | Metrics pages | `/metrics/*` routes with Recharts (add recharts to admin package.json). Cohort table. Funnel view. Playwright E2E drill-down tests. No cancel UI work — reason capture lives at the API boundary from PR 1. |
@@ -59,7 +59,7 @@ Cancel flow captures     GET /api/admin/metrics/        dropdown
 
 ## Data Model
 
-### Migration 0131 — `communities` table additions
+### Migration 0138 — `communities` table additions
 
 ```sql
 ALTER TABLE communities
@@ -82,7 +82,7 @@ export const CHURNED_STATUSES = ['canceled', 'expired', 'unpaid', 'incomplete_ex
 ```
 Snapshot job throws loud error on any `subscription_status` value not in `ALL_STATUSES`.
 
-### Migration 0132 — denormalize `unit_amount_cents` into `stripe_prices`
+### Migration 0139 — denormalize `unit_amount_cents` into `stripe_prices`
 
 The existing `stripe_prices` table stores only the Stripe Price ID, not the amount. Snapshots need the amount on every run; calling Stripe API each time adds a failure mode. Denormalize:
 
@@ -99,7 +99,7 @@ ALTER TABLE stripe_prices ALTER COLUMN unit_amount_cents SET NOT NULL;
 
 **Ongoing sync:** Add `price.updated` handler to `apps/web/src/app/api/v1/webhooks/stripe/route.ts` — updates `unit_amount_cents` when a Stripe price changes. Rare event; safe to sync reactively.
 
-### Migration 0133 — `revenue_snapshots` table (new)
+### Migration 0140 — `revenue_snapshots` table (new)
 
 ```sql
 CREATE TABLE revenue_snapshots (
@@ -131,7 +131,7 @@ CREATE INDEX idx_revenue_snapshots_date_computed
 
 **Platform-wide, not tenant-scoped.** No `community_id` FK. Lives outside RLS like `stripe_prices`. Access requires `requirePlatformAdmin()`.
 
-### Migration 0134 — metrics query indexes
+### Migration 0141 — metrics query indexes
 
 ```sql
 CREATE INDEX idx_communities_created_at_real
@@ -411,11 +411,11 @@ Dashboard + all `/metrics/*` pages scanned in CI. Fails on `serious` or `critica
 ## Critical Files
 
 **Create:**
-- `packages/db/migrations/0131_add_cancellation_reason.sql`
-- `packages/db/migrations/0132_stripe_prices_unit_amount.sql` (add column, nullable)
-- `packages/db/migrations/0132a_stripe_prices_unit_amount_not_null.sql` (after backfill; may split into follow-up PR)
-- `packages/db/migrations/0133_revenue_snapshots.sql`
-- `packages/db/migrations/0134_metrics_indexes.sql`
+- `packages/db/migrations/0138_add_cancellation_reason.sql`
+- `packages/db/migrations/0139_stripe_prices_unit_amount.sql` (add column, nullable)
+- `packages/db/migrations/0139a_stripe_prices_unit_amount_not_null.sql` (after backfill; may split into follow-up PR)
+- `packages/db/migrations/0140_revenue_snapshots.sql`
+- `packages/db/migrations/0141_metrics_indexes.sql`
 - `packages/shared/src/constants/cancellation-reasons.ts`
 - `packages/shared/src/constants/subscription-statuses.ts`
 - `scripts/backfill-stripe-price-amounts.ts`
