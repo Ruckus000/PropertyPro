@@ -215,25 +215,38 @@ export async function getOrCreateBillingGroupForPm(
   const bootstrapCommunities = communitiesWithStripeCustomer.filter(
     (community) => community.stripeCustomerId === stripeCustomerId,
   );
-  const billingGroupId = await createBillingGroup({
-    name: `${bootstrapCommunities[0]!.name} Portfolio`,
-    stripeCustomerId,
-    ownerUserId: userId,
+  const portfolioName = `${bootstrapCommunities[0]?.name ?? 'Portfolio'} Portfolio`;
+
+  // Atomic bootstrap: creating the billing group row and linking the PM's
+  // communities must succeed or fail together. Otherwise the PM could be left
+  // with an empty billing group that `getBillingGroupByOwner` would return
+  // forever, blocking any future bootstrap attempt.
+  const billingGroupId = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(billingGroups)
+      .values({ name: portfolioName, stripeCustomerId, ownerUserId: userId })
+      .returning({ id: billingGroups.id });
+    if (!row) throw new Error('Failed to create billing group');
+
+    await tx
+      .update(communities)
+      .set({ billingGroupId: row.id })
+      .where(
+        and(
+          inArray(
+            communities.id,
+            bootstrapCommunities.map((community) => community.id),
+          ),
+          eq(communities.stripeCustomerId, stripeCustomerId),
+        ),
+      );
+
+    return row.id;
   });
 
-  await db
-    .update(communities)
-    .set({ billingGroupId })
-    .where(
-      and(
-        inArray(
-          communities.id,
-          bootstrapCommunities.map((community) => community.id),
-        ),
-        eq(communities.stripeCustomerId, stripeCustomerId),
-      ),
-    );
-
+  // Volume-tier recalc makes Stripe API calls — intentionally outside the txn.
+  // If it fails, the coupon-sync-retry cron picks it up and the group is still
+  // complete and self-healing.
   await recalculateVolumeTier(billingGroupId);
 
   return { billingGroupId, stripeCustomerId };
