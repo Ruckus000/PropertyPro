@@ -32,6 +32,15 @@ vi.mock('@/lib/pm/create-community', () => ({
   createCommunityForPm: vi.fn(),
 }));
 
+vi.mock('@/lib/services/stripe-service', () => ({
+  createAddCommunityCheckout: vi.fn(),
+}));
+
+vi.mock('@/lib/billing/billing-group-service', () => ({
+  getOrCreateBillingGroupForPm: vi.fn(),
+  createPendingAddToGroupSignup: vi.fn(),
+}));
+
 import { GET } from '../../src/app/api/v1/pm/communities/route';
 
 describe('pm communities route', () => {

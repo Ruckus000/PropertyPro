@@ -94,6 +94,13 @@ const LEGACY_ALLOWLIST = new Map<string, string>([
   // Admin integration test
   ['apps/admin/__tests__/integration/site-blocks-crud.integration.test.ts',
     'LEGACY: mocks auth — migrate to test auth provider'],
+  // Plan 1 billing group tests — mock auth, Stripe, and downstream services.
+  // Billing group service exercises a real Postgres advisory lock but stubs
+  // Stripe + notifications (those paths have their own unit coverage).
+  ['apps/web/__tests__/api/pm-communities-gated.integration.test.ts',
+    'LEGACY: mocks auth + Stripe + billing-group-service — exercises gated route'],
+  ['apps/web/__tests__/billing/billing-group-service.integration.test.ts',
+    'LEGACY: mocks Stripe discount + notifications — tier recalc integration'],
 ]);
 
 // ---------------------------------------------------------------------------

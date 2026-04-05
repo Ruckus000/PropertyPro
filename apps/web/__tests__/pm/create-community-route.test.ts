@@ -18,11 +18,25 @@ vi.mock('@/lib/auth/signup', () => ({
   }),
 }));
 vi.mock('@/lib/pm/create-community', () => ({
-  createCommunityForPm: vi.fn().mockResolvedValue({ communityId: 99, slug: 'oceanview-towers' }),
+  createCommunityForPm: vi.fn(),
+}));
+vi.mock('@/lib/services/stripe-service', () => ({
+  createAddCommunityCheckout: vi.fn().mockResolvedValue({
+    clientSecret: 'cs_test_secret_123',
+    sessionId: 'cs_test_session_123',
+  }),
+}));
+vi.mock('@/lib/billing/billing-group-service', () => ({
+  getOrCreateBillingGroupForPm: vi.fn().mockResolvedValue({
+    billingGroupId: 42,
+    stripeCustomerId: 'cus_test_123',
+  }),
+  createPendingAddToGroupSignup: vi.fn().mockResolvedValue(7),
 }));
 
 import { POST } from '@/app/api/v1/pm/communities/route';
-import { createCommunityForPm } from '@/lib/pm/create-community';
+import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
+import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-service';
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request('http://localhost/api/v1/pm/communities', {
@@ -35,6 +49,7 @@ function makeRequest(body: Record<string, unknown>) {
 const validBody = {
   name: 'Oceanview Towers',
   communityType: 'condo_718',
+  planId: 'essentials',
   addressLine1: '123 Ocean Blvd',
   city: 'Miami',
   state: 'FL',
@@ -49,13 +64,24 @@ describe('POST /api/v1/pm/communities', () => {
     vi.clearAllMocks();
   });
 
-  it('creates a community with valid input', async () => {
+  it('starts a Stripe checkout session with valid input', async () => {
     const res = await POST(makeRequest(validBody));
     const json = await res.json();
-    expect(res.status).toBe(201);
-    expect(json.data).toEqual({ communityId: 99, slug: 'oceanview-towers' });
-    expect(createCommunityForPm).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Oceanview Towers', userId: 'user-123' }),
+    expect(res.status).toBe(202);
+    expect(json.data).toEqual({
+      clientSecret: 'cs_test_secret_123',
+      pendingSignupId: 7,
+      billingGroupId: 42,
+    });
+    expect(getOrCreateBillingGroupForPm).toHaveBeenCalledWith('user-123');
+    expect(createAddCommunityCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billingGroupId: 42,
+        stripeCustomerId: 'cus_test_123',
+        pendingSignupId: 7,
+        communityType: 'condo_718',
+        planId: 'essentials',
+      }),
     );
   });
 
