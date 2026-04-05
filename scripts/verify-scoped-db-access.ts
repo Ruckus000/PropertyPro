@@ -84,6 +84,12 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing
   resolve(repoRoot, 'apps/web/src/lib/api/user-communities.ts'),
+  // Cross-community query helpers — unified owner dashboard + aggregated notifications.
+  // User is the authorization anchor; callers MUST resolve the user's authorized community
+  // ids via getAuthorizedCommunityIds() and then run scoped queries per community.
+  resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
+  // Cross-community notifications — aggregated feed across all communities the user belongs to.
+  resolve(repoRoot, 'apps/web/src/app/api/v1/notifications/all/route.ts'),
   // Invitation acceptance — creates Supabase auth user via admin client (service_role)
   resolve(repoRoot, 'apps/web/src/app/api/v1/invitations/route.ts'),
   // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
@@ -180,8 +186,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts'),
   // Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
   resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/mine/route.ts'),
-  // Unified owner dashboard — cross-community query module for overview page
-  resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
