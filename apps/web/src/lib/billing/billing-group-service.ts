@@ -244,6 +244,11 @@ export async function getOrCreateBillingGroupForPm(
               bootstrapCommunities.map((community) => community.id),
             ),
             eq(communities.stripeCustomerId, stripeCustomerId),
+            // TOCTOU: the initial SELECT ran outside the txn, so re-assert
+            // that nothing has claimed these communities or soft-deleted
+            // them in the meantime.
+            isNull(communities.billingGroupId),
+            isNull(communities.deletedAt),
           ),
         );
 
