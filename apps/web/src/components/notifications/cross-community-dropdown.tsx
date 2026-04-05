@@ -9,10 +9,11 @@
  * to the originating community's portal.
  */
 import { Bell } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   useCrossNotifications,
@@ -75,13 +76,34 @@ export function CrossCommunityNotificationDropdown() {
     [data?.notifications],
   );
 
+  // Close on click-outside and Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
   function handleMarkCommunityRead(communityId: number) {
     markRead.mutate({ communityId, all: true });
   }
 
   function buildHref(n: CrossNotificationItem): string {
-    if (n.actionUrl) return n.actionUrl;
-    return `https://${n.community.slug}.getpropertypro.com/notifications`;
+    // If the notification was written with an absolute URL, trust it.
+    if (n.actionUrl && /^https?:\/\//i.test(n.actionUrl)) return n.actionUrl;
+    // Otherwise it's a relative path on the notification's own community.
+    const path = n.actionUrl ?? '/notifications';
+    return buildCommunityUrl(n.community.slug, path);
   }
 
   return (
