@@ -18,6 +18,24 @@ import { AddCommunityModal } from './add-community-modal';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
+async function fetchBillingGroup(): Promise<{ data: { billingGroupId: number } }> {
+  const res = await fetch('/api/v1/billing-groups/mine');
+  if (!res.ok) {
+    let message = 'Failed to fetch billing group';
+    try {
+      const body = await res.json() as { error?: { message?: string } };
+      if (body.error?.message) {
+        message = body.error.message;
+      }
+    } catch {
+      // Ignore parse failures and use the generic fallback above.
+    }
+    throw new Error(message);
+  }
+
+  return res.json();
+}
+
 export function PmDashboardClient() {
   const searchParams = useSearchParams();
 
@@ -29,13 +47,9 @@ export function PmDashboardClient() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  const billingGroupQuery = useQuery<{ data: { billingGroupId: number } }>({
+  const billingGroupQuery = useQuery<{ data: { billingGroupId: number } }, Error>({
     queryKey: ['billing-group', 'mine'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/billing-groups/mine');
-      if (!res.ok) throw new Error('Failed to fetch billing group');
-      return res.json();
-    },
+    queryFn: fetchBillingGroup,
   });
   const billingGroupId = billingGroupQuery.data?.data.billingGroupId ?? null;
 
@@ -96,6 +110,14 @@ export function PmDashboardClient() {
           status="danger"
           title="Failed to load dashboard data"
           description="Please try again or contact support if the problem persists."
+        />
+      )}
+
+      {billingGroupQuery.isError && (
+        <AlertBanner
+          status="warning"
+          title="Portfolio billing needs attention"
+          description={billingGroupQuery.error.message}
         />
       )}
 

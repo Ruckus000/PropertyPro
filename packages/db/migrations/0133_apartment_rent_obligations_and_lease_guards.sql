@@ -3,7 +3,7 @@
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
-CREATE TABLE rent_obligations (
+CREATE TABLE IF NOT EXISTS rent_obligations (
   id BIGSERIAL PRIMARY KEY,
   community_id BIGINT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
   lease_id BIGINT NOT NULL REFERENCES leases(id) ON DELETE CASCADE,
@@ -27,7 +27,7 @@ CREATE TABLE rent_obligations (
 ALTER TABLE rent_obligations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rent_obligations FORCE ROW LEVEL SECURITY;
 
-CREATE TABLE rent_payments (
+CREATE TABLE IF NOT EXISTS rent_payments (
   id BIGSERIAL PRIMARY KEY,
   community_id BIGINT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
   lease_id BIGINT NOT NULL REFERENCES leases(id) ON DELETE RESTRICT,
@@ -141,21 +141,84 @@ CREATE TRIGGER "pp_rls_enforce_tenant_scope"
   FOR EACH ROW EXECUTE FUNCTION "public"."pp_rls_enforce_tenant_community_id"();
 
 -- Lease validity and overlap invariants.
-ALTER TABLE leases
-  ADD CONSTRAINT leases_start_first_of_month_check
-  CHECK (date_trunc('month', start_date)::date = start_date);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'leases_start_first_of_month_check'
+      AND conrelid = 'leases'::regclass
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM leases
+      WHERE start_date IS DISTINCT FROM date_trunc('month', start_date)::date
+    ) THEN
+      RAISE NOTICE 'Skipping leases_start_first_of_month_check because existing lease rows violate it';
+    ELSE
+      ALTER TABLE leases
+        ADD CONSTRAINT leases_start_first_of_month_check
+        CHECK (date_trunc('month', start_date)::date = start_date);
+    END IF;
+  END IF;
+END
+$$;
 
-ALTER TABLE leases
-  ADD CONSTRAINT leases_end_after_start_check
-  CHECK (end_date IS NULL OR end_date > start_date);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'leases_end_after_start_check'
+      AND conrelid = 'leases'::regclass
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM leases
+      WHERE end_date IS NOT NULL AND end_date <= start_date
+    ) THEN
+      RAISE NOTICE 'Skipping leases_end_after_start_check because existing lease rows violate it';
+    ELSE
+      ALTER TABLE leases
+        ADD CONSTRAINT leases_end_after_start_check
+        CHECK (end_date IS NULL OR end_date > start_date);
+    END IF;
+  END IF;
+END
+$$;
 
-ALTER TABLE leases
-  ADD CONSTRAINT leases_no_overlap_per_unit
-  EXCLUDE USING gist (
-    unit_id WITH =,
-    daterange(start_date, COALESCE(end_date + 1, 'infinity'::date), '[)') WITH &&
-  )
-  WHERE (deleted_at IS NULL);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'leases_no_overlap_per_unit'
+      AND conrelid = 'leases'::regclass
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM leases l1
+      JOIN leases l2
+        ON l1.unit_id = l2.unit_id
+       AND l1.id < l2.id
+       AND l1.deleted_at IS NULL
+       AND l2.deleted_at IS NULL
+       AND daterange(l1.start_date, COALESCE(l1.end_date + 1, 'infinity'::date), '[)')
+         && daterange(l2.start_date, COALESCE(l2.end_date + 1, 'infinity'::date), '[)')
+    ) THEN
+      RAISE NOTICE 'Skipping leases_no_overlap_per_unit because existing lease rows violate it';
+    ELSE
+      ALTER TABLE leases
+        ADD CONSTRAINT leases_no_overlap_per_unit
+        EXCLUDE USING gist (
+          unit_id WITH =,
+          daterange(start_date, COALESCE(end_date + 1, 'infinity'::date), '[)') WITH &&
+        )
+        WHERE (deleted_at IS NULL);
+    END IF;
+  END IF;
+END
+$$;
 
 CREATE OR REPLACE FUNCTION pp_enforce_lease_renewal_continuity()
 RETURNS trigger
@@ -292,18 +355,18 @@ FROM (
 ) AS derived
 WHERE derived.unit_id = u.id;
 
-CREATE INDEX idx_rent_obligations_community_status_due
+CREATE INDEX IF NOT EXISTS idx_rent_obligations_community_status_due
   ON rent_obligations(community_id, status, due_date)
   WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_rent_obligations_lease_period
+CREATE INDEX IF NOT EXISTS idx_rent_obligations_lease_period
   ON rent_obligations(lease_id, period_start DESC)
   WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_rent_payments_community_payment_date
+CREATE INDEX IF NOT EXISTS idx_rent_payments_community_payment_date
   ON rent_payments(community_id, payment_date DESC)
   WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_rent_payments_obligation
+CREATE INDEX IF NOT EXISTS idx_rent_payments_obligation
   ON rent_payments(obligation_id)
   WHERE deleted_at IS NULL;

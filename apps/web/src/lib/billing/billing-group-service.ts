@@ -1,6 +1,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { billingGroups, communities } from '@propertypro/db';
-import { eq, and, isNull, sql } from '@propertypro/db/filters';
+import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
+import { eq, and, isNull, sql, inArray } from '@propertypro/db/filters';
+import { AppError } from '../api/errors';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
@@ -153,8 +154,6 @@ export async function getBillingGroupByOwner(ownerUserId: string) {
   return row ?? null;
 }
 
-import { pendingSignups } from '@propertypro/db';
-
 export async function getOrCreateBillingGroupForPm(
   userId: string,
 ): Promise<{ billingGroupId: number; stripeCustomerId: string }> {
@@ -165,31 +164,133 @@ export async function getOrCreateBillingGroupForPm(
     return { billingGroupId: existing.id, stripeCustomerId: existing.stripeCustomerId };
   }
 
-  // Find PM's first community (from signup) to get its Stripe Customer
-  const [firstCommunity] = await db
+  const managedCommunities = await db
     .select({
       id: communities.id,
       stripeCustomerId: communities.stripeCustomerId,
       name: communities.name,
+      billingGroupId: communities.billingGroupId,
     })
     .from(communities)
-    .innerJoin(sql`user_roles ur`, sql`ur.community_id = ${communities.id}`)
-    .where(and(sql`ur.user_id = ${userId}::uuid`, sql`ur.role = 'pm_admin'`, isNull(communities.deletedAt)))
-    .limit(1);
+    .innerJoin(userRoles, eq(userRoles.communityId, communities.id))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        eq(userRoles.role, 'pm_admin'),
+        isNull(communities.deletedAt),
+        // Only consider communities that aren't already in a billing group —
+        // we never want to silently yank a community out of an existing
+        // portfolio it belongs to.
+        isNull(communities.billingGroupId),
+      ),
+    );
 
-  if (!firstCommunity?.stripeCustomerId) {
-    throw new Error('PM has no community with a Stripe customer ID; cannot create billing group');
+  const communitiesWithStripeCustomer = managedCommunities.filter(
+    (community): community is typeof community & { stripeCustomerId: string } =>
+      typeof community.stripeCustomerId === 'string' && community.stripeCustomerId.length > 0,
+  );
+
+  const distinctStripeCustomerIds = [...new Set(
+    communitiesWithStripeCustomer.map((community) => community.stripeCustomerId),
+  )];
+
+  if (distinctStripeCustomerIds.length === 0) {
+    throw new AppError(
+      'Portfolio billing can’t be initialized yet because none of your active communities have a Stripe customer.',
+      409,
+      'BILLING_GROUP_BOOTSTRAP_REQUIRES_STRIPE_CUSTOMER',
+      { managedCommunityCount: managedCommunities.length },
+    );
   }
 
-  const billingGroupId = await createBillingGroup({
-    name: firstCommunity.name + ' Portfolio',
-    stripeCustomerId: firstCommunity.stripeCustomerId,
-    ownerUserId: userId,
-  });
+  if (distinctStripeCustomerIds.length > 1) {
+    throw new AppError(
+      'Portfolio billing can’t be initialized automatically because your active communities span multiple Stripe customers.',
+      409,
+      'BILLING_GROUP_BOOTSTRAP_MULTIPLE_STRIPE_CUSTOMERS',
+      {
+        stripeCustomerIds: distinctStripeCustomerIds,
+        managedCommunityCount: managedCommunities.length,
+      },
+    );
+  }
 
-  await linkCommunityToBillingGroup(firstCommunity.id, billingGroupId);
+  const stripeCustomerId = distinctStripeCustomerIds[0]!;
+  const bootstrapCommunities = communitiesWithStripeCustomer.filter(
+    (community) => community.stripeCustomerId === stripeCustomerId,
+  );
+  const portfolioName = `${bootstrapCommunities[0]?.name ?? 'Portfolio'} Portfolio`;
 
-  return { billingGroupId, stripeCustomerId: firstCommunity.stripeCustomerId };
+  // Atomic bootstrap: creating the billing group row and linking the PM's
+  // communities must succeed or fail together. Otherwise the PM could be left
+  // with an empty billing group that `getBillingGroupByOwner` would return
+  // forever, blocking any future bootstrap attempt.
+  let billingGroupId: number;
+  try {
+    billingGroupId = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(billingGroups)
+        .values({ name: portfolioName, stripeCustomerId, ownerUserId: userId })
+        .returning({ id: billingGroups.id });
+      if (!row) throw new Error('Failed to create billing group');
+
+      const linkedCommunities = await tx
+        .update(communities)
+        .set({ billingGroupId: row.id })
+        .where(
+          and(
+            inArray(
+              communities.id,
+              bootstrapCommunities.map((community) => community.id),
+            ),
+            eq(communities.stripeCustomerId, stripeCustomerId),
+            // TOCTOU: the initial SELECT ran outside the txn, so re-assert
+            // that nothing has claimed these communities or soft-deleted
+            // them in the meantime.
+            isNull(communities.billingGroupId),
+            isNull(communities.deletedAt),
+          ),
+        )
+        .returning({ id: communities.id });
+
+      // If all eligible communities were grabbed by another writer (or soft-
+      // deleted) between our SELECT and this UPDATE, rollback — we refuse to
+      // leave the PM with an empty billing group that would then block every
+      // future bootstrap attempt.
+      if (linkedCommunities.length === 0) {
+        throw new AppError(
+          'Portfolio billing can’t be initialized right now because your eligible communities are no longer available. Please try again.',
+          409,
+          'BILLING_GROUP_BOOTSTRAP_RACE_NO_ELIGIBLE_COMMUNITIES',
+        );
+      }
+
+      return row.id;
+    });
+  } catch (err) {
+    // billing_groups.stripe_customer_id is UNIQUE — if a different PM already
+    // owns a portfolio for this customer, surface a typed 409 instead of a
+    // generic 500. (Postgres unique-violation SQLSTATE = 23505.)
+    if (
+      err instanceof Error &&
+      (err as { code?: string }).code === '23505'
+    ) {
+      throw new AppError(
+        'Portfolio billing can’t be initialized because this Stripe customer already belongs to another portfolio.',
+        409,
+        'BILLING_GROUP_BOOTSTRAP_STRIPE_CUSTOMER_ALREADY_OWNED',
+        { stripeCustomerId },
+      );
+    }
+    throw err;
+  }
+
+  // Volume-tier recalc makes Stripe API calls — intentionally outside the txn.
+  // If it fails, the coupon-sync-retry cron picks it up and the group is still
+  // complete and self-healing.
+  await recalculateVolumeTier(billingGroupId);
+
+  return { billingGroupId, stripeCustomerId };
 }
 
 export async function createPendingAddToGroupSignup(input: {

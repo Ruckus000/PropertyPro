@@ -71,6 +71,11 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Stub URL so @propertypro/db can load at import time. Unit tests never
+      # actually connect — they either mock createScopedClient or call pure
+      # functions. Real DB access is covered by the integration-tests job.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
     steps:
       - name: Checkout
         uses: actions/checkout@v4

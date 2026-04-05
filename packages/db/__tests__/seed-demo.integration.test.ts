@@ -5,6 +5,7 @@ import { and, eq, inArray, isNull, sql as drizzleSql } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
+  billingGroups,
   communities,
   demoSeedRegistry,
   documentCategories,
@@ -18,6 +19,7 @@ import {
 import { runDemoSeed } from '../../../scripts/seed-demo';
 
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
+const itWithStripe = process.env.STRIPE_SECRET_KEY ? it : it.skip;
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
@@ -278,4 +280,47 @@ describeDb('demo seed integration', () => {
     expect(within60).toBeGreaterThanOrEqual(1);
     expect(within90).toBeGreaterThanOrEqual(1);
   }, 30_000);
+
+  itWithStripe('seeds PM portfolio billing with shared Stripe linkage and a synced tier_10 group', async () => {
+    const seededCommunities = await db
+      .select({
+        id: communities.id,
+        slug: communities.slug,
+        stripeCustomerId: communities.stripeCustomerId,
+        stripeSubscriptionId: communities.stripeSubscriptionId,
+        subscriptionPlan: communities.subscriptionPlan,
+        subscriptionStatus: communities.subscriptionStatus,
+        billingGroupId: communities.billingGroupId,
+      })
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+
+    expect(seededCommunities).toHaveLength(3);
+    expect(seededCommunities.every((community) => community.stripeCustomerId != null)).toBe(true);
+    expect(seededCommunities.every((community) => community.stripeSubscriptionId != null)).toBe(true);
+    expect(seededCommunities.every((community) => community.billingGroupId != null)).toBe(true);
+
+    const billingGroupIds = [...new Set(seededCommunities.map((community) => community.billingGroupId))];
+    const stripeCustomerIds = [...new Set(seededCommunities.map((community) => community.stripeCustomerId))];
+    expect(billingGroupIds).toHaveLength(1);
+    expect(stripeCustomerIds).toHaveLength(1);
+
+    const planBySlug = Object.fromEntries(
+      seededCommunities.map((community) => [community.slug, community.subscriptionPlan]),
+    );
+    expect(planBySlug).toMatchObject({
+      'sunset-condos': 'essentials',
+      'palm-shores-hoa': 'essentials',
+      'sunset-ridge-apartments': 'operations_plus',
+    });
+    expect(seededCommunities.every((community) => community.subscriptionStatus === 'active')).toBe(true);
+
+    const [group] = await db
+      .select()
+      .from(billingGroups)
+      .where(eq(billingGroups.id, billingGroupIds[0]!));
+    expect(group.activeCommunityCount).toBe(3);
+    expect(group.volumeTier).toBe('tier_10');
+    expect(group.couponSyncStatus).toBe('synced');
+  }, 60_000);
 });

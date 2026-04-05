@@ -112,7 +112,11 @@ describe('MobileHomePage', () => {
 
   it('calls loadDashboardData with correct communityId and userId', async () => {
     await MobileHomePage({ searchParams: SEARCH_PARAMS_1 });
-    expect(loadDashboardDataMock).toHaveBeenCalledWith(1, 'user-1');
+    expect(loadDashboardDataMock).toHaveBeenCalledWith(
+      1,
+      'user-1',
+      expect.objectContaining({ communityId: 1, userId: 'user-1' }),
+    );
   });
 
   describe('preview mode', () => {

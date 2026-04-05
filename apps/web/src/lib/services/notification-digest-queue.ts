@@ -1,5 +1,5 @@
 import { createScopedClient, notificationDigestQueue } from '@propertypro/db';
-import type { EmailFrequency } from '@/lib/utils/email-preferences';
+import type { EmailFrequency } from '../utils/email-preferences';
 
 export type DigestSourceType =
   | 'meeting'

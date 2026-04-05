@@ -550,6 +550,20 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         isPreviewRequest,
       );
     }
+
+    if (user && !isApiPath(pathname) && pathname === '/pm/dashboard/communities/new') {
+      const communitiesUrl = request.nextUrl.clone();
+      communitiesUrl.pathname = '/pm/dashboard/communities';
+      communitiesUrl.search = '';
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        NextResponse.redirect(communitiesUrl),
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+    }
   }
 
   // --- Public site auth-split [Wave 5 / Task 3.3] ---
