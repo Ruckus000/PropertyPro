@@ -9,6 +9,7 @@
  */
 import { Menu, Search } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/notification-bell';
+import { CommunitySwitcher } from '@/components/overview/community-switcher';
 import { ProfileMenu } from './profile-menu';
 import { useSidebar } from './sidebar-context';
 
@@ -52,6 +53,7 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:gap-2">
+          <CommunitySwitcher />
           <NotificationBell communityId={communityId} />
           <ProfileMenu userName={userName} userEmail={userEmail} communityId={communityId} />
         </div>

@@ -180,6 +180,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts'),
   // Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
   resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/mine/route.ts'),
+  // Unified owner dashboard — cross-community query module for overview page
+  resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
