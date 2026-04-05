@@ -34,18 +34,31 @@ const { dbState, selectMock, insertNotificationsMock, mockDb } = vi.hoisted(() =
       },
     }),
     update: (_table: unknown) => ({
-      set: (data: Record<string, unknown>) => ({
-        where: () => {
+      set: (data: Record<string, unknown>) => {
+        const applyUpdate = () => {
           if ('status' in data && typeof data.status === 'string' && dbState.joinRequests.length > 0) {
             const last = dbState.joinRequests[dbState.joinRequests.length - 1]!;
+            // Only transition if currently pending (mirrors conditional SQL update)
+            if (last.status !== 'pending') return [] as typeof dbState.joinRequests;
             last.status = data.status;
             last.reviewedBy = (data.reviewedBy as string) ?? null;
             last.reviewedAt = (data.reviewedAt as Date) ?? null;
             last.reviewNotes = (data.reviewNotes as string | null) ?? null;
+            return [last];
           }
-          return Promise.resolve([]);
-        },
-      }),
+          return [] as typeof dbState.joinRequests;
+        };
+        return {
+          where: () => {
+            const rows = applyUpdate();
+            const promise = Promise.resolve(rows) as Promise<typeof rows> & {
+              returning: () => Promise<typeof rows>;
+            };
+            promise.returning = () => Promise.resolve(rows);
+            return promise;
+          },
+        };
+      },
     }),
     transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb),
   };
@@ -65,6 +78,7 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (a: unknown, b: unknown) => ({ eq: [a, b] }),
+  and: (...parts: unknown[]) => ({ and: parts }),
 }));
 
 // Import after mocks

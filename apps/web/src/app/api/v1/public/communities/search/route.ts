@@ -64,12 +64,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const db = createUnscopedClient();
 
+  // Escape LIKE wildcards so users can't craft a query that matches all rows
+  // (e.g. "%" or "_"). Backslash is the default LIKE escape char in Postgres.
+  const escapeLike = (s: string) =>
+    s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
   const conditions = [
-    ilike(communities.name, `%${parsed.data.q}%`),
+    ilike(communities.name, `%${escapeLike(parsed.data.q)}%`),
     isNull(communities.deletedAt),
   ];
   if (parsed.data.city) {
-    conditions.push(ilike(communities.city, `%${parsed.data.city}%`));
+    conditions.push(ilike(communities.city, `%${escapeLike(parsed.data.city)}%`));
   }
 
   const rows = await db

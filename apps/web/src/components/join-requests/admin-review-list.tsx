@@ -22,6 +22,8 @@ interface PendingRequest {
 export function AdminReviewList() {
   const qc = useQueryClient();
   const [actingId, setActingId] = useState<number | null>(null);
+  const [denyDraftId, setDenyDraftId] = useState<number | null>(null);
+  const [denyNotes, setDenyNotes] = useState('');
 
   const { data, isLoading, isError } = useQuery<{ data: PendingRequest[] }>({
     queryKey: ['admin-join-requests'],
@@ -48,6 +50,8 @@ export function AdminReviewList() {
     },
     onSettled: () => {
       setActingId(null);
+      setDenyDraftId(null);
+      setDenyNotes('');
       qc.invalidateQueries({ queryKey: ['admin-join-requests'] });
     },
   });
@@ -108,7 +112,10 @@ export function AdminReviewList() {
                 size="sm"
                 variant="secondary"
                 disabled={actingId === r.id}
-                onClick={() => act.mutate({ id: r.id, action: 'deny' })}
+                onClick={() => {
+                  setDenyDraftId(r.id);
+                  setDenyNotes('');
+                }}
               >
                 Deny
               </Button>
@@ -121,6 +128,51 @@ export function AdminReviewList() {
               </Button>
             </div>
           </div>
+          {denyDraftId === r.id && (
+            <div className="mt-3 space-y-2 border-t pt-3">
+              <label
+                htmlFor={`deny-notes-${r.id}`}
+                className="text-sm font-medium"
+              >
+                Reason for denying (sent to requester)
+              </label>
+              <textarea
+                id={`deny-notes-${r.id}`}
+                className="w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder="e.g. Unit number doesn't match our records. Please provide your lease or closing document."
+                value={denyNotes}
+                onChange={(e) => setDenyNotes(e.target.value)}
+                maxLength={500}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={actingId === r.id}
+                  onClick={() => {
+                    setDenyDraftId(null);
+                    setDenyNotes('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={actingId === r.id}
+                  onClick={() =>
+                    act.mutate({
+                      id: r.id,
+                      action: 'deny',
+                      notes: denyNotes.trim() || undefined,
+                    })
+                  }
+                >
+                  {actingId === r.id ? 'Denying…' : 'Confirm deny'}
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       ))}
     </div>

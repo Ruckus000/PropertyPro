@@ -12,7 +12,7 @@ import {
   userRoles,
   insertNotifications,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, eq } from '@propertypro/db/filters';
 import { NotFoundError, ConflictError } from '@/lib/api/errors';
 
 export interface ApproveInput {
@@ -60,6 +60,29 @@ export async function approveJoinRequest(
   const displayTitle = isOwner ? 'Owner' : 'Tenant';
 
   await db.transaction(async (tx) => {
+    // Conditional update: only transition pending → approved. Ensures atomicity
+    // if two admins race to approve the same request.
+    const updated = await tx
+      .update(communityJoinRequests)
+      .set({
+        status: 'approved',
+        reviewedBy: input.reviewerUserId,
+        reviewedAt: new Date(),
+        reviewNotes: input.notes ?? null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(communityJoinRequests.id, input.requestId),
+          eq(communityJoinRequests.status, 'pending'),
+        ),
+      )
+      .returning();
+
+    if (updated.length === 0) {
+      throw new ConflictError('Request is no longer pending');
+    }
+
     // Create user_roles row (v2 hybrid model: role='resident' + isUnitOwner flag)
     await tx.insert(userRoles).values({
       userId: req.userId,
@@ -69,18 +92,6 @@ export async function approveJoinRequest(
       displayTitle,
       legacyRole: req.residentType,
     });
-
-    // Mark request approved
-    await tx
-      .update(communityJoinRequests)
-      .set({
-        status: 'approved',
-        reviewedBy: input.reviewerUserId,
-        reviewedAt: new Date(),
-        reviewNotes: input.notes ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(communityJoinRequests.id, input.requestId));
   });
 
   // Notify the requester (best-effort, outside the transaction)
@@ -130,7 +141,9 @@ export async function denyJoinRequest(
   if (!req) throw new NotFoundError('Join request not found');
   if (req.status !== 'pending') throw new ConflictError('Request is not pending');
 
-  await db
+  // Conditional update: only transition pending → denied. Ensures atomicity
+  // if two admins race to deny the same request.
+  const updated = await db
     .update(communityJoinRequests)
     .set({
       status: 'denied',
@@ -139,7 +152,17 @@ export async function denyJoinRequest(
       reviewNotes: input.notes ?? null,
       updatedAt: new Date(),
     })
-    .where(eq(communityJoinRequests.id, input.requestId));
+    .where(
+      and(
+        eq(communityJoinRequests.id, input.requestId),
+        eq(communityJoinRequests.status, 'pending'),
+      ),
+    )
+    .returning();
+
+  if (updated.length === 0) {
+    throw new ConflictError('Request is no longer pending');
+  }
 
   // Notify the requester (best-effort)
   try {
