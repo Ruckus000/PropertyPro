@@ -39,6 +39,8 @@ export type AuditAction =
   | 'community.contact_updated' | 'profile.updated'
   // Access request audit actions (self-service resident signup)
   | 'access_request.approved' | 'access_request.denied'
+  // Community join request audit actions (self-service community linking)
+  | 'join_request.approved' | 'join_request.denied'
   // Support access audit actions
   | 'support_session_started' | 'support_session_ended'
   | 'support_consent_granted' | 'support_consent_revoked'
