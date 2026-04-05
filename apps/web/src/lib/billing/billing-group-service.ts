@@ -234,7 +234,7 @@ export async function getOrCreateBillingGroupForPm(
         .returning({ id: billingGroups.id });
       if (!row) throw new Error('Failed to create billing group');
 
-      await tx
+      const linkedCommunities = await tx
         .update(communities)
         .set({ billingGroupId: row.id })
         .where(
@@ -250,7 +250,20 @@ export async function getOrCreateBillingGroupForPm(
             isNull(communities.billingGroupId),
             isNull(communities.deletedAt),
           ),
+        )
+        .returning({ id: communities.id });
+
+      // If all eligible communities were grabbed by another writer (or soft-
+      // deleted) between our SELECT and this UPDATE, rollback — we refuse to
+      // leave the PM with an empty billing group that would then block every
+      // future bootstrap attempt.
+      if (linkedCommunities.length === 0) {
+        throw new AppError(
+          'Portfolio billing can’t be initialized right now because your eligible communities are no longer available. Please try again.',
+          409,
+          'BILLING_GROUP_BOOTSTRAP_RACE_NO_ELIGIBLE_COMMUNITIES',
         );
+      }
 
       return row.id;
     });
