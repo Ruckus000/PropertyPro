@@ -3,15 +3,15 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@propertypro/web", "exec", "next", "dev"],
+      "runtimeExecutable": "/tmp/propertypro-start-web.sh",
+      "runtimeArgs": [],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "admin",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@propertypro/admin", "exec", "next", "dev"],
+      "runtimeExecutable": "/tmp/propertypro-start-admin.sh",
+      "runtimeArgs": [],
       "port": 3001,
       "autoPort": true
     }
