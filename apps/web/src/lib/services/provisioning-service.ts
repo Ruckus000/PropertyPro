@@ -29,6 +29,11 @@ import {
 } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db';
+import {
+  linkCommunityToBillingGroup,
+  recalculateVolumeTier,
+} from '@/lib/billing/billing-group-service';
+import { createCommunityForPm } from '@/lib/pm/create-community';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import { getComplianceTemplate } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
@@ -465,4 +470,91 @@ export async function runProvisioning(jobId: number): Promise<void> {
       throw err; // re-throw so caller can capture to Sentry
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// add_to_group provisioning path
+// ---------------------------------------------------------------------------
+
+export interface AddToGroupInput {
+  pendingSignupId: number;
+  billingGroupId: number;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string | undefined;
+}
+
+/**
+ * Provisions a new community for an existing PM adding to their billing group.
+ *
+ * Unlike the main provisioning state machine (which uses provisioningJobs rows),
+ * this path is a single async function triggered fire-and-forget from the webhook.
+ * It delegates community creation to createCommunityForPm(), then links the
+ * community to the billing group and stamps the Stripe billing IDs.
+ */
+export async function runAddToGroupProvisioning(input: AddToGroupInput): Promise<void> {
+  const db = createUnscopedClient();
+
+  // Load pending signup row to get the community input and auth user.
+  // pendingSignups.id is bigserial — must compare with BigInt.
+  const [signup] = await db
+    .select()
+    .from(pendingSignups)
+    .where(eq(pendingSignups.id, BigInt(input.pendingSignupId)))
+    .limit(1);
+
+  if (!signup) {
+    throw new Error(`[add_to_group] pending_signup ${input.pendingSignupId} not found`);
+  }
+  if (!signup.authUserId) {
+    throw new Error(`[add_to_group] pending_signup ${input.pendingSignupId} has no authUserId`);
+  }
+
+  const payload = signup.payload as {
+    kind: 'add_to_group';
+    billingGroupId: number;
+    fullInput: {
+      name: string;
+      communityType: 'condo_718' | 'hoa_720' | 'apartment';
+      addressLine1: string;
+      addressLine2?: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      subdomain: string;
+      timezone: string;
+      unitCount: number;
+    };
+  };
+
+  // 1. Create the community (inserts community, user role, doc categories, notification prefs,
+  //    checklist items, and audit log entry).
+  const { communityId } = await createCommunityForPm({
+    userId: signup.authUserId,
+    ...payload.fullInput,
+  });
+
+  // 2. Link to billing group.
+  await linkCommunityToBillingGroup(communityId, input.billingGroupId);
+
+  // 3. Stamp Stripe billing IDs on the new community.
+  await db
+    .update(communities)
+    .set({
+      stripeSubscriptionId: input.stripeSubscriptionId,
+      stripeCustomerId: input.stripeCustomerId ?? null,
+      subscriptionStatus: 'active',
+      subscriptionPlan: signup.planKey,
+      updatedAt: new Date(),
+    })
+    .where(eq(communities.id, communityId));
+
+  // 4. Mark signup completed.
+  // pendingSignups.id is bigserial — must compare with BigInt.
+  await db
+    .update(pendingSignups)
+    .set({ status: 'completed', updatedAt: new Date() })
+    .where(eq(pendingSignups.id, BigInt(input.pendingSignupId)));
+
+  // 5. Recalculate volume tier — may upgrade the whole group's Stripe discount.
+  await recalculateVolumeTier(input.billingGroupId);
 }
