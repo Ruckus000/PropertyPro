@@ -680,6 +680,13 @@
       "when": 1775560000000,
       "tag": "0136_drop_communities_stripe_customer_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1775570000000,
+      "tag": "0137_community_join_requests",
+      "breakpoints": true
     }
   ]
 }
