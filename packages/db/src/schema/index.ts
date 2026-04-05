@@ -2,6 +2,7 @@
  * Schema barrel export — all tables, enums, and inferred types.
  */
 export * from './access-requests';
+export * from './community-join-requests';
 export * from './enums';
 export * from './communities';
 export * from './users';

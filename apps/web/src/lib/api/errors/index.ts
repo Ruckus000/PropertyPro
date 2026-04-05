@@ -9,3 +9,4 @@ export { UnprocessableEntityError } from './UnprocessableEntityError';
 export { RateLimitError } from './RateLimitError';
 export { DataIntegrityError } from './DataIntegrityError';
 export { SignupEmailDeliveryError } from './SignupEmailDeliveryError';
+export { ConflictError } from './ConflictError';
