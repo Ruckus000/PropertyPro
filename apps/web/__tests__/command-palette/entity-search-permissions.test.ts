@@ -45,6 +45,12 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
   formatAnnouncementAudienceLabel: (audience: string) => audience,
 }));
 
+// The violations search route calls requirePlanFeature via requireViolationsEnabled.
+// Stub it so the test can reach requirePermissionMock (the thing under assertion).
+vi.mock('@/lib/middleware/plan-guard', () => ({
+  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { GET as getAnnouncementSearch } from '../../src/app/api/v1/search/announcements/route';
 import { GET as getDocumentSearch } from '../../src/app/api/v1/search/documents/route';
 import { GET as getMaintenanceSearch } from '../../src/app/api/v1/search/maintenance/route';
