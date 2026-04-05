@@ -1,4 +1,4 @@
-CREATE TABLE billing_groups (
+CREATE TABLE IF NOT EXISTS billing_groups (
   id                     bigserial PRIMARY KEY,
   name                   text NOT NULL,
   stripe_customer_id     text UNIQUE NOT NULL,
@@ -16,22 +16,46 @@ CREATE TABLE billing_groups (
 COMMENT ON COLUMN billing_groups.active_community_count IS
   'Denormalized count maintained by recalculateVolumeTier(). Do not write directly — call recalculateVolumeTier(billingGroupId) to refresh.';
 
-CREATE INDEX idx_billing_groups_owner ON billing_groups(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_billing_groups_owner ON billing_groups(owner_user_id);
 
-ALTER TABLE communities ADD COLUMN billing_group_id bigint
+ALTER TABLE communities ADD COLUMN IF NOT EXISTS billing_group_id bigint
   REFERENCES billing_groups(id) ON DELETE SET NULL;
 
-CREATE INDEX idx_communities_billing_group ON communities(billing_group_id);
+CREATE INDEX IF NOT EXISTS idx_communities_billing_group ON communities(billing_group_id);
 
 -- RLS: billing_groups are owner-scoped, not community-scoped
 ALTER TABLE billing_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE billing_groups FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY billing_groups_owner_read ON billing_groups
-  FOR SELECT USING (owner_user_id = auth.uid());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'billing_groups'
+      AND policyname = 'billing_groups_owner_read'
+  ) THEN
+    CREATE POLICY billing_groups_owner_read ON billing_groups
+      FOR SELECT USING (owner_user_id = auth.uid());
+  END IF;
+END
+$$;
 
 -- Writes only via service role (server code)
-CREATE POLICY billing_groups_service_write ON billing_groups
-  FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'billing_groups'
+      AND policyname = 'billing_groups_service_write'
+  ) THEN
+    CREATE POLICY billing_groups_service_write ON billing_groups
+      FOR ALL
+      USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
+  END IF;
+END
+$$;

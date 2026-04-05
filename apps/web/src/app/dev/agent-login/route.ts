@@ -139,8 +139,8 @@ export async function GET(request: Request) {
   ) ?? communities[0] ?? null;
 
   const isAdmin = ADMIN_ROLES.has(role);
-  let portal = isAdmin ? '/dashboard' : '/mobile';
-  if (primary) {
+  let portal = role === 'pm_admin' ? '/pm/dashboard/communities' : isAdmin ? '/dashboard' : '/mobile';
+  if (primary && role !== 'pm_admin') {
     portal += `?communityId=${primary.communityId}`;
   }
 
@@ -184,7 +184,8 @@ export async function GET(request: Request) {
   }
 
   // HTML mode: redirect to portal
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const baseUrl = isDevelopment ? url.origin : process.env.NEXT_PUBLIC_APP_URL || url.origin;
   const response = NextResponse.redirect(new URL(portal, baseUrl).toString());
   response.headers.set('Cache-Control', 'no-store');
   for (const cookie of pendingCookies) {

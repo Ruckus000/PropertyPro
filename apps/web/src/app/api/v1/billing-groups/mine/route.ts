@@ -9,8 +9,8 @@ import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-servic
  * GET /api/v1/billing-groups/mine
  *
  * Returns the billing group owned by the authenticated PM, creating one
- * on-demand from the PM's first community if none exists yet. Only callable
- * by users who are pm_admin in at least one community.
+ * on-demand from the PM's active portfolio when none exists yet. Only
+ * callable by users who are pm_admin in at least one community.
  */
 export const GET = withErrorHandler(async () => {
   const userId = await requireAuthenticatedUserId();

@@ -30,24 +30,60 @@ CREATE UNIQUE INDEX IF NOT EXISTS "notifications_dedup_unique"
   WHERE "deleted_at" IS NULL;
 
 -- Tenant write-scope trigger (matches pattern from migration 0020)
-CREATE TRIGGER "notifications_enforce_tenant_scope"
-  BEFORE INSERT OR UPDATE ON "notifications"
-  FOR EACH ROW EXECUTE FUNCTION "public"."pp_rls_enforce_tenant_community_id"();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'notifications_enforce_tenant_scope'
+      AND tgrelid = 'notifications'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER "notifications_enforce_tenant_scope"
+      BEFORE INSERT OR UPDATE ON "notifications"
+      FOR EACH ROW EXECUTE FUNCTION "public"."pp_rls_enforce_tenant_community_id"();
+  END IF;
+END
+$$;
 
 -- Row Level Security
 ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "notifications" FORCE ROW LEVEL SECURITY;
 
 -- SELECT: users see only their own notifications
-CREATE POLICY "notifications_user_select"
-  ON "notifications" FOR SELECT
-  USING ("user_id" = auth.uid());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notifications'
+      AND policyname = 'notifications_user_select'
+  ) THEN
+    CREATE POLICY "notifications_user_select"
+      ON "notifications" FOR SELECT
+      USING ("user_id" = auth.uid());
+  END IF;
+END
+$$;
 
 -- UPDATE: users can mark their own as read/archived
-CREATE POLICY "notifications_user_update"
-  ON "notifications" FOR UPDATE
-  USING ("user_id" = auth.uid())
-  WITH CHECK ("user_id" = auth.uid());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notifications'
+      AND policyname = 'notifications_user_update'
+  ) THEN
+    CREATE POLICY "notifications_user_update"
+      ON "notifications" FOR UPDATE
+      USING ("user_id" = auth.uid())
+      WITH CHECK ("user_id" = auth.uid());
+  END IF;
+END
+$$;
 
 -- INSERT/DELETE: no client policy — service_role bypasses RLS for inserts
 -- (app server connects as postgres/service_role which has BYPASSRLS)
@@ -56,7 +92,15 @@ CREATE POLICY "notifications_user_update"
 -- Wrapped in DO block because CI test databases don't have the supabase_realtime publication.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notifications'
+    )
+  THEN
     ALTER PUBLICATION "supabase_realtime" ADD TABLE "notifications";
   END IF;
 END
