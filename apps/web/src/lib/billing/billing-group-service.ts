@@ -225,28 +225,47 @@ export async function getOrCreateBillingGroupForPm(
   // communities must succeed or fail together. Otherwise the PM could be left
   // with an empty billing group that `getBillingGroupByOwner` would return
   // forever, blocking any future bootstrap attempt.
-  const billingGroupId = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(billingGroups)
-      .values({ name: portfolioName, stripeCustomerId, ownerUserId: userId })
-      .returning({ id: billingGroups.id });
-    if (!row) throw new Error('Failed to create billing group');
+  let billingGroupId: number;
+  try {
+    billingGroupId = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(billingGroups)
+        .values({ name: portfolioName, stripeCustomerId, ownerUserId: userId })
+        .returning({ id: billingGroups.id });
+      if (!row) throw new Error('Failed to create billing group');
 
-    await tx
-      .update(communities)
-      .set({ billingGroupId: row.id })
-      .where(
-        and(
-          inArray(
-            communities.id,
-            bootstrapCommunities.map((community) => community.id),
+      await tx
+        .update(communities)
+        .set({ billingGroupId: row.id })
+        .where(
+          and(
+            inArray(
+              communities.id,
+              bootstrapCommunities.map((community) => community.id),
+            ),
+            eq(communities.stripeCustomerId, stripeCustomerId),
           ),
-          eq(communities.stripeCustomerId, stripeCustomerId),
-        ),
-      );
+        );
 
-    return row.id;
-  });
+      return row.id;
+    });
+  } catch (err) {
+    // billing_groups.stripe_customer_id is UNIQUE — if a different PM already
+    // owns a portfolio for this customer, surface a typed 409 instead of a
+    // generic 500. (Postgres unique-violation SQLSTATE = 23505.)
+    if (
+      err instanceof Error &&
+      (err as { code?: string }).code === '23505'
+    ) {
+      throw new AppError(
+        'Portfolio billing can’t be initialized because this Stripe customer already belongs to another portfolio.',
+        409,
+        'BILLING_GROUP_BOOTSTRAP_STRIPE_CUSTOMER_ALREADY_OWNED',
+        { stripeCustomerId },
+      );
+    }
+    throw err;
+  }
 
   // Volume-tier recalc makes Stripe API calls — intentionally outside the txn.
   // If it fails, the coupon-sync-retry cron picks it up and the group is still
