@@ -108,6 +108,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   // Self-service resident signup: public submit + OTP verify (no session required)
   { path: '/api/v1/access-requests', method: 'POST' },
   { path: '/api/v1/access-requests/verify', method: 'POST' },
+  // Public community discovery search (rate-limited, returns minimal metadata only)
+  { path: '/api/v1/public/communities/search', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */
