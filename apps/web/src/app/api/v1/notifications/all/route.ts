@@ -65,44 +65,45 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     conditions.push(isNull(notifications.readAt));
   }
 
-  const rows = await db
-    .select({
-      id: notifications.id,
-      category: notifications.category,
-      title: notifications.title,
-      body: notifications.body,
-      actionUrl: notifications.actionUrl,
-      sourceType: notifications.sourceType,
-      sourceId: notifications.sourceId,
-      priority: notifications.priority,
-      readAt: notifications.readAt,
-      createdAt: notifications.createdAt,
-      communityId: notifications.communityId,
-      communityName: communities.name,
-      communitySlug: communities.slug,
-    })
-    .from(notifications)
-    .innerJoin(communities, eq(communities.id, notifications.communityId))
-    .where(and(...conditions))
-    .orderBy(desc(notifications.id))
-    .limit(parsed.data.limit + 1);
+  const [rows, unreadCountRows] = await Promise.all([
+    db
+      .select({
+        id: notifications.id,
+        category: notifications.category,
+        title: notifications.title,
+        body: notifications.body,
+        actionUrl: notifications.actionUrl,
+        sourceType: notifications.sourceType,
+        sourceId: notifications.sourceId,
+        priority: notifications.priority,
+        readAt: notifications.readAt,
+        createdAt: notifications.createdAt,
+        communityId: notifications.communityId,
+        communityName: communities.name,
+        communitySlug: communities.slug,
+      })
+      .from(notifications)
+      .innerJoin(communities, eq(communities.id, notifications.communityId))
+      .where(and(...conditions))
+      .orderBy(desc(notifications.id))
+      .limit(parsed.data.limit + 1),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          inArray(notifications.communityId, communityIds),
+          isNull(notifications.readAt),
+          isNull(notifications.archivedAt),
+          isNull(notifications.deletedAt),
+        ),
+      ),
+  ]);
 
   const hasMore = rows.length > parsed.data.limit;
   const page = hasMore ? rows.slice(0, parsed.data.limit) : rows;
   const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
-
-  const unreadCountRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, userId),
-        inArray(notifications.communityId, communityIds),
-        isNull(notifications.readAt),
-        isNull(notifications.archivedAt),
-        isNull(notifications.deletedAt),
-      ),
-    );
   const totalUnread = unreadCountRows[0]?.count ?? 0;
 
   const items = page.map((n) => ({
