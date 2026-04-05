@@ -13,6 +13,7 @@ import {
   insertNotifications,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { NotFoundError, ConflictError } from '@/lib/api/errors';
 
 export interface ApproveInput {
   requestId: number;
@@ -52,8 +53,8 @@ export async function approveJoinRequest(
     .where(eq(communityJoinRequests.id, input.requestId))
     .limit(1);
 
-  if (!req) throw new Error('Join request not found');
-  if (req.status !== 'pending') throw new Error('Request is not pending');
+  if (!req) throw new NotFoundError('Join request not found');
+  if (req.status !== 'pending') throw new ConflictError('Request is not pending');
 
   const isOwner = req.residentType === 'owner';
   const displayTitle = isOwner ? 'Owner' : 'Tenant';
@@ -126,8 +127,8 @@ export async function denyJoinRequest(
     .where(eq(communityJoinRequests.id, input.requestId))
     .limit(1);
 
-  if (!req) throw new Error('Join request not found');
-  if (req.status !== 'pending') throw new Error('Request is not pending');
+  if (!req) throw new NotFoundError('Join request not found');
+  if (req.status !== 'pending') throw new ConflictError('Request is not pending');
 
   await db
     .update(communityJoinRequests)

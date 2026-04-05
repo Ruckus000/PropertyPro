@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,17 +22,25 @@ interface CommunitySearchProps {
 
 export function CommunitySearch({ onSelect }: CommunitySearchProps) {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  // Debounce the search query by 300ms so we don't fire a request on every
+  // keystroke.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(handle);
+  }, [query]);
 
   const { data, isLoading, isError } = useQuery<{ data: CommunitySearchResult[] }>({
-    queryKey: ['community-search', query],
+    queryKey: ['community-search', debouncedQuery],
     queryFn: async () => {
       const res = await fetch(
-        `/api/v1/public/communities/search?q=${encodeURIComponent(query)}`,
+        `/api/v1/public/communities/search?q=${encodeURIComponent(debouncedQuery)}`,
       );
       if (!res.ok) throw new Error('Search failed');
       return res.json();
     },
-    enabled: query.trim().length >= 2,
+    enabled: debouncedQuery.trim().length >= 2,
   });
 
   const results = data?.data ?? [];
