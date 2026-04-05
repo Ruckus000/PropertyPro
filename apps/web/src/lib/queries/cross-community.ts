@@ -5,6 +5,10 @@
  * belongs to. Callers MUST have authenticated the user via
  * `requireAuthenticatedUserId()` before invoking. The helpers only return data
  * scoped to the user's own membership rows.
+ *
+ * This module is ALLOWLISTED for unsafe DB access. The helper resolves the
+ * caller's authorized community_id list via user_roles (the tenant membership
+ * table) before any scoped query elsewhere runs against those ids.
  */
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 
