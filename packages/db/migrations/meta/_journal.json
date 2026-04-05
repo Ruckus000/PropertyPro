@@ -715,6 +715,13 @@
       "when": 1775610000000,
       "tag": "0140_revenue_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1775620000000,
+      "tag": "0141_metrics_indexes",
+      "breakpoints": true
     }
   ]
 }
