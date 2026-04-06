@@ -42,6 +42,8 @@ export const revenueSnapshots = pgTable(
     mrrDeltaPct: numeric('mrr_delta_pct', { precision: 6, scale: 2 }),
   },
   (table) => [
+    // NOTE: Migration 0140 creates this index as (snapshot_date DESC, computed_at DESC).
+    // Drizzle's .on() defaults to ASC — the actual DB index direction is authoritative.
     index('idx_revenue_snapshots_date_computed').on(table.snapshotDate, table.computedAt),
   ],
 );

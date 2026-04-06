@@ -37,7 +37,6 @@ export interface BillingGroupRow {
 
 export interface AccessPlanRow {
   communityId: number;
-  status: 'active' | 'in_grace';
 }
 
 export interface SnapshotComputation {

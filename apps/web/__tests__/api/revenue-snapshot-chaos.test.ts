@@ -124,3 +124,15 @@ describe('chaos: null/empty subscription_plan', () => {
     expect(r.mrrCents).toBe(10000);
   });
 });
+
+// --- Deferred chaos scenarios (require database / integration test harness) ---
+// These are spec Layer 2 scenarios that will be added as integration tests in Phase 2.
+describe('chaos: deferred to integration tests', () => {
+  it.todo('duplicate snapshot same day — DISTINCT ON returns latest by computed_at');
+  it.todo('3-day cron gap — health endpoint returns 503, manual trigger recovers');
+  it.todo('late Stripe webhook (6h backdate) — reconciliation drift detected');
+  it.todo('DST fallback day (Nov 3) — cron fires once, not twice');
+  it.todo('timezone boundary (23:55 ET / 00:05 ET) — snapshot_date is correct');
+  it.todo('access plan grace boundary (t-1s / t / t+1s) — correctly included/excluded');
+  it.todo('future-dated created_at (2030) — does not break metrics queries');
+});

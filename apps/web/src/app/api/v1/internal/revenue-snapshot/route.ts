@@ -23,10 +23,6 @@ import {
   computeSnapshot,
   computeMrrDeltaPct,
   runSanityChecks,
-  type CommunityRow,
-  type PriceRow,
-  type BillingGroupRow,
-  type AccessPlanRow,
 } from '@/lib/services/revenue-snapshot-service';
 
 // DO NOT use withErrorHandler — we want explicit control over responses here.
@@ -39,7 +35,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const db = createUnscopedClient();
 
-  // Load inputs
+  // Load inputs — unbounded SELECTs are fine at current scale (~250 communities).
+  // If community count exceeds ~5K, consider cursor-based pagination here.
   const allCommunities = await db
     .select({
       id: communities.id,
@@ -86,10 +83,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let computation;
   try {
     computation = computeSnapshot({
-      communities: allCommunities as CommunityRow[],
-      prices: prices as PriceRow[],
-      billingGroups: groups as BillingGroupRow[],
-      accessPlans: activePlans as AccessPlanRow[],
+      communities: allCommunities,
+      prices,
+      billingGroups: groups,
+      accessPlans: activePlans,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -119,12 +116,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'sanity_check_failed', reasons: check.reasons }, { status: 500 });
   }
 
-  // Reconciliation against Stripe
+  // Reconciliation against Stripe — paginate to get full count
   let reconciliationDriftPct: number | null = null;
   try {
     const stripe = getStripeClient();
-    const activeSubs = await stripe.subscriptions.list({ status: 'active', limit: 100 });
-    const stripeActiveCount = activeSubs.data.length;
+    let stripeActiveCount = 0;
+    for await (const _sub of stripe.subscriptions.list({ status: 'active' })) {
+      stripeActiveCount += 1;
+    }
     const dbActiveCount = computation.activeSubscriptions;
     if (dbActiveCount > 0) {
       reconciliationDriftPct =
