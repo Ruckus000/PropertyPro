@@ -17,6 +17,7 @@ import {
   communities,
   pendingSignups,
   provisioningJobs,
+  stripePrices,
   stripeWebhookEvents,
 } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -515,6 +516,17 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     case 'invoice.payment_succeeded':
       await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
       break;
+    case 'price.updated': {
+      const price = event.data.object as Stripe.Price;
+      if (price.unit_amount !== null) {
+        const db = createUnscopedClient();
+        await db
+          .update(stripePrices)
+          .set({ unitAmountCents: price.unit_amount, updatedAt: new Date() })
+          .where(eq(stripePrices.stripePriceId, price.id));
+      }
+      break;
+    }
     default:
       // Unhandled event type — safe to ignore
       break;

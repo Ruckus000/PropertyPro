@@ -687,6 +687,41 @@
       "when": 1775570000000,
       "tag": "0137_community_join_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1775580000000,
+      "tag": "0138_add_cancellation_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1775590000000,
+      "tag": "0139_stripe_prices_unit_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1775600000000,
+      "tag": "0139a_stripe_prices_unit_amount_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1775610000000,
+      "tag": "0140_revenue_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1775620000000,
+      "tag": "0141_metrics_indexes",
+      "breakpoints": true
     }
   ]
 }

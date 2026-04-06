@@ -6,7 +6,7 @@
  *
  * Not community-scoped — excluded from RLS tenant tables.
  */
-import { bigserial, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
 
 export const stripePrices = pgTable(
   'stripe_prices',
@@ -16,6 +16,7 @@ export const stripePrices = pgTable(
     communityType: text('community_type').notNull(),
     billingInterval: text('billing_interval').notNull(),
     stripePriceId: text('stripe_price_id').notNull().unique(),
+    unitAmountCents: bigint('unit_amount_cents', { mode: 'number' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

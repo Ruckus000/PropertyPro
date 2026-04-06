@@ -1,12 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, billingGroups } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import { recalculateVolumeTier } from '@/lib/billing/billing-group-service';
+import { cancellationReasonSchema } from '@propertypro/shared';
+
+const cancelBodySchema = z.object({
+  reason: cancellationReasonSchema,
+  note: z.string().max(2000).optional(),
+});
 
 /**
  * POST /api/v1/communities/[id]/cancel
@@ -19,10 +26,22 @@ import { recalculateVolumeTier } from '@/lib/billing/billing-group-service';
  * billing group.
  */
 export const POST = withErrorHandler(
-  async (_req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
+  async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
     const userId = await requireAuthenticatedUserId();
     const params = await ctx.params;
     const communityId = Number(params.id);
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      throw new ValidationError('Invalid JSON body');
+    }
+    const parsed = cancelBodySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid request body', { issues: parsed.error.issues });
+    }
+    const { reason, note } = parsed.data;
 
     const db = createUnscopedClient();
 
@@ -67,7 +86,12 @@ export const POST = withErrorHandler(
     // Soft-delete the community.
     await db
       .update(communities)
-      .set({ deletedAt: new Date() })
+      .set({
+        deletedAt: new Date(),
+        cancellationReason: reason,
+        cancellationNote: note ?? null,
+        cancellationCapturedAt: new Date(),
+      })
       .where(eq(communities.id, communityId));
 
     // Recalculate volume tier — may downgrade and notify admins.
