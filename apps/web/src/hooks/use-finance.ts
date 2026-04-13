@@ -50,6 +50,19 @@ export interface LedgerFilters {
   endDate?: string;
 }
 
+export interface PaymentHistoryItem {
+  id: number;
+  unitId: number;
+  amountCents: number;
+  dueDate: string;
+  paidAt: string | null;
+  lateFeeCents: number;
+}
+
+interface FinanceQueryOptions {
+  enabled?: boolean;
+}
+
 /* ─────── Query Keys ─────── */
 
 export const FINANCE_KEYS = {
@@ -60,11 +73,16 @@ export const FINANCE_KEYS = {
     [...FINANCE_KEYS.all, 'delinquency', communityId] as const,
   ledger: (communityId: number, filters?: LedgerFilters) =>
     [...FINANCE_KEYS.all, 'ledger', communityId, filters ?? {}] as const,
+  payments: (communityId: number) =>
+    [...FINANCE_KEYS.all, 'payments', communityId] as const,
 };
 
 /* ─────── Hooks ─────── */
 
-export function useAssessments(communityId: number) {
+export function useAssessments(
+  communityId: number,
+  options?: FinanceQueryOptions,
+) {
   return useQuery({
     queryKey: FINANCE_KEYS.assessments(communityId),
     queryFn: () =>
@@ -72,11 +90,14 @@ export function useAssessments(communityId: number) {
         `/api/v1/assessments?communityId=${communityId}`,
       ),
     staleTime: 30_000,
-    enabled: communityId > 0,
+    enabled: communityId > 0 && options?.enabled !== false,
   });
 }
 
-export function useDelinquency(communityId: number) {
+export function useDelinquency(
+  communityId: number,
+  options?: FinanceQueryOptions,
+) {
   return useQuery({
     queryKey: FINANCE_KEYS.delinquency(communityId),
     queryFn: () =>
@@ -84,11 +105,15 @@ export function useDelinquency(communityId: number) {
         `/api/v1/delinquency?communityId=${communityId}`,
       ),
     staleTime: 60_000,
-    enabled: communityId > 0,
+    enabled: communityId > 0 && options?.enabled !== false,
   });
 }
 
-export function useLedger(communityId: number, filters?: LedgerFilters) {
+export function useLedger(
+  communityId: number,
+  filters?: LedgerFilters,
+  options?: FinanceQueryOptions,
+) {
   return useQuery({
     queryKey: FINANCE_KEYS.ledger(communityId, filters),
     queryFn: () => {
@@ -103,6 +128,21 @@ export function useLedger(communityId: number, filters?: LedgerFilters) {
       return requestJson<LedgerEntry[]>(`/api/v1/ledger?${params}`);
     },
     staleTime: 30_000,
-    enabled: communityId > 0,
+    enabled: communityId > 0 && options?.enabled !== false,
+  });
+}
+
+export function useRecentPayments(
+  communityId: number,
+  options?: FinanceQueryOptions,
+) {
+  return useQuery({
+    queryKey: FINANCE_KEYS.payments(communityId),
+    queryFn: () =>
+      requestJson<PaymentHistoryItem[]>(
+        `/api/v1/payments/history?communityId=${communityId}`,
+      ),
+    staleTime: 30_000,
+    enabled: communityId > 0 && options?.enabled !== false,
   });
 }
