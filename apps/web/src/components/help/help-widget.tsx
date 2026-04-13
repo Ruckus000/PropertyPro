@@ -91,23 +91,23 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {/* Search results */}
-          {isSearching && hasSearchResults && (
+          {isSearching && hasSearchResults && searchResults && (
             <div className="space-y-4">
-              {searchResults!.articles.length > 0 && (
+              {searchResults.articles.length > 0 && (
                 <section>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">Guides</h3>
                   <div className="space-y-0.5">
-                    {searchResults!.articles.map((a) => (
+                    {searchResults.articles.map((a) => (
                       <ArticleLink key={a.slug} article={a} />
                     ))}
                   </div>
                 </section>
               )}
-              {searchResults!.faqs.length > 0 && (
+              {searchResults.faqs.length > 0 && (
                 <section>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">FAQs</h3>
                   <div className="space-y-1">
-                    {searchResults!.faqs.map((faq) => (
+                    {searchResults.faqs.map((faq) => (
                       <details key={faq.id} className="group rounded-[var(--radius-sm)] hover:bg-surface-muted">
                         <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-content [&::-webkit-details-marker]:hidden">
                           <ChevronRight size={12} className="shrink-0 text-content-disabled transition-transform group-open:rotate-90" aria-hidden="true" />
