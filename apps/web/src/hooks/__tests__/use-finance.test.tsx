@@ -13,10 +13,11 @@ import {
   useAssessments,
   useDelinquency,
   useLedger,
+  useRecentPayments,
   FINANCE_KEYS,
   type Assessment,
   type DelinquentUnit,
-  type LedgerEntry,
+  type PaymentHistoryItem,
 } from '../use-finance';
 
 // ---------------------------------------------------------------------------
@@ -37,7 +38,6 @@ function createWrapper() {
     },
   });
   return {
-    queryClient,
     wrapper: ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
@@ -85,6 +85,11 @@ describe('FINANCE_KEYS factory', () => {
     const key1 = FINANCE_KEYS.assessments(1);
     const key2 = FINANCE_KEYS.assessments(2);
     expect(key1).not.toEqual(key2);
+  });
+
+  it('produces correct payments key shape', () => {
+    const key = FINANCE_KEYS.payments(42);
+    expect(key).toEqual(['finance', 'payments', 42]);
   });
 });
 
@@ -180,6 +185,49 @@ describe('useAssessments', () => {
 
     expect(result.current.error?.message).toBe('Missing response payload');
   });
+
+  it('deduplicates simultaneous assessments consumers through the canonical query key', async () => {
+    const { wrapper } = createWrapper();
+    const assessments: Assessment[] = [
+      {
+        id: 7,
+        communityId: 42,
+        title: 'Operating Assessment',
+        description: null,
+        amountCents: 25000,
+        frequency: 'monthly',
+        dueDay: 1,
+        lateFeeAmountCents: 1500,
+        lateFeeDaysGrace: 10,
+        startDate: '2026-01-01',
+        endDate: null,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: assessments }),
+    });
+
+    const { result } = renderHook(
+      () => ({
+        first: useAssessments(42),
+        second: useAssessments(42),
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.first.isSuccess).toBe(true);
+      expect(result.current.second.isSuccess).toBe(true);
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.current.first.data).toEqual(assessments);
+    expect(result.current.second.data).toEqual(assessments);
+  });
 });
 
 // =============================================================================
@@ -220,6 +268,12 @@ describe('useDelinquency', () => {
 
     expect(result.current.data?.[0]?.lienEligible).toBe(true);
     expect(result.current.data?.[0]?.daysOverdue).toBe(45);
+  });
+
+  it('does not fetch until explicitly enabled', () => {
+    const { wrapper } = createWrapper();
+    renderHook(() => useDelinquency(42, { enabled: false }), { wrapper });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
@@ -291,5 +345,56 @@ describe('useLedger', () => {
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
+  });
+
+  it('does not fetch until explicitly enabled', () => {
+    const { wrapper } = createWrapper();
+    renderHook(() => useLedger(42, { entryType: 'charge' }, { enabled: false }), {
+      wrapper,
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// useRecentPayments
+// =============================================================================
+
+describe('useRecentPayments', () => {
+  it('does not fetch until explicitly enabled', () => {
+    const { wrapper } = createWrapper();
+    renderHook(() => useRecentPayments(42, { enabled: false }), { wrapper });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns payment history on success', async () => {
+    const { wrapper } = createWrapper();
+    const items: PaymentHistoryItem[] = [
+      {
+        id: 5,
+        unitId: 302,
+        amountCents: 45000,
+        dueDate: '2026-04-01',
+        paidAt: '2026-04-02T15:00:00Z',
+        lateFeeCents: 0,
+      },
+    ];
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: items }),
+    });
+
+    const { result } = renderHook(() => useRecentPayments(42), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual(items);
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/payments/history?communityId=42',
+      undefined,
+    );
   });
 });
