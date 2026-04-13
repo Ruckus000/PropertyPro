@@ -14,10 +14,10 @@ export async function ensureFaqsExist(communityId: number): Promise<void> {
 
   if (existing.length > 0) return;
 
-  // No active FAQs — seed defaults
   const rows = DEFAULT_FAQS.map((faq, index) => ({
     question: faq.question,
     answer: faq.answer,
+    category: faq.category,
     sortOrder: index,
   }));
 

@@ -25,6 +25,8 @@ import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
 import { SidebarProvider, useSidebar } from './sidebar-context';
+import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
+import { HelpWidget } from '@/components/help/help-widget';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
@@ -281,7 +283,10 @@ function ShellInner({ children, user, community, role, features, resourceAccess,
 export function AppShell(props: AppShellProps) {
   return (
     <SidebarProvider>
-      <ShellInner {...props} />
+      <HelpWidgetProvider>
+        <ShellInner {...props} />
+        <HelpWidget communityId={props.community?.id ?? 0} />
+      </HelpWidgetProvider>
     </SidebarProvider>
   );
 }

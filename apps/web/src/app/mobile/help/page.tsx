@@ -10,6 +10,7 @@ import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { createScopedClient, faqs } from '@propertypro/db';
 import { ensureFaqsExist } from '@/lib/services/faq-service';
+import { getFeaturedForRole } from '@/lib/services/help-article-service';
 import { MobileHelpContent } from '@/components/mobile/MobileHelpContent';
 
 export default async function MobileHelpPage() {
@@ -30,10 +31,12 @@ export default async function MobileHelpPage() {
   }
 
   let isAdmin = false;
+  let effectiveRole: string = 'resident';
 
   try {
     const membership = await requireCommunityMembership(communityId, userId!);
     isAdmin = membership.isAdmin;
+    effectiveRole = (membership.role === 'manager' && membership.presetKey) ? membership.presetKey : membership.role;
   } catch {
     redirect('/auth/login');
   }
@@ -51,11 +54,19 @@ export default async function MobileHelpPage() {
       answer: f['answer'] as string,
     }));
 
+  const featuredArticles = getFeaturedForRole(effectiveRole);
+
   return (
     <MobileHelpContent
       faqs={sortedFaqs}
       isAdmin={isAdmin}
       communityId={communityId}
+      featuredArticles={featuredArticles.map((a) => ({
+        title: a.title,
+        description: a.description,
+        category: a.category,
+        slug: a.slug,
+      }))}
     />
   );
 }
