@@ -42,12 +42,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const articleResults = searchArticles(allArticles, q);
 
   const scoped = createScopedClient(communityId);
-  const faqRows = await scoped.query(faqs);
+  const faqRows = await scoped.query(faqs); // FAQs per community are small (< 100)
   const qLower = q.toLowerCase();
   const faqResults = faqRows
     .filter((f) => {
-      const question = (f['question'] as string).toLowerCase();
-      const answer = (f['answer'] as string).toLowerCase();
+      const question = String(f['question'] ?? '').toLowerCase();
+      const answer = String(f['answer'] ?? '').toLowerCase();
       return question.includes(qLower) || answer.includes(qLower);
     })
     .slice(0, 10);

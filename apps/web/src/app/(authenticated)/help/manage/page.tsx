@@ -16,7 +16,13 @@ import { PageHeader } from '@/components/shared/page-header';
  */
 export default async function HelpManagePage() {
   const requestHeaders = await headers();
-  const communityId = Number(requestHeaders.get('x-community-id'));
+  const communityIdStr = requestHeaders.get('x-community-id');
+  const communityId = communityIdStr ? parseInt(communityIdStr, 10) : NaN;
+
+  if (isNaN(communityId)) {
+    redirect('/help');
+  }
+
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 

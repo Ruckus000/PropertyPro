@@ -28,7 +28,7 @@ export default async function HelpArticlePage({ params }: ArticlePageProps) {
   const allArticles = getAllArticles();
   const relatedArticles = metadata.relatedArticles
     .map((relSlug) => allArticles.find((a) => a.slug === relSlug))
-    .filter(Boolean);
+    .filter((article): article is NonNullable<typeof article> => !!article);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 lg:px-6">
@@ -90,15 +90,15 @@ export default async function HelpArticlePage({ params }: ArticlePageProps) {
           <div className="space-y-3">
             {relatedArticles.map((related) => (
               <Link
-                key={related!.slug}
-                href={`/help/${related!.category}/${related!.slug}`}
+                key={related.slug}
+                href={`/help/${related.category}/${related.slug}`}
                 className="block rounded-[var(--radius-md)] border border-edge p-4 transition-colors hover:bg-surface-muted"
               >
                 <p className="text-sm font-medium text-content">
-                  {related!.title}
+                  {related.title}
                 </p>
                 <p className="mt-1 text-xs text-content-tertiary">
-                  {related!.description}
+                  {related.description}
                 </p>
               </Link>
             ))}

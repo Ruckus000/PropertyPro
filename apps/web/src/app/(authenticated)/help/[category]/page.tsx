@@ -23,9 +23,9 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
 
   // Sort: role-matched first, then alphabetical
   const sorted = [...articles].sort((a, b) => {
-    const aMatch = a.roles.length === 0 || a.roles.includes(effectiveRole) ? 0 : 1;
-    const bMatch = b.roles.length === 0 || b.roles.includes(effectiveRole) ? 0 : 1;
-    if (aMatch !== bMatch) return aMatch - bMatch;
+    const aIsRelevant = a.roles.length === 0 || a.roles.includes(effectiveRole);
+    const bIsRelevant = b.roles.length === 0 || b.roles.includes(effectiveRole);
+    if (aIsRelevant !== bIsRelevant) return aIsRelevant ? -1 : 1;
     return a.title.localeCompare(b.title);
   });
 
