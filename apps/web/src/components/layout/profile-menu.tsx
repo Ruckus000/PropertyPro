@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRightLeft, Download, LogOut, Settings } from 'lucide-react';
+import { ArrowRightLeft, CircleHelp, Download, LogOut, Settings } from 'lucide-react';
 import { toInitials } from '@propertypro/shared';
 import { createBrowserClient } from '@/lib/supabase/client';
 import {
@@ -84,6 +84,13 @@ export function ProfileMenu({ userName, userEmail, communityId }: ProfileMenuPro
           <Link href={settingsHref} onClick={() => setOpen(false)}>
             <Settings className="mr-2 size-4 text-content-disabled" />
             Settings
+          </Link>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem asChild>
+          <Link href="/help" onClick={() => setOpen(false)}>
+            <CircleHelp className="mr-2 size-4 text-content-disabled" />
+            Help
           </Link>
         </DropdownMenuItem>
 
