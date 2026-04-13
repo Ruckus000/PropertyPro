@@ -20,10 +20,18 @@ interface FaqItem {
   answer: string;
 }
 
+interface ArticleLink {
+  title: string;
+  description: string;
+  category: string;
+  slug: string;
+}
+
 interface MobileHelpContentProps {
   faqs: FaqItem[];
   isAdmin: boolean;
   communityId: number;
+  featuredArticles?: ArticleLink[];
 }
 
 function FaqAccordionItem({
@@ -74,6 +82,7 @@ export function MobileHelpContent({
   faqs,
   isAdmin,
   communityId,
+  featuredArticles = [],
 }: MobileHelpContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
@@ -114,6 +123,40 @@ export function MobileHelpContent({
             />
           </div>
         </SlideUp>
+
+        {/* Quick guides */}
+        {featuredArticles.length > 0 && (
+          <SlideUp delay={0.03}>
+            <div className="mt-4">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.8px] text-stone-400">
+                Quick Guides
+              </div>
+              <div className="space-y-2">
+                {featuredArticles.map((article) => (
+                  <Link
+                    key={article.slug}
+                    href={`/help/${article.category}/${article.slug}`}
+                    className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
+                  >
+                    <div className="flex-1">
+                      <div className="text-[14px] font-medium text-stone-900">
+                        {article.title}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-stone-400 line-clamp-1">
+                        {article.description}
+                      </div>
+                    </div>
+                    <ChevronRight
+                      size={16}
+                      className="shrink-0 text-stone-300"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </SlideUp>
+        )}
 
         {/* FAQs */}
         <SlideUp delay={0.05}>
