@@ -184,11 +184,10 @@ Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
 Production deploys happen automatically when a PR is merged to `main`:
 
 1. PR passes CI checks (lint, typecheck, test, build)
-2. PR is reviewed and approved
+2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
 3. PR is merged to `main`
 4. `deploy.yml` triggers after CI succeeds on `main`: builds via Vercel CLI and deploys to production
-5. PR previews are created by the native Vercel GitHub integration and reported back to the PR as Vercel statuses/comments
-6. Smoke test verifies HTTP 200 at the deployment URL
+5. Smoke test verifies HTTP 200 at the deployment URL
 
 No manual steps required.
 

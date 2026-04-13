@@ -8,26 +8,14 @@
 import type { CommunityRole, CommunityType, NewCommunityRole } from './index';
 import type { ManagerPermissions } from './manager-permissions';
 import { COMMUNITY_ROLES } from './index';
+import {
+  KNOWN_DOCUMENT_CATEGORY_KEYS,
+  DOCUMENT_CATEGORY_KEYS,
+} from './document-categories';
+import type { KnownDocumentCategoryKey, DocumentCategoryKey } from './document-categories';
 
-export const KNOWN_DOCUMENT_CATEGORY_KEYS = [
-  'declaration',
-  'rules',
-  'inspection_reports',
-  'meeting_minutes',
-  'announcements',
-  'maintenance_records',
-  'lease_docs',
-  'community_handbook',
-  'move_in_out_docs',
-] as const;
-
-export const DOCUMENT_CATEGORY_KEYS = [
-  ...KNOWN_DOCUMENT_CATEGORY_KEYS,
-  'unknown',
-] as const;
-
-export type KnownDocumentCategoryKey = (typeof KNOWN_DOCUMENT_CATEGORY_KEYS)[number];
-export type DocumentCategoryKey = (typeof DOCUMENT_CATEGORY_KEYS)[number];
+export { KNOWN_DOCUMENT_CATEGORY_KEYS, DOCUMENT_CATEGORY_KEYS };
+export type { KnownDocumentCategoryKey, DocumentCategoryKey };
 
 type CategoryAccess = 'all' | readonly KnownDocumentCategoryKey[];
 

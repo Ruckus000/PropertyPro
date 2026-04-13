@@ -50,7 +50,6 @@ const AUTH_RATE_LIMIT_PATHS = [
   '/api/v1/auth/password-reset',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/resend-verification',
-  '/api/v1/auth/provisioning-status',
   '/api/v1/reauth/verify',
   '/auth/login',
   '/signup',
@@ -83,8 +82,13 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
     return 'auth';
   }
 
-  // Public unauthenticated API endpoint (tenant opt-in gated at handler level)
-  if (pathname === '/api/v1/transparency' && method === 'GET') {
+  // Public unauthenticated API endpoints
+  // - transparency: tenant opt-in gated at handler level
+  // - provisioning-status: polled at 2s intervals during signup provisioning
+  if (
+    (pathname === '/api/v1/transparency' && method === 'GET') ||
+    (pathname.startsWith('/api/v1/auth/provisioning-status') && method === 'GET')
+  ) {
     return 'public';
   }
 

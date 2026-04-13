@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import { RBAC_RESOURCES, type RbacResource } from './rbac-matrix';
-import { KNOWN_DOCUMENT_CATEGORY_KEYS, type KnownDocumentCategoryKey } from './access-policies';
+import { KNOWN_DOCUMENT_CATEGORY_KEYS, type KnownDocumentCategoryKey } from './document-categories';
 
 // ---------------------------------------------------------------------------
 // Core types

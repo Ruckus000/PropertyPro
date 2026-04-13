@@ -32,6 +32,8 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasCalendarSync',
   'hasAccountingConnectors',
   'hasTransparencyPage',
+  'hasEsign',
+  'hasEmergencyNotifications',
 ] as const;
 
 describe('CommunityFeatures config', () => {

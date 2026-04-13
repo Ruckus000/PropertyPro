@@ -168,7 +168,10 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/auth/signup', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/password-reset', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/resend-verification', 'POST')).toBe('auth');
-    expect(classifyRoute('/api/v1/auth/provisioning-status', 'GET')).toBe('auth');
+  });
+
+  it('classifies provisioning-status as public tier (polling-friendly)', () => {
+    expect(classifyRoute('/api/v1/auth/provisioning-status', 'GET')).toBe('public');
   });
 
   it('classifies webhook routes as exempt', () => {

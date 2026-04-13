@@ -7,9 +7,9 @@ Tester: Codex (Playwright browser audit)
 
 - Dev server: `http://127.0.0.1:3002` (current worktree, started via `next dev`)
 - Seed data: Present in connected environment; explicit `pnpm seed:demo` attempt from this worktree stalled without output, but `/dev/agent-login` confirmed seeded demo users and communities exist
-- Roles tested: Pending
-- Roles skipped: Pending
-- Evidence directory: Playwright screenshots captured during execution (filenames recorded inline where relevant)
+- Roles tested: Board President (Phase 1)
+- Roles skipped: Owner, PM Admin, CAM, Board Member, Tenant, Site Manager (Phases 2-5)
+- Evidence directory: Playwright screenshots captured during execution
 
 ## Live Execution Log
 
