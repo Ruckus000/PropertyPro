@@ -56,13 +56,18 @@
 | `packages/db/src/schema/faqs.ts` | Add category, roleVisibility columns |
 | `apps/web/src/middleware.ts` | Add `/help` to PROTECTED_PATH_PREFIXES |
 | `apps/web/src/components/layout/nav-config.ts` | Add help to PAGE_TITLES |
-| `apps/web/src/components/layout/command-palette.tsx` | Add Help Center to globalItems |
+| `apps/web/src/components/layout/app-shell.tsx` | Mount HelpWidgetProvider + HelpWidget (inside client boundary, alongside SidebarProvider) |
 | `apps/web/src/components/layout/app-top-bar.tsx` | Add ? button |
 | `apps/web/src/components/layout/profile-menu.tsx` | Add Help link |
-| `apps/web/src/app/(authenticated)/layout.tsx` | Mount HelpWidgetProvider |
 | `apps/web/src/components/mobile/MobileHelpContent.tsx` | Add platform article quick links |
 | `apps/web/src/app/mobile/help/page.tsx` | Fetch platform articles alongside FAQs |
 | `packages/shared/src/default-faqs.ts` | Expand from 5 to ~15 default FAQs |
+| `apps/web/src/lib/services/faq-service.ts` | Pass `category` field from expanded DEFAULT_FAQS |
+
+**NOT modified (clarification):**
+- `apps/web/src/components/layout/command-palette.tsx` — Dead code (V2 is active). Do not touch.
+- `apps/web/src/app/(authenticated)/layout.tsx` — Provider goes in `app-shell.tsx` (client boundary), not here.
+- V2 command palette already has `page-help` entry in feature registry. No changes needed.
 
 ---
 
@@ -1308,7 +1313,7 @@ git commit -m "feat: add help article page with MDX rendering and related articl
 In `apps/web/src/components/layout/nav-config.ts`, add to the `PAGE_TITLES` record:
 
 ```typescript
-  help: { title: 'Help Center', subtitle: 'Guides, FAQs, and support' },
+  help: { title: 'Help Center', subtitle: 'Guides, FAQs, and support' },  // Note: PAGE_TITLES uses 'subtitle' (nav-config convention), PageHeader component uses 'description' prop
 ```
 
 - [ ] **Step 2: Create the help search input component**
@@ -1372,10 +1377,8 @@ export function HelpSearchInput({
 Create `apps/web/src/app/(authenticated)/help/page.tsx`:
 
 ```typescript
-import { headers } from 'next/headers';
 import Link from 'next/link';
 import { ChevronRight, BookOpen } from 'lucide-react';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { createScopedClient, faqs } from '@propertypro/db';
 import { ensureFaqsExist } from '@/lib/services/faq-service';
@@ -1387,14 +1390,18 @@ import { HelpSearchInput } from '@/components/help/help-search-input';
 import { PageHeader } from '@/components/shared/page-header';
 
 export default async function HelpHubPage() {
-  const requestHeaders = await headers();
-  const communityId = Number(requestHeaders.get('x-community-id'));
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
-  const role = membership.role as string;
+  // requirePageCommunityMembership() with no args resolves communityId internally
+  // via the middleware-forwarded x-community-id header. This is the standard pattern
+  // for pages without communityId in the URL segment.
+  const membership = await requireCommunityMembership();
+  const communityId = membership.communityId;
+  // Use presetKey for granular role matching (e.g. 'board_president', 'cam').
+  // membership.role is NewCommunityRole ('resident' | 'manager' | 'pm_admin') which
+  // won't match frontmatter role tags. presetKey falls back to role for residents.
+  const effectiveRole = membership.presetKey ?? membership.role;
 
   // Fetch featured articles and category tree
-  const featured = getFeaturedForRole(role);
+  const featured = getFeaturedForRole(effectiveRole);
   const categoryTree = getCategoryTree();
   const categories = Object.entries(categoryTree);
 
@@ -1408,7 +1415,7 @@ export default async function HelpHubPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 lg:px-6">
-      <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" />
+      <PageHeader title="Help Center" description="Guides, FAQs, and support" />
 
       {/* Search */}
       <HelpSearchInput className="mt-6" placeholder={
@@ -1517,9 +1524,7 @@ Create `apps/web/src/app/(authenticated)/help/[category]/page.tsx`:
 ```typescript
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import { ChevronRight, Clock } from 'lucide-react';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getCategoryTree } from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
@@ -1530,11 +1535,8 @@ interface CategoryPageProps {
 
 export default async function HelpCategoryPage({ params }: CategoryPageProps) {
   const { category } = await params;
-  const requestHeaders = await headers();
-  const communityId = Number(requestHeaders.get('x-community-id'));
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
-  const role = membership.role as string;
+  const membership = await requireCommunityMembership();
+  const effectiveRole = membership.presetKey ?? membership.role;
 
   const categoryTree = getCategoryTree();
   const articles = categoryTree[category];
@@ -1545,8 +1547,8 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
 
   // Sort: role-matched first, then alphabetical
   const sorted = [...articles].sort((a, b) => {
-    const aMatch = a.roles.length === 0 || a.roles.includes(role) ? 0 : 1;
-    const bMatch = b.roles.length === 0 || b.roles.includes(role) ? 0 : 1;
+    const aMatch = a.roles.length === 0 || a.roles.includes(effectiveRole) ? 0 : 1;
+    const bMatch = b.roles.length === 0 || b.roles.includes(effectiveRole) ? 0 : 1;
     if (aMatch !== bMatch) return aMatch - bMatch;
     return a.title.localeCompare(b.title);
   });
@@ -1648,7 +1650,6 @@ Create `apps/web/src/app/api/v1/help/search/route.ts`:
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createScopedClient, faqs } from '@propertypro/db';
-import { sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -1718,9 +1719,7 @@ Create `apps/web/src/app/(authenticated)/help/search/page.tsx`:
 
 ```typescript
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import { ChevronRight, Clock, FileText, MessageCircleQuestion } from 'lucide-react';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getAllArticles, searchArticles } from '@/lib/services/help-article-service';
 import { createScopedClient, faqs } from '@propertypro/db';
@@ -1734,10 +1733,8 @@ interface SearchPageProps {
 export default async function HelpSearchPage({ searchParams }: SearchPageProps) {
   const resolved = await searchParams;
   const query = typeof resolved.q === 'string' ? resolved.q.trim() : '';
-  const requestHeaders = await headers();
-  const communityId = Number(requestHeaders.get('x-community-id'));
-  const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership();
+  const communityId = membership.communityId;
 
   let articleResults: { title: string; description: string; category: string; slug: string; readTimeMinutes: number }[] = [];
   let faqResults: { id: number; question: string; answer: string }[] = [];
@@ -1910,9 +1907,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
-  const role = membership.role as string;
+  // Use presetKey for granular role matching (e.g. 'board_president', 'cam')
+  const effectiveRole = membership.presetKey ?? membership.role;
 
-  const articles = getContextualArticles(parsed.data.path, role, 3);
+  const articles = getContextualArticles(parsed.data.path, effectiveRole, 3);
 
   return NextResponse.json({
     data: articles.map((a) => ({
@@ -2030,7 +2028,7 @@ git commit -m "feat: add contextual help API route and TanStack Query hooks"
 **Files:**
 - Create: `apps/web/src/components/help/help-widget-provider.tsx`
 - Create: `apps/web/src/components/help/help-widget.tsx`
-- Modify: `apps/web/src/app/(authenticated)/layout.tsx`
+- Modify: `apps/web/src/components/layout/app-shell.tsx`
 
 - [ ] **Step 1: Create the help widget provider**
 
@@ -2067,7 +2065,8 @@ export function HelpWidgetProvider({ children }: { children: ReactNode }) {
     if (!isPointerDevice) return;
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+      const el = e.target as HTMLElement;
+      if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !el.isContentEditable) {
         e.preventDefault();
         setIsOpen((prev) => !prev);
       }
@@ -2146,7 +2145,7 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
       {/* Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-sm lg:hidden"
           onClick={close}
           aria-hidden="true"
         />
@@ -2155,7 +2154,7 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
       {/* Drawer */}
       <aside
         className={cn(
-          'fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-edge bg-surface-page shadow-xl transition-transform duration-200',
+          'fixed right-0 top-0 z-[70] flex h-full w-full max-w-md flex-col border-l border-edge bg-surface-page shadow-xl transition-transform duration-200',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         aria-label="Help panel"
@@ -2270,27 +2269,30 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
 }
 ```
 
-- [ ] **Step 3: Mount the provider and widget in the authenticated layout**
+- [ ] **Step 3: Mount the provider and widget in AppShell (client boundary)**
 
-In `apps/web/src/app/(authenticated)/layout.tsx`, add the imports and wrap:
+**IMPORTANT:** The widget provider must go inside `AppShell` (`apps/web/src/components/layout/app-shell.tsx`), NOT in the server layout (`layout.tsx`). This is where all interactive providers live — `SidebarProvider` is already mounted here at the `AppShell` export. The server layout cannot hold client context that `useHelpWidget()` consumers (like `AppTopBar`) need.
 
-Add imports at top:
+In `apps/web/src/components/layout/app-shell.tsx`, add imports at top:
+
 ```typescript
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
 ```
 
-Wrap children inside the `<MotionProvider>` block — add `<HelpWidgetProvider>` and `<HelpWidget>`:
+Find the `AppShell` export (currently wraps `<SidebarProvider>` around `<ShellInner>`). Add `<HelpWidgetProvider>` and `<HelpWidget>`:
 
 ```typescript
-<MotionProvider>
-  <HelpWidgetProvider>
-    <AppShell user={user} community={community} role={role} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
-      {children}
-    </AppShell>
-    <HelpWidget communityId={community?.id ?? 0} />
-  </HelpWidgetProvider>
-</MotionProvider>
+export function AppShell(props: AppShellProps) {
+  return (
+    <SidebarProvider>
+      <HelpWidgetProvider>
+        <ShellInner {...props} />
+        <HelpWidget communityId={props.community?.id ?? 0} />
+      </HelpWidgetProvider>
+    </SidebarProvider>
+  );
+}
 ```
 
 - [ ] **Step 4: Verify build**
@@ -2302,18 +2304,19 @@ pnpm typecheck
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/components/help/help-widget-provider.tsx apps/web/src/components/help/help-widget.tsx apps/web/src/app/\(authenticated\)/layout.tsx
+git add apps/web/src/components/help/help-widget-provider.tsx apps/web/src/components/help/help-widget.tsx apps/web/src/components/layout/app-shell.tsx
 git commit -m "feat: add help widget drawer with search and contextual suggestions"
 ```
 
 ---
 
-### Task 11: Navigation Integration — Top Bar, Command Palette, Profile Menu
+### Task 11: Navigation Integration — Top Bar + Profile Menu
 
 **Files:**
 - Modify: `apps/web/src/components/layout/app-top-bar.tsx`
-- Modify: `apps/web/src/components/layout/command-palette.tsx`
 - Modify: `apps/web/src/components/layout/profile-menu.tsx`
+
+**NOTE:** The V2 command palette (`apps/web/src/components/command-palette/CommandPalette.tsx`) already has a `page-help` entry in the feature registry at `apps/web/src/lib/constants/feature-registry.ts` (line 211). No command palette changes needed. Do NOT modify the legacy `apps/web/src/components/layout/command-palette.tsx` — it is dead code (app-shell.tsx sets `USE_COMMAND_PALETTE_V2 = true`).
 
 - [ ] **Step 1: Add ? button to top bar**
 
@@ -2344,31 +2347,16 @@ In the utility row `<div className="ml-auto flex shrink-0 items-center gap-1.5 l
 </button>
 ```
 
-- [ ] **Step 2: Add Help Center to command palette**
-
-In `apps/web/src/components/layout/command-palette.tsx`:
-
-Add import:
-```typescript
-import { CircleHelp } from 'lucide-react';
-```
-
-In the `getCommandItems` function, add to the `globalItems` array:
-
-```typescript
-{ id: 'help', label: 'Help Center', icon: CircleHelp, href: '/help', group: 'page', keywords: 'help support faq guide documentation' },
-```
-
-- [ ] **Step 3: Add Help link to profile menu**
+- [ ] **Step 2: Add Help link to profile menu**
 
 In `apps/web/src/components/layout/profile-menu.tsx`:
 
-Add import:
+Add `CircleHelp` to the existing lucide-react import:
 ```typescript
-import { CircleHelp } from 'lucide-react';
+import { ArrowRightLeft, CircleHelp, Download, LogOut, Settings } from 'lucide-react';
 ```
 
-Add a Help menu item between the Settings and Data Export items:
+Add a Help menu item after the Settings `<DropdownMenuItem>` (before the conditional Switch Community block):
 
 ```tsx
 <DropdownMenuItem asChild>
@@ -2379,17 +2367,17 @@ Add a Help menu item between the Settings and Data Export items:
 </DropdownMenuItem>
 ```
 
-- [ ] **Step 4: Verify build**
+- [ ] **Step 3: Verify build**
 
 ```bash
 pnpm typecheck
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add apps/web/src/components/layout/app-top-bar.tsx apps/web/src/components/layout/command-palette.tsx apps/web/src/components/layout/profile-menu.tsx
-git commit -m "feat: add help button to top bar, command palette, and profile menu"
+git add apps/web/src/components/layout/app-top-bar.tsx apps/web/src/components/layout/profile-menu.tsx
+git commit -m "feat: add help button to top bar and profile menu"
 ```
 
 ---
@@ -2583,7 +2571,32 @@ export const DEFAULT_FAQS: DefaultFaq[] = [
 ];
 ```
 
-- [ ] **Step 2: Update mobile help page to pass article data**
+- [ ] **Step 2: Update `ensureFaqsExist` to pass the new `category` field**
+
+The `DEFAULT_FAQS` type changed to include `category`. Update `apps/web/src/lib/services/faq-service.ts` to pass it through:
+
+```typescript
+import { createScopedClient, faqs } from '@propertypro/db';
+import { DEFAULT_FAQS } from '@propertypro/shared';
+
+export async function ensureFaqsExist(communityId: number): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  const existing = await scoped.query(faqs);
+
+  if (existing.length > 0) return;
+
+  const rows = DEFAULT_FAQS.map((faq, index) => ({
+    question: faq.question,
+    answer: faq.answer,
+    category: faq.category,
+    sortOrder: index,
+  }));
+
+  await scoped.insert(faqs, rows);
+}
+```
+
+- [ ] **Step 3: Update mobile help page to pass article data**
 
 In `apps/web/src/app/mobile/help/page.tsx`, add article fetching. Add import:
 
@@ -2594,9 +2607,11 @@ import { getFeaturedForRole } from '@/lib/services/help-article-service';
 After the membership check, add:
 
 ```typescript
-const role = membership.role as string ?? null;
-const featuredArticles = getFeaturedForRole(role);
+const effectiveRole = (membership.role === 'manager' && membership.presetKey) ? membership.presetKey : membership.role;
+const featuredArticles = getFeaturedForRole(effectiveRole);
 ```
+
+**Note:** `membership` here comes from the existing mobile help page's `requireCommunityMembership` call. The mobile page needs access to `membership` (not just `isAdmin`) to resolve the effective role. Add this alongside the existing `isAdmin = membership.isAdmin` line.
 
 Update the return to pass articles:
 
