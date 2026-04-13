@@ -105,7 +105,7 @@ describe('help-article-service', () => {
 
       const results = searchArticles(articles, 'compliance');
       expect(results).toHaveLength(1);
-      expect(results[0].slug).toBe('scoring');
+      expect(results[0]!.slug).toBe('scoring');
     });
 
     it('matches articles by keyword array', async () => {
