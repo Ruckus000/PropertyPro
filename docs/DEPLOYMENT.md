@@ -15,7 +15,7 @@ GitHub (main) ──push──► GitHub Actions CI ──pass──► Vercel D
                             ├─ test                        └─ SSL via Let's Encrypt
                             └─ build
                                                      Supabase (Managed Postgres)
-PR branch ──push──► GitHub Actions CI ──pass──► Vercel Preview Deploy
+PR branch ──push──────────────────────────────────► Vercel GitHub Preview Deploy
                                                      └─ unique preview URL
 ```
 
@@ -24,7 +24,7 @@ PR branch ──push──► GitHub Actions CI ──pass──► Vercel Previ
 | Environment | URL | Branch | Auto-deploy |
 |-------------|-----|--------|-------------|
 | Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` after CI passes) |
-| Preview | `*.vercel.app` (unique per PR) | PR branches | Yes (via `deploy.yml` on PR events) |
+| Preview | `*.vercel.app` (unique per PR) | PR branches | Yes (via native Vercel GitHub integration) |
 | Local dev | `localhost:3000` | Any | N/A |
 
 ## 3. Required GitHub Secrets
@@ -146,7 +146,7 @@ Set **Site URL** to the canonical web apex (e.g. `https://getpropertypro.com`).
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
 | **CI** | `ci.yml` | PR + push to main | lint → typecheck → test → build (fail-fast) |
-| **Deploy** | `deploy.yml` | PR + push to main | Production deploy (main) / Preview deploy (PR) |
+| **Deploy** | `deploy.yml` | Push to main CI success | Production deploy only |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
 | **Performance Budget** | `performance-budget-check.yml` | PR (src changes) | Bundle size budget enforcement |
 | **DB Access Guard** | `scoped-db-access-guard.yml` | PR + push (src changes) | Scoped DB access pattern verification |
@@ -186,8 +186,9 @@ Production deploys happen automatically when a PR is merged to `main`:
 1. PR passes CI checks (lint, typecheck, test, build)
 2. PR is reviewed and approved
 3. PR is merged to `main`
-4. `deploy.yml` triggers: builds via Vercel CLI and deploys to production
-5. Smoke test verifies HTTP 200 at the deployment URL
+4. `deploy.yml` triggers after CI succeeds on `main`: builds via Vercel CLI and deploys to production
+5. PR previews are created by the native Vercel GitHub integration and reported back to the PR as Vercel statuses/comments
+6. Smoke test verifies HTTP 200 at the deployment URL
 
 No manual steps required.
 
