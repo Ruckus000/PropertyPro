@@ -68,11 +68,14 @@ slug: "compliance-scoring-explained"
 roles: ["board_member", "board_president", "cam", "property_manager_admin"]
 keywords: ["compliance", "score", "percentage", "documents", "posting"]
 relatedArticles: ["document-posting-requirements", "meeting-notice-rules"]
+featured: true  # optional, defaults to false — surfaces on help hub quick links
 ```
 
 **Derived at render time, not stored:**
 - **Read time:** word count / 200, computed by the article service
 - **Last updated:** derived from `git log` on the file (or file mtime as fallback)
+
+The `featured` field drives the help hub quick links: the hub shows articles where `featured === true` and `roles` includes the user's role, taking the first 4. This replaces a separate `ROLE_QUICK_LINKS` config — one source of truth for article prominence and role relevance.
 
 Fields like `difficulty`, `coverImage`, and `communityTypes` can be added to the schema when articles actually need them — the frontmatter parser ignores unknown fields, so this is backwards-compatible.
 
@@ -109,13 +112,13 @@ Additional components (`RoleBadge`, `VideoEmbed`, `CommunityTypeNote`, etc.) get
 A cached server function following the existing service pattern (mirrors `faq-service.ts`):
 
 ```
-getAllArticles()        -> cached fs.readdir + gray-matter parse -> article metadata[]
-getArticle(slug)        -> read single .mdx + next-mdx-remote compile -> rendered content
-getArticlesByRole(role) -> getAllArticles() filtered by role
-searchArticles(query)   -> getAllArticles() filtered by full-text match on title + description + keywords
-getCategoryTree()       -> getAllArticles() grouped by category
+getAllArticles()            -> cached fs.readdir + gray-matter parse -> article metadata[]
+getArticle(slug)            -> read single .mdx + next-mdx-remote compile -> rendered content
+getArticlesByRole(role)     -> getAllArticles() filtered by role
+getFeaturedForRole(role)    -> getAllArticles() where featured === true, filtered by role, take first 4
+searchArticles(query)       -> getAllArticles() filtered by full-text match on title + description + keywords
+getCategoryTree()           -> getAllArticles() grouped by category
 getContextualArticles(path) -> reverse index lookup by route path
-getArticleUrl(slug)     -> returns URL if article exists, null if not (for HelpLink validation)
 ```
 
 **Cache strategy:** Module-level singleton (`let articlesCache: ArticleMetadata[] | null = null`) with lazy initialization. In development mode (`NODE_ENV === 'development'`), bypass cache and re-read from disk on every request. On Vercel, module variables persist per serverless instance — effective without risk of long-lived staleness (new deploy = new instances = fresh cache).
@@ -161,19 +164,20 @@ PM dashboard users at `/pm/*` access the same `/help` routes — the `(authentic
 Not a wall of categories. Personalized by role.
 
 - **Search bar** — Prominent, top of page. Placeholder adapts by role.
-- **Quick links** — 3-4 role-relevant article cards. Driven by `ROLE_QUICK_LINKS: Record<CommunityRole, string[]>` config mapping roles to article slugs.
+- **Quick links** — 3-4 role-relevant article cards. Driven by `featured: true` frontmatter + role filtering (articles where `featured && roles.includes(userRole)`, first 4).
 - **Platform articles by category** — Grouped, role-relevant categories sort first. Each category card shows article count and description.
-- **Pinned articles** — If the community admin has pinned platform articles, a "Recommended by your management" section appears between platform articles and community FAQs.
 - **Community FAQs** — Community's custom FAQs (from DB). Admin "Manage FAQs" link if user has admin role.
+- **Pinned articles (v1.1)** — If the community admin has pinned platform articles, a "Recommended by your management" section appears between platform articles and community FAQs. Deferred to v1.1 — with only 7 launch articles, curation isn't meaningful yet. The hub gracefully handles absence (section doesn't render).
 
 #### Article Page (`/help/[category]/[slug]`)
 
 - MDX rendered via `next-mdx-remote` with custom components
 - Sidebar: auto-generated table of contents (from headings) + related articles (from frontmatter)
 - Role badges on article header showing primary audience
-- "Was this helpful?" feedback at bottom (yes/no, stored in DB)
 - Breadcrumb: Help > Category > Article title
 - Responsive: sidebar collapses to top-of-page TOC dropdown on mobile viewport
+
+**Note:** "Was this helpful?" feedback deferred to v1.1. No analytics dashboard or content improvement workflow exists yet — collecting feedback without a consumer is YAGNI. The article page layout reserves space for it (easy to add later).
 
 #### Search Results (`/help/search?q=...`)
 
@@ -226,13 +230,15 @@ Persistent help panel accessible from any page via the `?` button or `?` keyboar
 - **Mounting:** Rendered in the app shell layout, alongside the sidebar. Always in DOM, visibility toggled.
 - **Data:** TanStack Query hooks fetch on widget open, not on page load.
 
-**Widget contents (slide-out drawer, right side):**
+**Widget contents (slide-out drawer, right side) — v1 ships lean, 3 sections:**
 
 1. **Search bar** — Searches platform articles + community FAQs. Results are links to full article pages (widget is for discovery, not reading).
 2. **Contextual suggestions** — "Relevant to this page" section, 2-3 articles based on current route. Powered by `contextPaths` frontmatter field.
-3. **Recently viewed** — Last 3-5 articles (stored in `localStorage`, same pattern as `useRecentPages` in command palette).
-4. **Community FAQs** — Top 3, with "View all" link to `/help`.
-5. **Footer** — "Visit Help Center" link to `/help`.
+3. **Footer** — "Visit Help Center" link to `/help`.
+
+**v1.1 additions (after validating widget engagement):**
+- **Recently viewed** — Last 3-5 articles (stored in `localStorage`, same pattern as `useRecentPages` in command palette).
+- **Community FAQs** — Top 3, with "View all" link.
 
 **Keyboard shortcut:** `?` key toggles the widget when no input is focused. Global keydown listener with `event.target` check. Gated behind `matchMedia('(pointer: fine)')` to skip registration on touch devices.
 
@@ -241,11 +247,11 @@ Persistent help panel accessible from any page via the `?` button or `?` keyboar
 Reusable `HelpLink` component:
 
 ```tsx
-<HelpLink article="compliance-scoring-explained" />
+<HelpLink category="compliance" slug="compliance-scoring-explained" />
 // Renders: small CircleHelp icon linking to /help/compliance/compliance-scoring-explained
 ```
 
-**Validation:** `HelpLink` calls `getArticleUrl(slug)` server-side. Renders nothing if the article doesn't exist — no broken links, graceful absence. A CI script can scan for `HelpLink` references to deleted articles.
+`HelpLink` is a thin presentational component — a `CircleHelp` icon wrapped in a Next.js `Link`. No server-side slug validation. With 7 articles and 5 placements, a broken link (if an article is deleted) naturally surfaces as a 404 — a clear signal to update the reference. Server-side validation can be added when article count grows and slug churn becomes real.
 
 **Placement (v1):**
 - Compliance dashboard (score explanation)
@@ -260,7 +266,11 @@ Reusable `HelpLink` component:
 - `category: text` (nullable) — Groups FAQs by topic. Null = uncategorized (backwards compatible).
 - `role_visibility: text[]` (nullable) — Roles that can see this FAQ. Null = all roles (backwards compatible).
 
-**New table: `community_pinned_articles`:**
+**Clarification on `role_visibility` vs "nothing is hidden":** Platform articles follow the "personalize, don't gate" principle — all articles visible, role-matched sort first. Community FAQs intentionally differ: admins can restrict FAQ visibility because they manage community-specific content that may genuinely be irrelevant to certain roles (e.g., "Board Meeting Financial Review Process" shown only to board members). Admins choose — platform content is open, community content is admin-controlled.
+
+**New table (v1.1): `community_pinned_articles`:**
+
+Deferred to v1.1. With only 7 launch articles, curation adds no value. Schema for reference:
 - `id: bigserial PK`
 - `community_id: bigint FK -> communities (cascade)`
 - `article_slug: text NOT NULL`
@@ -308,7 +318,7 @@ Personalization = filtering and sorting by role. Not an "engine."
 
 | Surface | Behavior |
 |---|---|
-| Help hub quick links | 3-4 cards from `ROLE_QUICK_LINKS` config (hardcoded, editorial choice). |
+| Help hub quick links | Articles where `featured === true` and `roles` includes user's role, first 4. |
 | Category listings | All articles shown. Role-matched sort first, then alphabetical. |
 | Widget contextual | Articles matching `contextPaths` for current route, filtered to role-relevant. Max 3. |
 
@@ -363,25 +373,12 @@ export function useContextualHelp(path: string) {
 |---|---|---|---|
 | `/api/v1/help/search` | GET | Required | Unified search across articles + FAQs |
 | `/api/v1/help/contextual` | GET | Required | Articles matching a given route path |
-| `/api/v1/help/feedback` | POST | Required | "Was this helpful?" signal |
-| `/api/v1/help/pinned-articles` | GET | Required | Community's pinned articles |
-| `/api/v1/help/pinned-articles` | POST | Required (admin) | Pin/unpin a platform article |
 
 All routes follow existing patterns: `withErrorHandler`, `requireAuthenticatedUserId()`, `requireCommunityMembership()`, Zod validation, `createScopedClient()`, audit logging on mutations.
 
-### Feedback Table
-
-```
-help_article_feedback:
-  id: bigserial PK
-  community_id: bigint FK -> communities (cascade)
-  user_id: uuid FK -> auth.users (cascade)
-  article_slug: text NOT NULL
-  helpful: boolean NOT NULL
-  created_at: timestamptz NOT NULL DEFAULT now()
-```
-
-No unique constraint — users can vote on the same article multiple times (latest vote is what matters for analytics). Index on `(article_slug, helpful)` for aggregate queries.
+**v1.1 routes (deferred):**
+- `/api/v1/help/feedback` POST — "Was this helpful?" signal (deferred until analytics dashboard exists)
+- `/api/v1/help/pinned-articles` GET/POST — Community pinned article management
 
 ### Cache Strategy
 
@@ -410,68 +407,16 @@ COMMENT ON COLUMN faqs.category IS 'Optional grouping label for help center disp
 COMMENT ON COLUMN faqs.role_visibility IS 'Array of community roles that can see this FAQ. NULL = all roles.';
 ```
 
-**0143: Community pinned articles**
-
-```sql
-CREATE TABLE community_pinned_articles (
-  id bigserial PRIMARY KEY,
-  community_id bigint NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-  article_slug text NOT NULL,
-  sort_order integer NOT NULL DEFAULT 0,
-  pinned_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz,
-  UNIQUE(community_id, article_slug) WHERE (deleted_at IS NULL)
-);
-
-ALTER TABLE community_pinned_articles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE community_pinned_articles FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY "Tenant isolation"
-  ON community_pinned_articles
-  USING (community_id = current_setting('app.current_community_id')::bigint);
-
-CREATE TRIGGER enforce_community_scope
-  BEFORE INSERT OR UPDATE ON community_pinned_articles
-  FOR EACH ROW
-  EXECUTE FUNCTION enforce_community_write_scope();
-```
-
-**0144: Help article feedback**
-
-```sql
-CREATE TABLE help_article_feedback (
-  id bigserial PRIMARY KEY,
-  community_id bigint NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  article_slug text NOT NULL,
-  helpful boolean NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE help_article_feedback ENABLE ROW LEVEL SECURITY;
-ALTER TABLE help_article_feedback FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY "Tenant isolation"
-  ON help_article_feedback
-  USING (community_id = current_setting('app.current_community_id')::bigint);
-
-CREATE TRIGGER enforce_community_scope
-  BEFORE INSERT OR UPDATE ON help_article_feedback
-  FOR EACH ROW
-  EXECUTE FUNCTION enforce_community_write_scope();
-
-CREATE INDEX idx_help_feedback_article
-  ON help_article_feedback(article_slug, helpful)
-  WHERE community_id IS NOT NULL;
-```
+**v1.1 migrations (deferred):**
+- `0143_community_pinned_articles.sql` — Pinned articles table with RLS + write-scope trigger
+- `0144_help_article_feedback.sql` — Feedback table with RLS + aggregate index
 
 ### Complete File Manifest
 
-**New files (29):**
+**New files (22):**
 
 ```
-# Content
+# Content (7)
 apps/web/src/content/help/getting-started/welcome-to-propertypro.mdx
 apps/web/src/content/help/getting-started/understanding-your-dashboard.mdx
 apps/web/src/content/help/compliance/compliance-scoring-explained.mdx
@@ -480,42 +425,35 @@ apps/web/src/content/help/documents/uploading-documents.mdx
 apps/web/src/content/help/maintenance/submitting-a-request.mdx
 apps/web/src/content/help/meetings/meeting-notices-explained.mdx
 
-# Database
+# Database (1 migration)
 packages/db/migrations/0142_enhance_faqs_for_help_center.sql
-packages/db/migrations/0143_community_pinned_articles.sql
-packages/db/migrations/0144_help_article_feedback.sql
-packages/db/src/schema/community-pinned-articles.ts
-packages/db/src/schema/help-article-feedback.ts
 
-# Services
+# Services (1)
 apps/web/src/lib/services/help-article-service.ts
 
-# API routes
+# API routes (2)
 apps/web/src/app/api/v1/help/search/route.ts
 apps/web/src/app/api/v1/help/contextual/route.ts
-apps/web/src/app/api/v1/help/feedback/route.ts
-apps/web/src/app/api/v1/help/pinned-articles/route.ts
 
-# Pages
+# Pages (5)
 apps/web/src/app/(authenticated)/help/page.tsx
 apps/web/src/app/(authenticated)/help/search/page.tsx
 apps/web/src/app/(authenticated)/help/[category]/page.tsx
 apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx
 apps/web/src/app/(authenticated)/help/manage/page.tsx
 
-# Components
+# Components (5)
 apps/web/src/components/help/help-widget.tsx
 apps/web/src/components/help/help-widget-provider.tsx
 apps/web/src/components/help/help-link.tsx
 apps/web/src/components/help/help-search-input.tsx
-apps/web/src/components/help/article-feedback.tsx
 apps/web/src/components/help/mdx-components.tsx
 
-# Hooks
+# Hooks (1)
 apps/web/src/hooks/use-help.ts
 ```
 
-**Modified files (12):**
+**Modified files (10):**
 
 ```
 apps/web/src/middleware.ts                           # Add /help to PROTECTED_PATH_PREFIXES
@@ -528,9 +466,10 @@ apps/web/src/components/mobile/MobileHelpContent.tsx # Add platform article quic
 apps/web/src/app/mobile/help/page.tsx                # Fetch platform articles alongside FAQs
 packages/shared/src/default-faqs.ts                  # Expand from 5 to ~15 default FAQs
 packages/db/src/schema/faqs.ts                       # Add category, roleVisibility columns
-packages/db/src/schema/index.ts                      # Add exports for new schema files
 apps/web/package.json                                # Add next-mdx-remote, gray-matter
 ```
+
+Note: `packages/db/src/schema/index.ts` no longer needs modification — no new schema tables in v1 (pinned articles and feedback tables are deferred).
 
 ### Content Seeding
 
@@ -546,29 +485,55 @@ Each new FAQ gets a `category` value. Existing FAQs get categories retroactively
 
 ---
 
+## SRP Note: Help Hub Page Decomposition
+
+The help hub (`/help/page.tsx`) renders multiple data-dependent sections (quick links, categories, community FAQs). To keep SRP clean, compose from smaller server components rather than one monolithic page:
+
+- `HelpQuickLinks` — fetches featured articles for role, renders cards
+- `HelpCategories` — fetches category tree, renders grouped article list
+- `HelpCommunityFaqs` — fetches community FAQs, renders accordion/list
+
+Each sub-component has one data source and one rendering concern. The hub page orchestrates layout only.
+
 ## Design Decisions Log
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Content format | MDX in repo (platform) + DB (community) | Editorial quality + community self-service |
 | Visual guides | Static images v1, programmatic screenshots v2 | Ship fast, automate when maintenance burden justifies it |
-| Role filtering | Personalize (sort), don't gate (hide) | Board presidents need to see tenant docs; CAMs reference owner-facing content |
+| Role filtering (platform) | Personalize (sort), don't gate (hide) | Board presidents need to see tenant docs; CAMs reference owner-facing content |
+| Role filtering (community) | Admin-controlled visibility via `role_visibility` | Admins manage community content — they should control who sees what |
 | Contextual help | Help pages + contextual links + embedded widget | Three-layer access for different user intents |
-| Search | Postgres full-text for FAQs, in-memory string match for articles | Right-sized for content volume, no over-engineering |
-| Community content | Enhanced FAQs + pinned platform articles | Curation > authoring for community admins |
+| Search | ILIKE for FAQs, in-memory string match for articles | Right-sized for content volume, no over-engineering |
+| Community content | Enhanced FAQs v1, + pinned articles v1.1 | Curation earns value at 30+ articles, not 7 |
 | MDX rendering | `next-mdx-remote` (on-demand) | Matches app's dynamic rendering model, zero static generation precedent |
 | Article caching | Module singleton, not `unstable_cache` | Simpler, no new API, codebase has zero `unstable_cache` usage |
 | Help widget location | `apps/web/src/components/help/` not `packages/ui/` | Only one consumer, extract when needed |
-| Frontmatter fields | 7 essential, not 11 | Less maintenance per article = more articles written |
+| Widget sections | 3 for v1 (search, contextual, footer), not 5 | Validate engagement before expanding |
+| Frontmatter fields | 7 required + `featured` + optional `contextPaths` | Less maintenance per article = more articles written |
+| Quick links | `featured: boolean` frontmatter, not `ROLE_QUICK_LINKS` config | One source of truth (DRY), simpler (KISS) |
 | MDX components | 3 for v1, not 8 | Build what articles need, not what might be useful |
 | Context mapping | `contextPaths` in frontmatter, not separate config | Articles own their context, reverse index built at cache time |
+| Feedback system | Deferred to v1.1 | No consumer exists yet (YAGNI) |
+| HelpLink validation | Simple presentational link, no server validation | 7 articles + 5 placements don't justify async validation (YAGNI) |
 
-## Out of Scope (Future)
+## v1.1 Roadmap (deferred from v1 per YAGNI/KISS review)
 
-- **AI-powered search / semantic search** — v2 after content volume justifies embeddings
-- **Programmatic screenshot automation** — v2 after 30+ articles
-- **Help analytics dashboard** — v2 after meaningful traffic volume
-- **Async article search in command palette** — v2, requires refactoring command palette to support async
+| Feature | Trigger to ship |
+|---|---|
+| Pinned articles (table, API, hub section) | Article count reaches 20+, admins request curation |
+| Article feedback ("Was this helpful?") | Analytics dashboard is built, traffic justifies collection |
+| Widget: recently viewed section | Widget engagement data shows users return to articles |
+| Widget: community FAQs section | User research shows FAQ access from widget is desired |
+| `HelpLink` server-side slug validation | Article count exceeds 30, slug changes become frequent |
+| Per-role quick link curation | `featured: boolean` proves insufficient for role targeting |
+
+## Out of Scope (v2+)
+
+- **AI-powered search / semantic search** — After content volume justifies embeddings
+- **Programmatic screenshot automation** — After 30+ articles
+- **Help analytics dashboard** — After meaningful traffic volume
+- **Async article search in command palette** — Requires refactoring command palette to support async
 - **Multilingual support** — Not on roadmap
 - **Interactive feature tours / guided walkthroughs** — Separate feature, not part of help center
 - **Community admin rich content editor** — Upgrade path from FAQs if demand emerges
