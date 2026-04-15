@@ -176,6 +176,8 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       { params: Promise.resolve({ id: String(threadId) }) },
     );
     expect(replyResponse.status).toBe(201);
+    const replyJson = await parseJson<{ data: Record<string, unknown> }>(replyResponse);
+    const replyId = readNumberField(replyJson.data, 'id');
 
     const lockResponse = await routeModules.forumThread.PATCH(
       jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}`), 'PATCH', {
@@ -196,6 +198,45 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       { params: Promise.resolve({ id: String(threadId) }) },
     );
     expect(unauthorizedModeration.status).toBe(403);
+
+    const unauthorizedReplyModeration = await routeModules.forumReply.DELETE(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'DELETE', {
+        communityId: communityA.id,
+        replyId,
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(unauthorizedReplyModeration.status).toBe(403);
+
+    setActor(kit, 'actorA');
+    const deleteReplyResponse = await routeModules.forumReply.DELETE(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'DELETE', {
+        communityId: communityA.id,
+        replyId,
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(deleteReplyResponse.status).toBe(200);
+
+    setActor(kit, 'tenantA');
+    const threadAfterModeration = await routeModules.forumThread.GET(
+      new NextRequest(apiUrl(`/api/v1/forum/threads/${threadId}?communityId=${communityA.id}`)),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(threadAfterModeration.status).toBe(200);
+    const moderatedJson = await parseJson<{
+      data: {
+        replies: Array<{
+          id: number;
+          body: string;
+          deletedAt: string | null;
+        }>;
+      };
+    }>(threadAfterModeration);
+    const moderatedReply = moderatedJson.data.replies.find((reply) => reply.id === replyId);
+    expect(moderatedReply).toBeDefined();
+    expect(moderatedReply?.deletedAt).not.toBeNull();
+    expect(moderatedReply?.body).toBe('');
 
     setActor(kit, 'actorB');
     const crossTenantRead = await routeModules.forumThread.GET(
