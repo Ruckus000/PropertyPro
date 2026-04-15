@@ -1,172 +1,186 @@
 /**
- * AnnouncementComposer — Form for creating new announcements.
+ * AnnouncementComposer — Shared authoring form for create/edit flows.
  *
- * Provides title, body (rich text area), audience selection, and pin toggle.
- * Calls the announcements API on submit.
+ * Keeps the field UI and lightweight client-side validation in one place while
+ * routed pages handle permission checks and data loading.
  */
 'use client';
 
-import React, { useState, useCallback, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
+import { Loader2 } from 'lucide-react';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
-export interface AnnouncementComposerProps {
-  communityId: number;
-  publishedBy: string;
-  onSubmit: (data: {
-    title: string;
-    body: string;
-    audience: AnnouncementAudience;
-    isPinned: boolean;
-    communityId: number;
-    publishedBy: string;
-  }) => Promise<void>;
-  onCancel?: () => void;
-  isSubmitting?: boolean;
+export interface AnnouncementComposerValues {
+  title: string;
+  body: string;
+  audience: AnnouncementAudience;
+  isPinned: boolean;
 }
 
+export interface AnnouncementComposerProps {
+  initialValues?: AnnouncementComposerValues;
+  isSubmitting?: boolean;
+  submitLabel?: string;
+  onCancel?: () => void;
+  onSubmit: (data: AnnouncementComposerValues) => Promise<void>;
+}
+
+const DEFAULT_VALUES: AnnouncementComposerValues = {
+  title: '',
+  body: '',
+  audience: 'all',
+  isPinned: false,
+};
+
 export function AnnouncementComposer({
-  communityId,
-  publishedBy,
-  onSubmit,
-  onCancel,
+  initialValues = DEFAULT_VALUES,
   isSubmitting = false,
+  submitLabel = 'Publish announcement',
+  onCancel,
+  onSubmit,
 }: AnnouncementComposerProps) {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [audience, setAudience] = useState<AnnouncementAudience>('all');
-  const [isPinned, setIsPinned] = useState(false);
+  const [title, setTitle] = useState(initialValues.title);
+  const [body, setBody] = useState(initialValues.body);
+  const [audience, setAudience] = useState<AnnouncementAudience>(initialValues.audience);
+  const [isPinned, setIsPinned] = useState(initialValues.isPinned);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = useCallback(
-    async (e: FormEvent) => {
-      e.preventDefault();
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
       setError(null);
 
-      if (!title.trim()) {
-        setError('Title is required');
+      const nextTitle = title.trim();
+      const nextBody = body.trim();
+
+      if (nextTitle.length === 0) {
+        setError('Title is required.');
         return;
       }
-      if (!body.trim()) {
-        setError('Body is required');
+
+      if (nextBody.length === 0) {
+        setError('Body is required.');
         return;
       }
 
       try {
         await onSubmit({
-          title: title.trim(),
-          body: body.trim(),
+          title: nextTitle,
+          body: nextBody,
           audience,
           isPinned,
-          communityId,
-          publishedBy,
         });
-        setTitle('');
-        setBody('');
-        setAudience('all');
-        setIsPinned(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create announcement');
+      } catch (submitError) {
+        setError(
+          submitError instanceof Error
+            ? submitError.message
+            : 'We could not save this announcement.',
+        );
       }
     },
-    [title, body, audience, isPinned, communityId, publishedBy, onSubmit],
+    [audience, body, isPinned, onSubmit, title],
   );
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="pp-announcement-composer flex flex-col gap-4 rounded-md border border-edge-subtle bg-surface-card p-5 dark:border-gray-700 dark:bg-gray-900"
+      className="space-y-6 rounded-xl border border-edge bg-surface-card p-6 shadow-sm"
     >
-      <h3 className="text-lg font-semibold text-content dark:text-gray-100">
-        New Announcement
-      </h3>
+      {error ? (
+        <AlertBanner
+          status="danger"
+          variant="subtle"
+          title="We couldn't save this announcement."
+          description={error}
+        />
+      ) : null}
 
-      {error && (
-        <div
-          role="alert"
-          className="rounded-md bg-status-danger-bg p-3 text-sm text-status-danger dark:bg-red-900/20 dark:text-red-400"
-        >
-          {error}
-        </div>
-      )}
-
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
-          Title
-        </span>
-        <input
-          type="text"
+      <div className="space-y-2">
+        <Label htmlFor="announcement-title">Title</Label>
+        <Input
+          id="announcement-title"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Announcement title"
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Board meeting reminder"
           maxLength={500}
-          required
-          className="rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content placeholder:text-content-disabled focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="h-11 md:h-9"
         />
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
-          Body
-        </span>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Write your announcement..."
-          rows={6}
-          required
-          className="resize-y rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content placeholder:text-content-disabled focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-        />
-      </label>
-
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-content-secondary dark:text-content-disabled">
-            Audience
-          </span>
-          <select
-            value={audience}
-            onChange={(e) => setAudience(e.target.value as AnnouncementAudience)}
-            className="rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/25 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            <option value="all">All Residents</option>
-            <option value="owners_only">Owners Only</option>
-            <option value="board_only">Board Members Only</option>
-            <option value="tenants_only">Tenants Only</option>
-          </select>
-        </label>
-
-        <label className="flex items-center gap-2 self-end pb-0.5">
-          <input
-            type="checkbox"
-            checked={isPinned}
-            onChange={(e) => setIsPinned(e.target.checked)}
-            className="h-4 w-4 rounded border-edge text-interactive focus:ring-interactive"
-          />
-          <span className="text-sm text-content-secondary dark:text-content-disabled">
-            Pin to top
-          </span>
-        </label>
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-2">
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
+      <div className="space-y-2">
+        <Label htmlFor="announcement-body">Message</Label>
+        <Textarea
+          id="announcement-body"
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          placeholder="Share the update residents should see."
+          rows={10}
+          className="min-h-40"
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <div className="space-y-2">
+          <Label htmlFor="announcement-audience">Audience</Label>
+          <Select value={audience} onValueChange={(value) => setAudience(value as AnnouncementAudience)}>
+            <SelectTrigger id="announcement-audience" className="h-11 md:h-9">
+              <SelectValue placeholder="Select audience" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All residents</SelectItem>
+              <SelectItem value="owners_only">Owners only</SelectItem>
+              <SelectItem value="board_only">Board members only</SelectItem>
+              <SelectItem value="tenants_only">Tenants only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-md border border-edge-subtle bg-surface-muted/40 px-4 py-3">
+          <Checkbox
+            id="announcement-pinned"
+            checked={isPinned}
+            onCheckedChange={(checked) => setIsPinned(checked === true)}
             disabled={isSubmitting}
-            className="rounded-md px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-interactive dark:text-content-disabled dark:hover:bg-gray-800"
+          />
+          <div className="space-y-1">
+            <Label htmlFor="announcement-pinned">Pin announcement</Label>
+            <p className="text-sm text-content-secondary">
+              Keep this update at the top of the list.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 md:h-9"
+            disabled={isSubmitting}
+            onClick={onCancel}
           >
             Cancel
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 disabled:opacity-50 dark:bg-interactive dark:hover:bg-interactive-subtle0"
-        >
-          {isSubmitting ? 'Publishing...' : 'Publish'}
-        </button>
+          </Button>
+        ) : null}
+        <Button type="submit" className="h-11 md:h-9" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {submitLabel}
+        </Button>
       </div>
     </form>
   );

@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { loadApartmentMetrics } from '@/lib/queries/apartment-metrics';
 import { loadWizardState } from '@/lib/queries/wizard-state';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -53,6 +54,16 @@ export default async function ApartmentDashboardPage({
   }
 
   const metrics = await loadApartmentMetrics(context.communityId, userId, membership);
+  const canWriteAnnouncements = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'announcements',
+    'write',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -61,7 +72,11 @@ export default async function ApartmentDashboardPage({
         communityName={metrics.communityName}
       />
       <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
-      <ApartmentDashboard metrics={metrics} communityId={context.communityId} />
+      <ApartmentDashboard
+        metrics={metrics}
+        communityId={context.communityId}
+        canWriteAnnouncements={canWriteAnnouncements}
+      />
     </div>
   );
 }
