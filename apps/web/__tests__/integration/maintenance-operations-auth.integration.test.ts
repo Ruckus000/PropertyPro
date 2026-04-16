@@ -24,10 +24,12 @@ const describeDb = getDescribeDb();
 
 type MaintenanceRequestsRouteModule = typeof import('../../src/app/api/v1/maintenance-requests/route');
 type MaintenanceRequestDetailRouteModule = typeof import('../../src/app/api/v1/maintenance-requests/[id]/route');
+type OperationsRouteModule = typeof import('../../src/app/api/v1/operations/route');
 
 interface RouteModules {
   maintenanceRequests: MaintenanceRequestsRouteModule;
   maintenanceRequestDetail: MaintenanceRequestDetailRouteModule;
+  operations: OperationsRouteModule;
 }
 
 let state: TestKitState | null = null;
@@ -93,6 +95,7 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
     routes = {
       maintenanceRequests: await import('../../src/app/api/v1/maintenance-requests/route'),
       maintenanceRequestDetail: await import('../../src/app/api/v1/maintenance-requests/[id]/route'),
+      operations: await import('../../src/app/api/v1/operations/route'),
     };
   });
 
@@ -172,5 +175,36 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
       { params: Promise.resolve({ id: String(tenantARequestId) }) },
     );
     expect(residentPatchResponse.status).toBe(403);
+  });
+
+  it('blocks residents from the community operations summary but allows staff and pm_admin', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityC = requireCommunity(kit, 'communityC');
+
+    setActor(kit, 'tenantA');
+    const residentResponse = await routeModules.operations.GET(
+      new NextRequest(apiUrl(`/api/v1/operations?communityId=${communityA.id}&limit=25`)),
+    );
+    expect(residentResponse.status).toBe(403);
+
+    setActor(kit, 'actorA');
+    const managerResponse = await routeModules.operations.GET(
+      new NextRequest(apiUrl(`/api/v1/operations?communityId=${communityA.id}&limit=25`)),
+    );
+    expect([200, 503]).toContain(managerResponse.status);
+
+    setActor(kit, 'actorC');
+    const pmAdminResponse = await routeModules.operations.GET(
+      new NextRequest(apiUrl(`/api/v1/operations?communityId=${communityC.id}&limit=25`)),
+    );
+    expect([200, 503]).toContain(pmAdminResponse.status);
+
+    setActor(kit, 'tenantC');
+    const tenantCResponse = await routeModules.operations.GET(
+      new NextRequest(apiUrl(`/api/v1/operations?communityId=${communityC.id}&limit=25`)),
+    );
+    expect(tenantCResponse.status).toBe(403);
   });
 });
