@@ -36,10 +36,10 @@ describe('operations route', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'resident',
+      role: 'manager',
       communityType: 'condo_718',
-      isUnitOwner: true,
-      isAdmin: false,
+      isUnitOwner: false,
+      isAdmin: true,
     });
   });
 
@@ -94,5 +94,23 @@ describe('operations route', () => {
 
     expect(res.status).toBe(503);
     expect(json.error.code).toBe('OPERATIONS_UNAVAILABLE');
+  });
+
+  it('returns 403 when the caller is a resident', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident',
+      communityType: 'condo_718',
+      isUnitOwner: true,
+      isAdmin: false,
+    });
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/operations?communityId=42&limit=25'),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(json.error?.message ?? json.error).toMatch(/resident/i);
+    expect(listOperationsForCommunityMock).not.toHaveBeenCalled();
   });
 });

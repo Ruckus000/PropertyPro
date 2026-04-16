@@ -32,6 +32,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const features = getFeaturesForCommunity(membership.communityType);
 
   requireOperationsEnabled(features);
+  if (membership.role === 'resident') {
+    throw new ForbiddenError(
+      'Residents cannot access the community operations summary',
+    );
+  }
   requirePermission(membership, 'maintenance', 'read');
   requirePermission(membership, 'work_orders', 'read');
 
