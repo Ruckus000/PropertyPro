@@ -6,13 +6,21 @@ import { useOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import { ChecklistCelebration } from './checklist-celebration';
 import { cn } from '@/lib/utils';
 
-const ACTION_ROUTES: Record<string, { label: string; href: string }> = {
+type ChecklistAction = {
+  label: string;
+  href: string | ((communityId: number) => string);
+};
+
+const ACTION_ROUTES: Record<string, ChecklistAction> = {
   upload_first_document: { label: 'Upload', href: '/documents' },
   upload_community_rules: { label: 'Upload', href: '/documents' },
   add_units: { label: 'Add', href: '/settings/units' },
   invite_first_member: { label: 'Invite', href: '/residents' },
   review_compliance: { label: 'View', href: '/compliance' },
-  post_announcement: { label: 'Create', href: '/announcements' },
+  post_announcement: {
+    label: 'Create',
+    href: (communityId: number) => `/announcements/new?communityId=${communityId}`,
+  },
   customize_portal: { label: 'Customize', href: '/settings/branding' },
   review_announcement: { label: 'View', href: '/announcements' },
   check_compliance: { label: 'View', href: '/compliance' },
@@ -126,6 +134,10 @@ export function OnboardingChecklist({
         {items.map((item) => {
           const isComplete = item.completedAt != null;
           const action = ACTION_ROUTES[item.itemKey];
+          const actionHref =
+            typeof action?.href === 'function'
+              ? action.href(communityId)
+              : action?.href;
 
           return (
             <li
@@ -176,7 +188,11 @@ export function OnboardingChecklist({
               {!isComplete && action && (
                 <button
                   type="button"
-                  onClick={() => router.push(action.href)}
+                  onClick={() => {
+                    if (actionHref) {
+                      router.push(actionHref);
+                    }
+                  }}
                   className="flex-shrink-0 text-sm font-medium text-interactive hover:text-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
                 >
                   {action.label}

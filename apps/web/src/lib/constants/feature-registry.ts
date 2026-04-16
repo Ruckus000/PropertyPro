@@ -550,7 +550,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     keywords: ['announce', 'post', 'broadcast', 'notify', 'send', 'communicate', 'bulletin', 'news', 'message', 'alert', 'blast'],
     description: 'Send a new announcement to residents',
     icon: Megaphone,
-    href: '/announcements',
+    href: (cid: number) => `/announcements/new?communityId=${cid}`,
     roles: ADMIN_ROLES,
     audience: 'admin',
     category: 'action',
