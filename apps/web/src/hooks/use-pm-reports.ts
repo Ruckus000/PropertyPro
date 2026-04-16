@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,6 +167,8 @@ export const PM_REPORT_KEYS = {
     ['pm', 'report', reportType, filters] as const,
 };
 
+const PM_REPORT_STALE_TIME = 5 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // Fetcher
 // ---------------------------------------------------------------------------
@@ -270,6 +272,17 @@ async function fetchPmReport<T extends ReportData>(
   return raw as T;
 }
 
+export function getPmReportQueryOptions<T extends ReportData = ReportData>(
+  reportType: ReportType,
+  filters: ReportFilters = {},
+) {
+  return queryOptions({
+    queryKey: PM_REPORT_KEYS.report(reportType, filters),
+    queryFn: () => fetchPmReport<T>(reportType, filters),
+    staleTime: PM_REPORT_STALE_TIME,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -280,9 +293,7 @@ export function usePmReport<T extends ReportData = ReportData>(
   options?: { enabled?: boolean },
 ) {
   return useQuery({
-    queryKey: PM_REPORT_KEYS.report(reportType, filters),
-    queryFn: () => fetchPmReport<T>(reportType, filters),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...getPmReportQueryOptions<T>(reportType, filters),
     enabled: options?.enabled ?? true,
   });
 }
