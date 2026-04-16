@@ -156,6 +156,19 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     );
     expect(packageNotifications.length).toBeGreaterThan(0);
 
+    // Refresh-after-create (staff list): the new package must appear in
+    // GET /api/v1/packages immediately. This is the API/service-layer
+    // counterpart to the React-Query invalidation unit test in
+    // apps/web/src/hooks/__tests__/use-packages.test.tsx.
+    const staffListAfterCreate = await routeModules.packages.GET(
+      new NextRequest(apiUrl(`/api/v1/packages?communityId=${communityA.id}`)),
+    );
+    expect(staffListAfterCreate.status).toBe(200);
+    const staffListAfterCreateJson = await parseJson<{
+      data: Array<Record<string, unknown>>;
+    }>(staffListAfterCreate);
+    expect(staffListAfterCreateJson.data.some((row) => row.id === packageId)).toBe(true);
+
     setActor(kit, 'tenantA');
     const myPackagesResponse = await routeModules.packagesMy.GET(
       new NextRequest(apiUrl(`/api/v1/packages/my?communityId=${communityA.id}`)),
@@ -176,6 +189,19 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const pickupJson = await parseJson<{ data: Record<string, unknown> }>(pickupResponse);
     expect(pickupJson.data.status).toBe('picked_up');
 
+    // Refresh-after-pickup: the picked-up package must drop out of the
+    // resident's /my list (listMyPackagesForCommunity excludes picked_up).
+    setActor(kit, 'tenantA');
+    const myAfterPickup = await routeModules.packagesMy.GET(
+      new NextRequest(apiUrl(`/api/v1/packages/my?communityId=${communityA.id}`)),
+    );
+    expect(myAfterPickup.status).toBe(200);
+    const myAfterPickupJson = await parseJson<{
+      data: Array<Record<string, unknown>>;
+    }>(myAfterPickup);
+    expect(myAfterPickupJson.data.some((row) => row.id === packageId)).toBe(false);
+
+    setActor(kit, 'actorA');
     const secondPickupResponse = await routeModules.packagePickup.PATCH(
       jsonRequest(apiUrl(`/api/v1/packages/${packageId}/pickup`), 'PATCH', {
         communityId: communityA.id,
