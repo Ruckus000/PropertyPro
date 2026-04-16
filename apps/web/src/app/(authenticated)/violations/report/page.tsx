@@ -111,7 +111,7 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
           >
             Filing on behalf of a resident. Your name will be recorded as the reporter.
           </div>
-          <StaffViolationReportForm communityId={communityId} userId={userId} />
+          <StaffViolationReportForm communityId={communityId} />
         </>
       )}
 

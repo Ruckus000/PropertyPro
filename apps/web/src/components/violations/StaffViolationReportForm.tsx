@@ -56,7 +56,6 @@ interface UnitsListResponse {
 
 interface StaffViolationReportFormProps {
   communityId: number;
-  userId: string;
 }
 
 function formatUnitLabel(unit: UnitOption): string {
