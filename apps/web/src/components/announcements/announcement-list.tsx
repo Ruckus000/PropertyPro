@@ -92,12 +92,11 @@ function AnnouncementCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Link
-              href={detailHref}
-              className="text-base font-semibold text-content hover:text-interactive"
-            >
-              {item.title}
-            </Link>
+            <h3 className="text-base font-semibold text-content">
+              <Link href={detailHref} className="hover:text-interactive">
+                {item.title}
+              </Link>
+            </h3>
             {item.isPinned && (
               <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-semibold text-interactive">
                 <Pin size={12} />

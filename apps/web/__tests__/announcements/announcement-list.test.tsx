@@ -61,4 +61,27 @@ describe('AnnouncementList', () => {
       '/announcements/17?communityId=42',
     );
   });
+
+  it('renders the announcement title as a level 3 heading linked to the detail page', () => {
+    render(
+      <AnnouncementList
+        items={[sampleAnnouncement]}
+        communityId={42}
+        canWriteAnnouncements={false}
+      />,
+    );
+
+    const heading = screen.getByRole('heading', {
+      level: 3,
+      name: 'Roof inspection scheduled',
+    });
+
+    expect(heading).toContainElement(
+      screen.getByRole('link', { name: 'Roof inspection scheduled' }),
+    );
+    expect(screen.getByRole('link', { name: 'Roof inspection scheduled' })).toHaveAttribute(
+      'href',
+      '/announcements/17?communityId=42',
+    );
+  });
 });
