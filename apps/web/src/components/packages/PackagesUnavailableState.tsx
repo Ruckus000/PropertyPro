@@ -57,11 +57,11 @@ export function PackagesUnavailableState({
         title={title}
         description={description}
         action={
-          <Link href={`/dashboard?communityId=${communityId}`}>
-            <Button variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/dashboard?communityId=${communityId}`}>
               Back to dashboard
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         }
       />
     </>
