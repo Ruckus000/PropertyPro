@@ -221,6 +221,38 @@ describeDb('violations reporting permission matrix', () => {
     expect(res.status).toBe(404);
   });
 
+  it('resident GET sees reportedByRole="staff" on their own unit\'s staff-filed violation', async () => {
+    const { state, routes, unitAId } = req();
+    const communityA = requireCommunity(state, 'communityA');
+
+    // Staff files for the resident's unit.
+    setActor(state, 'actorA');
+    const staffRes = await routes.violations.POST(
+      jsonRequest(apiUrl('/api/v1/violations'), 'POST', {
+        communityId: communityA.id,
+        unitId: unitAId,
+        category: 'landscaping',
+        description: `staff-for-resident ${state.runSuffix}`,
+      }),
+    );
+    expect(staffRes.status).toBe(201);
+    const staffId = readNumberField(
+      (await parseJson<{ data: Record<string, unknown> }>(staffRes)).data,
+      'id',
+    );
+
+    // Resident reads — the row for their unit should be tagged staff.
+    setActor(state, 'tenantA');
+    const listRes = await routes.violations.GET(
+      new NextRequest(apiUrl(`/api/v1/violations?communityId=${communityA.id}`)),
+    );
+    expect(listRes.status).toBe(200);
+    const listBody = await parseJson<{
+      data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+    }>(listRes);
+    expect(listBody.data.find((v) => v.id === staffId)?.reportedByRole).toBe('staff');
+  });
+
   it('GET returns reportedByRole=resident for resident-filed rows and staff for staff-filed rows', async () => {
     const { state, routes, unitAId } = req();
     const communityA = requireCommunity(state, 'communityA');

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, units, userRoles } from '@propertypro/db';
+import { createScopedClient, units } from '@propertypro/db';
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
-import { eq, inArray } from '@propertypro/db/filters';
+import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -18,6 +18,7 @@ import {
   requireViolationsReadPermission,
   requireViolationsWritePermission,
 } from '@/lib/violations/common';
+import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import {
   createViolationForCommunity,
   listViolationsForCommunity,
@@ -85,30 +86,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     createdBefore,
   });
 
-  const reporterIds = Array.from(
-    new Set(
-      data
-        .map((v) => v.reportedByUserId)
-        .filter((id): id is string => typeof id === 'string'),
-    ),
-  );
-  const roleByUser = new Map<string, 'resident' | 'staff'>();
-  if (reporterIds.length > 0) {
-    const reporterRoles = await scoped.selectFrom<{ userId: string; role: string }>(
-      userRoles,
-      { userId: userRoles.userId, role: userRoles.role },
-      inArray(userRoles.userId, reporterIds),
-    );
-    for (const r of reporterRoles) {
-      roleByUser.set(r.userId, r.role === 'resident' ? 'resident' : 'staff');
-    }
-  }
-
-  const hydrated = data.map((v) => ({
-    ...v,
-    reportedByRole: v.reportedByUserId ? (roleByUser.get(v.reportedByUserId) ?? null) : null,
-  }));
-
+  const hydrated = await hydrateReportedByRole(scoped, data);
   return NextResponse.json({ data: hydrated });
 });
 

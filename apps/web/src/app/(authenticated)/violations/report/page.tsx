@@ -19,6 +19,7 @@ import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { createScopedClient } from '@propertypro/db';
 import { getActorUnitIds, isResidentRole } from '@/lib/violations/common';
 import { resolveReportMode } from '@/lib/violations/report-mode';
+import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import { listViolationsForCommunity } from '@/lib/services/violations-service';
 import { ViolationReportForm } from '@/components/violations/ViolationReportForm';
 import { StaffViolationReportForm } from '@/components/violations/StaffViolationReportForm';
@@ -59,7 +60,10 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
 
   const ownViolations =
     mode === 'resident'
-      ? await listViolationsForCommunity(communityId, { allowedUnitIds: residentUnitIds })
+      ? await hydrateReportedByRole(
+          scoped,
+          await listViolationsForCommunity(communityId, { allowedUnitIds: residentUnitIds }),
+        )
       : [];
 
   return (
