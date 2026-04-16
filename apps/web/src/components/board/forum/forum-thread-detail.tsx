@@ -6,6 +6,16 @@ import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +24,7 @@ import { useUserNames } from '@/hooks/use-user-names';
 import {
   useBoardForumThread,
   useCreateForumReply,
+  useDeleteForumReply,
   useUpdateForumThread,
 } from '@/hooks/use-board';
 
@@ -21,15 +32,18 @@ interface ForumThreadDetailProps {
   communityId: number;
   threadId: number;
   isAdmin: boolean;
+  canModerateReplies: boolean;
 }
 
 export function ForumThreadDetail({
   communityId,
   threadId,
   isAdmin,
+  canModerateReplies,
 }: ForumThreadDetailProps) {
   const { data, isLoading, error } = useBoardForumThread(communityId, threadId);
   const createReply = useCreateForumReply(communityId, threadId);
+  const deleteReply = useDeleteForumReply(communityId, threadId);
   const updateThread = useUpdateForumThread(communityId, threadId);
   const userIds = data
     ? Array.from(
@@ -41,6 +55,7 @@ export function ForumThreadDetail({
     : [];
   const { getName } = useUserNames(communityId, userIds);
   const [replyBody, setReplyBody] = useState('');
+  const [replyPendingRemoval, setReplyPendingRemoval] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -134,13 +149,52 @@ export function ForumThreadDetail({
         ) : (
           replies.map((reply) => (
             <div key={reply.id} className="rounded-xl border border-edge bg-surface-card p-4">
-              <p className="whitespace-pre-wrap text-sm leading-6 text-content">{reply.body}</p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-1 space-y-3">
+                  {reply.deletedAt ? (
+                    <div className="rounded-lg border border-dashed border-edge bg-surface-subtle p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge status="closed" label="Reply removed" subtle />
+                      </div>
+                      <p className="mt-2 text-sm text-content-secondary">
+                        This reply was removed by a moderator. The conversation order has been preserved.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-content">{reply.body}</p>
+                  )}
+                </div>
+
+                {canModerateReplies && !reply.deletedAt ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 shrink-0 md:h-9"
+                    disabled={deleteReply.isPending}
+                    onClick={() => setReplyPendingRemoval(reply.id)}
+                  >
+                    {deleteReply.isPending && replyPendingRemoval === reply.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Remove Reply
+                  </Button>
+                ) : null}
+              </div>
               <p className="mt-3 text-xs text-content-secondary">
                 {getName(reply.authorUserId)} · {new Date(reply.createdAt).toLocaleString()}
               </p>
             </div>
           ))
         )}
+
+        {deleteReply.error && replyPendingRemoval === null ? (
+          <AlertBanner
+            status="danger"
+            variant="subtle"
+            title="We couldn't remove this reply."
+            description={deleteReply.error instanceof Error ? deleteReply.error.message : 'Please try again.'}
+          />
+        ) : null}
       </div>
 
       <Separator />
@@ -186,6 +240,50 @@ export function ForumThreadDetail({
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={replyPendingRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteReply.isPending) {
+            setReplyPendingRemoval(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove reply?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will hide the reply content and leave a visible tombstone in the thread so the discussion chronology stays intact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteReply.error && replyPendingRemoval !== null ? (
+            <AlertBanner
+              status="danger"
+              variant="subtle"
+              title="We couldn't remove this reply."
+              description={deleteReply.error instanceof Error ? deleteReply.error.message : 'Please try again.'}
+            />
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteReply.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteReply.isPending || replyPendingRemoval === null}
+              onClick={(event) => {
+                event.preventDefault();
+                if (replyPendingRemoval === null) {
+                  return;
+                }
+                void deleteReply.mutateAsync({ replyId: replyPendingRemoval }).then(() => {
+                  setReplyPendingRemoval(null);
+                });
+              }}
+            >
+              {deleteReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              Remove Reply
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

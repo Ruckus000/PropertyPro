@@ -46,6 +46,7 @@ export interface ForumReply {
   authorUserId: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 }
 
 export interface ForumThreadDetail {
@@ -525,6 +526,22 @@ export function useCreateForumReply(communityId: number, threadId: number) {
     mutationFn: async (payload: { body: string }) =>
       requestJson<ForumReply>(`/api/v1/forum/threads/${threadId}/reply`, {
         method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, ...payload }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: BOARD_KEYS.forum.detail(communityId, threadId) });
+    },
+  });
+}
+
+export function useDeleteForumReply(communityId: number, threadId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { replyId: number; moderationReason?: string }) =>
+      requestJson<{ id: number; deleted: true }>(`/api/v1/forum/threads/${threadId}/reply`, {
+        method: 'DELETE',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId, ...payload }),
       }),
