@@ -32,12 +32,14 @@ interface ForumThreadDetailProps {
   communityId: number;
   threadId: number;
   isAdmin: boolean;
+  canModerateReplies: boolean;
 }
 
 export function ForumThreadDetail({
   communityId,
   threadId,
   isAdmin,
+  canModerateReplies,
 }: ForumThreadDetailProps) {
   const { data, isLoading, error } = useBoardForumThread(communityId, threadId);
   const createReply = useCreateForumReply(communityId, threadId);
@@ -163,7 +165,7 @@ export function ForumThreadDetail({
                   )}
                 </div>
 
-                {isAdmin && !reply.deletedAt ? (
+                {canModerateReplies && !reply.deletedAt ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -185,7 +187,7 @@ export function ForumThreadDetail({
           ))
         )}
 
-        {deleteReply.error ? (
+        {deleteReply.error && replyPendingRemoval === null ? (
           <AlertBanner
             status="danger"
             variant="subtle"
@@ -254,6 +256,14 @@ export function ForumThreadDetail({
               This will hide the reply content and leave a visible tombstone in the thread so the discussion chronology stays intact.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteReply.error && replyPendingRemoval !== null ? (
+            <AlertBanner
+              status="danger"
+              variant="subtle"
+              title="We couldn't remove this reply."
+              description={deleteReply.error instanceof Error ? deleteReply.error.message : 'Please try again.'}
+            />
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteReply.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction

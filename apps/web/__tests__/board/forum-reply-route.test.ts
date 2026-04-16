@@ -76,6 +76,20 @@ const RESIDENT_MEMBERSHIP = {
   },
 };
 
+const LIMITED_MANAGER_MEMBERSHIP = {
+  role: 'manager',
+  isAdmin: true,
+  isUnitOwner: false,
+  displayTitle: 'Community Manager',
+  presetKey: 'cam',
+  communityType: 'condo_718',
+  permissions: {
+    resources: {
+      polls: { read: true, write: false },
+    },
+  },
+};
+
 describe('forum reply moderation route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -114,6 +128,28 @@ describe('forum reply moderation route', () => {
 
   it('rejects residents attempting to moderate replies', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7/reply', {
+      method: 'DELETE',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        replyId: 99,
+      }),
+    });
+
+    const res = await DELETE(req, { params: Promise.resolve({ id: '7' }) });
+    const json = (await res.json()) as { error: { message: string; code: string } };
+
+    expect(res.status).toBe(403);
+    expect(deleteForumReplyForCommunityMock).not.toHaveBeenCalled();
+    expect(json.error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects managers without polls write permission', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(LIMITED_MANAGER_MEMBERSHIP);
 
     const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7/reply', {
       method: 'DELETE',

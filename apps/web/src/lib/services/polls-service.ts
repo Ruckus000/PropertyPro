@@ -2,6 +2,7 @@ import {
   createScopedClient,
   forumReplies,
   forumThreads,
+  listDeletedForumRepliesForThread,
   logAuditEvent,
   polls,
   pollVotes,
@@ -495,17 +496,16 @@ export async function getForumThreadWithRepliesForCommunity(
   }
 
   const replies = await scoped
-    .selectFrom<ForumReplyRecord>(
-      forumReplies,
-      {},
-      eq(forumReplies.threadId, threadId),
-      { includeDeleted: true },
-    )
+    .selectFrom<ForumReplyRecord>(forumReplies, {}, eq(forumReplies.threadId, threadId))
     .orderBy(asc(forumReplies.createdAt));
+  const deletedReplies = await listDeletedForumRepliesForThread(communityId, threadId);
+  const allReplies = [...replies, ...deletedReplies].sort(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  );
 
   return {
     thread: mapForumThreadRow(thread),
-    replies: replies.map(mapForumReplyRow),
+    replies: allReplies.map(mapForumReplyRow),
   };
 }
 

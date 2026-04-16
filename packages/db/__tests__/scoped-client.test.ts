@@ -170,12 +170,6 @@ describe('createScopedClient', () => {
       expect(mockWhereOnSelect).toHaveBeenCalled();
     });
 
-    it('can include soft-deleted rows while preserving tenant scoping', () => {
-      const client = createScopedClient(1);
-      client.selectFrom(units, {}, undefined, { includeDeleted: true });
-
-      expect(mockWhereOnSelect).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe('insert', () => {

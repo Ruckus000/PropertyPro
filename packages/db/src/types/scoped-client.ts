@@ -45,7 +45,6 @@ export interface ScopedClient {
     table: ScopedTable,
     columns: Record<string, unknown>,
     additionalWhere?: SQL,
-    options?: { includeDeleted?: boolean },
   ) => ScopedDynamicBuilder<T>;
 
   /**

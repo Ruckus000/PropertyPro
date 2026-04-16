@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const {
   useBoardForumThreadMock,
@@ -84,7 +85,14 @@ describe('ForumThreadDetail', () => {
   });
 
   it('renders tombstones for removed replies and moderation controls for admins', () => {
-    render(<ForumThreadDetail communityId={42} threadId={10} isAdmin />);
+    render(
+      <ForumThreadDetail
+        communityId={42}
+        threadId={10}
+        isAdmin
+        canModerateReplies
+      />,
+    );
 
     expect(screen.getByText('A live reply')).toBeVisible();
     expect(screen.getByText('Reply removed')).toBeVisible();
@@ -95,9 +103,53 @@ describe('ForumThreadDetail', () => {
   });
 
   it('hides moderation controls from residents while still showing tombstones', () => {
-    render(<ForumThreadDetail communityId={42} threadId={10} isAdmin={false} />);
+    render(
+      <ForumThreadDetail
+        communityId={42}
+        threadId={10}
+        isAdmin={false}
+        canModerateReplies={false}
+      />,
+    );
 
     expect(screen.getByText('Reply removed')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Remove Reply' })).not.toBeInTheDocument();
+  });
+
+  it('hides moderation controls for admins without reply moderation capability', () => {
+    render(
+      <ForumThreadDetail
+        communityId={42}
+        threadId={10}
+        isAdmin
+        canModerateReplies={false}
+      />,
+    );
+
+    expect(screen.getByText('Reply removed')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Remove Reply' })).not.toBeInTheDocument();
+  });
+
+  it('shows reply removal errors inside the confirmation dialog while it is open', async () => {
+    const user = userEvent.setup();
+    useDeleteForumReplyMock.mockReturnValue({
+      ...makeMutationState(),
+      error: new Error('Please try again later.'),
+    });
+
+    render(
+      <ForumThreadDetail
+        communityId={42}
+        threadId={10}
+        isAdmin
+        canModerateReplies
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Remove Reply' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText("We couldn't remove this reply.")).toBeVisible();
+    expect(within(dialog).getByText('Please try again later.')).toBeVisible();
   });
 });

@@ -197,7 +197,6 @@ async function execDelete(
 function buildScopeFilters(
   table: PgTable<TableConfig>,
   communityId: number,
-  options?: { includeDeleted?: boolean },
 ): SQL[] {
   const columns = getTableColumns(table) as ColumnRecord;
   const tableName = getTableName(table as unknown as Table);
@@ -214,7 +213,6 @@ function buildScopeFilters(
 
   if (
     hasDeletedAtColumn(columns) &&
-    !options?.includeDeleted &&
     !SOFT_DELETE_EXEMPT_TABLES.has(tableName)
   ) {
     filters.push(isNull(columns.deletedAt));
@@ -293,9 +291,8 @@ export function createScopedClient(
       table: PgTable<TableConfig>,
       columns: Record<string, unknown>,
       additionalWhere?: SQL,
-      options?: { includeDeleted?: boolean },
     ): ScopedDynamicBuilder<T> {
-      const filters = buildScopeFilters(table, ctx.communityId, options);
+      const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
         filters.push(additionalWhere);
       }
