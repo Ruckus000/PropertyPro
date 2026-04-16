@@ -164,4 +164,31 @@ describe('OperationsHub', () => {
       '/maintenance/inbox?communityId=42',
     );
   });
+
+  it('hides the All tab for residents even when maintenance and work orders are both enabled', () => {
+    searchParamsMock.mockReturnValue('tab=all');
+
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={true}
+        reservationsEnabled={true}
+        requestScope="mine"
+        requestActionHref="/maintenance/submit?communityId=42"
+        requestActionLabel="Submit Request"
+      />,
+    );
+
+    expect(screen.queryByRole('tab', { name: 'All' })).not.toBeInTheDocument();
+
+    const selectedTab = screen.getByRole('tab', { selected: true });
+    expect(selectedTab).toHaveAccessibleName('Requests');
+
+    expect(useOperationsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ limit: 50 }),
+      expect.objectContaining({ enabled: false }),
+    );
+  });
 });

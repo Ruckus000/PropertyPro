@@ -52,7 +52,7 @@ export function OperationsHub({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = (searchParams.get('tab') ?? 'requests') as OperationsTab;
-  const summaryEnabled = requestsEnabled && workOrdersEnabled;
+  const summaryEnabled = requestsEnabled && workOrdersEnabled && requestScope === 'community';
   const availableTabs = TABS.filter((candidate) => {
     switch (candidate.id) {
       case 'all':
