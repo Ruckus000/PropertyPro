@@ -12,6 +12,7 @@ interface ViolationLike {
   status: string;
   severity: string;
   createdAt: string | Date;
+  reportedByRole?: 'staff' | 'resident' | null;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -78,6 +79,11 @@ export function ViolationCard({ violation, communityId }: ViolationCardProps) {
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${severityStyle}`}>
               {violation.severity}
             </span>
+            {violation.reportedByRole === 'staff' && (
+              <span className="inline-flex items-center rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-medium text-content-link">
+                Filed by staff
+              </span>
+            )}
           </div>
           <p className="mt-1 line-clamp-2 text-sm text-content-secondary">{violation.description}</p>
         </div>
