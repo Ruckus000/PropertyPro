@@ -1,13 +1,12 @@
 'use client';
 
 /**
- * Violation report form for owners/residents.
- * Allows submitting a violation with category, description, severity, and photo evidence.
- * Photos are uploaded through the dedicated hidden evidence flow
- * (/api/v1/upload -> /api/v1/violations/evidence), returning document IDs stored
- * in evidenceDocumentIds.
+ * Staff-only report form for filing a violation on behalf of a resident.
+ * Fetches the scoped unit list via GET /api/v1/units and requires the operator
+ * to explicitly pick the target unit. The server stamps the operator's userId
+ * as reportedByUserId, surfacing the "staff" attribution on reads.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { createViolation } from '@/lib/api/violations';
@@ -15,7 +14,7 @@ import { uploadEvidencePhoto } from '@/lib/violations/evidence-upload';
 import type { ViolationSeverity } from '@propertypro/db';
 
 const MAX_PHOTOS = 3;
-const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 
 const VIOLATION_CATEGORIES = [
@@ -37,25 +36,39 @@ const SEVERITY_OPTIONS: { value: ViolationSeverity; label: string }[] = [
 ];
 
 const formSchema = z.object({
+  unitId: z.number().int().positive({ message: 'Please select a unit' }),
   category: z.string().min(1, 'Category is required'),
-  description: z.string().min(1, 'Description is required').max(4000, 'Description must be 4000 characters or less'),
+  description: z
+    .string()
+    .min(1, 'Description is required')
+    .max(4000, 'Description must be 4000 characters or less'),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),
 });
 
-interface ViolationReportFormProps {
-  communityId: number;
-  userId: string;
-  defaultUnitId: number | null;
-  unitIds: number[];
+interface UnitOption {
+  id: number;
+  unitNumber: string;
+  building: string | null;
+}
+interface UnitsListResponse {
+  data: Array<{ id: number; unitNumber: string; building: string | null }>;
 }
 
-export function ViolationReportForm({
-  communityId,
-  userId,
-  defaultUnitId,
-  unitIds,
-}: ViolationReportFormProps) {
+interface StaffViolationReportFormProps {
+  communityId: number;
+  userId: string;
+}
+
+function formatUnitLabel(unit: UnitOption): string {
+  return unit.building ? `${unit.building} • Unit ${unit.unitNumber}` : `Unit ${unit.unitNumber}`;
+}
+
+export function StaffViolationReportForm({ communityId }: StaffViolationReportFormProps) {
   const router = useRouter();
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [unitsError, setUnitsError] = useState('');
+  const [unitId, setUnitId] = useState<number | ''>('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<ViolationSeverity>('minor');
@@ -66,6 +79,31 @@ export function ViolationReportForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/units?communityId=${communityId}`);
+        if (!res.ok) throw new Error('Failed to load units');
+        const body = (await res.json()) as UnitsListResponse;
+        if (cancelled) return;
+        const sorted = [...body.data].sort((a, b) =>
+          formatUnitLabel(a).localeCompare(formatUnitLabel(b), undefined, { numeric: true }),
+        );
+        setUnits(sorted);
+      } catch (err) {
+        if (!cancelled) {
+          setUnitsError(err instanceof Error ? err.message : 'Failed to load units');
+        }
+      } finally {
+        if (!cancelled) setUnitsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [communityId]);
+
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     const total = photos.length + files.length;
@@ -73,17 +111,13 @@ export function ViolationReportForm({
       setServerError(`Maximum ${MAX_PHOTOS} photos allowed`);
       return;
     }
-
-    // Client-side size validation
     const oversized = files.find((f) => f.size > MAX_PHOTO_SIZE_BYTES);
     if (oversized) {
       setServerError(`${oversized.name} exceeds the 10 MB size limit`);
       return;
     }
-
     setPhotos((prev) => [...prev, ...files].slice(0, MAX_PHOTOS));
     setServerError('');
-    // Reset the input so the same file can be re-selected if removed
     e.target.value = '';
   }
 
@@ -97,7 +131,12 @@ export function ViolationReportForm({
       setFieldErrors({});
       setServerError('');
 
-      const parsed = formSchema.safeParse({ category, description, severity });
+      const parsed = formSchema.safeParse({
+        unitId: typeof unitId === 'number' ? unitId : undefined,
+        category,
+        description,
+        severity,
+      });
       if (!parsed.success) {
         const errors: Record<string, string> = {};
         for (const issue of parsed.error.issues) {
@@ -107,14 +146,8 @@ export function ViolationReportForm({
         return;
       }
 
-      if (!defaultUnitId) {
-        setServerError('No unit association found. Please contact your community manager.');
-        return;
-      }
-
       setSubmitting(true);
       try {
-        // Upload photos first, collecting document IDs
         let evidenceDocumentIds: number[] | undefined;
         if (photos.length > 0) {
           setUploading(true);
@@ -129,20 +162,20 @@ export function ViolationReportForm({
 
         await createViolation({
           communityId,
-          unitId: defaultUnitId,
+          unitId: parsed.data.unitId,
           category: parsed.data.category,
           description: parsed.data.description,
           severity: parsed.data.severity,
           evidenceDocumentIds,
         });
 
+        setUnitId('');
         setCategory('');
         setDescription('');
         setSeverity('minor');
         setPhotos([]);
         setSubmitted(true);
         setTimeout(() => setSubmitted(false), 4000);
-        // Refresh server components to show the new violation in the list below
         router.refresh();
       } catch (err) {
         setServerError(err instanceof Error ? err.message : 'Failed to submit violation report');
@@ -151,13 +184,17 @@ export function ViolationReportForm({
         setUploading(false);
       }
     },
-    [communityId, defaultUnitId, category, description, severity, photos],
+    [communityId, unitId, category, description, severity, photos, router],
   );
+
+  const disableSubmit = submitting || unitsLoading || units.length === 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-edge bg-surface-card p-6">
       {serverError && (
-        <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{serverError}</div>
+        <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">
+          {serverError}
+        </div>
       )}
       {submitted && (
         <div className="rounded-md bg-status-success-bg px-3 py-2 text-sm text-status-success">
@@ -165,13 +202,45 @@ export function ViolationReportForm({
         </div>
       )}
 
+      {/* Unit picker */}
+      <div>
+        <label htmlFor="staff-violation-unit" className="mb-1 block text-sm font-medium text-content-secondary">
+          Resident's Unit <span aria-hidden="true" className="text-status-danger">*</span>
+        </label>
+        {unitsError ? (
+          <p role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">
+            {unitsError}
+          </p>
+        ) : (
+          <select
+            id="staff-violation-unit"
+            value={unitId === '' ? '' : String(unitId)}
+            onChange={(e) => setUnitId(e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={unitsLoading || units.length === 0}
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus disabled:opacity-50"
+          >
+            <option value="">
+              {unitsLoading ? 'Loading units…' : units.length === 0 ? 'No units available' : 'Select a unit…'}
+            </option>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>
+                {formatUnitLabel(u)}
+              </option>
+            ))}
+          </select>
+        )}
+        {fieldErrors['unitId'] && (
+          <p className="mt-1 text-xs text-status-danger">{fieldErrors['unitId']}</p>
+        )}
+      </div>
+
       {/* Category */}
       <div>
-        <label htmlFor="violation-category" className="mb-1 block text-sm font-medium text-content-secondary">
+        <label htmlFor="staff-violation-category" className="mb-1 block text-sm font-medium text-content-secondary">
           Category
         </label>
         <select
-          id="violation-category"
+          id="staff-violation-category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
@@ -190,11 +259,11 @@ export function ViolationReportForm({
 
       {/* Description */}
       <div>
-        <label htmlFor="violation-description" className="mb-1 block text-sm font-medium text-content-secondary">
+        <label htmlFor="staff-violation-description" className="mb-1 block text-sm font-medium text-content-secondary">
           Description
         </label>
         <textarea
-          id="violation-description"
+          id="staff-violation-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={4}
@@ -210,11 +279,11 @@ export function ViolationReportForm({
 
       {/* Severity */}
       <div>
-        <label htmlFor="violation-severity" className="mb-1 block text-sm font-medium text-content-secondary">
+        <label htmlFor="staff-violation-severity" className="mb-1 block text-sm font-medium text-content-secondary">
           Severity
         </label>
         <select
-          id="violation-severity"
+          id="staff-violation-severity"
           value={severity}
           onChange={(e) => setSeverity(e.target.value as ViolationSeverity)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
@@ -227,13 +296,13 @@ export function ViolationReportForm({
         </select>
       </div>
 
-      {/* Photo Evidence */}
+      {/* Photo evidence */}
       <div>
-        <label htmlFor="violation-photos" className="mb-1 block text-sm font-medium text-content-secondary">
+        <label htmlFor="staff-violation-photos" className="mb-1 block text-sm font-medium text-content-secondary">
           Photo Evidence (max {MAX_PHOTOS})
         </label>
         <input
-          id="violation-photos"
+          id="staff-violation-photos"
           type="file"
           accept={ACCEPTED_IMAGE_TYPES}
           multiple
@@ -247,7 +316,10 @@ export function ViolationReportForm({
         {photos.length > 0 && (
           <ul className="mt-2 space-y-1">
             {photos.map((f, idx) => (
-              <li key={idx} className="flex items-center justify-between rounded-md bg-surface-hover px-3 py-1.5 text-xs text-content-secondary">
+              <li
+                key={idx}
+                className="flex items-center justify-between rounded-md bg-surface-hover px-3 py-1.5 text-xs text-content-secondary"
+              >
                 <span className="truncate">{f.name}</span>
                 <button
                   type="button"
@@ -262,20 +334,13 @@ export function ViolationReportForm({
         )}
       </div>
 
-      {/* Submit */}
       <button
         type="submit"
-        disabled={submitting || !defaultUnitId}
+        disabled={disableSubmit}
         className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {uploading ? 'Uploading photos...' : submitting ? 'Submitting...' : 'Submit Violation Report'}
+        {uploading ? 'Uploading photos...' : submitting ? 'Submitting...' : 'File Violation Report'}
       </button>
-
-      {!defaultUnitId && (
-        <p className="text-xs text-status-warning">
-          You are not associated with a unit in this community. Contact your community manager to be assigned a unit.
-        </p>
-      )}
     </form>
   );
 }

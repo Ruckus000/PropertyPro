@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient } from '@propertypro/db';
+import { createScopedClient, units, userRoles } from '@propertypro/db';
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
+import { eq, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -84,7 +85,31 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     createdBefore,
   });
 
-  return NextResponse.json({ data });
+  const reporterIds = Array.from(
+    new Set(
+      data
+        .map((v) => v.reportedByUserId)
+        .filter((id): id is string => typeof id === 'string'),
+    ),
+  );
+  const roleByUser = new Map<string, 'resident' | 'staff'>();
+  if (reporterIds.length > 0) {
+    const reporterRoles = await scoped.selectFrom<{ userId: string; role: string }>(
+      userRoles,
+      { userId: userRoles.userId, role: userRoles.role },
+      inArray(userRoles.userId, reporterIds),
+    );
+    for (const r of reporterRoles) {
+      roleByUser.set(r.userId, r.role === 'resident' ? 'resident' : 'staff');
+    }
+  }
+
+  const hydrated = data.map((v) => ({
+    ...v,
+    reportedByRole: v.reportedByUserId ? (roleByUser.get(v.reportedByUserId) ?? null) : null,
+  }));
+
+  return NextResponse.json({ data: hydrated });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -108,6 +133,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const scoped = createScopedClient(communityId);
   if (isResidentRole(membership.role)) {
     const unitIds = await getActorUnitIds(scoped, actorUserId);
+    if (unitIds.length === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You must be associated with a unit before reporting a violation',
+          },
+        },
+        { status: 403 },
+      );
+    }
     if (!unitIds.includes(parseResult.data.unitId)) {
       return NextResponse.json(
         {
@@ -118,6 +154,18 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         },
         { status: 403 },
       );
+    }
+  } else {
+    // Staff path: validate target unit belongs to this scoped community.
+    // createScopedClient injects community_id + deletedAt IS NULL, so a unitId
+    // from another tenant returns zero rows here and surfaces as NotFound.
+    const matches = await scoped.selectFrom<{ id: number }>(
+      units,
+      { id: units.id },
+      eq(units.id, parseResult.data.unitId),
+    );
+    if (matches.length === 0) {
+      throw new NotFoundError(`Unit ${parseResult.data.unitId} not found in this community`);
     }
   }
 
