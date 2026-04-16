@@ -20,6 +20,9 @@ vi.mock('@/hooks/use-onboarding-checklist', () => ({
 describe('OnboardingChecklist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('routes the post announcement action to the routed create page', () => {
     useOnboardingChecklistMock.mockReturnValue({
       isLoading: false,
       data: [
@@ -32,9 +35,7 @@ describe('OnboardingChecklist', () => {
         },
       ],
     });
-  });
 
-  it('routes the post announcement action to the routed create page', () => {
     render(
       <OnboardingChecklist
         communityId={42}
@@ -45,5 +46,31 @@ describe('OnboardingChecklist', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     expect(mockPush).toHaveBeenCalledWith('/announcements/new?communityId=42');
+  });
+
+  it('routes the review announcement action to the scoped announcements list', () => {
+    useOnboardingChecklistMock.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 2,
+          itemKey: 'review_announcement',
+          displayText: 'Review announcements',
+          completedAt: null,
+          createdAt: '2026-04-15T12:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <OnboardingChecklist
+        communityId={42}
+        communityName="Sunset Condos"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/announcements?communityId=42');
   });
 });

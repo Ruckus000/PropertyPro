@@ -135,7 +135,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     keywords: ['announcement', 'news', 'bulletin', 'notify', 'updates', 'broadcast', 'message', 'alert', 'communication'],
     description: 'Community announcements and bulletins',
     icon: Megaphone,
-    href: '/announcements',
+    href: (cid: number) => `/announcements?communityId=${cid}`,
     roles: 'all',
     audience: 'all',
     category: 'page',

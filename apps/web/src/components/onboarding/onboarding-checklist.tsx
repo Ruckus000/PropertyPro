@@ -22,7 +22,10 @@ const ACTION_ROUTES: Record<string, ChecklistAction> = {
     href: (communityId: number) => `/announcements/new?communityId=${communityId}`,
   },
   customize_portal: { label: 'Customize', href: '/settings/branding' },
-  review_announcement: { label: 'View', href: '/announcements' },
+  review_announcement: {
+    label: 'View',
+    href: (communityId: number) => `/announcements?communityId=${communityId}`,
+  },
   check_compliance: { label: 'View', href: '/compliance' },
   access_document: { label: 'Browse', href: '/documents' },
   update_preferences: { label: 'Update', href: '/settings/notifications' },
