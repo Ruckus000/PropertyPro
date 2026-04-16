@@ -1,10 +1,13 @@
 import type { Announcement } from '@propertypro/db';
+import Link from 'next/link';
 import { Pin } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Button } from '@/components/ui/button';
 
 interface AnnouncementListProps {
   items: Announcement[];
-  isAdmin?: boolean;
+  communityId: number;
+  canWriteAnnouncements?: boolean;
 }
 
 /**
@@ -72,13 +75,28 @@ function formatDate(value: Date | string): string {
   });
 }
 
-function AnnouncementCard({ item }: { item: Announcement }) {
+function AnnouncementCard({
+  item,
+  communityId,
+  canWriteAnnouncements,
+}: {
+  item: Announcement;
+  communityId: number;
+  canWriteAnnouncements: boolean;
+}) {
+  const detailHref = `/announcements/${item.id}?communityId=${communityId}`;
+  const editHref = `/announcements/${item.id}/edit?communityId=${communityId}`;
+
   return (
     <article className="rounded-md border border-edge bg-surface-card p-5">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-content">{item.title}</h3>
+            <h3 className="text-base font-semibold text-content">
+              <Link href={detailHref} className="hover:text-interactive">
+                {item.title}
+              </Link>
+            </h3>
             {item.isPinned && (
               <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-semibold text-interactive">
                 <Pin size={12} />
@@ -94,11 +112,26 @@ function AnnouncementCard({ item }: { item: Announcement }) {
           {stripHtml(item.body)}
         </p>
       )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href={detailHref}>View details</Link>
+        </Button>
+        {canWriteAnnouncements ? (
+          <Button asChild size="sm">
+            <Link href={editHref}>Edit</Link>
+          </Button>
+        ) : null}
+      </div>
     </article>
   );
 }
 
-export function AnnouncementList({ items, isAdmin }: AnnouncementListProps) {
+export function AnnouncementList({
+  items,
+  communityId,
+  canWriteAnnouncements = false,
+}: AnnouncementListProps) {
   const { pinned, unpinned } = items.reduce<{
     pinned: Announcement[];
     unpinned: Announcement[];
@@ -116,18 +149,17 @@ export function AnnouncementList({ items, isAdmin }: AnnouncementListProps) {
         icon="bell"
         title="No announcements yet"
         description={
-          isAdmin
+          canWriteAnnouncements
             ? "Post your first announcement to keep residents informed."
             : "Announcements from your community will appear here."
         }
         action={
-          isAdmin ? (
-            <a
-              href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
-            >
-              Go to Dashboard
-            </a>
+          canWriteAnnouncements ? (
+            <Button asChild>
+              <Link href={`/announcements/new?communityId=${communityId}`}>
+                Create announcement
+              </Link>
+            </Button>
           ) : undefined
         }
       />
@@ -143,7 +175,12 @@ export function AnnouncementList({ items, isAdmin }: AnnouncementListProps) {
           </h2>
           <div className="space-y-3">
             {pinned.map((item) => (
-              <AnnouncementCard key={item.id} item={item} />
+              <AnnouncementCard
+                key={item.id}
+                item={item}
+                communityId={communityId}
+                canWriteAnnouncements={canWriteAnnouncements}
+              />
             ))}
           </div>
         </section>
@@ -158,7 +195,12 @@ export function AnnouncementList({ items, isAdmin }: AnnouncementListProps) {
           )}
           <div className="space-y-3">
             {unpinned.map((item) => (
-              <AnnouncementCard key={item.id} item={item} />
+              <AnnouncementCard
+                key={item.id}
+                item={item}
+                communityId={communityId}
+                canWriteAnnouncements={canWriteAnnouncements}
+              />
             ))}
           </div>
         </section>

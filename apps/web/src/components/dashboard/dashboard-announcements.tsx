@@ -1,8 +1,12 @@
 import type { DashboardAnnouncement } from '@/lib/dashboard/dashboard-selectors';
+import Link from 'next/link';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Button } from '@/components/ui/button';
 
 interface DashboardAnnouncementsProps {
   items: DashboardAnnouncement[];
+  communityId?: number;
+  canWriteAnnouncements?: boolean;
 }
 
 function formatDate(value: string): string {
@@ -13,13 +17,39 @@ function formatDate(value: string): string {
   });
 }
 
-export function DashboardAnnouncements({ items }: DashboardAnnouncementsProps) {
+export function DashboardAnnouncements({
+  items,
+  communityId,
+  canWriteAnnouncements = false,
+}: DashboardAnnouncementsProps) {
+  const createHref =
+    canWriteAnnouncements && communityId
+      ? `/announcements/new?communityId=${communityId}`
+      : null;
+
   return (
     <section className="rounded-md border border-edge bg-surface-card p-5">
-      <h2 className="text-lg font-semibold text-content">Recent Announcements</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-content">Recent Announcements</h2>
+        {createHref ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href={createHref}>New announcement</Link>
+          </Button>
+        ) : null}
+      </div>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
-          <EmptyState preset="no_announcements" size="sm" />
+          <EmptyState
+            preset="no_announcements"
+            size="sm"
+            action={
+              createHref ? (
+                <Button asChild size="sm">
+                  <Link href={createHref}>Create announcement</Link>
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           items.map((item) => (
             <article key={item.id} className="rounded-md border border-edge-subtle p-3">
