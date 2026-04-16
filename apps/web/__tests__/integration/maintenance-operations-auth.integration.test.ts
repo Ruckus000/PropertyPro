@@ -119,6 +119,7 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
     const tenantARequestId = await createRequest('tenantA', communityA.id, `Tenant A Request ${kit.runSuffix}`);
     const managerRequestId = await createRequest('actorA', communityA.id, `Manager Request ${kit.runSuffix}`);
     const tenantCRequestId = await createRequest('tenantC', communityC.id, `Tenant C Request ${kit.runSuffix}`);
+    const pmAdminRequestId = await createRequest('actorC', communityC.id, `PM Admin Request ${kit.runSuffix}`);
 
     setActor(kit, 'tenantA');
     const residentListResponse = await routeModules.maintenanceRequests.GET(
@@ -144,7 +145,11 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
     );
     expect(pmAdminListResponse.status).toBe(200);
     const pmAdminList = await parseJson<{ data: Array<Record<string, unknown>> }>(pmAdminListResponse);
-    expect(pmAdminList.data.map((row) => row.id)).toEqual([tenantCRequestId]);
+    // pm_admin must see community-wide requests (their own AND tenantC's),
+    // not just their own. This distinguishes community-wide read from self-scope.
+    expect(pmAdminList.data.map((row) => Number(row.id)).sort((a, b) => a - b)).toEqual(
+      [tenantCRequestId, pmAdminRequestId].sort((a, b) => a - b),
+    );
 
     setActor(kit, 'actorA');
     const managerPatchResponse = await routeModules.maintenanceRequestDetail.PATCH(
