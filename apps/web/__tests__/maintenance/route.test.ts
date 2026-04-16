@@ -356,11 +356,12 @@ describe('maintenance requests route', () => {
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ comments: Array<{ isInternal: boolean }> }> };
+      const json = (await res.json()) as { data: Array<{ comments: Array<Record<string, unknown>> }> };
       const comments = json.data[0].comments;
-      // All returned comments should have isInternal=false
-      expect(comments.every((c) => !c.isInternal)).toBe(true);
+      // isInternal field must not be emitted to resident callers (defense-in-depth
+      // on top of the filter that drops isInternal=true comments).
       expect(comments).toHaveLength(1);
+      expect(comments[0]).not.toHaveProperty('isInternal');
     });
 
     it('does NOT strip internal comments for admin callers', async () => {
