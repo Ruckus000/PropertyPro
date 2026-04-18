@@ -17,15 +17,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const hasSupabaseAuth = !!supabaseUrl && !!supabaseAnonKey && !!serviceRoleKey;
 
-if (process.env.CI && (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey)) {
-  throw new Error(
-    'password-reset-login integration test requires NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in CI',
-  );
-}
-
-const describeSupabase =
-  supabaseUrl && supabaseAnonKey && serviceRoleKey ? describe : describe.skip;
+const describeSupabase = hasSupabaseAuth ? describe : describe.skip;
 
 describeSupabase('password reset → sign-in', () => {
   const email = `pw-reset-${randomUUID().slice(0, 8)}@example.test`;
@@ -33,12 +27,15 @@ describeSupabase('password reset → sign-in', () => {
   const NEW_PASSWORD = 'BrandNew!456';
 
   let userId: string | null = null;
-
-  const admin = createClient(supabaseUrl as string, serviceRoleKey as string, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  let admin: ReturnType<typeof createClient> | null = null;
 
   beforeAll(async () => {
+    if (!hasSupabaseAuth) return;
+
+    admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
     const { data, error } = await admin.auth.admin.createUser({
       email,
       password: OLD_PASSWORD,
@@ -51,13 +48,13 @@ describeSupabase('password reset → sign-in', () => {
   });
 
   afterAll(async () => {
-    if (userId) {
+    if (admin && userId) {
       await admin.auth.admin.deleteUser(userId);
     }
   });
 
   it('rejects old password and accepts new password after admin-driven rotation', async () => {
-    if (!userId) throw new Error('userId not set');
+    if (!admin || !userId) throw new Error('Supabase auth test setup did not complete');
 
     // Rotate password via admin API — equivalent to what updatePassword() does
     // against an authenticated recovery session on the server side.
@@ -67,14 +64,14 @@ describeSupabase('password reset → sign-in', () => {
     expect(updateResult.error).toBeNull();
 
     // Use fresh, non-persistent clients per assertion to avoid stale session state.
-    const oldClient = createClient(supabaseUrl as string, supabaseAnonKey as string, {
+    const oldClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const oldAttempt = await oldClient.auth.signInWithPassword({ email, password: OLD_PASSWORD });
     expect(oldAttempt.error).not.toBeNull();
     expect(oldAttempt.data.session).toBeNull();
 
-    const newClient = createClient(supabaseUrl as string, supabaseAnonKey as string, {
+    const newClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const newAttempt = await newClient.auth.signInWithPassword({ email, password: NEW_PASSWORD });

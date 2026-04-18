@@ -315,7 +315,9 @@ describeDb('visitor upgrade (db-backed integration)', () => {
 
     clearCapturedNotifications();
 
-    const summary = await processComplianceAlerts(new Date('2026-06-15T12:00:00.000Z'));
+    const summary = await processComplianceAlerts(new Date('2026-06-15T12:00:00.000Z'), {
+      communityIds: [communityA.id],
+    });
     expect(summary.totalExpiringVisitors).toBeGreaterThanOrEqual(1);
     expect(summary.totalExpiryNotifications).toBeGreaterThanOrEqual(1);
 

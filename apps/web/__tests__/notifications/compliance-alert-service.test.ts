@@ -330,6 +330,25 @@ describe('processComplianceAlerts', () => {
     expect(createScopedClientMock).not.toHaveBeenCalledWith(3);
   });
 
+  it('limits processing to the requested community ids when provided', async () => {
+    setupUnscopedMock([
+      { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
+      { id: 2, communityType: 'hoa_720', timezone: 'America/Chicago' },
+      { id: 3, communityType: 'apartment', timezone: 'America/New_York' },
+    ]);
+
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async () => []),
+    });
+
+    const summary = await processComplianceAlerts(NOW, { communityIds: [2, 3] });
+    expect(summary.communitiesProcessed).toBe(1);
+    expect(createScopedClientMock).toHaveBeenCalledTimes(1);
+    expect(createScopedClientMock).toHaveBeenCalledWith(2);
+    expect(createScopedClientMock).not.toHaveBeenCalledWith(1);
+    expect(createScopedClientMock).not.toHaveBeenCalledWith(3);
+  });
+
   it('continues processing if one community throws', async () => {
     setupUnscopedMock([
       { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
@@ -427,5 +446,51 @@ describe('processComplianceAlerts', () => {
     const event = sendNotificationMock.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(event).toBeDefined();
     expect('sourceId' in event).toBe(false);
+  });
+
+  it('applies community filtering to expiring visitor notifications', async () => {
+    setupUnscopedMock(
+      [
+        { id: 1, communityType: 'condo_718', timezone: 'America/New_York' },
+        { id: 2, communityType: 'hoa_720', timezone: 'America/Chicago' },
+      ],
+      [
+        {
+          communityId: 1,
+          id: 77,
+          visitorName: 'Casey Guest',
+          guestType: 'recurring',
+          hostUserId: 'resident-1',
+          validUntil: new Date('2026-03-20T16:30:00.000Z'),
+        },
+        {
+          communityId: 2,
+          id: 88,
+          visitorName: 'Robin Guest',
+          guestType: 'permanent',
+          hostUserId: 'resident-2',
+          validUntil: new Date('2026-03-18T10:00:00.000Z'),
+        },
+      ],
+    );
+
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async () => []),
+    });
+
+    const summary = await processComplianceAlerts(NOW, { communityIds: [2] });
+
+    expect(summary.communitiesProcessed).toBe(1);
+    expect(summary.totalExpiringVisitors).toBe(1);
+    expect(summary.totalExpiryNotifications).toBe(1);
+    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({
+        alertTitle: 'Robin Guest visitor pass expires soon',
+      }),
+      { type: 'specific_user', userId: 'resident-2' },
+      undefined,
+    );
   });
 });

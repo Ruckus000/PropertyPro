@@ -1,9 +1,9 @@
--- Add category and role visibility columns to existing faqs table.
--- Both nullable for backwards compatibility with existing FAQs.
--- NULL category = uncategorized. NULL role_visibility = visible to all roles.
+-- Add optional help center metadata to FAQs.
+-- NULL category preserves backwards compatibility for existing rows.
+-- NULL role_visibility means visible to all roles.
 
 ALTER TABLE faqs ADD COLUMN category text;
 ALTER TABLE faqs ADD COLUMN role_visibility text[];
 
-COMMENT ON COLUMN faqs.category IS 'Optional grouping label for help center display';
-COMMENT ON COLUMN faqs.role_visibility IS 'Array of community roles that can see this FAQ. NULL = all roles.';
+COMMENT ON COLUMN faqs.category IS 'Optional help center category label';
+COMMENT ON COLUMN faqs.role_visibility IS 'Optional array of role keys allowed to view this FAQ';

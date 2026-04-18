@@ -1,16 +1,10 @@
-/**
- * Custom MDX components for help articles.
- *
- * These are passed to next-mdx-remote's compileMDX as the components map.
- * All three are server-compatible (no 'use client' directive).
- */
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
-// ---------------------------------------------------------------------------
-// Callout
-// ---------------------------------------------------------------------------
+function linkClasses() {
+  return 'font-medium text-[var(--interactive-primary)] underline underline-offset-2';
+}
 
 const CALLOUT_STYLES = {
   info: {
@@ -53,6 +47,7 @@ interface CalloutProps {
 
 export function Callout({ type = 'info', title, children }: CalloutProps) {
   const style = CALLOUT_STYLES[type];
+
   return (
     <div
       className={cn('my-6 rounded-[var(--radius-md)] border p-4', style.border, style.bg)}
@@ -63,23 +58,13 @@ export function Callout({ type = 'info', title, children }: CalloutProps) {
           {style.icon}
         </span>
         <div className="min-w-0 flex-1">
-          {title && (
-            <p className={cn('mb-1 text-sm font-semibold', style.title)}>
-              {title}
-            </p>
-          )}
-          <div className={cn('text-sm leading-relaxed', style.body)}>
-            {children}
-          </div>
+          {title && <p className={cn('mb-1 text-sm font-semibold', style.title)}>{title}</p>}
+          <div className={cn('text-sm leading-relaxed', style.body)}>{children}</div>
         </div>
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// StepByStep
-// ---------------------------------------------------------------------------
 
 interface StepProps {
   title: string;
@@ -91,21 +76,17 @@ interface StepProps {
 export function Step({ title, image, imageAlt, children }: StepProps) {
   return (
     <div className="relative pb-8 pl-8 last:pb-0">
-      {/* Vertical connector line */}
       <div
-        className="absolute left-3 top-8 bottom-0 w-px bg-border-default last:hidden"
+        className="absolute bottom-0 left-3 top-8 w-px bg-border-default last:hidden"
         aria-hidden="true"
       />
-      {/* Step number circle */}
       <div
         className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--interactive-primary)] text-xs font-semibold text-white"
         aria-hidden="true"
       />
       <div>
         <h4 className="mb-1 text-sm font-semibold text-content">{title}</h4>
-        <div className="text-sm leading-relaxed text-content-secondary">
-          {children}
-        </div>
+        <div className="text-sm leading-relaxed text-content-secondary">{children}</div>
         {image && (
           <div className="mt-3 overflow-hidden rounded-[var(--radius-md)] border border-edge">
             <Image
@@ -134,10 +115,6 @@ export function StepByStep({ children }: StepByStepProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Screenshot
-// ---------------------------------------------------------------------------
-
 interface ScreenshotProps {
   src: string;
   alt: string;
@@ -148,13 +125,7 @@ export function Screenshot({ src, alt, caption }: ScreenshotProps) {
   return (
     <figure className="my-6">
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge">
-        <Image
-          src={src}
-          alt={alt}
-          width={960}
-          height={540}
-          className="w-full"
-        />
+        <Image src={src} alt={alt} width={960} height={540} className="w-full" />
       </div>
       {caption && (
         <figcaption className="mt-2 text-center text-xs text-content-tertiary">
@@ -165,13 +136,42 @@ export function Screenshot({ src, alt, caption }: ScreenshotProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Components map for next-mdx-remote
-// ---------------------------------------------------------------------------
-
 export const helpMdxComponents = {
   Callout,
   StepByStep,
   Step,
   Screenshot,
+  h1: (props: ComponentPropsWithoutRef<'h1'>) => (
+    <h1 className="text-3xl font-semibold tracking-tight text-content" {...props} />
+  ),
+  h2: (props: ComponentPropsWithoutRef<'h2'>) => (
+    <h2 className="mt-8 text-2xl font-semibold tracking-tight text-content" {...props} />
+  ),
+  h3: (props: ComponentPropsWithoutRef<'h3'>) => (
+    <h3 className="mt-6 text-xl font-semibold text-content" {...props} />
+  ),
+  p: (props: ComponentPropsWithoutRef<'p'>) => (
+    <p className="mt-4 leading-7 text-content-secondary" {...props} />
+  ),
+  ul: (props: ComponentPropsWithoutRef<'ul'>) => (
+    <ul className="mt-4 list-disc space-y-2 pl-6 text-content-secondary" {...props} />
+  ),
+  ol: (props: ComponentPropsWithoutRef<'ol'>) => (
+    <ol className="mt-4 list-decimal space-y-2 pl-6 text-content-secondary" {...props} />
+  ),
+  li: (props: ComponentPropsWithoutRef<'li'>) => <li className="leading-7" {...props} />,
+  a: (props: ComponentPropsWithoutRef<'a'>) => <a className={linkClasses()} {...props} />,
+  blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
+    <blockquote
+      className="mt-4 rounded-r-lg border-l-4 border-[var(--interactive-primary)]/40 bg-surface-muted px-4 py-3 text-content-secondary"
+      {...props}
+    />
+  ),
+  strong: (props: ComponentPropsWithoutRef<'strong'>) => (
+    <strong className="font-semibold text-content" {...props} />
+  ),
+  code: (props: ComponentPropsWithoutRef<'code'>) => (
+    <code className="rounded bg-surface-muted px-1 py-0.5 text-sm text-content" {...props} />
+  ),
+  hr: () => <hr className="my-8 border-edge" />,
 };

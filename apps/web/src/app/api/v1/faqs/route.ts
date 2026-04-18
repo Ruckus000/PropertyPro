@@ -20,7 +20,7 @@ import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { ensureFaqsExist } from '@/lib/services/faq-service';
+import { ensureFaqsExist, filterFaqsForRole } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
@@ -40,20 +40,16 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, parsed.data);
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
 
   // Lazy-seed default FAQs if none exist
   await ensureFaqsExist(communityId);
 
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(faqs);
+  const visibleFaqs = filterFaqsForRole(rows, membership.role);
 
-  // Sort by sortOrder ascending in JS
-  const sorted = [...rows].sort(
-    (a, b) => ((a['sortOrder'] as number) ?? 0) - ((b['sortOrder'] as number) ?? 0),
-  );
-
-  return NextResponse.json({ data: sorted });
+  return NextResponse.json({ data: visibleFaqs });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

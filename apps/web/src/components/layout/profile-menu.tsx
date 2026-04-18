@@ -56,6 +56,7 @@ export function ProfileMenu({ userName, userEmail, communityId }: ProfileMenuPro
   }
 
   const settingsHref = communityId ? `/settings?communityId=${communityId}` : '/settings';
+  const helpHref = communityId ? `/help?communityId=${communityId}` : '/help';
   const exportHref = communityId
     ? `/settings/export?communityId=${communityId}`
     : '/settings/export';
@@ -88,9 +89,9 @@ export function ProfileMenu({ userName, userEmail, communityId }: ProfileMenuPro
         </DropdownMenuItem>
 
         <DropdownMenuItem asChild>
-          <Link href="/help" onClick={() => setOpen(false)}>
+          <Link href={helpHref} onClick={() => setOpen(false)}>
             <CircleHelp className="mr-2 size-4 text-content-disabled" />
-            Help
+            Help Center
           </Link>
         </DropdownMenuItem>
 

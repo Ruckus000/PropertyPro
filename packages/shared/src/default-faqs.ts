@@ -1,106 +1,122 @@
-export interface DefaultFaq {
+export interface DefaultFaqDefinition {
   question: string;
   answer: string;
   category: string;
+  roleVisibility?: readonly string[] | null;
 }
 
-export const DEFAULT_FAQS: DefaultFaq[] = [
-  // Getting Started
-  {
-    question: 'How do I submit a maintenance request?',
-    answer:
-      'From the sidebar, click Operations then select the Requests tab. Click "Submit Request", fill in the details, attach any photos, and submit. You\'ll receive updates as your request is processed.',
-    category: 'getting-started',
-  },
+export type DefaultFaq = DefaultFaqDefinition;
+
+const ADMIN_HELP_ROLES = [
+  'board_member',
+  'board_president',
+  'cam',
+  'site_manager',
+  'property_manager_admin',
+  'manager',
+  'pm_admin',
+] as const;
+
+export const DEFAULT_FAQS: DefaultFaqDefinition[] = [
   {
     question: 'How do I view community documents?',
     answer:
-      'Click Documents in the sidebar. You can browse by category or use the search bar to find specific documents. Click any document to view or download it.',
-    category: 'getting-started',
+      'Open Documents to browse bylaws, rules, budgets, minutes, and other shared records. Use search or filters to jump to a specific document.',
+    category: 'documents',
+  },
+  {
+    question: 'How do I pay my dues or assessments?',
+    answer:
+      'Open Payments to review your balance, saved payment methods, and recent activity. If online payments are enabled for your community, you can pay there directly.',
+    category: 'payments',
+  },
+  {
+    question: 'How do I submit a maintenance request?',
+    answer:
+      'Open Maintenance and choose Submit Request. Add a clear description, unit details, and photos if helpful, then submit to track updates from management.',
+    category: 'maintenance',
+  },
+  {
+    question: 'How do I track my maintenance request status?',
+    answer:
+      'After you submit a request, return to Maintenance to see status updates such as new, in progress, or resolved, along with notes from the management team.',
+    category: 'maintenance',
   },
   {
     question: 'How do I view upcoming meetings?',
     answer:
-      'Click Meetings in the sidebar. Upcoming meetings are shown at the top with date, time, and location. Past meetings with posted minutes appear below.',
-    category: 'getting-started',
+      'Open Meetings to see upcoming dates, locations, agendas, and posted materials. Past meetings with posted minutes remain available below.',
+    category: 'meetings',
   },
   {
-    question: 'How do I update my notification preferences?',
+    question: 'How do I change my notification preferences?',
     answer:
-      'Go to Settings from the profile menu and scroll to the Email Notifications section. You can toggle announcements, meeting notices, and in-app alerts, and choose your email frequency.',
-    category: 'account',
+      'Go to Settings and update your notification preferences to control announcement emails, meeting notices, reminders, and alert frequency.',
+    category: 'settings',
   },
   {
     question: 'How do I change my password?',
     answer:
-      'Go to Settings > Security. Enter your current password, then your new password twice to confirm. If you\'ve forgotten your current password, use the "Forgot your password?" link on the login page.',
-    category: 'account',
-  },
-  // Operations
-  {
-    question: 'How do I track the status of my maintenance request?',
-    answer:
-      'Go to Operations > Requests. Your submitted requests show their current status: Open, In Progress, Completed, or Closed. You\'ll also receive notifications when the status changes.',
-    category: 'operations',
+      'Go to Settings > Account or Security to update your password. If you are locked out, use the password reset flow from the login screen.',
+    category: 'settings',
   },
   {
-    question: 'How do I report a violation?',
+    question: 'How do I contact management?',
     answer:
-      'Click "Report Violation" in the sidebar. Describe the issue, select the violation type, add photos if possible, and submit. Your management team will review and respond.',
-    category: 'operations',
-  },
-  // Board & Compliance
-  {
-    question: 'What is the compliance score?',
-    answer:
-      'The compliance score measures how well your community meets Florida statutory requirements for document posting, meeting notices, and record-keeping. A score above 90% indicates strong compliance. Visit the Help Center for a detailed guide.',
-    category: 'compliance',
+      'Open Help and choose Contact Management to view the current email address, phone number, and primary contact for your community.',
+    category: 'support',
   },
   {
-    question: 'How do I vote in a board poll?',
+    question: 'How do I report a violation or concern?',
     answer:
-      'When a poll is active, you\'ll see it on the Board page. Click the poll, review the options, and cast your vote. Results are visible once the poll closes.',
-    category: 'board',
+      'If your community uses violations tracking, open Violations to review your community\'s process or submit a new report when you have permission to do so.',
+    category: 'violations',
   },
-  // Payments & Finance
+  {
+    question: 'How do I sign documents electronically?',
+    answer:
+      'Open E-Sign to review documents waiting for your signature. Follow the prompts to confirm your signature and submit the completed form.',
+    category: 'esign',
+  },
   {
     question: 'How do I view my assessment balance?',
     answer:
-      'Click Payments in the sidebar to see your current balance, payment history, and any upcoming assessments. You can make payments directly through the platform if online payments are enabled.',
+      'Open Payments to review your current balance, payment history, and any upcoming charges in one place.',
     category: 'payments',
   },
-  // E-Sign
   {
-    question: 'How do I sign a document electronically?',
+    question: 'How do I post a meeting notice and stay compliant?',
     answer:
-      'When a document is sent for your signature, you\'ll receive an email notification with a link. Click the link, review the document, and follow the on-screen instructions to sign. You can also find pending signatures in your E-Sign section.',
-    category: 'esign',
+      'Admins can open Meetings to create or manage notices. Be sure to review the required posting deadlines and attach agenda materials before publishing.',
+    category: 'meetings',
+    roleVisibility: ADMIN_HELP_ROLES,
   },
-  // Emergency
   {
-    question: 'What are emergency broadcasts?',
+    question: 'How do I review the compliance dashboard?',
     answer:
-      'Emergency broadcasts are urgent messages sent to all community members via push notification, email, and in-app alert. They\'re used for situations like severe weather, security incidents, or critical maintenance issues.',
-    category: 'emergency',
-  },
-  // Move-in/out
-  {
-    question: 'How does the move-in/move-out process work?',
-    answer:
-      'Your management team will create a move checklist for your unit. You can view the checklist from the Leases section, track completed items, and coordinate with management on any remaining steps.',
-    category: 'operations',
-  },
-  // Admin-specific
-  {
-    question: 'How do I upload a document for compliance?',
-    answer:
-      'Go to Documents, click "Upload Document", select the correct category (this matters for compliance scoring), add a title and description, then upload the file. Your compliance score updates automatically.',
+      'Admins can open Compliance to review which statutory requirements are satisfied, overdue, or missing. The dashboard highlights the next actions that improve the score.',
     category: 'compliance',
+    roleVisibility: ADMIN_HELP_ROLES,
   },
   {
-    question: 'How do I customize the community portal?',
+    question: 'How do I create or send announcements?',
     answer:
-      'Admins can customize branding and portal settings from the Settings page. You can update your community logo, color scheme, and contact information that residents see.',
-    category: 'admin',
+      'Admins can open Announcements to draft updates, publish them to the community, and review previously posted messages.',
+    category: 'announcements',
+    roleVisibility: ADMIN_HELP_ROLES,
+  },
+  {
+    question: 'How do I manage community records and uploads?',
+    answer:
+      'Admins can open Documents to upload new files, organize categories, and maintain the records residents should be able to access.',
+    category: 'documents',
+    roleVisibility: ADMIN_HELP_ROLES,
+  },
+  {
+    question: 'How do I manage residents and access?',
+    answer:
+      'Admins can open Residents to review the roster, invite people, and update access when ownership, leasing, or staff assignments change.',
+    category: 'residents',
+    roleVisibility: ADMIN_HELP_ROLES,
   },
 ];

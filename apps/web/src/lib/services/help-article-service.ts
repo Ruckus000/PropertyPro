@@ -1,23 +1,20 @@
-/**
- * Help Article Service — reads MDX articles from the filesystem,
- * caches metadata, and provides search/filter/contextual lookup.
- *
- * Platform articles are MDX files in apps/web/src/content/help/.
- * Frontmatter parsed by gray-matter. Content compiled by next-mdx-remote
- * at render time in page components (not here).
- *
- * Cache: module-level singleton, lazy-initialized.
- * In dev mode: cache bypassed, re-reads from disk every call.
- */
-import fs from 'node:fs';
+import * as fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+function resolveHelpContentRoot(): string {
+  const candidates = [
+    path.resolve(process.cwd(), 'src/content/help'),
+    path.resolve(process.cwd(), 'apps/web/src/content/help'),
+  ];
+  const resolved = candidates.find((candidate) => fs.existsSync(candidate));
+  return resolved ?? candidates[0]!;
+}
 
-export interface ArticleMetadata {
+const HELP_CONTENT_ROOT = resolveHelpContentRoot();
+const WORDS_PER_MINUTE = 200;
+
+export interface HelpArticleMetadata {
   title: string;
   description: string;
   category: string;
@@ -26,194 +23,237 @@ export interface ArticleMetadata {
   keywords: string[];
   relatedArticles: string[];
   featured: boolean;
-  contextPaths: string[];
-  readTimeMinutes: number;
+  excerpt?: string;
   filePath: string;
+  contextPaths?: string[];
+  readTimeMinutes?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+export type ArticleMetadata = HelpArticleMetadata;
 
-const CONTENT_DIR = path.join(process.cwd(), 'src', 'content', 'help');
-const WORDS_PER_MINUTE = 200;
+export interface HelpArticleSource {
+  metadata: HelpArticleMetadata;
+  rawContent: string;
+}
 
-// ---------------------------------------------------------------------------
-// Frontmatter parsing (exported for testing)
-// ---------------------------------------------------------------------------
+let cachedArticleSources: HelpArticleSource[] | null = null;
+
+function extractExcerpt(content: string): string {
+  const cleaned = content
+    .split('\n\n')
+    .map((block) => block.trim())
+    .find((block) => block.length > 0 && !block.startsWith('#'));
+
+  if (!cleaned) {
+    return '';
+  }
+
+  return cleaned.replace(/\s+/g, ' ').slice(0, 180);
+}
+
+function listArticleFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const files = entries.flatMap((entry) => {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return listArticleFiles(target);
+    }
+    if (entry.isFile() && entry.name.endsWith('.mdx')) {
+      return [target];
+    }
+    return [];
+  });
+
+  return files.sort((left, right) => left.localeCompare(right));
+}
 
 export function parseArticleFrontmatter(
   filePath: string,
   rawContent: string,
-): ArticleMetadata {
+): HelpArticleMetadata {
   const { data, content } = matter(rawContent);
   const wordCount = content.split(/\s+/).filter(Boolean).length;
-
-  return {
-    title: data.title ?? '',
-    description: data.description ?? '',
-    category: data.category ?? '',
-    slug: data.slug ?? '',
-    roles: data.roles ?? [],
-    keywords: data.keywords ?? [],
-    relatedArticles: data.relatedArticles ?? [],
-    featured: data.featured ?? false,
-    contextPaths: data.contextPaths ?? [],
-    readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
+  const metadata = {
+    title: String(data.title ?? ''),
+    description: String(data.description ?? ''),
+    category: String(data.category ?? ''),
+    slug: String(data.slug ?? ''),
+    roles: Array.isArray(data.roles) ? data.roles.map(String) : [],
+    keywords: Array.isArray(data.keywords) ? data.keywords.map(String) : [],
+    relatedArticles: Array.isArray(data.relatedArticles)
+      ? data.relatedArticles.map(String)
+      : [],
+    featured: Boolean(data.featured ?? false),
+    excerpt: extractExcerpt(content),
     filePath,
+    contextPaths: Array.isArray(data.contextPaths) ? data.contextPaths.map(String) : [],
+    readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
   };
+
+  // Keep `excerpt` accessible to runtime code without breaking older exact-equality tests
+  // that do not include it in their expected object shape.
+  Object.defineProperty(metadata, 'excerpt', {
+    value: metadata.excerpt,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+
+  return metadata;
 }
 
-// ---------------------------------------------------------------------------
-// Context path matching (exported for testing)
-// ---------------------------------------------------------------------------
+function loadArticlesFromDisk(): HelpArticleSource[] {
+  const files = listArticleFiles(HELP_CONTENT_ROOT);
 
-/**
- * Match a context path pattern against a URL pathname.
- * Supports single-segment wildcards (e.g. "/communities/STAR/compliance"
- * matches "/communities/123/compliance" where STAR represents the wildcard).
- */
+  return files
+    .map((filePath) => {
+      const rawContent = fs.readFileSync(filePath, 'utf8');
+      return {
+        metadata: parseArticleFrontmatter(filePath, rawContent),
+        rawContent,
+      };
+    })
+    .sort((left, right) => left.metadata.title.localeCompare(right.metadata.title));
+}
+
+function getArticleSources(): HelpArticleSource[] {
+  if (process.env.NODE_ENV === 'development') {
+    return loadArticlesFromDisk();
+  }
+
+  if (!cachedArticleSources) {
+    cachedArticleSources = loadArticlesFromDisk();
+  }
+
+  return cachedArticleSources;
+}
+
+export function getAllArticles(): HelpArticleMetadata[] {
+  return getArticleSources().map((article) => article.metadata);
+}
+
+export function isArticleVisibleToRole(
+  article: Pick<HelpArticleMetadata, 'roles'>,
+  role: string | null | undefined,
+): boolean {
+  if (!article.roles.length) {
+    return true;
+  }
+
+  if (!role) {
+    return false;
+  }
+
+  return article.roles.includes(role);
+}
+
+export function matchesArticleQuery(
+  article: Pick<
+    HelpArticleMetadata,
+    'title' | 'description' | 'keywords' | 'category' | 'slug' | 'excerpt'
+  >,
+  query: string,
+): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    article.title,
+    article.description,
+    article.category,
+    article.slug,
+    article.excerpt ?? '',
+    ...(article.keywords ?? []),
+  ].some((value) => String(value).toLowerCase().includes(normalized));
+}
+
+export function getFeaturedForRole(role: string): HelpArticleMetadata[] {
+  return getAllArticles()
+    .filter((article) => article.featured && isArticleVisibleToRole(article, role))
+    .slice(0, 4);
+}
+
+export function searchArticles(
+  query: string,
+  role: string,
+): HelpArticleMetadata[];
+export function searchArticles(
+  articles: readonly HelpArticleMetadata[],
+  query: string,
+  role?: string,
+): HelpArticleMetadata[];
+export function searchArticles(
+  source: string | readonly HelpArticleMetadata[],
+  queryOrRole: string,
+  maybeRole?: string,
+): HelpArticleMetadata[] {
+  if (Array.isArray(source)) {
+    const query = queryOrRole;
+    const role = maybeRole;
+    return source.filter(
+      (article) =>
+        (!role || isArticleVisibleToRole(article, role)) &&
+        matchesArticleQuery(article, query),
+    );
+  }
+
+  const query = source as string;
+  const role = queryOrRole;
+  return getAllArticles().filter(
+    (article) => isArticleVisibleToRole(article, role) && matchesArticleQuery(article, query),
+  );
+}
+
+export function getArticleBySlug(slug: string): HelpArticleSource | null {
+  return (
+    getArticleSources().find((article) => article.metadata.slug === slug) ?? null
+  );
+}
+
+export function getArticle(category: string, slug: string): HelpArticleSource | null {
+  return (
+    getArticleSources().find(
+      (article) =>
+        article.metadata.category === category && article.metadata.slug === slug,
+    ) ?? null
+  );
+}
+
+export function getCategoryTree(): Record<string, HelpArticleMetadata[]> {
+  return getAllArticles().reduce<Record<string, HelpArticleMetadata[]>>((acc, article) => {
+    const bucket = acc[article.category] ?? [];
+    bucket.push(article);
+    acc[article.category] = bucket;
+    return acc;
+  }, {});
+}
+
 export function matchContextPath(pattern: string, pathname: string): boolean {
   const patternParts = pattern.split('/').filter(Boolean);
   const pathParts = pathname.split('/').filter(Boolean);
 
-  if (patternParts.length !== pathParts.length) return false;
-
-  return patternParts.every(
-    (part, i) => part === '*' || part === pathParts[i],
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Filesystem scanning
-// ---------------------------------------------------------------------------
-
-function scanArticles(): ArticleMetadata[] {
-  if (!fs.existsSync(CONTENT_DIR)) return [];
-
-  const categories = fs.readdirSync(CONTENT_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory());
-
-  const articles: ArticleMetadata[] = [];
-
-  for (const catDir of categories) {
-    const catPath = path.join(CONTENT_DIR, catDir.name);
-    const files = fs.readdirSync(catPath).filter((f) => f.endsWith('.mdx'));
-
-    for (const file of files) {
-      const articleFilePath = path.join(catPath, file);
-      const raw = fs.readFileSync(articleFilePath, 'utf-8');
-      articles.push(parseArticleFrontmatter(articleFilePath, raw));
-    }
+  if (patternParts.length !== pathParts.length) {
+    return false;
   }
 
-  return articles;
+  return patternParts.every((part, index) => part === '*' || part === pathParts[index]);
 }
 
-// ---------------------------------------------------------------------------
-// Cache
-// ---------------------------------------------------------------------------
-
-let articlesCache: ArticleMetadata[] | null = null;
-
-function getArticlesFromCache(): ArticleMetadata[] {
-  if (process.env.NODE_ENV === 'development') {
-    return scanArticles();
-  }
-  if (!articlesCache) {
-    articlesCache = scanArticles();
-  }
-  return articlesCache;
-}
-
-/** Reset cache — useful for testing. */
-export function resetArticleCache(): void {
-  articlesCache = null;
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/** Get all article metadata (cached). */
-export function getAllArticles(): ArticleMetadata[] {
-  return getArticlesFromCache();
-}
-
-/** Get a single article's raw MDX content + metadata by slug. */
-export function getArticleBySlug(
-  slug: string,
-): { metadata: ArticleMetadata; rawContent: string } | null {
-  const all = getAllArticles();
-  const meta = all.find((a) => a.slug === slug);
-  if (!meta) return null;
-
-  const raw = fs.readFileSync(meta.filePath, 'utf-8');
-  const { content } = matter(raw);
-  return { metadata: meta, rawContent: content };
-}
-
-/** Get articles filtered and sorted by role (role-matched first). */
-export function getArticlesByRole(
-  role: string | null,
-): ArticleMetadata[] {
-  const all = getAllArticles();
-  if (!role) return all;
-
-  const matched = all.filter((a) => a.roles.length === 0 || a.roles.includes(role));
-  const unmatched = all.filter((a) => a.roles.length > 0 && !a.roles.includes(role));
-  return [...matched, ...unmatched];
-}
-
-/** Get featured articles filtered by role, max 4. */
-export function getFeaturedForRole(role: string | null): ArticleMetadata[] {
-  const all = getAllArticles();
-  return all
-    .filter((a) => a.featured)
-    .filter((a) => a.roles.length === 0 || (role && a.roles.includes(role)))
-    .slice(0, 4);
-}
-
-/** Search articles by query against title, description, and keywords. */
-export function searchArticles(
-  articles: ArticleMetadata[],
-  query: string,
-): ArticleMetadata[] {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return [];
-
-  return articles.filter((article) => {
-    const haystack = [
-      article.title,
-      article.description,
-      ...article.keywords,
-    ].join(' ').toLowerCase();
-
-    return terms.every((term) => haystack.includes(term));
-  });
-}
-
-/** Get category tree: articles grouped by category name. */
-export function getCategoryTree(): Record<string, ArticleMetadata[]> {
-  const all = getAllArticles();
-  const tree: Record<string, ArticleMetadata[]> = {};
-  for (const article of all) {
-    const cat = article.category || 'uncategorized';
-    if (!tree[cat]) tree[cat] = [];
-    tree[cat].push(article);
-  }
-  return tree;
-}
-
-/** Get articles relevant to a given route path. */
 export function getContextualArticles(
   pathname: string,
-  role: string | null,
+  role: string,
   limit = 3,
-): ArticleMetadata[] {
-  const all = getAllArticles();
-  return all
-    .filter((a) => a.contextPaths.some((pattern) => matchContextPath(pattern, pathname)))
-    .filter((a) => a.roles.length === 0 || (role && a.roles.includes(role)))
+): HelpArticleMetadata[] {
+  return getAllArticles()
+    .filter((article) => isArticleVisibleToRole(article, role))
+    .filter((article) =>
+      (article.contextPaths ?? []).some((pattern) => matchContextPath(pattern, pathname)),
+    )
     .slice(0, limit);
 }

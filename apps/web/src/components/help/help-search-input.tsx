@@ -1,11 +1,7 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HelpSearchInputProps {
+  communityId?: number;
   defaultValue?: string;
   placeholder?: string;
   className?: string;
@@ -13,37 +9,41 @@ interface HelpSearchInputProps {
 }
 
 export function HelpSearchInput({
+  communityId,
   defaultValue = '',
-  placeholder = 'Search help articles...',
+  placeholder = 'Search guides, FAQs, and common tasks',
   className,
   autoFocus = false,
 }: HelpSearchInputProps) {
-  const router = useRouter();
-  const [query, setQuery] = useState(defaultValue);
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = query.trim();
-    if (trimmed.length >= 2) {
-      router.push(`/help/search?q=${encodeURIComponent(trimmed)}`);
-    }
-  }
-
   return (
-    <form onSubmit={handleSubmit} role="search" className={cn('relative', className)}>
-      <Search
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-content-disabled"
-        size={18}
-        aria-hidden="true"
-      />
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        className="w-full rounded-[var(--radius-md)] border border-edge bg-surface-card py-3 pl-11 pr-4 text-sm text-content placeholder:text-content-placeholder transition-colors focus-visible:border-edge-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      />
+    <form
+      action="/help/search"
+      method="GET"
+      role="search"
+      className={cn('rounded-2xl border border-edge bg-surface-card p-4 shadow-sm', className)}
+    >
+      {typeof communityId === 'number' && (
+        <input type="hidden" name="communityId" value={communityId} />
+      )}
+      <label htmlFor="help-search" className="block text-sm font-medium text-content">
+        Search the help center
+      </label>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+        <input
+          id="help-search"
+          name="q"
+          defaultValue={defaultValue}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          className="h-11 flex-1 rounded-xl border border-edge bg-surface-page px-3 text-sm text-content placeholder:text-content-disabled focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        />
+        <button
+          type="submit"
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--interactive-primary)] px-4 text-sm font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          Search Help
+        </button>
+      </div>
     </form>
   );
 }
