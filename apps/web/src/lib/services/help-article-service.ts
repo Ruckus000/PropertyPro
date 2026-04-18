@@ -1,8 +1,17 @@
-import fs from 'node:fs';
+import * as fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 
-const HELP_CONTENT_ROOT = path.resolve(process.cwd(), 'apps/web/src/content/help');
+function resolveHelpContentRoot(): string {
+  const candidates = [
+    path.resolve(process.cwd(), 'src/content/help'),
+    path.resolve(process.cwd(), 'apps/web/src/content/help'),
+  ];
+  const resolved = candidates.find((candidate) => fs.existsSync(candidate));
+  return resolved ?? candidates[0]!;
+}
+
+const HELP_CONTENT_ROOT = resolveHelpContentRoot();
 const WORDS_PER_MINUTE = 200;
 
 export interface HelpArticleMetadata {

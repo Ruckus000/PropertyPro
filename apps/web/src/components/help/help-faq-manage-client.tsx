@@ -23,6 +23,7 @@ export function HelpFaqManageClient({
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const editingFaq = useMemo(
     () => faqs.find((faq) => faq.id === editingId) ?? null,
@@ -38,14 +39,25 @@ export function HelpFaqManageClient({
   function startEdit(id: number) {
     const faq = faqs.find((item) => item.id === id);
     if (!faq) return;
+    setErrorMessage(null);
     setEditingId(id);
     setQuestion(faq.question);
     setAnswer(faq.answer);
   }
 
+  async function readErrorMessage(response: Response): Promise<string> {
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      return body.error?.message ?? 'Unable to save FAQ changes right now.';
+    } catch {
+      return 'Unable to save FAQ changes right now.';
+    }
+  }
+
   async function handleSave() {
     if (!question.trim() || !answer.trim()) return;
     setSaving(true);
+    setErrorMessage(null);
 
     try {
       if (editingFaq) {
@@ -59,20 +71,23 @@ export function HelpFaqManageClient({
           }),
         });
 
-        if (response.ok) {
-          setFaqs((current) =>
-            current.map((faq) =>
-              faq.id === editingFaq.id
-                ? {
-                    ...faq,
-                    question: question.trim(),
-                    answer: answer.trim(),
-                  }
-                : faq,
-            ),
-          );
-          resetForm();
+        if (!response.ok) {
+          setErrorMessage(await readErrorMessage(response));
+          return;
         }
+
+        setFaqs((current) =>
+          current.map((faq) =>
+            faq.id === editingFaq.id
+              ? {
+                  ...faq,
+                  question: question.trim(),
+                  answer: answer.trim(),
+                }
+              : faq,
+          ),
+        );
+        resetForm();
       } else {
         const response = await fetch('/api/v1/faqs', {
           method: 'POST',
@@ -83,17 +98,24 @@ export function HelpFaqManageClient({
             answer: answer.trim(),
           }),
         });
-        const body = await response.json();
+        const body = (await response.json()) as {
+          data?: ManageFaqItem;
+          error?: { message?: string };
+        };
 
-        if (response.ok && body.data) {
-          setFaqs((current) =>
-            [...current, body.data as ManageFaqItem].sort(
-              (a, b) => a.sortOrder - b.sortOrder,
-            ),
-          );
-          resetForm();
+        if (!response.ok || !body.data) {
+          setErrorMessage(body.error?.message ?? 'Unable to create this FAQ right now.');
+          return;
         }
+
+        const newFaq = body.data;
+        setFaqs((current) =>
+          [...current, newFaq].sort((a, b) => a.sortOrder - b.sortOrder),
+        );
+        resetForm();
       }
+    } catch {
+      setErrorMessage('Unable to save FAQ changes right now.');
     } finally {
       setSaving(false);
     }
@@ -102,15 +124,21 @@ export function HelpFaqManageClient({
   async function handleDelete() {
     if (!editingFaq) return;
     setSaving(true);
+    setErrorMessage(null);
     try {
       const response = await fetch(
         `/api/v1/faqs/${editingFaq.id}?communityId=${communityId}`,
         { method: 'DELETE' },
       );
-      if (response.ok) {
-        setFaqs((current) => current.filter((faq) => faq.id !== editingFaq.id));
-        resetForm();
+      if (!response.ok) {
+        setErrorMessage(await readErrorMessage(response));
+        return;
       }
+
+      setFaqs((current) => current.filter((faq) => faq.id !== editingFaq.id));
+      resetForm();
+    } catch {
+      setErrorMessage('Unable to delete this FAQ right now.');
     } finally {
       setSaving(false);
     }
@@ -144,6 +172,11 @@ export function HelpFaqManageClient({
           </p>
         </div>
         <div className="mt-5 space-y-4">
+          {errorMessage && (
+            <div className="rounded-xl border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">
+              {errorMessage}
+            </div>
+          )}
           <div>
             <label htmlFor="faq-question" className="text-sm font-medium text-content">
               Question
