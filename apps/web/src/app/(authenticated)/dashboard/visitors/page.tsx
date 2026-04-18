@@ -15,6 +15,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole } from '@propertypro/shared';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { listActorUnitIds } from '@/lib/units/actor-units';
+import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
 
@@ -51,7 +52,14 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
   const communityRows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
   const community = communityRows[0];
   const communitySettings = (community?.communitySettings as Record<string, unknown> | undefined) ?? {};
-  const hostUnitId = isStaff ? undefined : (await listActorUnitIds(scoped, userId))[0];
+  let hostUnitLabel: string | undefined;
+  if (!isStaff) {
+    const primaryId = (await listActorUnitIds(scoped, userId))[0];
+    if (primaryId != null) {
+      const labelMap = await getUnitLabelMap(communityId, [primaryId]);
+      hostUnitLabel = labelMap.get(primaryId);
+    }
+  }
 
   return (
     <>
@@ -71,7 +79,7 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
       ) : (
         <VisitorResidentView
           communityId={communityId}
-          hostUnitId={hostUnitId}
+          hostUnitLabel={hostUnitLabel}
           allowResidentVisitorRevoke={communitySettings.allowResidentVisitorRevoke === true}
           currentUserId={userId}
         />
