@@ -1,59 +1,27 @@
 export const dynamic = 'force-dynamic';
 
-/**
- * Mobile Management Contact page.
- * Server component: auth + community contact fetch, then hands off to client content.
- */
-import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { createScopedClient, communities } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-import { MobileContactContent } from '@/components/mobile/MobileContactContent';
+import { redirect } from 'next/navigation';
 
-export default async function MobileHelpContactPage() {
-  const requestHeaders = await headers();
-  const communityId = Number(requestHeaders.get('x-community-id'));
+interface MobileHelpContactRedirectPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
-  if (!Number.isInteger(communityId) || communityId <= 0) {
-    redirect('/auth/login');
+function getSearchParamValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
   }
 
-  let userId: string;
+  return value ?? null;
+}
 
-  try {
-    const user = await requireAuthenticatedUser();
-    userId = user.id;
-  } catch {
-    redirect('/auth/login');
-  }
+export default async function MobileHelpContactPage({
+  searchParams,
+}: MobileHelpContactRedirectPageProps) {
+  const [requestHeaders, resolvedSearchParams] = await Promise.all([headers(), searchParams]);
+  const communityId =
+    getSearchParamValue(resolvedSearchParams.communityId) ??
+    requestHeaders.get('x-community-id');
 
-  let isAdmin = false;
-
-  try {
-    const membership = await requireCommunityMembership(communityId, userId!);
-    isAdmin = membership.isAdmin;
-  } catch {
-    redirect('/auth/login');
-  }
-
-  // Fetch community contact info
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
-  const community = (rows as unknown as Record<string, unknown>[])[0];
-
-  const contact = {
-    name: (community?.['contactName'] as string | null) ?? null,
-    email: (community?.['contactEmail'] as string | null) ?? null,
-    phone: (community?.['contactPhone'] as string | null) ?? null,
-  };
-
-  return (
-    <MobileContactContent
-      contact={contact}
-      isAdmin={isAdmin}
-      communityId={communityId}
-    />
-  );
+  redirect(communityId ? `/help/contact?communityId=${communityId}` : '/help/contact');
 }

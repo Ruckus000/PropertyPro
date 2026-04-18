@@ -144,7 +144,7 @@ export function MobileHelpContent({
         <SlideUp delay={0.1}>
           <div className="mt-4">
             <Link
-              href={`/mobile/help/contact?communityId=${communityId}`}
+              href={`/help/contact?communityId=${communityId}`}
               className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100">
@@ -176,7 +176,7 @@ export function MobileHelpContent({
           <SlideUp delay={0.15}>
             <div className="mt-4">
               <Link
-                href={`/mobile/help/manage?communityId=${communityId}`}
+                href={`/help/manage?communityId=${communityId}`}
                 className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
               >
                 <Settings

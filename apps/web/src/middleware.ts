@@ -54,6 +54,7 @@ const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
   '/select-community',
   '/settings',
+  '/help',
   '/documents',
   '/maintenance',
   '/violations',
