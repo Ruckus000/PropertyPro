@@ -13,6 +13,7 @@ export interface VisitorListItem {
   visitorName: string;
   purpose: string;
   hostUnitId: number;
+  hostUnitLabel: string | null;
   hostUserId: string | null;
   expectedArrival: string;
   checkedInAt: string | null;
@@ -47,7 +48,7 @@ export type MyVisitorFilter = 'active' | 'upcoming' | 'past';
 export interface CreateVisitorPayload {
   visitorName: string;
   purpose: string;
-  hostUnitId: number;
+  hostUnitLabel: string;
   expectedArrival?: string;
   notes?: string | null;
   guestType?: 'one_time' | 'recurring' | 'permanent' | 'vendor';

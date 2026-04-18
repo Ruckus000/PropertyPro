@@ -21,11 +21,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { UnitSearchCombobox } from '@/components/shared/UnitSearchCombobox';
 
 interface VisitorRegistrationFormProps {
   communityId: number;
-  /** When provided, locks the form to this unit (resident self-registration). */
-  hostUnitId?: number;
+  /** When provided, locks the form to this unit label (resident self-registration). */
+  hostUnitLabel?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -41,7 +42,7 @@ const PURPOSE_SUGGESTIONS = [
 
 export function VisitorRegistrationForm({
   communityId,
-  hostUnitId,
+  hostUnitLabel,
   open,
   onOpenChange,
 }: VisitorRegistrationFormProps) {
@@ -49,7 +50,7 @@ export function VisitorRegistrationForm({
 
   const [visitorName, setVisitorName] = useState('');
   const [purpose, setPurpose] = useState('');
-  const [unitId, setUnitId] = useState(hostUnitId ? String(hostUnitId) : '');
+  const [unitLabel, setUnitLabel] = useState<string>(hostUnitLabel ?? '');
   const [guestType, setGuestType] = useState<'one_time' | 'recurring' | 'vendor' | 'permanent'>('one_time');
   const [expectedArrival, setExpectedArrival] = useState('');
   const [validFrom, setValidFrom] = useState('');
@@ -66,7 +67,7 @@ export function VisitorRegistrationForm({
   function resetForm() {
     setVisitorName('');
     setPurpose('');
-    setUnitId(hostUnitId ? String(hostUnitId) : '');
+    setUnitLabel(hostUnitLabel ?? '');
     setGuestType('one_time');
     setExpectedArrival('');
     setValidFrom('');
@@ -84,8 +85,8 @@ export function VisitorRegistrationForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const parsedUnitId = Number(unitId);
-    if (!Number.isInteger(parsedUnitId) || parsedUnitId <= 0) return;
+    const trimmedLabel = unitLabel.trim();
+    if (!trimmedLabel) return;
     if (!visitorName.trim()) return;
     if (!purpose.trim()) return;
     if (guestType === 'one_time' && !expectedArrival) return;
@@ -94,7 +95,7 @@ export function VisitorRegistrationForm({
     await createVisitor.mutateAsync({
       visitorName: visitorName.trim(),
       purpose: purpose.trim(),
-      hostUnitId: parsedUnitId,
+      hostUnitLabel: trimmedLabel,
       expectedArrival: expectedArrival ? new Date(expectedArrival).toISOString() : undefined,
       notes: notes.trim() || null,
       guestType,
@@ -183,16 +184,16 @@ export function VisitorRegistrationForm({
 
           <div className="space-y-2">
             <Label htmlFor="visitor-unit">Host Unit</Label>
-            <Input
-              id="visitor-unit"
-              type="number"
-              min={1}
-              placeholder="e.g. 101"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              disabled={hostUnitId !== undefined}
-              required
-            />
+            {hostUnitLabel ? (
+              <Input id="visitor-unit" value={hostUnitLabel} disabled readOnly />
+            ) : (
+              <UnitSearchCombobox
+                communityId={communityId}
+                value={unitLabel || null}
+                onChange={setUnitLabel}
+                inputId="visitor-unit"
+              />
+            )}
           </div>
 
           <div className="space-y-2">
@@ -329,6 +330,13 @@ export function VisitorRegistrationForm({
               rows={2}
             />
           </div>
+
+          {createVisitor.isError ? (
+            <p role="alert" className="text-sm text-status-danger">
+              {(createVisitor.error as Error).message
+                || 'Could not register visitor. Please check the unit label and try again.'}
+            </p>
+          ) : null}
 
           <DialogFooter>
             <Button
