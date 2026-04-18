@@ -41,3 +41,19 @@ load-test-summary*.json
 # Agent run logs
 .claude-ralph-runs/
 .claude/worktrees/
+
+# Agent/editor tool scratch dirs
+.agents/
+.claire/
+.cursor/
+.kiro/
+.claude/patches/
+.claude/plans/
+.claude/skills/
+.claude/start-*.sh
+.claude/scheduled_tasks.lock
+.superpowers/
+skills-lock.json
+
+# Local scratch
+tmp/

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PropertyPro Admin Templates Mockup</title>
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --primary: #2563eb;
+        --primary-soft: #dbeafe;
+        --success: #059669;
+        --warn: #d97706;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .nav {
+        height: 60px;
+        background: #0b1220;
+        color: #cbd5e1;
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        gap: 22px;
+      }
+      .brand { color: #fff; font-weight: 700; margin-right: 16px; }
+      .tab { font-size: 14px; }
+      .tab.active {
+        color: #fff;
+        border-bottom: 2px solid var(--primary);
+        padding-bottom: 3px;
+      }
+      .page {
+        padding: 18px;
+        height: calc(100vh - 60px);
+      }
+      .header {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .header h1 { margin: 0; font-size: 20px; }
+      .header p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+      .meta {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        border: 1px solid var(--border);
+        background: #fff;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        color: #334155;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 12px;
+        height: calc(100% - 126px);
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .panel-head {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .btn {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 13px;
+        cursor: default;
+      }
+      .btn.primary { background: var(--primary); color: #fff; }
+      .btn.ghost { background: #eef2ff; color: #3730a3; }
+      .search {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        color: #475569;
+      }
+      .list {
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+      .template-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        background: #fff;
+      }
+      .template-item.active { border-color: var(--primary); background: #f8fbff; }
+      .item-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+      .badge { font-size: 11px; border-radius: 99px; padding: 2px 7px; }
+      .badge.pub { background: #ecfdf5; color: var(--success); }
+      .badge.draft { background: #fffbeb; color: var(--warn); }
+      .item-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+      .work {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .col {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .col + .col { border-left: 1px solid var(--border); }
+      .col-head {
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .actions { display: flex; gap: 6px; }
+      .code {
+        margin: 0;
+        height: 100%;
+        overflow: auto;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .preview-wrap {
+        padding: 12px;
+        background: #f8fafc;
+        height: 100%;
+      }
+      .browser {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        height: 100%;
+        background: #fff;
+      }
+      .chrome { height: 30px; border-bottom: 1px solid var(--border); background: #eef2f7; }
+      .hero { background: linear-gradient(120deg, #2563eb, #60a5fa); color: white; padding: 18px; }
+      .hero h3 { margin: 0 0 6px; font-size: 17px; }
+      .hero p { margin: 0; font-size: 12px; opacity: 0.95; }
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
+      .card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; }
+      .footer { padding: 10px 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div class="nav">
+      <div class="brand">PropertyPro Admin</div>
+      <div class="tab">Dashboard</div>
+      <div class="tab">Clients</div>
+      <div class="tab">Demos</div>
+      <div class="tab active">Templates</div>
+      <div class="tab">Settings</div>
+    </div>
+    <div class="page">
+      <div class="header">
+        <h1>Public Site Templates</h1>
+        <p>Global template library used across all demo communities.</p>
+        <div class="meta">
+          <span class="chip">Template Name: Coastal Community v2</span>
+          <span class="chip">Slug: coastal-community-v2</span>
+          <span class="chip">Tags: condo, modern</span>
+          <span class="chip">Version: v2.1</span>
+        </div>
+      </div>
+
+      <div class="layout">
+        <aside class="panel">
+          <div class="panel-head">
+            <strong>Template Library</strong>
+            <button class="btn primary">+ New Template</button>
+          </div>
+          <div style="padding:10px;border-bottom:1px solid var(--border)">
+            <input class="search" value="Search templates..." aria-label="Search templates" />
+          </div>
+          <div class="list">
+            <div class="template-item active">
+              <div class="item-top"><span>Coastal Community</span><span class="badge draft">Draft</span></div>
+              <div class="item-sub">Updated 1h ago</div>
+            </div>
+            <div class="template-item">
+              <div class="item-top"><span>Condo Modern Blue</span><span class="badge pub">Published</span></div>
+              <div class="item-sub">Updated Mar 25</div>
+            </div>
+            <div class="template-item">
+              <div class="item-top"><span>HOA Minimal</span><span class="badge pub">Published</span></div>
+              <div class="item-sub">Updated Mar 20</div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel">
+          <div class="work">
+            <div class="col">
+              <div class="col-head">
+                <strong>Code</strong>
+                <div class="actions">
+                  <button class="btn ghost">Save Draft</button>
+                  <button class="btn primary">Publish</button>
+                </div>
+              </div>
+              <pre class="code">function App() {
+  return (
+    &lt;div className="min-h-screen bg-white"&gt;
+      &lt;header className="bg-[var(--pp-primary)] text-white p-4"&gt;
+        &lt;h1&gt;Coastal Community&lt;/h1&gt;
+      &lt;/header&gt;
+      &lt;section className="p-8"&gt;...&lt;/section&gt;
+    &lt;/div&gt;
+  );
+}</pre>
+            </div>
+            <div class="col">
+              <div class="col-head">
+                <strong>Live Preview</strong>
+                <div class="actions">
+                  <button class="btn ghost">Refresh</button>
+                </div>
+              </div>
+              <div class="preview-wrap">
+                <div class="browser">
+                  <div class="chrome"></div>
+                  <div class="hero">
+                    <h3>Welcome to Coastal Community</h3>
+                    <p>Your digital hub for community information.</p>
+                  </div>
+                  <div class="cards">
+                    <div class="card">Documents</div>
+                    <div class="card">Meetings</div>
+                    <div class="card">Announcements</div>
+                  </div>
+                  <div class="footer">Public Website Preview</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>
