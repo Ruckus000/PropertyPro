@@ -46,6 +46,8 @@ let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId: number;
 let unitCId: number;
+let unitALabel: string;
+let unitCLabel: string;
 
 function requireState(): TestKitState {
   if (!state) {
@@ -78,13 +80,16 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const scopedA = state.dbModule.createScopedClient(communityA.id);
     const scopedC = state.dbModule.createScopedClient(communityC.id);
 
+    unitALabel = `PKG-A-${state.runSuffix}`;
+    unitCLabel = `PKG-C-${state.runSuffix}`;
+
     const [unitA] = await scopedA.insert(state.dbModule.units, {
-      unitNumber: `PKG-A-${state.runSuffix}`,
+      unitNumber: unitALabel,
       building: 'A',
       floor: 1,
     });
     const [unitC] = await scopedC.insert(state.dbModule.units, {
-      unitNumber: `PKG-C-${state.runSuffix}`,
+      unitNumber: unitCLabel,
       building: 'C',
       floor: 3,
     });
@@ -199,7 +204,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Guest ${kit.runSuffix}`,
         purpose: 'Dinner visit',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-06-21T18:00:00.000Z',
       }),
     );
@@ -283,7 +288,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         communityId: communityC.id,
         visitorName: 'Apartment Guest',
         purpose: 'Move-in help',
-        hostUnitId: unitCId,
+        hostUnitLabel: unitCLabel,
         expectedArrival: '2026-06-25T12:00:00.000Z',
       }),
     );
