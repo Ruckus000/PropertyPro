@@ -57,7 +57,7 @@ export function ComplianceItemActions({
         fileSize: json.data.fileSize,
         mimeType: json.data.mimeType,
         categoryId: null,
-        createdAt: new Date().toISOString(),
+        createdAt: item.documentPostedAt ?? new Date().toISOString(),
         uploadedBy: null,
       });
     } catch (err) {
