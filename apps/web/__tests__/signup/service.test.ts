@@ -581,4 +581,111 @@ describe('signup service', () => {
     expect(state.pendingSignups[0]?.verificationEmailId).toBeNull();
     expect(state.pendingSignups[0]?.verificationEmailSentAt).toBeNull();
   });
+
+  describe('advisory subdomain check logging and transient failures', () => {
+    let infoSpy: ReturnType<typeof vi.spyOn>;
+    let errorSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    });
+
+    function getLoggedEvents(spy: ReturnType<typeof vi.spyOn>): string[] {
+      return spy.mock.calls
+        .map((args) => args[0])
+        .filter((line): line is string => typeof line === 'string')
+        .map((line) => {
+          try {
+            return (JSON.parse(line) as { event?: string }).event ?? '';
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean);
+    }
+
+    it('returns reason="unknown" and logs db_failure when the DB query throws', async () => {
+      const failingDb = {
+        select: vi.fn(() => {
+          throw new Error('connection refused');
+        }),
+        insert: vi.fn(),
+        update: vi.fn(),
+      };
+      createUnscopedClientMock.mockReturnValueOnce(failingDb);
+
+      const result = await checkSignupSubdomainAvailability('fresh-slug');
+
+      expect(result.reason).toBe('unknown');
+      expect(result.available).toBe(false);
+      expect(result.message).toMatch(/couldn't verify/i);
+      expect(getLoggedEvents(errorSpy)).toContain('subdomain.check.db_failure');
+    });
+
+    it('logs subdomain.check.invalid for too-short inputs', async () => {
+      await checkSignupSubdomainAvailability('ab');
+      expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.invalid');
+    });
+
+    it('logs subdomain.check.reserved for reserved names', async () => {
+      await checkSignupSubdomainAvailability('admin');
+      expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.reserved');
+    });
+
+    it('logs subdomain.check.taken.community when an existing community matches', async () => {
+      state.communities.push({ id: 7, slug: 'taken-existing' });
+      await checkSignupSubdomainAvailability('taken-existing');
+      expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.taken.community');
+    });
+
+    it('logs subdomain.check.taken.pending when a verified pending signup matches', async () => {
+      state.pendingSignups.push({
+        id: 77,
+        signupRequestId: 'verified-req',
+        emailNormalized: 'verified@example.com',
+        candidateSlug: 'verified-slug',
+        status: 'email_verified',
+        expiresAt: new Date(Date.now() + 3600_000),
+        authUserId: 'auth-77',
+        verificationEmailId: 'email-77',
+        verificationEmailSentAt: new Date(),
+      });
+      await checkSignupSubdomainAvailability('verified-slug');
+      expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.taken.pending');
+    });
+
+    it('logs subdomain.check.available for clean slugs', async () => {
+      await checkSignupSubdomainAvailability('wide-open-slug');
+      expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.available');
+    });
+
+    it('submitSignup throws a retryable ValidationError when the re-check returns unknown', async () => {
+      // First call (authoritative re-check inside submitSignup) fails; any
+      // subsequent DB call for upsert would not be reached.
+      const failingDb = {
+        select: vi.fn(() => {
+          throw new Error('connection refused');
+        }),
+        insert: vi.fn(),
+        update: vi.fn(),
+      };
+      createUnscopedClientMock.mockReturnValueOnce(failingDb);
+
+      let captured: unknown;
+      try {
+        await submitSignup(validSignupPayload);
+      } catch (err) {
+        captured = err;
+      }
+
+      expect(captured).toBeInstanceOf(ValidationError);
+      const err = captured as ValidationError & {
+        details?: { reason?: string; field?: string };
+      };
+      expect(err.message).toMatch(/couldn't verify/i);
+      expect(err.details?.reason).toBe('unknown');
+      expect(err.details?.field).toBe('candidateSlug');
+    });
+  });
 });

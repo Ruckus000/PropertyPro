@@ -22,7 +22,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const availability = await checkSignupSubdomainAvailability(
     parseResult.data.subdomain,
-    { excludeSignupRequestId: parseResult.data.signupRequestId },
+    {
+      excludeSignupRequestId: parseResult.data.signupRequestId,
+      signupRequestId: parseResult.data.signupRequestId,
+    },
   );
 
   return NextResponse.json({ data: availability });

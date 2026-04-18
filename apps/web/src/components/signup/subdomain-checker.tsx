@@ -6,9 +6,12 @@ import { normalizeSignupSubdomain } from '@/lib/auth/signup-schema';
 export interface SubdomainAvailability {
   normalizedSubdomain: string;
   available: boolean;
-  reason: 'invalid' | 'reserved' | 'taken' | 'available' | 'checking';
+  reason: 'invalid' | 'reserved' | 'taken' | 'available' | 'checking' | 'unknown';
   message: string;
 }
+
+const UNKNOWN_MESSAGE =
+  "We couldn't verify this subdomain right now — we'll check again when you submit.";
 
 interface SubdomainCheckerProps {
   value: string;
@@ -82,8 +85,8 @@ export function SubdomainChecker({
         setAvailability({
           normalizedSubdomain: normalizedValue,
           available: false,
-          reason: 'invalid',
-          message: 'Unable to verify subdomain right now. Please try again.',
+          reason: 'unknown',
+          message: UNKNOWN_MESSAGE,
         });
       }
     }, 350);
@@ -100,7 +103,7 @@ export function SubdomainChecker({
 
   const helperColor = availability?.reason === 'available'
     ? 'text-status-success'
-    : availability?.reason === 'checking'
+    : availability?.reason === 'checking' || availability?.reason === 'unknown'
       ? 'text-content-tertiary'
       : 'text-status-danger';
 
