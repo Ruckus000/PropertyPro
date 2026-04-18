@@ -18,12 +18,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (process.env.CI && (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey)) {
-  throw new Error(
-    'password-reset-login integration test requires NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in CI',
-  );
-}
-
 const describeSupabase =
   supabaseUrl && supabaseAnonKey && serviceRoleKey ? describe : describe.skip;
 

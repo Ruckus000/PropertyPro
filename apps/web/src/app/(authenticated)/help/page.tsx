@@ -1,4 +1,4 @@
-import { createScopedClient, communities, faqs } from '@propertypro/db';
+import { createScopedClient, communities, faqs, type Community } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { HelpHubContent } from '@/components/help/help-hub-content';
 import { PageHeader } from '@/components/shared/page-header';
@@ -9,25 +9,6 @@ import { getFeaturedForRole } from '@/lib/services/help-article-service';
 
 interface HelpPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-interface CommunityContactRecord {
-  contactName: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-}
-
-function toCommunityContact(
-  row: Record<string, unknown> | undefined,
-): CommunityContactRecord {
-  const readNullableString = (value: unknown): string | null =>
-    typeof value === 'string' && value.length > 0 ? value : null;
-
-  return {
-    contactName: readNullableString(row?.['contactName']),
-    contactEmail: readNullableString(row?.['contactEmail']),
-    contactPhone: readNullableString(row?.['contactPhone']),
-  };
 }
 
 export default async function HelpPage({ searchParams }: HelpPageProps) {
@@ -42,9 +23,7 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
     scoped.query(faqs),
     scoped.selectFrom(communities, {}, eq(communities.id, context.communityId)),
   ]);
-  const contact = toCommunityContact(
-    communityRows[0] as Record<string, unknown> | undefined,
-  );
+  const community = communityRows[0] as Community | undefined;
 
   return (
     <div className="space-y-8">
@@ -63,9 +42,9 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
         featuredArticles={getFeaturedForRole(effectiveRole)}
         faqs={filterFaqsForRole(faqRows, effectiveRole)}
         contact={{
-          name: contact.contactName,
-          email: contact.contactEmail,
-          phone: contact.contactPhone,
+          name: community?.contactName ?? null,
+          email: community?.contactEmail ?? null,
+          phone: community?.contactPhone ?? null,
         }}
       />
     </div>
