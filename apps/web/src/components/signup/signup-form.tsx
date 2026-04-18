@@ -157,15 +157,10 @@ export function SignupForm({
     setCandidateSlug(value);
   }
 
-  const isSubdomainBlocked = Boolean(
-    !normalizedCandidateSlug
-    || normalizedCandidateSlug.length < 3
-    || (
-      subdomainAvailability
-      && subdomainAvailability.reason !== 'available'
-      && subdomainAvailability.reason !== 'checking'
-    ),
-  );
+  // Advisory-only: only local syntax blocks submit. Server's POST-time re-check
+  // is still authoritative for 'taken' / 'reserved', and transient preflight
+  // failures (reason='unknown') never block conversion.
+  const isSubdomainBlocked = !normalizedCandidateSlug || normalizedCandidateSlug.length < 3;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
