@@ -1,5 +1,6 @@
 import { createScopedClient, units } from '@propertypro/db';
 import { asc, inArray, sql } from '@propertypro/db/filters';
+import { escapeLikePattern } from '@/lib/utils/escape-like';
 
 export interface UnitSearchResult {
   id: number;
@@ -51,11 +52,12 @@ export async function searchUnitsByLabel(
   if (!trimmed) return [];
 
   const scoped = createScopedClient(communityId);
+  const escaped = escapeLikePattern(trimmed);
   const rows = await scoped
     .selectFrom<UnitRow>(
       units,
       {},
-      sql`lower(${units.unitNumber}) LIKE lower(${trimmed + '%'})`,
+      sql`lower(${units.unitNumber}) LIKE lower(${escaped + '%'})`,
     )
     .orderBy(asc(units.unitNumber))
     .limit(limit);
