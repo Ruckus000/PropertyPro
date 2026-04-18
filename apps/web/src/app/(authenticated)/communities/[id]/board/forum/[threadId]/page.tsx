@@ -1,4 +1,5 @@
 import { ForumThreadDetail } from '@/components/board/forum/forum-thread-detail';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { requireCommunityBoardEnabled, requirePollReadPermission } from '@/lib/polls/common';
@@ -16,12 +17,23 @@ export default async function ForumThreadPage({ params }: PageProps) {
 
   requireCommunityBoardEnabled(membership);
   requirePollReadPermission(membership);
+  const canModerateReplies = membership.isAdmin && checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'polls',
+    'write',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
 
   return (
     <ForumThreadDetail
       communityId={communityId}
       threadId={parsedThreadId}
       isAdmin={membership.isAdmin}
+      canModerateReplies={canModerateReplies}
     />
   );
 }

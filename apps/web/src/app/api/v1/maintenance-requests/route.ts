@@ -9,7 +9,7 @@
  * - Action-dispatch POST pattern (mirrors contracts/route.ts)
  *
  * Security invariants:
- * - internalNotes and isInternal=true comments never returned to RESIDENT_ROLES callers
+ * - internalNotes and isInternal=true comments never returned to resident callers
  * - Resident add_comment always stores isInternal=false regardless of request body
  * - Photo count ≤ 5 checked before issuing a new upload URL (resident callers)
  * - Resident read scope = own requests only
@@ -25,24 +25,18 @@ import {
   units,
 } from '@propertypro/db';
 import { eq, and, inArray } from '@propertypro/db/filters';
-import { ADMIN_ROLES as ADMIN_ROLES_LIST, RESIDENT_ROLES as RESIDENT_ROLES_LIST, getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
 import { formatRequest } from './_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ADMIN_ROLES = new Set<string>(ADMIN_ROLES_LIST);
-const RESIDENT_ROLES = new Set<string>(RESIDENT_ROLES_LIST);
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -108,8 +102,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ForbiddenError('Maintenance requests are not enabled for this community type');
   }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
-  const isAdmin = ADMIN_ROLES.has(membership.role);
-  const isResident = RESIDENT_ROLES.has(membership.role);
+  requirePermission(membership, 'maintenance', 'read');
+  const isResident = membership.role === 'resident';
+  const isStaff = membership.isAdmin;
 
   const page = Math.max(1, Number(searchParams.get('page') ?? '1'));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') ?? '20')));
@@ -126,7 +121,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (statusFilter) conditions.push(eq(maintenanceRequests.status, statusFilter as 'submitted' | 'acknowledged' | 'in_progress' | 'resolved' | 'closed' | 'open'));
   if (categoryFilter) conditions.push(eq(maintenanceRequests.category, categoryFilter));
   if (priorityFilter) conditions.push(eq(maintenanceRequests.priority, priorityFilter as 'low' | 'normal' | 'high' | 'urgent'));
-  if (isAdmin && assignedToIdFilter) conditions.push(eq(maintenanceRequests.assignedToId, assignedToIdFilter));
+  if (isStaff && assignedToIdFilter) conditions.push(eq(maintenanceRequests.assignedToId, assignedToIdFilter));
 
   const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
   const dbOffset = (page - 1) * limit;
@@ -219,6 +214,7 @@ async function handleCreateRequest(
     throw new ForbiddenError('Maintenance requests are not enabled for this community type');
   }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
+  requirePermission(createMembership, 'maintenance', 'write');
 
   const scoped = createScopedClient(communityId);
 
@@ -318,8 +314,8 @@ async function handleAddComment(
     throw new ForbiddenError('Maintenance requests are not enabled for this community type');
   }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
-  const isAdmin = ADMIN_ROLES.has(membership.role);
-  const isResident = RESIDENT_ROLES.has(membership.role);
+  requirePermission(membership, 'maintenance', 'write');
+  const isResident = membership.role === 'resident';
 
   const scoped = createScopedClient(communityId);
 
@@ -340,7 +336,7 @@ async function handleAddComment(
   }
 
   // Force isInternal=false for residents regardless of request body
-  const isInternal = isAdmin ? payload.isInternal : false;
+  const isInternal = isResident ? false : payload.isInternal;
 
   const insertedRows = await scoped.insert(maintenanceComments, {
     requestId: payload.requestId,
@@ -390,7 +386,8 @@ async function handleRequestUploadUrl(
     throw new ForbiddenError('Maintenance requests are not enabled for this community type');
   }
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
-  const isResident = RESIDENT_ROLES.has(membership.role);
+  requirePermission(membership, 'maintenance', 'write');
+  const isResident = membership.role === 'resident';
 
   if (payload.requestId != null) {
     // Verify ownership for residents

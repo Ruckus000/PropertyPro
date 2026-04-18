@@ -89,7 +89,15 @@ export function useCreatePackage(communityId: number) {
         body: JSON.stringify({ communityId, ...payload }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: PACKAGE_KEYS.all });
+      // refetchType: 'all' also refreshes inactive observers — e.g. the
+      // resident's useMyPackages query while staff is on the staff view, or
+      // a list view that was unmounted by a tab/dialog transition. Without
+      // this flag, the stale cache is shown the next time the user navigates
+      // back to the inactive view.
+      await queryClient.invalidateQueries({
+        queryKey: PACKAGE_KEYS.all,
+        refetchType: 'all',
+      });
     },
   });
 }
@@ -114,7 +122,13 @@ export function usePickupPackage(communityId: number) {
         },
       ),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: PACKAGE_KEYS.all });
+      // See useCreatePackage — refetchType: 'all' is required so the
+      // resident's /my list refreshes (it excludes picked_up packages)
+      // even if it's currently inactive.
+      await queryClient.invalidateQueries({
+        queryKey: PACKAGE_KEYS.all,
+        refetchType: 'all',
+      });
     },
   });
 }

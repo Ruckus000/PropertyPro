@@ -5,13 +5,16 @@
  * Auth: any community member.
  */
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { requirePermission } from '@/lib/db/access-control';
+import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { AnnouncementList } from '@/components/announcements/announcement-list';
+import { PageHeader } from '@/components/shared/page-header';
+import { Button } from '@/components/ui/button';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -42,11 +45,43 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
   requirePermission(membership, 'announcements', 'read');
+  const canWriteAnnouncements = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'announcements',
+    'write',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
   const query =
     typeof resolvedSearchParams['q'] === 'string' ? resolvedSearchParams['q'] : undefined;
   const { rows: items } = await listVisibleAnnouncements(context.communityId, membership, {
     query,
   });
 
-  return <AnnouncementList items={items} isAdmin={membership.isAdmin} />;
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Announcements"
+        description="Community updates, notices, and reminders."
+        actions={
+          canWriteAnnouncements ? (
+            <Button asChild>
+              <Link href={`/announcements/new?communityId=${context.communityId}`}>
+                New announcement
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <AnnouncementList
+        items={items}
+        communityId={context.communityId}
+        canWriteAnnouncements={canWriteAnnouncements}
+      />
+    </div>
+  );
 }

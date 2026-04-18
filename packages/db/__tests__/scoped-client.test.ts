@@ -26,6 +26,7 @@ const {
   mockValues,
   mockInsertInto,
   mockWhereOnSelect,
+  mockDynamicBuilder,
   mockFrom,
   mockSelect,
   mockDb,
@@ -40,9 +41,13 @@ const {
   const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
   const mockInsertInto = vi.fn().mockReturnValue({ values: mockValues });
 
-  const mockWhereOnSelect = vi.fn().mockReturnThis();
-  const mockFrom = vi.fn().mockReturnValue({ where: mockWhereOnSelect });
+  const mockDynamicBuilder = {
+    $dynamic: vi.fn(),
+  };
+  const mockWhereOnSelect = vi.fn().mockReturnValue(mockDynamicBuilder);
+  const mockFrom = vi.fn().mockReturnValue({ where: mockWhereOnSelect, $dynamic: mockDynamicBuilder.$dynamic });
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+  mockDynamicBuilder.$dynamic.mockReturnValue(mockDynamicBuilder);
 
   // transaction executes its callback immediately with the same mock db,
   // so update/softDelete/insert transaction wrappers work without a real connection.
@@ -64,6 +69,7 @@ const {
     mockValues,
     mockInsertInto,
     mockWhereOnSelect,
+    mockDynamicBuilder,
     mockFrom,
     mockSelect,
     mockDb,
@@ -99,6 +105,8 @@ beforeEach(() => {
   mockWhereOnDelete.mockReturnValue({ returning: mockReturning });
   mockDb.execute.mockResolvedValue([]);
   mockDb.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb));
+  mockDynamicBuilder.$dynamic.mockReturnValue(mockDynamicBuilder);
+  mockFrom.mockReturnValue({ where: mockWhereOnSelect, $dynamic: mockDynamicBuilder.$dynamic });
 });
 
 // ---------------------------------------------------------------------------
@@ -161,6 +169,7 @@ describe('createScopedClient', () => {
       // communities has deletedAt but no communityId
       expect(mockWhereOnSelect).toHaveBeenCalled();
     });
+
   });
 
   describe('insert', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildViolationSummary,
   selectRecentAnnouncements,
   selectUpcomingMeetings,
   toFirstName,
@@ -80,5 +81,38 @@ describe('dashboard data helpers', () => {
 
     const selected = selectUpcomingMeetings(rows);
     expect(selected[0]?.title).toBe('Board Meeting');
+  });
+
+  it('builds violation summaries from targeted aggregate rows', () => {
+    const summary = buildViolationSummary(
+      [
+        { status: 'reported', count: 2 },
+        { status: 'resolved', count: 1 },
+      ],
+      [
+        {
+          id: 7,
+          unitId: 101,
+          category: 'parking',
+          status: 'reported',
+          severity: 'moderate',
+          createdAt: new Date('2026-02-10T00:00:00.000Z'),
+        },
+      ],
+    );
+
+    expect(summary.total).toBe(3);
+    expect(summary.byStatus).toEqual({
+      reported: 2,
+      resolved: 1,
+    });
+    expect(summary.recentViolations[0]).toMatchObject({
+      id: 7,
+      unitId: 101,
+      category: 'parking',
+      status: 'reported',
+      severity: 'moderate',
+      createdAt: '2026-02-10T00:00:00.000Z',
+    });
   });
 });

@@ -1,12 +1,12 @@
 import { cache } from 'react';
-import { COMMUNITY_TYPES, getFeaturesForCommunity, isAnyCommunityRole } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import type {
   AnyCommunityRole,
   CommunityFeatures,
   CommunityType,
 } from '@propertypro/shared';
+import { ForbiddenError } from '@/lib/api/errors';
 import { getBrandingForCommunity } from '@/lib/api/branding';
-import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { getMembershipResourceAccess, type ResourceAccessMap } from '@/lib/db/access-control';
 import { getOptionalPageCommunityId, requirePageCommunityMembership } from './page-community-context';
 import { getOptionalPageAuthenticatedUser } from './page-auth-context';
@@ -37,21 +37,57 @@ export interface PageShellContext {
   demoExpiresAt: Date | null;
 }
 
+const EMPTY_PAGE_SHELL_CONTEXT: PageShellContext = {
+  user: null,
+  community: null,
+  role: null,
+  features: null,
+  resourceAccess: null,
+  subscriptionStatus: null,
+  freeAccessExpiresAt: null,
+  isDemo: false,
+  trialEndsAt: null,
+  demoExpiresAt: null,
+};
+
+const getPageActiveCommunityShellContextCached = cache(
+  async (
+    communityId: number,
+    userId: string,
+  ): Promise<Omit<PageShellContext, 'user'> | null> => {
+    try {
+      const membership = await requirePageCommunityMembership(communityId, userId);
+
+      return {
+        community: {
+          id: membership.communityId,
+          name: membership.communityName,
+          type: membership.communityType as CommunityType,
+          plan: membership.subscriptionPlan,
+        },
+        role: membership.role as AnyCommunityRole,
+        features: getFeaturesForCommunity(membership.communityType),
+        resourceAccess: getMembershipResourceAccess(membership),
+        subscriptionStatus: membership.subscriptionStatus,
+        freeAccessExpiresAt: membership.freeAccessExpiresAt,
+        isDemo: membership.isDemo,
+        trialEndsAt: membership.trialEndsAt,
+        demoExpiresAt: membership.demoExpiresAt,
+      };
+    } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return null;
+      }
+
+      throw error;
+    }
+  },
+);
+
 const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
   const user = await getOptionalPageAuthenticatedUser();
   if (!user) {
-    return {
-      user: null,
-      community: null,
-      role: null,
-      features: null,
-      resourceAccess: null,
-      subscriptionStatus: null,
-      freeAccessExpiresAt: null,
-      isDemo: false,
-      trialEndsAt: null,
-      demoExpiresAt: null,
-    };
+    return EMPTY_PAGE_SHELL_CONTEXT;
   }
 
   const shellUser: PageShellUser = {
@@ -63,76 +99,24 @@ const getPageShellContextCached = cache(async (): Promise<PageShellContext> => {
   const communityId = await getOptionalPageCommunityId();
   if (!communityId) {
     return {
+      ...EMPTY_PAGE_SHELL_CONTEXT,
       user: shellUser,
-      community: null,
-      role: null,
-      features: null,
-      resourceAccess: null,
-      subscriptionStatus: null,
-      freeAccessExpiresAt: null,
-      isDemo: false,
-      trialEndsAt: null,
-      demoExpiresAt: null,
     };
   }
 
-  const communities = await listCommunitiesForUser(user.id);
-  const match = communities.find((community) => community.communityId === communityId);
+  const activeCommunityContext = await getPageActiveCommunityShellContextCached(
+    communityId,
+    user.id,
+  );
 
-  if (!match) {
+  if (!activeCommunityContext) {
     return {
+      ...EMPTY_PAGE_SHELL_CONTEXT,
       user: shellUser,
-      community: null,
-      role: null,
-      features: null,
-      resourceAccess: null,
-      subscriptionStatus: null,
-      freeAccessExpiresAt: null,
-      isDemo: false,
-      trialEndsAt: null,
-      demoExpiresAt: null,
     };
   }
 
-  const communityType = match.communityType;
-  const role = match.role;
-  if (
-    !COMMUNITY_TYPES.includes(communityType as CommunityType) ||
-    !isAnyCommunityRole(role)
-  ) {
-    return {
-      user: shellUser,
-      community: null,
-      role: null,
-      features: null,
-      resourceAccess: null,
-      subscriptionStatus: null,
-      freeAccessExpiresAt: null,
-      isDemo: false,
-      trialEndsAt: null,
-      demoExpiresAt: null,
-    };
-  }
-
-  const membership = await requirePageCommunityMembership(match.communityId, user.id);
-
-  return {
-    user: shellUser,
-    community: {
-      id: match.communityId,
-      name: match.communityName,
-      type: communityType as CommunityType,
-      plan: match.subscriptionPlan ?? null,
-    },
-    role: membership.role,
-    features: getFeaturesForCommunity(communityType as CommunityType),
-    resourceAccess: getMembershipResourceAccess(membership),
-    subscriptionStatus: match.subscriptionStatus ?? null,
-    freeAccessExpiresAt: match.freeAccessExpiresAt ?? null,
-    isDemo: match.isDemo,
-    trialEndsAt: match.trialEndsAt ?? null,
-    demoExpiresAt: match.demoExpiresAt ?? null,
-  };
+  return { user: shellUser, ...activeCommunityContext };
 });
 
 const getPageBrandingCached = cache(async (communityId: number) =>

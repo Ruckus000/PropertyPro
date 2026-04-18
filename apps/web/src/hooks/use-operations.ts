@@ -1,6 +1,12 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  listAllRequests,
+  type ListAllRequestsParams,
+  type MaintenanceRequestItem,
+} from '@/lib/api/admin-maintenance';
+import { listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
 
 export interface OperationsListItem {
@@ -53,6 +59,13 @@ export interface ReservationListItem {
   updatedAt: string;
 }
 
+export type MaintenanceRequestScope = 'mine' | 'community';
+
+export interface MaintenanceRequestListResponse {
+  data: MaintenanceRequestItem[];
+  meta: { total: number; page: number; limit: number };
+}
+
 export const OPERATIONS_KEYS = {
   all: ['operations'] as const,
   summary: (communityId: number) => ['operations', 'summary', communityId] as const,
@@ -74,6 +87,25 @@ export const OPERATIONS_KEYS = {
     ] as const,
   detail: (communityId: number, itemId: number, type: OperationsListItem['type']) =>
     ['operations', 'detail', communityId, type, itemId] as const,
+} as const;
+
+export const MAINTENANCE_REQUEST_KEYS = {
+  list: (
+    communityId: number,
+    scope: MaintenanceRequestScope,
+    params?: ListAllRequestsParams,
+  ) => [
+    'maintenance-requests',
+    'list',
+    scope,
+    communityId,
+    params?.status ?? 'all',
+    params?.category ?? 'all',
+    params?.priority ?? 'all',
+    params?.assignedToId ?? 'all',
+    params?.page ?? 1,
+    params?.limit ?? 20,
+  ] as const,
 } as const;
 
 export const WORK_ORDER_KEYS = {
@@ -138,6 +170,36 @@ export function useWorkOrders(
     },
     enabled: enabled && communityId > 0,
     staleTime: 60_000,
+  });
+}
+
+export function useMaintenanceRequests(
+  communityId: number,
+  options?: {
+    scope?: MaintenanceRequestScope;
+    params?: ListAllRequestsParams;
+    enabled?: boolean;
+  },
+) {
+  const enabled = options?.enabled ?? true;
+  const scope = options?.scope ?? 'mine';
+  const params = options?.params;
+
+  return useQuery({
+    queryKey: MAINTENANCE_REQUEST_KEYS.list(communityId, scope, params),
+    queryFn: async (): Promise<MaintenanceRequestListResponse> => {
+      if (scope === 'community') {
+        return listAllRequests(communityId, params);
+      }
+
+      return listMyRequests(communityId, {
+        status: params?.status,
+        page: params?.page,
+        limit: params?.limit,
+      });
+    },
+    enabled: enabled && communityId > 0,
+    staleTime: 45_000,
   });
 }
 
