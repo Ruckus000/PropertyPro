@@ -46,12 +46,23 @@ describe('signup schema validation', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects weak passwords', () => {
+  it.each([
+    ['too short', 'Ab1!'],
+    ['missing lowercase', 'ABCDEFG1!'],
+    ['missing uppercase', 'abcdefg1!'],
+    ['missing number', 'Abcdefgh!'],
+    ['missing special character', 'Abcdefg1'],
+  ])('rejects password that is %s', (_label, password) => {
     const result = signupSchema.safeParse({
       ...validPayload,
-      password: 'password123',
+      password,
     });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts a fully compliant payload', () => {
+    const result = signupSchema.safeParse(validPayload);
+    expect(result.success).toBe(true);
   });
 
   it('rejects invalid emails', () => {

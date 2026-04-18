@@ -12,6 +12,7 @@ import {
   suggestSubdomainFromCommunityName,
   type SignupPlanId,
 } from '@/lib/auth/signup-schema';
+import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import {
   CommunityTypeSelector,
 } from './community-type-selector';
@@ -79,14 +80,6 @@ export function SignupForm({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
   const formRef = useRef<HTMLFormElement>(null);
-
-  const passwordChecks = useMemo(() => ({
-    length: password.length >= 8,
-    lowercase: /[a-z]/.test(password),
-    uppercase: /[A-Z]/.test(password),
-    number: /\d/.test(password),
-    special: /[^A-Za-z0-9]/.test(password),
-  }), [password]);
 
   const plans = useMemo(
     () => getSignupPlansForCommunityType(communityType),
@@ -346,30 +339,17 @@ export function SignupForm({
             required
             minLength={8}
             maxLength={72}
+            aria-describedby="signup-password-strength"
           />
         </label>
         {fieldErrors.password ? (
           <span className="mt-1 block text-xs text-status-danger">{fieldErrors.password}</span>
         ) : null}
-        {password.length > 0 ? (
-          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
-            <li className={passwordChecks.length ? 'text-status-success' : 'text-content-secondary'}>
-              {passwordChecks.length ? '\u2713' : '\u2022'} 8+ characters
-            </li>
-            <li className={passwordChecks.lowercase ? 'text-status-success' : 'text-content-secondary'}>
-              {passwordChecks.lowercase ? '\u2713' : '\u2022'} Lowercase letter
-            </li>
-            <li className={passwordChecks.uppercase ? 'text-status-success' : 'text-content-secondary'}>
-              {passwordChecks.uppercase ? '\u2713' : '\u2022'} Uppercase letter
-            </li>
-            <li className={passwordChecks.number ? 'text-status-success' : 'text-content-secondary'}>
-              {passwordChecks.number ? '\u2713' : '\u2022'} Number
-            </li>
-            <li className={passwordChecks.special ? 'text-status-success' : 'text-content-secondary'}>
-              {passwordChecks.special ? '\u2713' : '\u2022'} Special character
-            </li>
-          </ul>
-        ) : null}
+        <PasswordStrengthIndicator
+          password={password}
+          id="signup-password-strength"
+          hideOnEmpty
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
