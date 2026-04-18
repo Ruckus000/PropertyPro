@@ -25,6 +25,7 @@ import {
   ensureNotificationPreference,
   seedCommunity,
   seedDocumentCategories,
+  reconcilePublicUserIdWithAuthId,
   seedRoles,
   type SeededDocumentCategoryIds,
   type SeedCommunityConfig,
@@ -228,6 +229,17 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
     .limit(1);
 
   if (existingByEmail[0]) {
+    let effectiveId = existingByEmail[0].id;
+    const authId = await findAuthUserIdByEmail(normalizedEmail);
+    if (authId && existingByEmail[0].id !== authId) {
+      await reconcilePublicUserIdWithAuthId(existingByEmail[0].id, authId, {
+        email: normalizedEmail,
+        fullName: demoUser.fullName,
+        phone: demoUser.phone,
+      });
+      effectiveId = authId;
+    }
+
     await db
       .update(users)
       .set({
@@ -235,8 +247,8 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
         phone: demoUser.phone,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, existingByEmail[0].id));
-    return existingByEmail[0].id;
+      .where(eq(users.id, effectiveId));
+    return effectiveId;
   }
 
   const userId = preferredId ?? crypto.randomUUID();
