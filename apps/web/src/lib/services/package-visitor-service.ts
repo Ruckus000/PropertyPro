@@ -11,6 +11,7 @@ import {
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
+import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import {
   deriveVisitorStatus,
   filterDeniedVisitorMatches,
@@ -41,6 +42,7 @@ interface VisitorLogRow {
   visitorName: string;
   purpose: string;
   hostUnitId: number;
+  hostUnitLabel?: string | null;
   hostUserId: string | null;
   expectedArrival: Date;
   checkedInAt: Date | null;
@@ -61,6 +63,23 @@ interface VisitorLogRow {
   revokedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+async function attachUnitLabel(
+  communityId: number,
+  row: VisitorLogRow,
+): Promise<VisitorLogRow> {
+  const labelMap = await getUnitLabelMap(communityId, [row.hostUnitId]);
+  return { ...row, hostUnitLabel: labelMap.get(row.hostUnitId) ?? null };
+}
+
+async function attachUnitLabels(
+  communityId: number,
+  rows: VisitorLogRow[],
+): Promise<VisitorLogRow[]> {
+  const unitIds = [...new Set(rows.map((r) => r.hostUnitId))];
+  const labelMap = await getUnitLabelMap(communityId, unitIds);
+  return rows.map((r) => ({ ...r, hostUnitLabel: labelMap.get(r.hostUnitId) ?? null }));
 }
 
 interface UnitResidentRow {
@@ -85,6 +104,7 @@ export interface CreateVisitorInput {
   visitorName: string;
   purpose: string;
   hostUnitId: number;
+  hostUnitLabel?: string;
   expectedArrival?: string;
   notes?: string | null;
   guestType?: 'one_time' | 'recurring' | 'permanent' | 'vendor';
@@ -490,7 +510,11 @@ export async function createVisitorForCommunity(
     },
   });
 
-  return created;
+  if (input.hostUnitLabel != null) {
+    created.hostUnitLabel = input.hostUnitLabel;
+    return created;
+  }
+  return attachUnitLabel(communityId, created);
 }
 
 export async function listVisitorsForCommunity(
@@ -505,15 +529,15 @@ export async function listVisitorsForCommunity(
   } = {},
 ): Promise<VisitorLogRow[]> {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped
+  const rows = (await scoped
     .selectFrom<VisitorLogRow>(
       visitorLog,
       {},
       buildVisitorWhereClause(options),
     )
-    .orderBy(desc(visitorLog.expectedArrival), desc(visitorLog.id));
+    .orderBy(desc(visitorLog.expectedArrival), desc(visitorLog.id))) as VisitorLogRow[];
 
-  return rows;
+  return attachUnitLabels(communityId, rows);
 }
 
 export async function checkInVisitorForCommunity(
@@ -553,7 +577,7 @@ export async function checkInVisitorForCommunity(
         transition: 'checkin',
       },
     });
-    return existing;
+    return attachUnitLabel(communityId, existing);
   }
 
   const [updated] = await scoped.update(
@@ -594,7 +618,7 @@ export async function checkInVisitorForCommunity(
     `Your visitor ${existing.visitorName} was checked in successfully.`,
   );
 
-  return row;
+  return attachUnitLabel(communityId, row);
 }
 
 export async function checkOutVisitorForCommunity(
@@ -627,7 +651,7 @@ export async function checkOutVisitorForCommunity(
         transition: 'checkout',
       },
     });
-    return existing;
+    return attachUnitLabel(communityId, existing);
   }
 
   const [updated] = await scoped.update(
@@ -659,7 +683,7 @@ export async function checkOutVisitorForCommunity(
     },
   });
 
-  return row;
+  return attachUnitLabel(communityId, row);
 }
 
 export async function listMyVisitorsForCommunity(
@@ -701,7 +725,7 @@ export async function revokeVisitorForCommunity(
       resourceId: String(visitorId),
       metadata: { requestId, idempotent: true, transition: 'revoke' },
     });
-    return existing;
+    return attachUnitLabel(communityId, existing);
   }
 
   const [updated] = await scoped.update(
@@ -736,7 +760,7 @@ export async function revokeVisitorForCommunity(
       : `The visitor pass for ${existing.visitorName} was revoked.`,
   );
 
-  return row;
+  return attachUnitLabel(communityId, row);
 }
 
 export async function revokeVisitorPassesForUser(
