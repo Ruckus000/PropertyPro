@@ -63,6 +63,14 @@ const APARTMENT_FEATURES: CommunityFeatures = {
   hasEmergencyNotifications: true,
 };
 
+// HOA (§720) feature shape — packages and visitors are NOT included.
+// Locks in the existing nav gating so a regression flips to a stale-link state.
+const HOA_FEATURES: CommunityFeatures = {
+  ...ALL_FEATURES,
+  hasPackageLogging: false,
+  hasVisitorLogging: false,
+};
+
 describe('NAV_SECTIONS', () => {
   it('exposes the expected section order', () => {
     expect(NAV_SECTIONS.map((section) => section.label)).toEqual([
@@ -151,6 +159,16 @@ describe('getVisibleItems', () => {
   it('shows all items when role/features are null', () => {
     const items = getVisibleItems(NAV_ITEMS, null, null);
     expect(items.length).toBe(NAV_ITEMS.length);
+  });
+
+  it('hides packages and visitors for HOA communities (regression)', () => {
+    // hasPackageLogging=false at the community-type layer must hide the
+    // packages nav item entirely so users do not click into a guard state
+    // they cannot resolve. Same for visitors.
+    const items = getVisibleItems(NAV_ITEMS, 'board_member', HOA_FEATURES);
+    const ids = items.map((i) => i.id);
+    expect(ids).not.toContain('packages');
+    expect(ids).not.toContain('visitors');
   });
 });
 

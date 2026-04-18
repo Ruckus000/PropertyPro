@@ -58,4 +58,40 @@ describe('useFilteredRegistry', () => {
     expect(ids).not.toContain('action-schedule-meeting');
     expect(ids).not.toContain('action-upload-document');
   });
+
+  it('resolves the post announcement quick action to the routed create page', () => {
+    const { result } = renderHook(() =>
+      useFilteredRegistry(
+        'board_president',
+        {
+          hasMeetings: true,
+        } as never,
+        42,
+        buildAccess({
+          announcements: { read: true, write: true },
+        }),
+      ),
+    );
+
+    const postAnnouncement = result.current.find((item) => item.id === 'action-post-announcement');
+    expect(postAnnouncement?.href).toBe('/announcements/new?communityId=42');
+  });
+
+  it('resolves the announcements page entry to the scoped announcements list', () => {
+    const { result } = renderHook(() =>
+      useFilteredRegistry(
+        'board_president',
+        {
+          hasMeetings: true,
+        } as never,
+        42,
+        buildAccess({
+          announcements: { read: true, write: true },
+        }),
+      ),
+    );
+
+    const announcementsPage = result.current.find((item) => item.id === 'page-announcements');
+    expect(announcementsPage?.href).toBe('/announcements?communityId=42');
+  });
 });

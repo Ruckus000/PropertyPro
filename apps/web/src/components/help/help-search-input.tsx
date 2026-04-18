@@ -1,19 +1,30 @@
+import { cn } from '@/lib/utils';
+
 interface HelpSearchInputProps {
-  communityId: number;
+  communityId?: number;
   defaultValue?: string;
+  placeholder?: string;
+  className?: string;
+  autoFocus?: boolean;
 }
 
 export function HelpSearchInput({
   communityId,
   defaultValue = '',
+  placeholder = 'Search guides, FAQs, and common tasks',
+  className,
+  autoFocus = false,
 }: HelpSearchInputProps) {
   return (
     <form
       action="/help/search"
       method="GET"
-      className="rounded-2xl border border-edge bg-surface-card p-4 shadow-sm"
+      role="search"
+      className={cn('rounded-2xl border border-edge bg-surface-card p-4 shadow-sm', className)}
     >
-      <input type="hidden" name="communityId" value={communityId} />
+      {typeof communityId === 'number' && (
+        <input type="hidden" name="communityId" value={communityId} />
+      )}
       <label htmlFor="help-search" className="block text-sm font-medium text-content">
         Search the help center
       </label>
@@ -22,7 +33,8 @@ export function HelpSearchInput({
           id="help-search"
           name="q"
           defaultValue={defaultValue}
-          placeholder="Search guides, FAQs, and common tasks"
+          placeholder={placeholder}
+          autoFocus={autoFocus}
           className="h-11 flex-1 rounded-xl border border-edge bg-surface-page px-3 text-sm text-content placeholder:text-content-disabled focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         />
         <button

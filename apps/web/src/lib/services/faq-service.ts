@@ -27,10 +27,9 @@ export function isFaqVisibleToRole(
   role: string | null | undefined,
 ): boolean {
   const allowedRoles = (
-    'roleVisibility' in faq
-      ? faq.roleVisibility
-      : faq['roleVisibility']
+    'roleVisibility' in faq ? faq.roleVisibility : faq['roleVisibility']
   ) as string[] | null | undefined;
+
   if (!allowedRoles || allowedRoles.length === 0) {
     return true;
   }
@@ -55,7 +54,7 @@ export function toVisibleFaq(faq: FaqLike): VisibleFaq {
     id: faq['id'] as number,
     question: faq['question'] as string,
     answer: faq['answer'] as string,
-    sortOrder: ((faq['sortOrder'] as number | null | undefined) ?? 0),
+    sortOrder: (faq['sortOrder'] as number | null | undefined) ?? 0,
     category: (faq['category'] as string | null | undefined) ?? null,
     roleVisibility: (faq['roleVisibility'] as string[] | null | undefined) ?? null,
   };
@@ -74,7 +73,9 @@ export async function ensureFaqsExist(communityId: number): Promise<void> {
   const scoped = createScopedClient(communityId);
   const existing = await scoped.query(faqs);
 
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    return;
+  }
 
   await scoped.insert(faqs, buildDefaultFaqRows());
 }

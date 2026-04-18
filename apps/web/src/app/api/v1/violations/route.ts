@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient } from '@propertypro/db';
+import { createScopedClient, units } from '@propertypro/db';
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -17,6 +18,7 @@ import {
   requireViolationsReadPermission,
   requireViolationsWritePermission,
 } from '@/lib/violations/common';
+import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import {
   createViolationForCommunity,
   listViolationsForCommunity,
@@ -84,7 +86,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     createdBefore,
   });
 
-  return NextResponse.json({ data });
+  const hydrated = await hydrateReportedByRole(scoped, data);
+  return NextResponse.json({ data: hydrated });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -108,6 +111,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const scoped = createScopedClient(communityId);
   if (isResidentRole(membership.role)) {
     const unitIds = await getActorUnitIds(scoped, actorUserId);
+    if (unitIds.length === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You must be associated with a unit before reporting a violation',
+          },
+        },
+        { status: 403 },
+      );
+    }
     if (!unitIds.includes(parseResult.data.unitId)) {
       return NextResponse.json(
         {
@@ -118,6 +132,18 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         },
         { status: 403 },
       );
+    }
+  } else {
+    // Staff path: validate target unit belongs to this scoped community.
+    // createScopedClient injects community_id + deletedAt IS NULL, so a unitId
+    // from another tenant returns zero rows here and surfaces as NotFound.
+    const matches = await scoped.selectFrom<{ id: number }>(
+      units,
+      { id: units.id },
+      eq(units.id, parseResult.data.unitId),
+    );
+    if (matches.length === 0) {
+      throw new NotFoundError(`Unit ${parseResult.data.unitId} not found in this community`);
     }
   }
 

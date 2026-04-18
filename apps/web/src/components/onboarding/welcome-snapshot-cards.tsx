@@ -208,12 +208,18 @@ function getCommunityTypeLabel(type: CommunityData['communityType']): string {
 // ─── Owner Cards ──────────────────────────────────────────────
 
 interface OwnerCardsProps {
+  communityId: number;
   community: CommunityData;
   announcement: AnnouncementData | null;
   compliance: ComplianceData;
 }
 
-export function OwnerCards({ community, announcement, compliance }: OwnerCardsProps) {
+export function OwnerCards({
+  communityId,
+  community,
+  announcement,
+  compliance,
+}: OwnerCardsProps) {
   const location = [community.city, community.state].filter(Boolean).join(', ');
 
   return (
@@ -239,7 +245,10 @@ export function OwnerCards({ community, announcement, compliance }: OwnerCardsPr
             <p className="mt-1 text-xs text-content-tertiary">
               Posted {formatDate(announcement.publishedAt)}
             </p>
-            <ActionLink href="/announcements" label="View announcements" />
+            <ActionLink
+              href={`/announcements?communityId=${communityId}`}
+              label="View announcements"
+            />
           </>
         ) : (
           <p className="text-sm text-content-tertiary">No announcements yet</p>

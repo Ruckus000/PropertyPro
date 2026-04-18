@@ -37,6 +37,11 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   const requestsEnabled = features.hasMaintenanceRequests && canReadResource(membership, 'maintenance');
   const workOrdersEnabled = features.hasWorkOrders && canReadResource(membership, 'work_orders');
   const reservationsEnabled = features.hasAmenities && canReadResource(membership, 'amenities');
+  const requestScope = membership.role === 'resident' ? 'mine' : 'community';
+  const requestActionHref = membership.role === 'resident'
+    ? `/maintenance/submit?communityId=${communityId}`
+    : `/maintenance/inbox?communityId=${communityId}`;
+  const requestActionLabel = membership.role === 'resident' ? 'Submit Request' : 'Open Inbox';
 
   if (!requestsEnabled && !workOrdersEnabled && !reservationsEnabled) {
     throw new ForbiddenError('Operations are not enabled for this community or role');
@@ -53,6 +58,9 @@ export default async function OperationsPage({ params, searchParams }: PageProps
       requestsEnabled={requestsEnabled}
       workOrdersEnabled={workOrdersEnabled}
       reservationsEnabled={reservationsEnabled}
+      requestScope={requestScope}
+      requestActionHref={requestActionHref}
+      requestActionLabel={requestActionLabel}
     />
   );
 }

@@ -19,11 +19,17 @@ function formatCents(cents: number): string {
 
 interface FinanceKpiRowProps {
   communityId: number;
+  delinquencyEnabled?: boolean;
 }
 
-export function FinanceKpiRow({ communityId }: FinanceKpiRowProps) {
+export function FinanceKpiRow({
+  communityId,
+  delinquencyEnabled = false,
+}: FinanceKpiRowProps) {
   const { data: assessments, isLoading: assessmentsLoading } = useAssessments(communityId);
-  const { data: delinquent, isLoading: delinquentLoading } = useDelinquency(communityId);
+  const { data: delinquent, isLoading: delinquentLoading } = useDelinquency(communityId, {
+    enabled: delinquencyEnabled,
+  });
 
   // Total assessed = sum of active assessment amounts
   const totalAssessedCents =
@@ -37,6 +43,8 @@ export function FinanceKpiRow({ communityId }: FinanceKpiRowProps) {
 
   // Delinquent unit count
   const delinquentCount = delinquent?.length ?? 0;
+  const delinquencyValue = delinquencyEnabled ? formatCents(overdueCents) : '--';
+  const delinquentUnitsValue = delinquencyEnabled ? String(delinquentCount) : '--';
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -54,13 +62,13 @@ export function FinanceKpiRow({ communityId }: FinanceKpiRowProps) {
       />
       <KpiCard
         title="Overdue Balance"
-        value={formatCents(overdueCents)}
+        value={delinquencyValue}
         icon={AlertTriangle}
         isLoading={delinquentLoading}
       />
       <KpiCard
         title="Delinquent Units"
-        value={String(delinquentCount)}
+        value={delinquentUnitsValue}
         icon={Users}
         isLoading={delinquentLoading}
       />

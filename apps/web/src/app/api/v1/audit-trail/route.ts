@@ -14,9 +14,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   createScopedClient,
   complianceAuditLog,
-  userRoles,
 } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, lte, sql } from '@propertypro/db/filters';
+import { and, desc, eq, gte, lte, sql } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -24,6 +23,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
 import { requirePermission } from '@/lib/db/access-control';
+import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -148,29 +148,6 @@ function encodeCursor(row: AuditLogRow): string {
   return Buffer.from(
     JSON.stringify({ createdAt: row.createdAt.toISOString(), id: row.id }),
   ).toString('base64');
-}
-
-/**
- * Load user display names for a set of userIds within a community.
- * Uses scoped user_roles to get community-specific user IDs, then matches.
- */
-async function loadUserDisplayNames(
-  communityId: number,
-  userIds: Set<string>,
-): Promise<Map<string, string>> {
-  if (userIds.size === 0) return new Map();
-
-  const scoped = createScopedClient(communityId);
-  const roleRows = await scoped.selectFrom(userRoles, {}, inArray(userRoles.userId, [...userIds]));
-
-  const nameMap = new Map<string, string>();
-  for (const row of roleRows as unknown as Record<string, unknown>[]) {
-    const userId = row['userId'] as string;
-    // Use userId as fallback display name (actual name lookup would require users table)
-    nameMap.set(userId, userId.substring(0, 8));
-  }
-
-  return nameMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -316,8 +293,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }));
 
   // Load user display names for this page
-  const userIds = new Set(page.flatMap((row) => (row.userId ? [row.userId] : [])));
-  const userNames = await loadUserDisplayNames(communityId, userIds);
+  const userIds = page.flatMap((row) => (row.userId ? [row.userId] : []));
+  const userNames = await resolveUserDisplayNames(communityId, userIds);
 
   return NextResponse.json({
     data: redactedPage,

@@ -1,29 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FinanceKpiRow } from './finance-kpi-row';
 import { AssessmentManager } from './assessment-manager';
 import { LedgerTable } from './ledger-table';
 import { DelinquencyTable } from './delinquency-table';
+import { useRecentPayments } from '@/hooks/use-finance';
 
 /* ─────── Types ─────── */
-
-interface PaymentHistoryItem {
-  id: number;
-  unitId: number;
-  amountCents: number;
-  dueDate: string;
-  paidAt: string | null;
-  lateFeeCents: number;
-}
 
 interface FinanceDashboardProps {
   communityId: number;
   userId: string;
   userRole: string;
 }
+
+type FinanceTab = 'assessments' | 'delinquency' | 'ledger' | 'payments';
 
 /* ─────── Helpers ─────── */
 
@@ -41,25 +34,39 @@ function formatDateTime(dateStr: string): string {
   });
 }
 
-/* ─────── Fetch ─────── */
-
-async function fetchPaymentHistory(communityId: number): Promise<PaymentHistoryItem[]> {
-  const res = await fetch(`/api/v1/payments/history?communityId=${communityId}`);
-  if (!res.ok) throw new Error('Failed to load payment history');
-  const json = await res.json();
-  return json.data;
-}
-
 /* ─────── Main Component ─────── */
 
 export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashboardProps) {
+  const [activeTab, setActiveTab] = useState<FinanceTab>('assessments');
+  const [visitedTabs, setVisitedTabs] = useState<Record<FinanceTab, boolean>>({
+    assessments: true,
+    delinquency: false,
+    ledger: false,
+    payments: false,
+  });
+
+  const handleTabChange = (value: string) => {
+    const nextTab = value as FinanceTab;
+    setActiveTab(nextTab);
+    setVisitedTabs((current) =>
+      current[nextTab] ? current : { ...current, [nextTab]: true },
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* KPI Row */}
-      <FinanceKpiRow communityId={communityId} />
+      <FinanceKpiRow
+        communityId={communityId}
+        delinquencyEnabled={visitedTabs.delinquency}
+      />
 
       {/* Tabbed Content */}
-      <Tabs defaultValue="assessments" className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="space-y-4"
+      >
         <TabsList>
           <TabsTrigger value="assessments">Assessments</TabsTrigger>
           <TabsTrigger value="delinquency">Delinquency</TabsTrigger>
@@ -68,23 +75,31 @@ export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashb
         </TabsList>
 
         <TabsContent value="assessments">
-          <AssessmentManager
-            communityId={communityId}
-            userId={userId}
-            userRole={userRole}
-          />
+          {activeTab === 'assessments' && visitedTabs.assessments ? (
+            <AssessmentManager
+              communityId={communityId}
+              userId={userId}
+              userRole={userRole}
+            />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="delinquency">
-          <DelinquencyTable communityId={communityId} />
+          {activeTab === 'delinquency' && visitedTabs.delinquency ? (
+            <DelinquencyTable communityId={communityId} />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="ledger">
-          <LedgerTable communityId={communityId} />
+          {activeTab === 'ledger' && visitedTabs.ledger ? (
+            <LedgerTable communityId={communityId} />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="payments">
-          <RecentPayments communityId={communityId} />
+          {activeTab === 'payments' && visitedTabs.payments ? (
+            <RecentPayments communityId={communityId} />
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>
@@ -94,11 +109,7 @@ export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashb
 /* ─────── Recent Payments (kept from original) ─────── */
 
 function RecentPayments({ communityId }: { communityId: number }) {
-  const { data: items, isLoading: loading } = useQuery({
-    queryKey: ['finance-payments', communityId],
-    queryFn: () => fetchPaymentHistory(communityId),
-    staleTime: 30_000,
-  });
+  const { data: items, isLoading: loading } = useRecentPayments(communityId);
 
   if (loading) {
     return <div className="h-48 animate-pulse rounded-md bg-surface-muted" />;

@@ -11,6 +11,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const branding = await resolveAuthPageBranding();
   const returnTo = resolveReturnTo(params.returnTo, branding.hasTenantContext);
+  const resetStatus = typeof params.reset === 'string' ? params.reset : null;
 
   const heading = branding.communityName
     ? `Sign in to ${branding.communityName}`
@@ -40,6 +41,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               Use your email and password to access your community portal.
             </p>
           </div>
+          {resetStatus === 'success' ? (
+            <div
+              role="status"
+              className="rounded-md border border-status-success-border bg-status-success-bg px-4 py-3 text-sm text-status-success"
+            >
+              Your password has been updated. Sign in with your new password to continue.
+            </div>
+          ) : null}
           <LoginForm returnTo={returnTo} />
           <div className="space-y-2 text-center text-sm">
             <p className="text-content-secondary">

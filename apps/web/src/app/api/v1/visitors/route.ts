@@ -21,6 +21,7 @@ import {
   createVisitorForCommunity,
   listVisitorsForCommunity,
 } from '@/lib/services/package-visitor-service';
+import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
 
 const createVisitorCommunitySchema = z.object({
   communityId: z.number().int().positive(),
@@ -31,7 +32,7 @@ const createVisitorSchema = z
     communityId: z.number().int().positive(),
     visitorName: z.string().trim().min(1).max(240),
     purpose: z.string().trim().min(1).max(240),
-    hostUnitId: z.number().int().positive(),
+    hostUnitLabel: z.string().trim().min(1).max(100),
     expectedArrival: z.string().datetime({ offset: true }).optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
     guestType: z
@@ -219,10 +220,32 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const scoped = createScopedClient(communityId);
+
+  const resolution = await resolveUnitIdByLabel(communityId, parsed.data.hostUnitLabel);
+  if (resolution.kind !== 'resolved') {
+    if (isResidentRole(membership.role)) {
+      throw new ValidationError('Invalid visitor payload', {
+        fields: { hostUnitLabel: 'Unit not found or not accessible' },
+      });
+    }
+    throw new ValidationError('Invalid visitor payload', {
+      fields: {
+        hostUnitLabel:
+          resolution.kind === 'ambiguous'
+            ? 'Multiple units share this label; contact your administrator to resolve duplicates'
+            : 'Unit not found',
+      },
+    });
+  }
+  const hostUnitId = resolution.unitId;
+  const canonicalHostUnitLabel = resolution.unitNumber;
+
   if (isResidentRole(membership.role)) {
     const allowedUnitIds = await requireActorUnitIds(scoped, actorUserId);
-    if (!allowedUnitIds.includes(parsed.data.hostUnitId)) {
-      throw new ForbiddenError('You can only create visitor passes for your own unit');
+    if (!allowedUnitIds.includes(hostUnitId)) {
+      throw new ValidationError('Invalid visitor payload', {
+        fields: { hostUnitLabel: 'Unit not found or not accessible' },
+      });
     }
   } else {
     requireStaffOperator(membership);
@@ -235,7 +258,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     {
       visitorName: parsed.data.visitorName,
       purpose: parsed.data.purpose,
-      hostUnitId: parsed.data.hostUnitId,
+      hostUnitId,
+      hostUnitLabel: canonicalHostUnitLabel,
       expectedArrival: parsed.data.expectedArrival,
       notes: parsed.data.notes ?? null,
       guestType: parsed.data.guestType,

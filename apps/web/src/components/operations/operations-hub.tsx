@@ -1,14 +1,21 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useOperations, useReservations, useWorkOrders } from '@/hooks/use-operations';
-import { listMyRequests } from '@/lib/api/maintenance-requests';
+import {
+  useMaintenanceRequests,
+  useOperations,
+  useReservations,
+  useWorkOrders,
+  type MaintenanceRequestScope,
+} from '@/hooks/use-operations';
 import { cn } from '@/lib/utils';
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
@@ -26,6 +33,9 @@ interface OperationsHubProps {
   requestsEnabled: boolean;
   workOrdersEnabled: boolean;
   reservationsEnabled: boolean;
+  requestScope: MaintenanceRequestScope;
+  requestActionHref?: string;
+  requestActionLabel?: string;
 }
 
 export function OperationsHub({
@@ -34,12 +44,15 @@ export function OperationsHub({
   requestsEnabled,
   workOrdersEnabled,
   reservationsEnabled,
+  requestScope,
+  requestActionHref,
+  requestActionLabel,
 }: OperationsHubProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = (searchParams.get('tab') ?? 'requests') as OperationsTab;
-  const summaryEnabled = requestsEnabled && workOrdersEnabled;
+  const summaryEnabled = requestsEnabled && workOrdersEnabled && requestScope === 'community';
   const availableTabs = TABS.filter((candidate) => {
     switch (candidate.id) {
       case 'all':
@@ -58,11 +71,9 @@ export function OperationsHub({
   const operationsQuery = useOperations(communityId, { limit: 50 }, { enabled: summaryEnabled });
   const workOrdersQuery = useWorkOrders(communityId, undefined, { enabled: workOrdersEnabled });
   const reservationsQuery = useReservations(communityId, { enabled: reservationsEnabled });
-  const requestsQuery = useQuery({
-    queryKey: ['maintenance-requests', 'operations', communityId],
-    queryFn: async () => listMyRequests(communityId),
-    enabled: requestsEnabled && communityId > 0,
-    staleTime: 45_000,
+  const requestsQuery = useMaintenanceRequests(communityId, {
+    scope: requestScope,
+    enabled: requestsEnabled,
   });
 
   useEffect(() => {
@@ -118,6 +129,31 @@ export function OperationsHub({
     router.replace(`${pathname}?${params.toString()}`);
   }
 
+  const requestsDescription = requestScope === 'community'
+    ? 'Review community requests, work orders, and reservations from one hub.'
+    : 'Track your requests, work orders, and reservations from one hub.';
+
+  const requestsEmptyState = selectedTab === 'requests'
+    ? (
+      <EmptyState
+        title={requestScope === 'community' ? 'No maintenance requests yet' : 'No maintenance requests yet'}
+        description={
+          requestScope === 'community'
+            ? 'Resident submissions will appear here as they come in.'
+            : 'Submit a request to start tracking repairs and follow-up here.'
+        }
+        icon="wrench"
+        action={
+          requestActionHref && requestActionLabel ? (
+            <Button asChild size="sm">
+              <Link href={requestActionHref}>{requestActionLabel}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
+    )
+    : <EmptyState preset="no_operations_items" />;
+
   return (
     <div className="space-y-6">
       {legacyNotice ? (
@@ -128,12 +164,17 @@ export function OperationsHub({
         />
       ) : null}
 
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold text-content">Operations</h1>
-        <p className="max-w-2xl text-sm text-content-secondary">
-          Track requests, work orders, and reservations from one hub.
-        </p>
-      </header>
+      <PageHeader
+        title="Operations"
+        description={requestsDescription}
+        actions={
+          requestActionHref && requestActionLabel && requestsEnabled ? (
+            <Button asChild size="sm">
+              <Link href={requestActionHref}>{requestActionLabel}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
 
       <nav
         className="flex flex-wrap gap-2 border-b border-edge pb-3"
@@ -195,7 +236,7 @@ export function OperationsHub({
         ) : null}
 
         {!activeState.isLoading && !activeState.error && !activeState.hasData && !operationsPartialFailure ? (
-          <EmptyState preset="no_operations_items" />
+          requestsEmptyState
         ) : null}
 
         {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data ? (

@@ -9,14 +9,24 @@ import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireCommunityBoardEnabled,
+  requireForumModerationPermission,
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { createForumReplyForCommunity } from '@/lib/services/polls-service';
+import {
+  createForumReplyForCommunity,
+  deleteForumReplyForCommunity,
+} from '@/lib/services/polls-service';
 
 const createReplySchema = z.object({
   communityId: z.number().int().positive(),
   body: z.string().trim().min(1).max(8000),
+});
+
+const deleteReplySchema = z.object({
+  communityId: z.number().int().positive(),
+  replyId: z.number().int().positive(),
+  moderationReason: z.string().trim().min(1).max(500).optional(),
 });
 
 export const POST = withErrorHandler(
@@ -51,5 +61,42 @@ export const POST = withErrorHandler(
     );
 
     return NextResponse.json({ data }, { status: 201 });
+  },
+);
+
+export const DELETE = withErrorHandler(
+  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
+    const params = await context?.params;
+    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
+
+    const actorUserId = await requireAuthenticatedUserId();
+    const body: unknown = await req.json();
+    const parsed = deleteReplySchema.safeParse(body);
+
+    if (!parsed.success) {
+      throw new ValidationError('Invalid reply moderation payload', {
+        fields: formatZodErrors(parsed.error),
+      });
+    }
+
+    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+
+    requireCommunityBoardEnabled(membership);
+    requirePollWritePermission(membership);
+    requireForumModerationPermission(membership);
+
+    const requestId = req.headers.get('x-request-id');
+    await deleteForumReplyForCommunity(
+      communityId,
+      threadId,
+      parsed.data.replyId,
+      actorUserId,
+      requestId,
+      parsed.data.moderationReason,
+    );
+
+    return NextResponse.json({ data: { id: parsed.data.replyId, deleted: true } });
   },
 );

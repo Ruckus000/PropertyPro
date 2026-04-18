@@ -23,9 +23,12 @@ const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 export interface SubdomainAvailabilityResult {
   normalizedSubdomain: string;
   available: boolean;
-  reason: 'invalid' | 'reserved' | 'taken' | 'available';
+  reason: 'invalid' | 'reserved' | 'taken' | 'available' | 'unknown';
   message: string;
 }
+
+const SUBDOMAIN_UNKNOWN_MESSAGE =
+  "We couldn't verify this subdomain right now. Please try again in a moment.";
 
 export interface SignupSubmitResult {
   signupRequestId: string;
@@ -37,11 +40,16 @@ export interface SignupSubmitResult {
 
 export async function checkSignupSubdomainAvailability(
   rawSubdomain: string,
-  options?: { excludeSignupRequestId?: string },
+  options?: { excludeSignupRequestId?: string; signupRequestId?: string },
 ): Promise<SubdomainAvailabilityResult> {
   const normalizedSubdomain = normalizeSignupSubdomain(rawSubdomain);
+  const logContext = {
+    signupRequestId: options?.signupRequestId,
+    normalizedSubdomain,
+  };
 
   if (!normalizedSubdomain || normalizedSubdomain.length < 3) {
+    console.info(JSON.stringify({ event: 'subdomain.check.invalid', ...logContext }));
     return {
       normalizedSubdomain,
       available: false,
@@ -51,6 +59,7 @@ export async function checkSignupSubdomainAvailability(
   }
 
   if (isReservedSubdomain(normalizedSubdomain)) {
+    console.info(JSON.stringify({ event: 'subdomain.check.reserved', ...logContext }));
     return {
       normalizedSubdomain,
       available: false,
@@ -59,45 +68,58 @@ export async function checkSignupSubdomainAvailability(
     };
   }
 
-  const db = createUnscopedClient();
-  const [existingCommunityRows, pendingRows] = await Promise.all([
-    db
-      .select({ id: communities.id })
-      .from(communities)
-      .where(eq(communities.slug, normalizedSubdomain))
-      .limit(1),
-    db
-      .select({
-        id: pendingSignups.id,
-        signupRequestId: pendingSignups.signupRequestId,
-      })
-      .from(pendingSignups)
-      .where(
-        and(
-          eq(pendingSignups.candidateSlug, normalizedSubdomain),
-          // Only verified+ signups reserve slugs. Unverified signups
-          // (pending_verification) don't block — prevents squatting by
-          // bots or bad actors who never confirm their email.
-          notInArray(pendingSignups.status, [
-            'pending_verification',
-            'expired',
-            'completed',
-          ]),
-          // Exclude implicitly expired rows (cleanup job hasn't run yet).
-          or(
-            isNull(pendingSignups.expiresAt),
-            gt(pendingSignups.expiresAt, new Date()),
+  let existingCommunityRows: Array<{ id: number }>;
+  let pendingRows: Array<{ id: bigint; signupRequestId: string }>;
+  try {
+    const db = createUnscopedClient();
+    [existingCommunityRows, pendingRows] = await Promise.all([
+      db
+        .select({ id: communities.id })
+        .from(communities)
+        .where(eq(communities.slug, normalizedSubdomain))
+        .limit(1),
+      db
+        .select({
+          id: pendingSignups.id,
+          signupRequestId: pendingSignups.signupRequestId,
+        })
+        .from(pendingSignups)
+        .where(
+          and(
+            eq(pendingSignups.candidateSlug, normalizedSubdomain),
+            // Only verified+ signups reserve slugs. Unverified signups
+            // (pending_verification) don't block — prevents squatting by
+            // bots or bad actors who never confirm their email.
+            notInArray(pendingSignups.status, [
+              'pending_verification',
+              'expired',
+              'completed',
+            ]),
+            // Exclude implicitly expired rows (cleanup job hasn't run yet).
+            or(
+              isNull(pendingSignups.expiresAt),
+              gt(pendingSignups.expiresAt, new Date()),
+            ),
           ),
-        ),
-      )
-      .limit(5),
-  ]);
+        )
+        .limit(5),
+    ]);
+  } catch (dbError) {
+    console.error(JSON.stringify({
+      event: 'subdomain.check.db_failure',
+      ...logContext,
+      error: dbError instanceof Error ? dbError.message : String(dbError),
+    }));
+    return {
+      normalizedSubdomain,
+      available: false,
+      reason: 'unknown',
+      message: SUBDOMAIN_UNKNOWN_MESSAGE,
+    };
+  }
 
-  const conflictingPending = pendingRows.some(
-    (row) => row.signupRequestId !== options?.excludeSignupRequestId,
-  );
-
-  if (existingCommunityRows.length > 0 || conflictingPending) {
+  if (existingCommunityRows.length > 0) {
+    console.info(JSON.stringify({ event: 'subdomain.check.taken.community', ...logContext }));
     return {
       normalizedSubdomain,
       available: false,
@@ -106,6 +128,25 @@ export async function checkSignupSubdomainAvailability(
     };
   }
 
+  const conflictingPendingCount = pendingRows.filter(
+    (row) => row.signupRequestId !== options?.excludeSignupRequestId,
+  ).length;
+
+  if (conflictingPendingCount > 0) {
+    console.info(JSON.stringify({
+      event: 'subdomain.check.taken.pending',
+      ...logContext,
+      conflictingPendingCount,
+    }));
+    return {
+      normalizedSubdomain,
+      available: false,
+      reason: 'taken',
+      message: 'That subdomain is already taken.',
+    };
+  }
+
+  console.info(JSON.stringify({ event: 'subdomain.check.available', ...logContext }));
   return {
     normalizedSubdomain,
     available: true,
@@ -153,11 +194,15 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
   }));
   const authoritativeSubdomain = await checkSignupSubdomainAvailability(
     input.candidateSlug,
-    { excludeSignupRequestId: signupRequestId },
+    { excludeSignupRequestId: signupRequestId, signupRequestId },
   );
 
   if (!authoritativeSubdomain.available) {
-    throw new ValidationError(authoritativeSubdomain.message, {
+    const retryMessage =
+      authoritativeSubdomain.reason === 'unknown'
+        ? SUBDOMAIN_UNKNOWN_MESSAGE
+        : authoritativeSubdomain.message;
+    throw new ValidationError(retryMessage, {
       field: 'candidateSlug',
       reason: authoritativeSubdomain.reason,
     });

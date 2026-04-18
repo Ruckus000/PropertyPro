@@ -2,6 +2,7 @@ import {
   createScopedClient,
   forumReplies,
   forumThreads,
+  listDeletedForumRepliesForThread,
   logAuditEvent,
   polls,
   pollVotes,
@@ -63,6 +64,7 @@ interface ForumReplyRecord {
   authorUserId: string;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface CreatePollInput {
@@ -195,6 +197,8 @@ function mapForumThreadRow(row: ForumThreadRecord): ForumThreadRecord {
 function mapForumReplyRow(row: ForumReplyRecord): ForumReplyRecord {
   return {
     ...row,
+    body: row.deletedAt ? '' : row.body,
+    deletedAt: row.deletedAt ?? null,
   };
 }
 
@@ -494,10 +498,14 @@ export async function getForumThreadWithRepliesForCommunity(
   const replies = await scoped
     .selectFrom<ForumReplyRecord>(forumReplies, {}, eq(forumReplies.threadId, threadId))
     .orderBy(asc(forumReplies.createdAt));
+  const deletedReplies = await listDeletedForumRepliesForThread(communityId, threadId);
+  const allReplies = [...replies, ...deletedReplies].sort(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  );
 
   return {
     thread: mapForumThreadRow(thread),
-    replies: replies.map(mapForumReplyRow),
+    replies: allReplies.map(mapForumReplyRow),
   };
 }
 
@@ -541,6 +549,46 @@ export async function createForumReplyForCommunity(
   });
 
   return created;
+}
+
+export async function deleteForumReplyForCommunity(
+  communityId: number,
+  threadId: number,
+  replyId: number,
+  actorUserId: string,
+  requestId?: string | null,
+  moderationReason?: string | null,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  const existingRows = await scoped.selectFrom<ForumReplyRecord>(
+    forumReplies,
+    {},
+    and(eq(forumReplies.id, replyId), eq(forumReplies.threadId, threadId)),
+  );
+  const existing = existingRows[0];
+
+  if (!existing) {
+    throw new NotFoundError('Forum reply not found');
+  }
+
+  await scoped.softDelete(
+    forumReplies,
+    and(eq(forumReplies.id, replyId), eq(forumReplies.threadId, threadId)),
+  );
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'delete',
+    resourceType: 'forum_reply',
+    resourceId: String(replyId),
+    communityId,
+    oldValues: existing,
+    metadata: {
+      requestId: requestId ?? null,
+      threadId,
+      moderationReason: moderationReason ?? null,
+    },
+  });
 }
 
 export async function updateForumThreadForCommunity(

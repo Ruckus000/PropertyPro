@@ -177,6 +177,7 @@ export function WelcomeScreen({
       <section aria-label="Community snapshot" className="mb-8">
         {cardCategory === 'owner' && (
           <OwnerCards
+            communityId={communityId}
             community={community}
             announcement={announcement}
             compliance={compliance}

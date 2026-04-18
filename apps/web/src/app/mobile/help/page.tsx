@@ -15,7 +15,9 @@ function getSearchParamValue(value: string | string[] | undefined): string | nul
   return value ?? null;
 }
 
-export default async function MobileHelpPage({ searchParams }: MobileHelpRedirectPageProps) {
+export default async function MobileHelpPage({
+  searchParams,
+}: MobileHelpRedirectPageProps) {
   const [requestHeaders, resolvedSearchParams] = await Promise.all([headers(), searchParams]);
   const communityId =
     getSearchParamValue(resolvedSearchParams.communityId) ??

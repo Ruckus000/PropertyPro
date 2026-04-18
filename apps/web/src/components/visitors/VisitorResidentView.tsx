@@ -21,8 +21,8 @@ import { getVisitorStatus } from './visitor-columns';
 
 interface VisitorResidentViewProps {
   communityId: number;
-  /** The resident's unit ID for scoping registration */
-  hostUnitId?: number;
+  /** The resident's unit label for scoping registration */
+  hostUnitLabel?: string;
   allowResidentVisitorRevoke?: boolean;
   currentUserId: string;
 }
@@ -165,7 +165,7 @@ function VisitorCard({
 
 export function VisitorResidentView({
   communityId,
-  hostUnitId,
+  hostUnitLabel,
   allowResidentVisitorRevoke = false,
   currentUserId,
 }: VisitorResidentViewProps) {
@@ -237,7 +237,7 @@ export function VisitorResidentView({
 
       <VisitorRegistrationForm
         communityId={communityId}
-        hostUnitId={hostUnitId}
+        hostUnitLabel={hostUnitLabel}
         open={registerOpen}
         onOpenChange={setRegisterOpen}
       />

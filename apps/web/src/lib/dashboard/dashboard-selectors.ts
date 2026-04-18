@@ -90,29 +90,59 @@ interface ViolationRow {
   createdAt: Date;
 }
 
-export function selectViolationSummary(rows: ViolationRow[]): DashboardViolationSummary {
-  const active = rows.filter((row) => row.deletedAt == null);
-  const byStatus: Record<string, number> = {};
+export interface DashboardViolationStatusCount {
+  status: string;
+  count: number;
+}
 
-  for (const row of active) {
-    byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+export interface DashboardViolationRecentRow {
+  id: number;
+  unitId: number;
+  category: string;
+  status: string;
+  severity: string;
+  createdAt: Date | string;
+}
+
+export function buildViolationSummary(
+  statusCounts: DashboardViolationStatusCount[],
+  recentRows: DashboardViolationRecentRow[],
+): DashboardViolationSummary {
+  const byStatus: Record<string, number> = {};
+  let total = 0;
+
+  for (const row of statusCounts) {
+    const count = Number(row.count) || 0;
+    byStatus[row.status] = count;
+    total += count;
   }
 
-  const recent = active
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5)
-    .map((row) => ({
+  return {
+    total,
+    byStatus,
+    recentViolations: recentRows.map((row) => ({
       id: row.id,
       unitId: row.unitId,
       category: row.category,
       status: row.status as ViolationStatus,
       severity: row.severity as ViolationSeverity,
       createdAt: new Date(row.createdAt).toISOString(),
-    }));
-
-  return {
-    total: active.length,
-    byStatus,
-    recentViolations: recent,
+    })),
   };
+}
+
+export function selectViolationSummary(rows: ViolationRow[]): DashboardViolationSummary {
+  const active = rows.filter((row) => row.deletedAt == null);
+  const byStatus = active.reduce<Record<string, number>>((acc, row) => {
+    acc[row.status] = (acc[row.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  const recent = active
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  return buildViolationSummary(
+    Object.entries(byStatus).map(([status, count]) => ({ status, count })),
+    recent,
+  );
 }

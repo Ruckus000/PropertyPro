@@ -31,6 +31,7 @@ const {
   unitsTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  requirePermissionMock,
   getMaintenancePhotoUploadUrlMock,
   processAndStoreThumbnailMock,
   getFeaturesForCommunityMock,
@@ -43,6 +44,7 @@ const {
   unitsTableMock: { id: Symbol('units.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
   getMaintenancePhotoUploadUrlMock: vi.fn().mockResolvedValue({
     uploadUrl: 'https://storage.example.com/upload',
     storagePath: 'maintenance/42/tmp/file.jpg',
@@ -68,8 +70,10 @@ vi.mock('@propertypro/db/filters', () => ({
 
 vi.mock('@propertypro/shared', () => ({
   getFeaturesForCommunity: getFeaturesForCommunityMock,
-  ADMIN_ROLES: ['board_member', 'board_president', 'cam', 'site_manager', 'property_manager_admin'],
-  RESIDENT_ROLES: ['owner', 'tenant'],
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -105,7 +109,7 @@ import { GET, POST } from '../../src/app/api/v1/maintenance-requests/route';
 const ADMIN_MEMBERSHIP = {
   userId: 'session-user-1',
   communityId: 42,
-  role: 'board_president',
+  role: 'manager',
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
@@ -141,11 +145,11 @@ const ADMIN_MEMBERSHIP = {
 
 const RESIDENT_MEMBERSHIP = {
   ...ADMIN_MEMBERSHIP,
-  role: 'owner',
+  role: 'resident',
   isAdmin: false,
   isUnitOwner: true,
   displayTitle: 'Owner',
-  presetKey: 'owner',
+  presetKey: undefined,
 };
 
 function makeChainableBuilder(rows: unknown[]) {
@@ -183,6 +187,7 @@ describe('maintenance requests route', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
+    requirePermissionMock.mockImplementation(() => {});
     getFeaturesForCommunityMock.mockReturnValue({ hasMaintenanceRequests: true });
     createScopedClientMock.mockReturnValue(makeDefaultScopedClient());
   });
@@ -299,6 +304,21 @@ describe('maintenance requests route', () => {
         'session-user-1',
       );
     });
+
+    it('applies assignedToId filter for staff callers using the community request scope', async () => {
+      const { eq } = await import('@propertypro/db/filters');
+      const eqMock = eq as ReturnType<typeof vi.fn>;
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/maintenance-requests?communityId=42&assignedToId=staff-user-2',
+      );
+      await GET(req);
+
+      expect(eqMock).toHaveBeenCalledWith(
+        maintenanceRequestsTableMock.assignedToId,
+        'staff-user-2',
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -336,11 +356,12 @@ describe('maintenance requests route', () => {
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ comments: Array<{ isInternal: boolean }> }> };
+      const json = (await res.json()) as { data: Array<{ comments: Array<Record<string, unknown>> }> };
       const comments = json.data[0].comments;
-      // All returned comments should have isInternal=false
-      expect(comments.every((c) => !c.isInternal)).toBe(true);
+      // isInternal field must not be emitted to resident callers (defense-in-depth
+      // on top of the filter that drops isInternal=true comments).
       expect(comments).toHaveLength(1);
+      expect(comments[0]).not.toHaveProperty('isInternal');
     });
 
     it('does NOT strip internal comments for admin callers', async () => {

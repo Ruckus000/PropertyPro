@@ -1,7 +1,7 @@
 import { createScopedClient, communities, faqs } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { PageHeader } from '@/components/shared/page-header';
 import { HelpHubContent } from '@/components/help/help-hub-content';
+import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 import { buildHelpTaskCardsFromFeatures } from '@/lib/help/task-cards';
 import { ensureFaqsExist, filterFaqsForRole } from '@/lib/services/faq-service';
@@ -14,14 +14,14 @@ interface HelpPageProps {
 export default async function HelpPage({ searchParams }: HelpPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help');
+  const effectiveRole = context.membership.presetKey ?? context.membership.role;
 
   await ensureFaqsExist(context.communityId);
 
   const scoped = createScopedClient(context.communityId);
-  const [faqRows, communityRows, featuredArticles] = await Promise.all([
+  const [faqRows, communityRows] = await Promise.all([
     scoped.query(faqs),
     scoped.selectFrom(communities, {}, eq(communities.id, context.communityId)),
-    getFeaturedForRole(context.membership.role),
   ]);
   const community = communityRows[0] as Record<string, unknown> | undefined;
 
@@ -39,8 +39,8 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
           context.features,
           context.membership.isAdmin,
         )}
-        featuredArticles={featuredArticles}
-        faqs={filterFaqsForRole(faqRows, context.membership.role)}
+        featuredArticles={getFeaturedForRole(effectiveRole)}
+        faqs={filterFaqsForRole(faqRows, effectiveRole)}
         contact={{
           name: (community?.['contactName'] as string | null | undefined) ?? null,
           email: (community?.['contactEmail'] as string | null | undefined) ?? null,

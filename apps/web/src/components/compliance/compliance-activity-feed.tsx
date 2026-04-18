@@ -10,11 +10,13 @@ import {
   Eye,
   Clock,
 } from "lucide-react";
+import { ComplianceActivityHistorySheet } from "./compliance-activity-history-sheet";
 
 // ── Types ───────────────────────────────────────────
 
 interface AuditEntry {
   id: number;
+  userId: string | null;
   action: string;
   resourceType: string;
   resourceId: string;
@@ -29,6 +31,14 @@ interface ActivityFeedResponse {
     hasMore: boolean;
   };
   users: Record<string, string>;
+}
+
+class ActivityFetchError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────
@@ -90,19 +100,22 @@ export interface ComplianceActivityFeedProps {
 }
 
 export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedProps) {
-  const { data, isLoading, error } = useQuery<ActivityFeedResponse>({
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+
+  const { data, isLoading, error } = useQuery<ActivityFeedResponse, ActivityFetchError>({
     queryKey: ["compliance-activity", communityId],
     queryFn: async () => {
       const res = await fetch(`/api/v1/audit-trail?communityId=${communityId}&limit=8`);
-      if (!res.ok) throw new Error("Failed to load activity");
+      if (!res.ok) {
+        throw new ActivityFetchError(res.status, "Failed to load activity");
+      }
       return res.json();
     },
     staleTime: 2 * 60_000, // 2 minutes
+    retry: false,
   });
 
   // Defensive: deduplicate by ID in case the API ever returns duplicate rows.
-  // The "duplicate-looking" entries in Recent Activity were caused by all actions
-  // being logged as generic 'update' — fixed in the compliance PATCH endpoint.
   const entries = React.useMemo(() => {
     const raw = data?.data ?? [];
     const seen = new Set<number>();
@@ -113,7 +126,10 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
     });
   }, [data]);
 
-  // Don't render anything if there are no entries or still loading with no data
+  // Hide entire panel if the user lacks audit:read permission (403). Otherwise
+  // always render the header so "View all history" is reachable.
+  if (error?.status === 403) return null;
+
   if (isLoading && entries.length === 0) {
     return (
       <div className="flex flex-col gap-3">
@@ -133,58 +149,82 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
     );
   }
 
-  if (error || entries.length === 0) return null;
+  const users = data?.users ?? {};
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
-        Recent Activity
-      </h3>
-
-      <div className="flex flex-col">
-        {entries.map((entry, idx) => {
-          const itemTitle =
-            (entry.metadata?.itemTitle as string) ??
-            (entry.metadata?.documentTitle as string) ??
-            entry.resourceId;
-
-          return (
-            <div
-              key={entry.id}
-              className={`
-                flex items-start gap-2.5 py-2 px-1
-                ${idx < entries.length - 1 ? "border-b border-edge-subtle" : ""}
-              `}
-            >
-              {/* Action dot */}
-              <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${actionDotColor(entry.action)}`} />
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-content-secondary leading-relaxed">
-                  <span className="inline-flex items-center gap-1 text-content-tertiary">
-                    {actionIcon(entry.action)}
-                  </span>{" "}
-                  {actionLabel(entry.action)}
-                  {itemTitle && (
-                    <>
-                      {" \u2014 "}
-                      <span className="font-medium text-content">
-                        {itemTitle}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </div>
-
-              {/* Timestamp */}
-              <span className="text-xs text-content-tertiary tabular-nums shrink-0 mt-0.5">
-                {relativeTime(entry.createdAt)}
-              </span>
-            </div>
-          );
-        })}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">
+          Recent Activity
+        </h3>
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="text-xs font-medium text-[var(--interactive-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm px-1"
+        >
+          View all history
+        </button>
       </div>
+
+      {error ? (
+        <p className="text-xs text-status-danger">
+          Couldn&apos;t load recent activity. Try View all history.
+        </p>
+      ) : entries.length === 0 ? (
+        <p className="text-xs text-content-tertiary">No recent activity.</p>
+      ) : (
+        <div className="flex flex-col">
+          {entries.map((entry, idx) => {
+            const itemTitle =
+              (entry.metadata?.itemTitle as string) ??
+              (entry.metadata?.documentTitle as string) ??
+              entry.resourceId;
+            const actorName = entry.userId ? users[entry.userId] : null;
+
+            return (
+              <div
+                key={entry.id}
+                className={`
+                  flex items-start gap-2.5 py-2 px-1
+                  ${idx < entries.length - 1 ? "border-b border-edge-subtle" : ""}
+                `}
+              >
+                <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${actionDotColor(entry.action)}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-content-secondary leading-relaxed">
+                    <span className="inline-flex items-center gap-1 text-content-tertiary">
+                      {actionIcon(entry.action)}
+                    </span>{" "}
+                    {actorName && (
+                      <>
+                        <span className="font-medium text-content">{actorName}</span>{" "}
+                      </>
+                    )}
+                    {actionLabel(entry.action)}
+                    {itemTitle && (
+                      <>
+                        {" \u2014 "}
+                        <span className="font-medium text-content">
+                          {itemTitle}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <span className="text-xs text-content-tertiary tabular-nums shrink-0 mt-0.5">
+                  {relativeTime(entry.createdAt)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <ComplianceActivityHistorySheet
+        communityId={communityId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
     </div>
   );
 }

@@ -1,13 +1,13 @@
 /**
  * Maintenance Requests [id] API — P3-50/P3-51
  *
- * GET  — Fetch a single maintenance request (resident: own only; admin: any)
- * PATCH — Update request (admin only)
- * DELETE — Soft-delete request (admin only)
+ * GET  — Fetch a single maintenance request (resident: own only; staff: any in community)
+ * PATCH — Update request (staff only)
+ * DELETE — Soft-delete request (staff only)
  *
  * Security:
  * - Residents can only GET their own requests (ForbiddenError if not owner)
- * - PATCH/DELETE restricted to ADMIN_ROLES
+ * - PATCH/DELETE restricted to community staff roles
  * - internalNotes stripped from resident responses
  * - isInternal=true comments stripped from resident responses
  * - Status transitions enforced via ALLOWED_TRANSITIONS map
@@ -28,24 +28,17 @@ import {
   userRoles,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { ADMIN_ROLES as ADMIN_ROLES_LIST, RESIDENT_ROLES as RESIDENT_ROLES_LIST } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ADMIN_ROLES = new Set<string>(ADMIN_ROLES_LIST);
-const RESIDENT_ROLES = new Set<string>(RESIDENT_ROLES_LIST);
 
 /**
  * Valid status transitions.
@@ -111,8 +104,8 @@ export const GET = withErrorHandler(async (req: NextRequest, context?: { params:
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
-  const isAdmin = ADMIN_ROLES.has(membership.role);
-  const isResident = RESIDENT_ROLES.has(membership.role);
+  requirePermission(membership, 'maintenance', 'read');
+  const isResident = membership.role === 'resident';
 
   const scoped = createScopedClient(communityId);
   const [reqRows, commentRows] = await Promise.all([
@@ -165,8 +158,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
-  if (!ADMIN_ROLES.has(membership.role)) {
-    throw new ForbiddenError('Only community administrators can update maintenance requests');
+  requirePermission(membership, 'maintenance', 'write');
+  if (!membership.isAdmin) {
+    throw new ForbiddenError('Only maintenance staff can update maintenance requests');
   }
 
   const scoped = createScopedClient(communityId);
@@ -214,10 +208,10 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
         eq(userRoles.userId, fields.assignedToId),
       ) as unknown as Record<string, unknown>[];
       const match = roleRows.find(
-        (row) => ADMIN_ROLES.has(row['role'] as string),
+        (row) => row['role'] === 'manager' || row['role'] === 'pm_admin',
       );
       if (!match) {
-        throw new ValidationError('Assigned user must be a community administrator');
+        throw new ValidationError('Assigned user must be maintenance staff');
       }
     }
     updateData['assignedToId'] = fields.assignedToId;
@@ -331,8 +325,9 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: { para
   const membership = await requireCommunityMembership(communityId, actorUserId);
   await requirePlanFeature(communityId, 'hasMaintenanceRequests');
 
-  if (!ADMIN_ROLES.has(membership.role)) {
-    throw new ForbiddenError('Only community administrators can delete maintenance requests');
+  requirePermission(membership, 'maintenance', 'write');
+  if (!membership.isAdmin) {
+    throw new ForbiddenError('Only maintenance staff can delete maintenance requests');
   }
 
   const scoped = createScopedClient(communityId);

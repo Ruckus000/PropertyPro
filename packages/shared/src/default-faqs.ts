@@ -5,6 +5,8 @@ export interface DefaultFaqDefinition {
   roleVisibility?: readonly string[] | null;
 }
 
+export type DefaultFaq = DefaultFaqDefinition;
+
 const ADMIN_HELP_ROLES = [
   'board_member',
   'board_president',
@@ -75,6 +77,12 @@ export const DEFAULT_FAQS: DefaultFaqDefinition[] = [
     answer:
       'Open E-Sign to review documents waiting for your signature. Follow the prompts to confirm your signature and submit the completed form.',
     category: 'esign',
+  },
+  {
+    question: 'How do I view my assessment balance?',
+    answer:
+      'Open Payments to review your current balance, payment history, and any upcoming charges in one place.',
+    category: 'payments',
   },
   {
     question: 'How do I post a meeting notice and stay compliant?',

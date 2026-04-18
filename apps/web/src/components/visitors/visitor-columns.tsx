@@ -156,9 +156,9 @@ export function getVisitorColumns(
       ),
     },
     {
-      accessorKey: 'hostUnitId',
+      accessorKey: 'hostUnitLabel',
       header: 'Host',
-      cell: ({ row }) => `Unit ${row.original.hostUnitId}`,
+      cell: ({ row }) => `Unit ${row.original.hostUnitLabel ?? row.original.hostUnitId}`,
     },
     {
       accessorKey: 'expectedArrival',
