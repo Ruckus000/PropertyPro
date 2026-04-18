@@ -200,6 +200,10 @@ export interface ComplianceAlertSummary {
   errors: number;
 }
 
+export interface ProcessComplianceAlertsOptions {
+  communityIds?: number[];
+}
+
 /**
  * Iterate all compliance-enabled communities and check for overdue items.
  * Called by the daily cron at /api/v1/internal/compliance-alerts.
@@ -209,6 +213,7 @@ export interface ComplianceAlertSummary {
  */
 export async function processComplianceAlerts(
   now: Date = new Date(),
+  options?: ProcessComplianceAlertsOptions,
 ): Promise<ComplianceAlertSummary> {
   const db = createUnscopedClient();
   const expiryHorizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -222,8 +227,16 @@ export async function processComplianceAlerts(
     .from(communities)
     .where(isNull(communities.deletedAt));
 
+  const requestedCommunityIds = options?.communityIds;
+  const requestedCommunityIdSet =
+    requestedCommunityIds && requestedCommunityIds.length > 0
+      ? new Set(requestedCommunityIds)
+      : null;
+
   const complianceCommunities = activeCommunities.filter(
-    (c) => c.communityType === 'condo_718' || c.communityType === 'hoa_720',
+    (c) =>
+      (c.communityType === 'condo_718' || c.communityType === 'hoa_720')
+      && (requestedCommunityIdSet ? requestedCommunityIdSet.has(c.id) : true),
   );
   const complianceCommunityIds = complianceCommunities.map((community) => community.id);
 
