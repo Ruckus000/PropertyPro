@@ -176,12 +176,12 @@ export function MobileProfileContent({
             <SettingsRow
               icon={HelpCircle}
               label="Help Center"
-              href={`/mobile/help?communityId=${communityId}`}
+              href={`/help?communityId=${communityId}`}
             />
             <SettingsRow
               icon={MessageSquare}
               label="Contact Management"
-              href={`/mobile/help/contact?communityId=${communityId}`}
+              href={`/help/contact?communityId=${communityId}`}
               isLast
             />
           </div>

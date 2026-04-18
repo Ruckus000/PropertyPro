@@ -46,6 +46,8 @@ let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId: number;
 let unitCId: number;
+let unitALabel: string;
+let unitCLabel: string;
 
 function requireState(): TestKitState {
   if (!state) {
@@ -78,13 +80,16 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const scopedA = state.dbModule.createScopedClient(communityA.id);
     const scopedC = state.dbModule.createScopedClient(communityC.id);
 
+    unitALabel = `PKG-A-${state.runSuffix}`;
+    unitCLabel = `PKG-C-${state.runSuffix}`;
+
     const [unitA] = await scopedA.insert(state.dbModule.units, {
-      unitNumber: `PKG-A-${state.runSuffix}`,
+      unitNumber: unitALabel,
       building: 'A',
       floor: 1,
     });
     const [unitC] = await scopedC.insert(state.dbModule.units, {
-      unitNumber: `PKG-C-${state.runSuffix}`,
+      unitNumber: unitCLabel,
       building: 'C',
       floor: 3,
     });
@@ -156,6 +161,19 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     );
     expect(packageNotifications.length).toBeGreaterThan(0);
 
+    // Refresh-after-create (staff list): the new package must appear in
+    // GET /api/v1/packages immediately. This is the API/service-layer
+    // counterpart to the React-Query invalidation unit test in
+    // apps/web/src/hooks/__tests__/use-packages.test.tsx.
+    const staffListAfterCreate = await routeModules.packages.GET(
+      new NextRequest(apiUrl(`/api/v1/packages?communityId=${communityA.id}`)),
+    );
+    expect(staffListAfterCreate.status).toBe(200);
+    const staffListAfterCreateJson = await parseJson<{
+      data: Array<Record<string, unknown>>;
+    }>(staffListAfterCreate);
+    expect(staffListAfterCreateJson.data.some((row) => row.id === packageId)).toBe(true);
+
     setActor(kit, 'tenantA');
     const myPackagesResponse = await routeModules.packagesMy.GET(
       new NextRequest(apiUrl(`/api/v1/packages/my?communityId=${communityA.id}`)),
@@ -176,6 +194,19 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const pickupJson = await parseJson<{ data: Record<string, unknown> }>(pickupResponse);
     expect(pickupJson.data.status).toBe('picked_up');
 
+    // Refresh-after-pickup: the picked-up package must drop out of the
+    // resident's /my list (listMyPackagesForCommunity excludes picked_up).
+    setActor(kit, 'tenantA');
+    const myAfterPickup = await routeModules.packagesMy.GET(
+      new NextRequest(apiUrl(`/api/v1/packages/my?communityId=${communityA.id}`)),
+    );
+    expect(myAfterPickup.status).toBe(200);
+    const myAfterPickupJson = await parseJson<{
+      data: Array<Record<string, unknown>>;
+    }>(myAfterPickup);
+    expect(myAfterPickupJson.data.some((row) => row.id === packageId)).toBe(false);
+
+    setActor(kit, 'actorA');
     const secondPickupResponse = await routeModules.packagePickup.PATCH(
       jsonRequest(apiUrl(`/api/v1/packages/${packageId}/pickup`), 'PATCH', {
         communityId: communityA.id,
@@ -199,7 +230,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Guest ${kit.runSuffix}`,
         purpose: 'Dinner visit',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-06-21T18:00:00.000Z',
       }),
     );
@@ -283,7 +314,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         communityId: communityC.id,
         visitorName: 'Apartment Guest',
         purpose: 'Move-in help',
-        hostUnitId: unitCId,
+        hostUnitLabel: unitCLabel,
         expectedArrival: '2026-06-25T12:00:00.000Z',
       }),
     );

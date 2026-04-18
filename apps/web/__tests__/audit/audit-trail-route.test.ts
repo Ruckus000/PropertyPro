@@ -41,6 +41,12 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+// resolve-users imports from @propertypro/db/unsafe which initializes drizzle.
+// Stub it here so the unit test doesn't require DATABASE_URL.
+vi.mock('@/lib/utils/resolve-users', () => ({
+  resolveUserDisplayNames: vi.fn().mockResolvedValue(new Map<string, string>()),
+}));
+
 import { GET } from '../../src/app/api/v1/audit-trail/route';
 
 // ---------------------------------------------------------------------------

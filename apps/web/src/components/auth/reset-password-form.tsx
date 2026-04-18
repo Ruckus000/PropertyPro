@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useEffect, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { resetPasswordSchema } from '@/lib/auth/schemas';
 import { updatePasswordAction } from '@/lib/auth/actions';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
+import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 
 export function ResetPasswordForm() {
+  const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionError, setSessionError] = useState(false);
@@ -75,10 +77,18 @@ export function ResetPasswordForm() {
         return;
       }
 
-      setSuccess(true);
+      // Clear the recovery session locally before redirecting to /auth/login,
+      // otherwise middleware redirects authenticated sessions away from /auth/*
+      // and the user never reaches the login form to verify the new password.
+      //
+      // `scope: 'local'` clears THIS browser's cookies + client singleton only.
+      // Using `scope: 'global'` would revoke refresh tokens on other devices —
+      // which is not desired here.
+      const supabase = createBrowserClient();
+      await supabase.auth.signOut({ scope: 'local' });
+      router.replace('/auth/login?reset=success');
     } catch {
       setError('An unexpected error occurred. Please try again.');
-    } finally {
       setLoading(false);
     }
   }
@@ -208,20 +218,6 @@ export function ResetPasswordForm() {
     );
   }
 
-  if (success) {
-    return (
-      <div className="text-center" data-testid="reset-password-success">
-        <h2 className="mb-2 text-xl font-semibold text-content">Password updated</h2>
-        <p className="mb-4 text-content-secondary">
-          Your password has been updated successfully. You can now log in with your new password.
-        </p>
-        <a href="/auth/login" className="inline-block text-content-link underline hover:text-content-link">
-          Go to login
-        </a>
-      </div>
-    );
-  }
-
   if (!sessionReady) {
     return (
       <div className="flex flex-col items-center gap-3 text-center" data-testid="reset-password-loading">
@@ -264,6 +260,12 @@ export function ResetPasswordForm() {
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="At least 8 characters"
           disabled={loading}
+          aria-describedby="reset-password-strength"
+        />
+        <PasswordStrengthIndicator
+          password={password}
+          id="reset-password-strength"
+          hideOnEmpty
         />
       </div>
 

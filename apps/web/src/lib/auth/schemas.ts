@@ -1,6 +1,7 @@
 /**
  * Zod schemas for password reset forms.
  */
+import { buildPasswordZodSchema } from '@propertypro/shared';
 import { z } from 'zod';
 
 export const forgotPasswordSchema = z.object({
@@ -9,10 +10,7 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z
   .object({
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .max(72, 'Password must be at most 72 characters'),
+    password: buildPasswordZodSchema(),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {

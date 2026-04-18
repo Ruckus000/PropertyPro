@@ -1,26 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { FINANCE_KEYS, useAssessments, type Assessment } from '@/hooks/use-finance';
 
 /* ─────── Types ─────── */
-
-interface Assessment {
-  id: number;
-  communityId: number;
-  title: string;
-  description: string | null;
-  amountCents: number;
-  frequency: 'monthly' | 'quarterly' | 'annual' | 'one_time';
-  dueDay: number | null;
-  lateFeeAmountCents: number;
-  lateFeeDaysGrace: number;
-  startDate: string | null;
-  endDate: string | null;
-  isActive: boolean;
-  createdAt: string;
-}
 
 interface LineItem {
   id: number;
@@ -69,13 +54,6 @@ const STATUS_STYLES: Record<string, string> = {
 
 /* ─────── Fetch ─────── */
 
-async function fetchAssessments(communityId: number): Promise<Assessment[]> {
-  const res = await fetch(`/api/v1/assessments?communityId=${communityId}`);
-  if (!res.ok) throw new Error('Failed to load assessments');
-  const json = await res.json();
-  return json.data;
-}
-
 async function fetchLineItems(communityId: number, assessmentId: number): Promise<LineItem[]> {
   const res = await fetch(`/api/v1/assessments/${assessmentId}/line-items?communityId=${communityId}`);
   if (!res.ok) throw new Error('Failed to load line items');
@@ -116,11 +94,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
 
-  const { data: assessments, isLoading, isError } = useQuery({
-    queryKey: ['assessments', communityId],
-    queryFn: () => fetchAssessments(communityId),
-    staleTime: 30_000,
-  });
+  const { data: assessments, isLoading, isError } = useAssessments(communityId);
 
   if (isLoading) {
     return (
@@ -194,7 +168,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
-            queryClient.invalidateQueries({ queryKey: ['assessments', communityId] });
+            queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
           }}
         />
       )}
@@ -208,7 +182,7 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           onUpdated={() => {
             setEditingAssessment(null);
             setSelectedAssessment(null);
-            queryClient.invalidateQueries({ queryKey: ['assessments', communityId] });
+            queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
           }}
         />
       )}

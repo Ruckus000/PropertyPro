@@ -10,10 +10,14 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
+import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { PackageStaffView } from '@/components/packages/PackageStaffView';
 import { PackageResidentView } from '@/components/packages/PackageResidentView';
+import {
+  PackagesUnavailableState,
+  type PackagesUnavailableReason,
+} from '@/components/packages/PackagesUnavailableState';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -40,7 +44,14 @@ export default async function PackagesPage({ searchParams }: PageProps) {
 
   const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasPackageLogging) {
-    redirect('/dashboard?reason=feature-unavailable');
+    // Render an explanatory guard state instead of silently redirecting.
+    // Discriminate cause so copy can explain whether the limitation is the
+    // community type (e.g. HOA) or the subscription plan.
+    const typeFeatures = getFeaturesForCommunity(membership.communityType);
+    const reason: PackagesUnavailableReason = !typeFeatures.hasPackageLogging
+      ? 'community_type'
+      : 'plan';
+    return <PackagesUnavailableState communityId={communityId} reason={reason} />;
   }
 
   const isStaff = isAdminRole(membership.role);

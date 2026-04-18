@@ -11,6 +11,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { createViolation } from '@/lib/api/violations';
+import { uploadEvidencePhoto } from '@/lib/violations/evidence-upload';
 import type { ViolationSeverity } from '@propertypro/db';
 
 const MAX_PHOTOS = 3;
@@ -40,82 +41,6 @@ const formSchema = z.object({
   description: z.string().min(1, 'Description is required').max(4000, 'Description must be 4000 characters or less'),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),
 });
-
-interface PresignResponse {
-  data: {
-    path: string;
-    uploadUrl: string;
-    token: string;
-    documentId: string;
-  };
-}
-
-interface DocumentCreateResponse {
-  data: { id: number };
-}
-
-/**
- * Upload a single photo through the dedicated violations evidence infrastructure:
- * 1. POST /api/v1/upload -> presigned URL
- * 2. PUT file to presigned URL
- * 3. POST /api/v1/violations/evidence -> creates hidden evidence metadata, returns documentId
- */
-async function uploadEvidencePhoto(
-  communityId: number,
-  file: File,
-  index: number,
-): Promise<number> {
-  // Step 1: Get presigned upload URL
-  const presignRes = await fetch('/api/v1/upload', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      communityId,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    }),
-  });
-
-  if (!presignRes.ok) {
-    throw new Error(`Failed to prepare upload for ${file.name}`);
-  }
-
-  const presignBody = (await presignRes.json()) as PresignResponse;
-
-  // Step 2: Upload file directly to storage
-  const uploadRes = await fetch(presignBody.data.uploadUrl, {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`Failed to upload ${file.name}`);
-  }
-
-  // Step 3: Create document metadata record
-  const createRes = await fetch('/api/v1/violations/evidence', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      communityId,
-      title: `Violation Evidence Photo ${index + 1}`,
-      description: null,
-      filePath: presignBody.data.path,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    }),
-  });
-
-  if (!createRes.ok) {
-    throw new Error(`Upload succeeded but saving metadata failed for ${file.name}`);
-  }
-
-  const createBody = (await createRes.json()) as DocumentCreateResponse;
-  return createBody.data.id;
-}
 
 interface ViolationReportFormProps {
   communityId: number;

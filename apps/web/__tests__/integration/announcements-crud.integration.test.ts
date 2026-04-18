@@ -132,6 +132,44 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
   // 1. Create announcement
   // =========================================================================
 
+  it('admin can create then edit an announcement in one routed authoring flow', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Flow Announcement ${kit.runSuffix}`,
+        body: `Created via authoring flow ${kit.runSuffix}`,
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+
+    expect(createResponse.status).toBe(201);
+    const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const flowAnnouncementId = readNumberField(createJson.data, 'id');
+
+    const updateResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'update',
+        id: flowAnnouncementId,
+        communityId: communityA.id,
+        title: `Flow Announcement Updated ${kit.runSuffix}`,
+        body: `Edited via authoring flow ${kit.runSuffix}`,
+        audience: 'board_only',
+        isPinned: true,
+      }),
+    );
+
+    expect(updateResponse.status).toBe(200);
+    const updateJson = await parseJson<{ data: Record<string, unknown> }>(updateResponse);
+    expect(updateJson.data['title']).toBe(`Flow Announcement Updated ${kit.runSuffix}`);
+    expect(updateJson.data['audience']).toBe('board_only');
+    expect(updateJson.data['isPinned']).toBe(true);
+  });
+
   it('POST creates announcement with 201', async () => {
     const kit = requireState();
     const route = requireRoute();
@@ -198,6 +236,56 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['title']).toBe(`Updated Announcement ${kit.runSuffix}`);
+  });
+
+  it('POST handles sequential action mutations without consuming the request body twice', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Sequential Announcement ${kit.runSuffix}`,
+        body: `Sequential body ${kit.runSuffix}`,
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    expect(createResponse.status).toBe(201);
+    const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const sequentialAnnouncementId = readNumberField(createJson.data, 'id');
+
+    const updateResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'update',
+        id: sequentialAnnouncementId,
+        communityId: communityA.id,
+        title: `Sequential Updated ${kit.runSuffix}`,
+        body: `Sequential updated body ${kit.runSuffix}`,
+      }),
+    );
+    expect(updateResponse.status).toBe(200);
+
+    const pinResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'pin',
+        id: sequentialAnnouncementId,
+        communityId: communityA.id,
+        isPinned: true,
+      }),
+    );
+    expect(pinResponse.status).toBe(200);
+
+    const archiveResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'archive',
+        id: sequentialAnnouncementId,
+        communityId: communityA.id,
+        archive: true,
+      }),
+    );
+    expect(archiveResponse.status).toBe(200);
   });
 
   // =========================================================================

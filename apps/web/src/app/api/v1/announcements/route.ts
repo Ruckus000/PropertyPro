@@ -72,6 +72,23 @@ const archiveActionSchema = z.object({
   archive: z.boolean(),
 });
 
+const parsedBodyCache = new WeakMap<NextRequest, Promise<Record<string, unknown>>>();
+
+async function getParsedBody(req: NextRequest): Promise<Record<string, unknown>> {
+  let parsed = parsedBodyCache.get(req);
+  if (!parsed) {
+    parsed = req.json().then((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+      }
+      return value as Record<string, unknown>;
+    });
+    parsedBodyCache.set(req, parsed);
+  }
+
+  return parsed;
+}
+
 
 // ---------------------------------------------------------------------------
 // GET — List announcements (pinned first, chronological)
@@ -110,7 +127,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 export const POST = withErrorHandler(
   withAuditLog(
     async (req: NextRequest) => {
-      const body = await req.clone().json() as Record<string, unknown>;
+      const body = await getParsedBody(req);
       const rawCommunityId = body['communityId'];
       const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
       if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
@@ -127,7 +144,7 @@ export const POST = withErrorHandler(
       return { userId, communityId };
     },
     async (req, _ctx, audit) => {
-      const body = await req.json() as Record<string, unknown>;
+      const body = await getParsedBody(req);
       const normalizedBody: Record<string, unknown> = {
         ...body,
         communityId: audit.communityId,

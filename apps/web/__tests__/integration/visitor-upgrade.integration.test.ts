@@ -60,11 +60,13 @@ interface RouteModules {
 interface RuntimeResident {
   userId: string;
   unitId: number;
+  unitLabel: string;
 }
 
 let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId = 0;
+let unitALabel = '';
 
 function requireState(): TestKitState {
   if (!state) {
@@ -133,8 +135,9 @@ async function seedRuntimeResident(
   });
 
   const scoped = kit.dbModule.createScopedClient(communityId);
+  const unitLabel = `${label.toUpperCase().slice(0, 6)}-${kit.runSuffix}`;
   const [unitRow] = await scoped.insert(kit.dbModule.units, {
-    unitNumber: `${label.toUpperCase().slice(0, 6)}-${kit.runSuffix}`,
+    unitNumber: unitLabel,
     building: 'R',
     floor: 2,
   });
@@ -148,7 +151,7 @@ async function seedRuntimeResident(
     unitId,
   });
 
-  return { userId, unitId };
+  return { userId, unitId, unitLabel };
 }
 
 describeDb('visitor upgrade (db-backed integration)', () => {
@@ -165,8 +168,9 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const communityA = requireCommunity(state, 'communityA');
     const scoped = state.dbModule.createScopedClient(communityA.id);
 
+    unitALabel = `VIS-A-${state.runSuffix}`;
     const [unitA] = await scoped.insert(state.dbModule.units, {
-      unitNumber: `VIS-A-${state.runSuffix}`,
+      unitNumber: unitALabel,
       building: 'A',
       floor: 1,
     });
@@ -220,7 +224,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `One Time ${kit.runSuffix}`,
         purpose: 'Dinner',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-06-15T18:00:00.000Z',
         expectedDurationMinutes: 90,
       }),
@@ -236,7 +240,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Recurring ${kit.runSuffix}`,
         purpose: 'Caretaker',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         guestType: 'recurring',
         validFrom: '2026-06-10T09:00:00.000Z',
         validUntil: '2026-06-20T17:00:00.000Z',
@@ -259,7 +263,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Permanent ${kit.runSuffix}`,
         purpose: 'Caregiver',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         guestType: 'permanent',
         validFrom: '2026-06-01T00:00:00.000Z',
       }),
@@ -274,7 +278,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Vendor ${kit.runSuffix}`,
         purpose: 'HVAC service',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         guestType: 'vendor',
         validFrom: '2026-06-15T08:00:00.000Z',
         validUntil: '2026-06-15T18:00:00.000Z',
@@ -311,7 +315,9 @@ describeDb('visitor upgrade (db-backed integration)', () => {
 
     clearCapturedNotifications();
 
-    const summary = await processComplianceAlerts(new Date('2026-06-15T12:00:00.000Z'));
+    const summary = await processComplianceAlerts(new Date('2026-06-15T12:00:00.000Z'), {
+      communityIds: [communityA.id],
+    });
     expect(summary.totalExpiringVisitors).toBeGreaterThanOrEqual(1);
     expect(summary.totalExpiryNotifications).toBeGreaterThanOrEqual(1);
 
@@ -339,7 +345,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Self Revoke ${kit.runSuffix}`,
         purpose: 'Friend',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-07-01T18:00:00.000Z',
         expectedDurationMinutes: 60,
       }),
@@ -402,7 +408,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Resident Toggle ${kit.runSuffix}`,
         purpose: 'Babysitter',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-07-02T18:00:00.000Z',
         expectedDurationMinutes: 120,
       }),
@@ -434,7 +440,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Expired ${kit.runSuffix}`,
         purpose: 'Tutor',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         guestType: 'recurring',
         validFrom: '2026-02-01T09:00:00.000Z',
         validUntil: '2026-03-01T17:00:00.000Z',
@@ -565,7 +571,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Auto Checkout ${kit.runSuffix}`,
         purpose: 'Food delivery',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-08-01T18:00:00.000Z',
         expectedDurationMinutes: 15,
       }),
@@ -624,7 +630,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Cascade Recurring ${kit.runSuffix}`,
         purpose: 'Care aide',
-        hostUnitId: runtimeResident.unitId,
+        hostUnitLabel: runtimeResident.unitLabel,
         guestType: 'recurring',
         validFrom: '2026-09-01T09:00:00.000Z',
         validUntil: '2026-09-30T17:00:00.000Z',
@@ -641,7 +647,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Cascade Permanent ${kit.runSuffix}`,
         purpose: 'Live-in aide',
-        hostUnitId: runtimeResident.unitId,
+        hostUnitLabel: runtimeResident.unitLabel,
         guestType: 'permanent',
         validFrom: '2026-09-01T00:00:00.000Z',
       }),
@@ -679,7 +685,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Overstayed ${kit.runSuffix}`,
         purpose: 'Physical therapy',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         guestType: 'recurring',
         validFrom: '2026-10-01T09:00:00.000Z',
         validUntil: '2026-12-31T17:00:00.000Z',
@@ -735,7 +741,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Default Active ${kit.runSuffix}`,
         purpose: 'Neighbor visit',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-11-01T18:00:00.000Z',
         expectedDurationMinutes: 45,
       }),
@@ -749,7 +755,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Default Past ${kit.runSuffix}`,
         purpose: 'Pet sitter',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-11-01T12:00:00.000Z',
         expectedDurationMinutes: 30,
       }),

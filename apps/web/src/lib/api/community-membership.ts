@@ -11,6 +11,9 @@ export interface CommunityMembership {
   communityName: string;
   role: NewCommunityRole;
   communityType: CommunityType;
+  subscriptionPlan: string | null;
+  subscriptionStatus: string | null;
+  freeAccessExpiresAt: Date | null;
   timezone: string;
   /** True if this resident is a unit owner (only meaningful when role = 'resident'). */
   isUnitOwner: boolean;
@@ -119,6 +122,14 @@ export async function requireCommunityMembership(
     communityName: typeof community['name'] === 'string' ? community['name'] : '',
     role,
     communityType,
+    subscriptionPlan:
+      typeof community['subscriptionPlan'] === 'string' ? community['subscriptionPlan'] : null,
+    subscriptionStatus:
+      typeof community['subscriptionStatus'] === 'string'
+        ? community['subscriptionStatus']
+        : null,
+    freeAccessExpiresAt:
+      community['freeAccessExpiresAt'] instanceof Date ? community['freeAccessExpiresAt'] : null,
     timezone: typeof community['timezone'] === 'string' ? community['timezone'] : 'America/New_York',
     isUnitOwner,
     isAdmin,

@@ -72,6 +72,7 @@ interface RouteModules {
 let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId: number;
+let unitALabel: string;
 let unitCId: number;
 
 function requireState(): TestKitState {
@@ -147,8 +148,9 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const scopedA = state.dbModule.createScopedClient(communityA.id);
     const scopedC = state.dbModule.createScopedClient(communityC.id);
 
+    unitALabel = `WS72-A-${state.runSuffix}`;
     const [unitA] = await scopedA.insert(state.dbModule.units, {
-      unitNumber: `WS72-A-${state.runSuffix}`,
+      unitNumber: unitALabel,
       building: 'A',
       floor: 1,
     });
@@ -300,7 +302,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: 'Guest',
         purpose: 'Visit',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-08-01T12:00:00.000Z',
       }),
     );
@@ -421,7 +423,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         communityId: communityA.id,
         visitorName: `Guest ${kit.runSuffix}`,
         purpose: 'Cross-tenant seed',
-        hostUnitId: unitAId,
+        hostUnitLabel: unitALabel,
         expectedArrival: '2026-08-02T12:00:00.000Z',
       }),
     );
@@ -698,7 +700,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
           communityId: communityA.id,
           visitorName: `Audit Visitor ${kit.runSuffix}`,
           purpose: 'Audit flow',
-          hostUnitId: unitAId,
+          hostUnitLabel: unitALabel,
           expectedArrival: '2026-09-01T18:00:00.000Z',
         },
         { 'x-request-id': visitorsRequestId },

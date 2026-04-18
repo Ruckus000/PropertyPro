@@ -43,6 +43,7 @@ const {
   userRolesTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  requirePermissionMock,
   assertNotDemoGraceMock,
   requirePlanFeatureMock,
   queueNotificationMock,
@@ -55,6 +56,7 @@ const {
   userRolesTableMock: { userId: Symbol('user_roles.userId') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
   requirePlanFeatureMock: vi.fn().mockResolvedValue(undefined),
   queueNotificationMock: vi.fn().mockResolvedValue(undefined),
@@ -73,9 +75,8 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn().mockReturnValue('eq-filter'),
 }));
 
-vi.mock('@propertypro/shared', () => ({
-  ADMIN_ROLES: ['board_member', 'board_president', 'cam', 'site_manager', 'property_manager_admin'],
-  RESIDENT_ROLES: ['owner', 'tenant'],
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -108,7 +109,7 @@ import { GET, PATCH, DELETE } from '../../src/app/api/v1/maintenance-requests/[i
 const ADMIN_MEMBERSHIP = {
   userId: 'session-user-1',
   communityId: 42,
-  role: 'board_president',
+  role: 'manager',
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
@@ -142,14 +143,22 @@ const ADMIN_MEMBERSHIP = {
   },
 };
 
+const PM_ADMIN_MEMBERSHIP = {
+  ...ADMIN_MEMBERSHIP,
+  role: 'pm_admin',
+  displayTitle: 'Property Manager Admin',
+  presetKey: undefined,
+  permissions: undefined,
+};
+
 const RESIDENT_MEMBERSHIP = {
   userId: 'session-user-1',
   communityId: 42,
-  role: 'owner',
+  role: 'resident',
   isAdmin: false,
   isUnitOwner: true,
   displayTitle: 'Owner',
-  presetKey: 'owner',
+  presetKey: undefined,
   communityType: 'condo_718',
   permissions: {
     resources: {
@@ -250,6 +259,7 @@ describe('maintenance requests [id] route', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
+    requirePermissionMock.mockImplementation(() => {});
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     queueNotificationMock.mockResolvedValue(undefined);
@@ -374,6 +384,20 @@ describe('maintenance requests [id] route', () => {
       );
     });
 
+    it('pm_admin can update status with valid transition', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(PM_ADMIN_MEMBERSHIP);
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ communityId: 42, status: 'acknowledged' }),
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+      const res = await PATCH(req, { params: Promise.resolve({ id: '1' }) });
+      expect(res.status).toBe(200);
+    });
+
     it('returns 422 for invalid status transition with allowedTransitions in error detail', async () => {
       // resolved → in_progress is not allowed
       createScopedClientMock.mockReturnValue(
@@ -436,7 +460,7 @@ describe('maintenance requests [id] route', () => {
       expect(res.status).toBe(400);
     });
 
-    it('returns 400 when assignedToId is not a community admin', async () => {
+    it('returns 400 when assignedToId is not maintenance staff', async () => {
       // userRoles returns no admin match
       createScopedClientMock.mockReturnValue(
         makeDefaultScopedClient({
@@ -447,12 +471,14 @@ describe('maintenance requests [id] route', () => {
         'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',
         {
           method: 'PATCH',
-          body: JSON.stringify({ communityId: 42, assignedToId: '00000000-0000-0000-0000-000000000001' }),
+          body: JSON.stringify({ communityId: 42, assignedToId: '123e4567-e89b-42d3-a456-426614174000' }),
           headers: { 'Content-Type': 'application/json' },
         },
       );
       const res = await PATCH(req, { params: Promise.resolve({ id: '1' }) });
       expect(res.status).toBe(400);
+      const body = await res.json() as { error: { message: string } };
+      expect(body.error.message).toContain('maintenance staff');
     });
 
     it('status change queues notification with maintenance_update type and no internalNotes', async () => {
@@ -556,6 +582,8 @@ describe('maintenance requests [id] route', () => {
       );
       const res = await DELETE(req, { params: Promise.resolve({ id: '1' }) });
       expect(res.status).toBe(403);
+      const body = await res.json() as { error: { message: string } };
+      expect(body.error.message).toContain('Only maintenance staff');
     });
 
     it('returns 404 when request not found for DELETE', async () => {

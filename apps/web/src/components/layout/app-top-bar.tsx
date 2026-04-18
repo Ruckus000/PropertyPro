@@ -7,7 +7,8 @@
  * while desktop collapses to a single utility row with search, notifications,
  * and the avatar profile menu.
  */
-import { Menu, Search } from 'lucide-react';
+import { CircleHelp, Menu, Search } from 'lucide-react';
+import { useHelpWidget } from '@/components/help/help-widget-provider';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommunitySwitcher } from '@/components/overview/community-switcher';
 import { ProfileMenu } from './profile-menu';
@@ -22,6 +23,7 @@ interface AppTopBarProps {
 
 export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: AppTopBarProps) {
   const { setMobileOpen } = useSidebar();
+  const { toggle: toggleHelp } = useHelpWidget();
 
   return (
     <header className="shrink-0 border-b border-edge bg-surface-card">
@@ -53,6 +55,15 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:gap-2">
+          <button
+            type="button"
+            onClick={toggleHelp}
+            className="flex size-11 items-center justify-center rounded-[var(--radius-md)] text-content-tertiary transition-colors duration-quick hover:bg-surface-muted hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus lg:size-9"
+            aria-label="Open help"
+            title="Help (?)"
+          >
+            <CircleHelp size={18} aria-hidden="true" />
+          </button>
           <CommunitySwitcher />
           <NotificationBell communityId={communityId} />
           <ProfileMenu userName={userName} userEmail={userEmail} communityId={communityId} />

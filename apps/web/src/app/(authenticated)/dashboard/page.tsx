@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -56,6 +57,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   const data = await loadDashboardData(context.communityId, userId, membership);
+  const canWriteAnnouncements = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'announcements',
+    'write',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -65,7 +76,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       />
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <DashboardAnnouncements items={data.announcements} />
+        <DashboardAnnouncements
+          items={data.announcements}
+          communityId={context.communityId}
+          canWriteAnnouncements={canWriteAnnouncements}
+        />
         <DashboardMeetings items={data.meetings} timezone={data.timezone} />
         {features.hasViolations && data.violationSummary && (
           <DashboardViolations

@@ -443,4 +443,5 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   visitors: { title: 'Visitors', subtitle: 'Manage visitor access' },
   'move-in-out': { title: 'Move In/Out', subtitle: 'Move-in & move-out checklists' },
   reports: { title: 'Reports', subtitle: 'Portfolio analytics & reports' },
+  help: { title: 'Help Center', subtitle: 'Guides, FAQs, and support' },
 };

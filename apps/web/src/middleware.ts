@@ -52,8 +52,10 @@ import {
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
+  '/help',
   '/select-community',
   '/settings',
+  '/help',
   '/documents',
   '/maintenance',
   '/violations',

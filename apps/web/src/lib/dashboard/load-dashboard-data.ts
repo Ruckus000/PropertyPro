@@ -1,35 +1,25 @@
 import {
-  announcements,
-  communities,
   createScopedClient,
-  maintenanceRequests,
-  meetings,
-  users,
-  violations,
-  type Announcement,
-  type Meeting,
-  type Violation,
 } from '@propertypro/db';
 import {
   getFeaturesForCommunity,
-  type CommunityType,
 } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
-  selectRecentAnnouncements,
-  selectUpcomingMeetings,
-  selectViolationSummary,
-  toFirstName,
   type DashboardAnnouncement,
   type DashboardMeeting,
   type DashboardViolationSummary,
+  toFirstName,
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { listMyPendingSigners } from '@/lib/services/esign-service';
 import {
-  filterVisibleAnnouncements,
-  getAnnouncementCommunityContext,
-} from '@/lib/announcements/read-visibility';
+  getDashboardOpenMaintenanceCount,
+  getDashboardUserLookup,
+  getDashboardViolationSummary,
+  listDashboardAnnouncements,
+  listDashboardMeetings,
+} from './dashboard-queries';
 
 export interface DashboardPendingSigner {
   signerId: number;
@@ -58,61 +48,48 @@ export async function loadDashboardData(
   membership: CommunityMembership,
 ): Promise<DashboardData> {
   const scoped = createScopedClient(communityId);
-  const [announcementRows, meetingRows, communityRows, userRows, violationRows, maintenanceRows] = await Promise.all([
-    scoped.query(announcements),
-    scoped.query(meetings),
-    scoped.query(communities),
-    scoped.query(users),
-    scoped.query(violations),
-    scoped.query(maintenanceRequests),
+  const features = getFeaturesForCommunity(membership.communityType);
+  const userLookupPromise = getDashboardUserLookup(scoped, userId);
+  const pendingSignersPromise = userLookupPromise.then(async (userLookup) => {
+    if (!features.hasEsign || !userLookup.email) {
+      return [] as DashboardPendingSigner[];
+    }
+
+    const raw = await listMyPendingSigners(communityId, userId, userLookup.email);
+    return raw.map((r) => ({
+      signerId: r.signerId,
+      templateName: r.templateName,
+      messageSubject: r.messageSubject,
+      expiresAt: r.expiresAt?.toISOString() ?? null,
+      submissionExternalId: r.submissionExternalId,
+      slug: r.slug,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  });
+
+  const [
+    userLookup,
+    announcements,
+    meetings,
+    violationSummary,
+    openMaintenanceCount,
+    pendingSigners,
+  ] = await Promise.all([
+    userLookupPromise,
+    listDashboardAnnouncements(scoped, membership),
+    listDashboardMeetings(scoped),
+    getDashboardViolationSummary(scoped),
+    getDashboardOpenMaintenanceCount(scoped),
+    pendingSignersPromise,
   ]);
 
-  const community = communityRows.find((row) => row['id'] === communityId);
-  const communityName =
-    typeof community?.['name'] === 'string' ? (community['name'] as string) : 'Community';
-  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
-
-  const user = userRows.find((row) => row['id'] === userId);
-  const fullName = typeof user?.['fullName'] === 'string' ? (user['fullName'] as string) : null;
-  const userEmail = typeof user?.['email'] === 'string' ? (user['email'] as string) : '';
-
-  const openStatuses = new Set(['open', 'submitted', 'in_progress', 'acknowledged']);
-  const openMaintenanceCount = maintenanceRows.filter(
-    (row) => typeof row['status'] === 'string' && openStatuses.has(row['status'] as string),
-  ).length;
-
-  // Load pending e-sign signers if the feature is enabled
-  let pendingSigners: DashboardPendingSigner[] = [];
-  const communityType = community?.['communityType'] as string | undefined;
-  if (communityType) {
-    const features = getFeaturesForCommunity(communityType as CommunityType);
-    if (features.hasEsign && userEmail) {
-      const raw = await listMyPendingSigners(communityId, userId, userEmail);
-      pendingSigners = raw.map((r) => ({
-        signerId: r.signerId,
-        templateName: r.templateName,
-        messageSubject: r.messageSubject,
-        expiresAt: r.expiresAt?.toISOString() ?? null,
-        submissionExternalId: r.submissionExternalId,
-        slug: r.slug,
-        createdAt: r.createdAt.toISOString(),
-      }));
-    }
-  }
-
-  const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
-    getAnnouncementCommunityContext(membership),
-    membership,
-    announcementRows as Announcement[],
-  );
-
   return {
-    communityName,
-    firstName: toFirstName(fullName),
-    timezone,
-    announcements: selectRecentAnnouncements(visibleAnnouncements),
-    meetings: selectUpcomingMeetings(meetingRows as Meeting[]),
-    violationSummary: selectViolationSummary(violationRows as unknown as Violation[]),
+    communityName: membership.communityName,
+    firstName: toFirstName(userLookup.fullName),
+    timezone: resolveTimezone(membership.timezone),
+    announcements,
+    meetings,
+    violationSummary,
     pendingSigners,
     openMaintenanceCount,
   };

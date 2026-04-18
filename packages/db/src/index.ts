@@ -50,6 +50,9 @@ export type {
   DocumentSearchResult,
 } from './queries/document-search';
 
+export { listDeletedForumRepliesForThread } from './queries/forum-replies';
+export type { DeletedForumReplyRow } from './queries/forum-replies';
+
 export {
   updateDocumentExtractionFailure,
   updateDocumentExtractionSuccess,
