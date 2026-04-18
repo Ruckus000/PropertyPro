@@ -1,5 +1,5 @@
 import type { CommunityType } from '@propertypro/shared';
-import { PLAN_IDS, type PlanId } from '@propertypro/shared';
+import { PLAN_IDS, buildPasswordZodSchema, type PlanId } from '@propertypro/shared';
 import { z } from 'zod';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
@@ -104,14 +104,7 @@ export const signupSchema = z
       .trim()
       .min(1, 'Email is required')
       .email('Please enter a valid email address'),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .max(72, 'Password must be at most 72 characters')
-      .regex(/[a-z]/, 'Password must include a lowercase letter')
-      .regex(/[A-Z]/, 'Password must include an uppercase letter')
-      .regex(/\d/, 'Password must include a number')
-      .regex(/[^A-Za-z0-9]/, 'Password must include a special character'),
+    password: buildPasswordZodSchema(),
     communityName: z
       .string()
       .trim()
