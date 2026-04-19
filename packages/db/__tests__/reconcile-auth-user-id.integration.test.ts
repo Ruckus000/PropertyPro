@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, inArray, sql as drizzleSql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
