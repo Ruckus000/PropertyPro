@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from '../filters';
+import { and, eq, inArray, sql } from '../filters';
 import {
   announcements,
   communities,
@@ -453,6 +453,13 @@ export interface ReconcilePublicUserProfile {
 }
 
 /**
+ * Seed/demo-only helper run with service-role privileges during reconcile flows.
+ * Concurrent Promise.all callers serialize at the ACCESS EXCLUSIVE DDL on
+ * compliance_audit_log when the append-only guard trigger is disabled/enabled.
+ * A self-referencing FK on public.users would need bespoke handling because the
+ * current FK scan would silently skip carrying that relationship onto the
+ * replacement row; none exist today.
+ *
  * Re-keys every FK to public.users from a stale UUID to the Supabase auth user id.
  * public.users.id must match auth.users.id so sessions resolve user_roles.
  */
@@ -1480,15 +1487,58 @@ export async function seedCommunity(
   const userIdsByEmail: Record<string, string> = {};
   const seededUsers: SeedCommunityResult['users'] = [];
 
-  const seededUsersData = await Promise.all(
+  const usersWithAuth = await Promise.all(
     usersToSeed.map(async (user) => {
       const authUserId = syncAuthUsers
         ? await ensureAuthUser(user.email, user.fullName, getDefaultPassword())
         : null;
-      const userId = await ensureUser(user.email, user.fullName, user.phone, authUserId ?? undefined);
-      return { email: user.email, userId, role: user.role };
+      return {
+        authUserId: authUserId ?? undefined,
+        normalizedEmail: user.email.toLowerCase(),
+        user,
+      };
     }),
   );
+
+  const normalizedEmails = [...new Set(usersWithAuth.map((entry) => entry.normalizedEmail))];
+  const existingUsersByEmail = normalizedEmails.length === 0
+    ? []
+    : await db
+      .select({ email: users.email, id: users.id })
+      .from(users)
+      .where(inArray(users.email, normalizedEmails));
+  const existingUserIdsByEmail = new Map(existingUsersByEmail.map((row) => [row.email, row.id]));
+  const needsReconcile = usersWithAuth.some((entry) => {
+    const existingId = existingUserIdsByEmail.get(entry.normalizedEmail);
+    return Boolean(entry.authUserId && existingId && existingId !== entry.authUserId);
+  });
+
+  const seededUsersData: SeedCommunityResult['users'] = [];
+  // Reconciles serialize at DDL; parallel is safe when no reconcile is needed.
+  if (needsReconcile) {
+    for (const entry of usersWithAuth) {
+      const userId = await ensureUser(
+        entry.user.email,
+        entry.user.fullName,
+        entry.user.phone,
+        entry.authUserId,
+      );
+      seededUsersData.push({ email: entry.user.email, userId, role: entry.user.role });
+    }
+  } else {
+    seededUsersData.push(...(await Promise.all(
+      usersWithAuth.map(async (entry) => {
+        const userId = await ensureUser(
+          entry.user.email,
+          entry.user.fullName,
+          entry.user.phone,
+          entry.authUserId,
+        );
+        return { email: entry.user.email, userId, role: entry.user.role };
+      }),
+    )));
+  }
+
   for (const seededUser of seededUsersData) {
     userIdsByEmail[seededUser.email] = seededUser.userId;
     seededUsers.push(seededUser);
