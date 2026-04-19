@@ -36,6 +36,7 @@ import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsaf
 import { getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { runSeedSafetyChecks } from './lib/seed-safety';
 import {
   getOrCreateBillingGroupForPm,
   recalculateVolumeTier,
@@ -1675,6 +1676,10 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
 
 async function main(): Promise<void> {
   try {
+    await runSeedSafetyChecks({
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      db,
+    });
     await runDemoSeed();
     // eslint-disable-next-line no-console
     console.log('Demo seed complete.');
