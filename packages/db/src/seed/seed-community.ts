@@ -422,22 +422,28 @@ async function rekeyAllForeignKeysToPublicUsers(
     if (row.table_name === 'compliance_audit_log') {
       continue;
     }
+    // Table and column names are validated identifiers; the uuid values are
+    // passed through driver parameter binding so they cannot inject SQL even
+    // if assertUuid were bypassed.
     const table = assertSqlIdentifier(row.table_name);
     const column = assertSqlIdentifier(row.column_name);
     await tx.execute(
-      sql.raw(
-        `UPDATE ${table} SET ${column} = '${authUserId}'::uuid WHERE ${column} = '${oldPublicUserId}'::uuid`,
-      ),
+      sql`UPDATE ${sql.raw(table)} SET ${sql.raw(column)} = ${authUserId}::uuid WHERE ${sql.raw(column)} = ${oldPublicUserId}::uuid`,
     );
   }
 
-  await tx.execute(sql.raw(`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`));
+  // Briefly disable the append-only guard trigger to move audit rows to the
+  // new user id. Wrapped in the same transaction as the caller, so a failure
+  // rolls the DDL back and the trigger is always re-enabled before commit.
   await tx.execute(
-    sql.raw(
-      `UPDATE compliance_audit_log SET user_id = '${authUserId}'::uuid WHERE user_id = '${oldPublicUserId}'::uuid`,
-    ),
+    sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
   );
-  await tx.execute(sql.raw(`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`));
+  await tx.execute(
+    sql`UPDATE compliance_audit_log SET user_id = ${authUserId}::uuid WHERE user_id = ${oldPublicUserId}::uuid`,
+  );
+  await tx.execute(
+    sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
+  );
 }
 
 export interface ReconcilePublicUserProfile {
