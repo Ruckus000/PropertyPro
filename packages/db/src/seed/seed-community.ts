@@ -375,6 +375,149 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
   return created!.id;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assertUuid(label: string, value: string): void {
+  if (!UUID_RE.test(value)) {
+    throw new Error(`${label} is not a valid UUID: ${value}`);
+  }
+}
+
+function assertSqlIdentifier(name: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(name)) {
+    throw new Error(`Invalid SQL identifier: ${name}`);
+  }
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+async function rekeyAllForeignKeysToPublicUsers(
+  tx: Pick<typeof db, 'execute'>,
+  oldPublicUserId: string,
+  authUserId: string,
+): Promise<void> {
+  const fkRows = await tx.execute(sql`
+    SELECT tc.table_name, kcu.column_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+    JOIN information_schema.constraint_column_usage ccu
+      ON ccu.constraint_name = tc.constraint_name
+      AND ccu.table_schema = tc.table_schema
+    WHERE tc.constraint_type = 'FOREIGN KEY'
+      AND tc.table_schema = 'public'
+      AND ccu.table_schema = 'public'
+      AND ccu.table_name = 'users'
+      AND ccu.column_name = 'id'
+  `);
+
+  // postgres-js returns a RowList (array); node-pg shape uses { rows: [] }
+  const raw = fkRows as unknown;
+  const rows: Array<{ table_name: string; column_name: string }> = Array.isArray(raw)
+    ? (raw as Array<{ table_name: string; column_name: string }>)
+    : ((raw as { rows?: Array<{ table_name: string; column_name: string }> }).rows ?? []);
+
+  for (const row of rows) {
+    if (row.table_name === 'compliance_audit_log') {
+      continue;
+    }
+    // Table and column names are validated identifiers; the uuid values are
+    // passed through driver parameter binding so they cannot inject SQL even
+    // if assertUuid were bypassed.
+    const table = assertSqlIdentifier(row.table_name);
+    const column = assertSqlIdentifier(row.column_name);
+    await tx.execute(
+      sql`UPDATE ${sql.raw(table)} SET ${sql.raw(column)} = ${authUserId}::uuid WHERE ${sql.raw(column)} = ${oldPublicUserId}::uuid`,
+    );
+  }
+
+  // Briefly disable the append-only guard trigger to move audit rows to the
+  // new user id. Wrapped in the same transaction as the caller, so a failure
+  // rolls the DDL back and the trigger is always re-enabled before commit.
+  await tx.execute(
+    sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
+  );
+  await tx.execute(
+    sql`UPDATE compliance_audit_log SET user_id = ${authUserId}::uuid WHERE user_id = ${oldPublicUserId}::uuid`,
+  );
+  await tx.execute(
+    sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
+  );
+}
+
+export interface ReconcilePublicUserProfile {
+  email: string;
+  fullName: string;
+  phone?: string | null;
+}
+
+/**
+ * Re-keys every FK to public.users from a stale UUID to the Supabase auth user id.
+ * public.users.id must match auth.users.id so sessions resolve user_roles.
+ */
+export async function reconcilePublicUserIdWithAuthId(
+  oldPublicUserId: string,
+  authUserId: string,
+  profile: ReconcilePublicUserProfile,
+): Promise<void> {
+  assertUuid('oldPublicUserId', oldPublicUserId);
+  assertUuid('authUserId', authUserId);
+
+  if (oldPublicUserId === authUserId) {
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    const oldRow = await tx.select().from(users).where(eq(users.id, oldPublicUserId)).limit(1);
+    if (!oldRow[0]) {
+      throw new Error(`reconcilePublicUserIdWithAuthId: no public.users row for ${oldPublicUserId}`);
+    }
+
+    const authRow = await tx.select().from(users).where(eq(users.id, authUserId)).limit(1);
+
+    if (authRow[0]) {
+      await tx
+        .update(users)
+        .set({
+          fullName: profile.fullName,
+          phone: profile.phone ?? undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, authUserId));
+
+      await rekeyAllForeignKeysToPublicUsers(tx, oldPublicUserId, authUserId);
+      await tx.delete(users).where(eq(users.id, oldPublicUserId));
+      return;
+    }
+
+    const orphanEmail = `orphan+${oldPublicUserId}@seed.propertypro.invalid`;
+    await tx
+      .update(users)
+      .set({ email: orphanEmail, updatedAt: new Date() })
+      .where(eq(users.id, oldPublicUserId));
+
+    const o = oldRow[0];
+    await tx.insert(users).values({
+      id: authUserId,
+      email: profile.email.toLowerCase(),
+      fullName: profile.fullName,
+      phone: profile.phone ?? o.phone,
+      phoneVerifiedAt: o.phoneVerifiedAt,
+      avatarUrl: o.avatarUrl,
+      otpLastSentAt: o.otpLastSentAt,
+      otpFailedAttempts: o.otpFailedAttempts,
+      otpLockedUntil: o.otpLockedUntil,
+      createdAt: o.createdAt,
+      updatedAt: new Date(),
+      deletedAt: o.deletedAt,
+    });
+
+    await rekeyAllForeignKeysToPublicUsers(tx, oldPublicUserId, authUserId);
+    await tx.delete(users).where(eq(users.id, oldPublicUserId));
+  });
+}
+
 async function ensureUser(
   email: string,
   fullName: string,
@@ -389,10 +532,18 @@ async function ensureUser(
     .limit(1);
 
   if (existing[0]) {
+    let effectiveId = existing[0].id;
+
     if (preferredId && existing[0].id !== preferredId) {
       debugSeed(
-        `preserving existing public.users.id=${existing[0].id} for ${normalizedEmail}; auth user id ${preferredId} differs and automatic churn is disabled`,
+        `reconciling public.users.id ${existing[0].id} -> Supabase auth id ${preferredId} for ${normalizedEmail}`,
       );
+      await reconcilePublicUserIdWithAuthId(existing[0].id, preferredId, {
+        email: normalizedEmail,
+        fullName,
+        phone: phone ?? existing[0].phone,
+      });
+      effectiveId = preferredId;
     }
 
     await db
@@ -402,8 +553,8 @@ async function ensureUser(
         phone,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, existing[0].id));
-    return existing[0].id;
+      .where(eq(users.id, effectiveId));
+    return effectiveId;
   }
 
   const userId = preferredId ?? randomUUID();

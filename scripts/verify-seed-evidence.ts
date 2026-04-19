@@ -42,6 +42,12 @@ interface SeededDocumentRow {
   file_path: string;
 }
 
+interface UserIdDriftRow {
+  email: string;
+  public_user_id: string;
+  auth_user_id: string;
+}
+
 interface StorageCheckResult {
   slug: string;
   itemName: string;
@@ -416,6 +422,34 @@ async function run(): Promise<number> {
         ]),
       ),
     );
+
+    const userIdDriftRows = await sql<UserIdDriftRow[]>`
+      select
+        u.email,
+        u.id::text as public_user_id,
+        a.id::text as auth_user_id
+      from public.users u
+      join auth.users a on a.email = u.email
+      where u.id <> a.id
+      order by u.email
+    `;
+
+    console.log('\nPublic/Auth User ID Drift Check');
+    if (userIdDriftRows.length === 0) {
+      console.log('PASS: No drift between public.users.id and auth.users.id.');
+    } else {
+      console.log(
+        formatTable(
+          ['email', 'public_user_id', 'auth_user_id'],
+          userIdDriftRows.map((row) => [row.email, row.public_user_id, row.auth_user_id]),
+        ),
+      );
+      for (const row of userIdDriftRows) {
+        failures.push(
+          `User id drift: ${row.email} public.users.id=${row.public_user_id} differs from auth.users.id=${row.auth_user_id}.`,
+        );
+      }
+    }
 
     if (failures.length === 0) {
       console.log('\nPASS: Seed evidence verification checks passed.');

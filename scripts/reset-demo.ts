@@ -16,6 +16,7 @@ import { inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { DEMO_COMMUNITIES } from './config/demo-data';
+import { runSeedSafetyChecks } from './lib/seed-safety';
 import { runDemoSeed } from './seed-demo';
 
 const db = createUnscopedClient();
@@ -277,6 +278,10 @@ export async function runDemoReset(options: DemoResetOptions = {}): Promise<void
 
 async function main(): Promise<void> {
   try {
+    await runSeedSafetyChecks({
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      db,
+    });
     await runDemoReset({ syncAuthUsers: true });
   } finally {
     await closeUnscopedClient();

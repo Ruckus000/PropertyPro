@@ -25,6 +25,7 @@ import {
   ensureNotificationPreference,
   seedCommunity,
   seedDocumentCategories,
+  reconcilePublicUserIdWithAuthId,
   seedRoles,
   type SeededDocumentCategoryIds,
   type SeedCommunityConfig,
@@ -35,6 +36,7 @@ import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsaf
 import { getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { runSeedSafetyChecks } from './lib/seed-safety';
 import {
   getOrCreateBillingGroupForPm,
   recalculateVolumeTier,
@@ -228,6 +230,17 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
     .limit(1);
 
   if (existingByEmail[0]) {
+    let effectiveId = existingByEmail[0].id;
+    const authId = await findAuthUserIdByEmail(normalizedEmail);
+    if (authId && existingByEmail[0].id !== authId) {
+      await reconcilePublicUserIdWithAuthId(existingByEmail[0].id, authId, {
+        email: normalizedEmail,
+        fullName: demoUser.fullName,
+        phone: demoUser.phone,
+      });
+      effectiveId = authId;
+    }
+
     await db
       .update(users)
       .set({
@@ -235,8 +248,8 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
         phone: demoUser.phone,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, existingByEmail[0].id));
-    return existingByEmail[0].id;
+      .where(eq(users.id, effectiveId));
+    return effectiveId;
   }
 
   const userId = preferredId ?? crypto.randomUUID();
@@ -1663,6 +1676,10 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
 
 async function main(): Promise<void> {
   try {
+    await runSeedSafetyChecks({
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      db,
+    });
     await runDemoSeed();
     // eslint-disable-next-line no-console
     console.log('Demo seed complete.');
