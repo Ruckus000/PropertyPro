@@ -1,0 +1,108 @@
+---
+title: "Creating an e-sign template"
+description: "Build a reusable document template with field placeholders for signers, dates, and custom data."
+category: "esign"
+slug: "creating-an-esign-template"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - esign
+  - e-sign
+  - template
+  - signature
+  - contract
+tags:
+  - esign
+  - admin
+updatedAt: "2026-04-19"
+relatedArticles:
+  - sending-an-esign-submission
+  - signing-documents-electronically
+featured: false
+contextPaths:
+  - /esign
+  - /esign/templates
+  - /esign/templates/*
+---
+
+Templates let you send the same document repeatedly — leases, disclosures, amendments — without rebuilding the signature layout every time.
+
+## Good use cases for templates
+
+- **Standard lease** — same fields, different tenant each time
+- **Annual disclosure** — every owner signs the same form yearly
+- **Board resolution acknowledgements** — board members sign the same form per resolution
+- **Policy updates** — bylaws amendments that all owners must acknowledge
+
+If you're only sending a document once, skip the template and go straight to a one-off submission.
+
+## Creating a template
+
+<StepByStep>
+<Step title="Open E-Sign → Templates">
+Click E-Sign in the sidebar, then Templates.
+</Step>
+
+<Step title="New template">
+Click **New template**. Give it a clear name ("Annual Insurance Disclosure 2026") and upload the base PDF.
+</Step>
+
+<Step title="Place fields">
+For each place the signer needs to act, drop a field: **Signature**, **Initials**, **Date**, **Name**, or **Custom text**. Drag to position.
+</Step>
+
+<Step title="Assign fields to signers">
+Each field belongs to a specific signer role — "Owner", "Tenant", "Board President." When you send a submission, each role gets mapped to a real person.
+</Step>
+
+<Step title="Set signing order">
+If signers must go in a specific order (tenant then owner, for example), enable sequential mode. Otherwise everyone signs in parallel.
+</Step>
+
+<Step title="Save and test">
+Save the template, then send a test submission to yourself to verify the layout looks right.
+</Step>
+</StepByStep>
+
+## Tips for good templates
+
+- **Size fields generously** — signers draw on touch screens; too-small fields are frustrating.
+- **Use typed names for readability** — a Name field beside a Signature field makes the final document easier to read.
+- **Date fields auto-fill** — use Today's date type to avoid confusion.
+- **Attach supporting docs** — if the signer needs to read an appendix before signing, include it in the template.
+
+## Updating a template
+
+When you update a template, prior submissions that used the old version are unaffected — they keep the document as signed. New submissions use the new version automatically.
+
+If the template changes materially (not a typo), rename the new version (e.g., "Annual Insurance Disclosure 2027") and archive the old one rather than editing in place. That way historical submissions are clearly tied to the version they referenced.
+
+## Cloning
+
+Save time by cloning an existing template:
+
+1. Open the source template.
+2. Click **Clone**.
+3. Rename and edit the copy.
+
+Cloning preserves field layout, which is usually the hardest part to rebuild.
+
+## Archiving
+
+Old templates clutter the list. Archive (not delete) once you've replaced them with a newer version. Archived templates stay for audit but don't appear when picking a template for a new submission.
+
+## Access
+
+Only admins can create and manage templates. Residents never see the template list — they only see submissions addressed to them.
+
+## Compliance
+
+<Callout type="florida-statute" title="E-signatures satisfy statute">
+Under the federal E-Sign Act and Florida's adoption of UETA, e-signatures on your templates have the same legal weight as pen signatures on paper, provided the signer consents to electronic signing. PropertyPro captures that consent automatically in the signing flow.
+</Callout>

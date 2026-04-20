@@ -1,0 +1,104 @@
+---
+title: "Inviting and managing residents"
+description: "Bring residents onto PropertyPro and keep the roster current as owners, tenants, and staff change."
+category: "residents"
+slug: "inviting-and-managing-residents"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - residents
+  - invite
+  - roster
+  - add
+  - roles
+  - offboard
+tags:
+  - residents
+  - admin
+updatedAt: "2026-04-19"
+relatedArticles:
+  - approving-join-requests
+featured: false
+contextPaths:
+  - /dashboard/residents
+  - /communities/*/residents
+---
+
+The resident roster is the source of truth for who can see what in your community. Keeping it clean speeds up everything from announcements to violation handling.
+
+## Invitation vs. self-service
+
+Two paths add residents:
+
+- **Invitation** — you send an invite; resident clicks the link and lands ready to go.
+- **Self-service join** — resident submits a request; you approve or deny.
+
+Invitations are faster and ensure unit numbers are correct from the start. Self-service is useful for communities where you can't easily get resident emails in advance.
+
+## Sending an invitation
+
+<StepByStep>
+<Step title="Open Residents">
+From the sidebar, click Residents (or `/dashboard/residents`).
+</Step>
+
+<Step title="Click Invite resident">
+Enter the resident's email, unit number, and role (Owner, Tenant, Staff, Board Member, etc.).
+</Step>
+
+<Step title="Review and send">
+The resident receives an email invitation with a direct sign-up link pre-filled with their unit and role.
+</Step>
+
+<Step title="Track the invitation">
+Pending invitations show in the Residents list with their status — Sent, Accepted, Expired.
+</Step>
+</StepByStep>
+
+## Bulk invitations
+
+For onboarding at scale (new communities, quarterly new-owner intake):
+
+1. Download the CSV template from the Residents page.
+2. Fill in email, unit, first name, last name, role for each resident.
+3. Upload. PropertyPro validates and sends invitations in bulk.
+4. Review the summary — any rows that failed validation show the reason.
+
+## Updating roles
+
+As ownership, leases, and staff assignments change, update the roster:
+
+- **Owner moves out / sells** — change the unit's owner to the new party; the prior owner loses access.
+- **Tenant moves in** — add as Tenant linked to the unit.
+- **Board election** — promote an owner to Board Member; demote at end of term.
+- **Staff turnover** — remove departing staff and invite replacements.
+
+Role changes take effect immediately. The resident sees their view adjust on next page load.
+
+## Offboarding
+
+<Callout type="warning" title="Don't just delete">
+If an owner sells, the record of their tenure (payments, maintenance history, violations) belongs in the community archive. Deactivate their access rather than deleting the resident — otherwise the audit history loses continuity.
+</Callout>
+
+Use the **Remove from community** action on the resident's profile. Their account stays intact (they can still sign in to any other communities they belong to), but their access to this community is revoked and they drop off the roster.
+
+## Merging duplicate residents
+
+Occasionally a resident has two accounts (old email, new email). To merge:
+
+1. Pick the account you want to keep.
+2. On the duplicate, change the email to a placeholder and remove them from the community.
+3. Invite them back if needed using the correct email.
+
+There's no automatic merge — the two accounts remain distinct in PropertyPro. If history (payments, maintenance) is attached to the old account, it stays with that account.
+
+## Viewing the directory as a resident
+
+Residents see a simpler directory — name and unit for most, contact info only where the resident opts in. Admins see more (email, phone, role). Use this to help residents network without forcing their details public.

@@ -1,0 +1,87 @@
+---
+title: "Approving join requests"
+description: "Triage incoming self-service join requests — verify, approve, or deny with a clear reason."
+category: "residents"
+slug: "approving-join-requests"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - join request
+  - approve
+  - deny
+  - access
+  - verification
+tags:
+  - residents
+  - admin
+updatedAt: "2026-04-19"
+relatedArticles:
+  - inviting-and-managing-residents
+featured: false
+contextPaths:
+  - /admin/join-requests
+---
+
+When residents use the self-service **Join community** flow, they land in the join-requests queue. Admins review and act.
+
+## The queue
+
+Open `/admin/join-requests` to see every pending request with:
+
+- The resident's name, email, and optional phone
+- The unit they claim to live in or own
+- Their declared role (Owner, Tenant, etc.)
+- Any supporting evidence they attached
+- Submission timestamp
+
+Sort by age to keep the queue fresh — old requests often mean a resident is frustrated.
+
+## Reviewing a request
+
+<StepByStep>
+<Step title="Open the request">
+Click any row to see the full submission.
+</Step>
+
+<Step title="Verify the unit claim">
+Cross-check the claimed unit number against your ownership and tenant records. Most disputes boil down to a unit that doesn't match records.
+</Step>
+
+<Step title="Verify role">
+Owners should appear on your title or ownership list. Tenants should have a lease on file or be named by the owner. If neither checks out, ask for proof before approving.
+</Step>
+
+<Step title="Approve">
+Click **Approve**. The resident gets an email, and they're added to the roster with their declared role.
+</Step>
+
+<Step title="Or deny with a reason">
+Click **Deny** and write a short reason (e.g., "Unit number doesn't match our records. Please confirm with your closing paperwork and resubmit."). The resident sees the reason and can resubmit.
+</Step>
+</StepByStep>
+
+## When in doubt
+
+<Callout type="warning" title="Default to a temporary role">
+If you're unsure whether a requester is really an owner or a tenant, approve as Tenant (lower permissions) and ask them to provide documentation. It's easier to elevate later than to take permissions back.
+</Callout>
+
+## Common patterns
+
+- **Tenant claiming owner role** — very common. Tenants sometimes pick Owner because they assume it means "person living in unit." Approve as Tenant and message them.
+- **Former owner whose name is still on a prior deed** — if they sold, they're no longer eligible. Deny with "ownership has transferred per our records" and ask them to clarify if that's wrong.
+- **Unit typos** — common for units with leading zeros or letters. Approve if the resident's identity is clear, and fix the unit number on their profile.
+
+## Bulk triage
+
+During onboarding for a new community, you may have dozens of pending requests. Work them in order of unit to group similar cases, or by age to clear stale ones first. There's no bulk-approve button by design — each request deserves a quick human look.
+
+## Audit trail
+
+Every approval and denial is captured in the compliance audit log with the admin's name and the reason. If a resident later disputes that they were denied or delayed, you have a timestamped record.
