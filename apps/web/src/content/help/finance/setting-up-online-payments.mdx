@@ -1,0 +1,80 @@
+---
+title: "Setting up online payments"
+description: "Enable online payments with a card or bank account so you can pay dues from the web or mobile."
+category: "finance"
+slug: "setting-up-online-payments"
+roles: []
+keywords:
+  - stripe
+  - card
+  - ach
+  - bank
+  - payment method
+  - online payment
+tags:
+  - finance
+  - residents
+updatedAt: "2026-04-19"
+relatedArticles:
+  - paying-dues-and-assessments
+  - understanding-your-assessment-balance
+featured: false
+contextPaths:
+  - /settings/payments
+  - /settings/payments/connected
+  - /payments
+---
+
+Online payments speed up dues collection and give you a digital receipt automatically. They're available when your association has connected Stripe.
+
+## Is online payment enabled for my community?
+
+Open Payments. If you see a **Pay now** button, your community has it enabled. If you don't, your association is collecting payments through another channel — usually mailed check or bank bill-pay.
+
+## Adding a payment method
+
+<StepByStep>
+<Step title="Open your Payments settings">
+From the profile menu, pick Settings and open the Payments area (or visit `/settings/payments/connected`).
+</Step>
+
+<Step title="Add a method">
+Choose **Add payment method**. You'll see options for card or bank account (ACH) where both are supported.
+</Step>
+
+<Step title="Enter details">
+Card numbers and bank details go directly to Stripe — PropertyPro never stores them. You'll only ever see the last 4 digits and expiration.
+</Step>
+
+<Step title="Optionally set as default">
+If a default toggle is available, enabling it uses this method automatically the next time you tap Pay now. You can change the default any time.
+</Step>
+
+<Step title="Verify">
+For ACH, Stripe may send two small test deposits that you confirm. Cards are usable immediately.
+</Step>
+</StepByStep>
+
+## Paying with a saved method
+
+Open Payments, tap **Pay now**, and pick a saved method. The payment goes through in a few seconds; you'll get a confirmation screen and an emailed receipt.
+
+## Security
+
+<Callout type="tip" title="Your numbers don't live on PropertyPro">
+Card and bank details are tokenized by Stripe. We store a token, not the actual card number. If our database were compromised, your payment details would not be exposed because they aren't there to begin with.
+</Callout>
+
+## Removing a method
+
+Open the Payments settings page, click the row for the method you want to remove, and pick **Remove**. If it was your default, set a new default so nothing interrupts future payments.
+
+## Refunds
+
+Refunds process back to the original method. If you paid with a card you no longer have, ask your management team — Stripe can still refund a closed card in most cases.
+
+## Common issues
+
+- **Card declined** — usually bank-side. Try the same card on another site, or use a different method.
+- **ACH takes a few days** — bank transfers can take 3-5 business days to clear. The receipt is immediate but the funds move on bank time.
+- **Community doesn't accept online payments** — your association hasn't connected Stripe yet. Encourage your board to consider it; meanwhile, follow the traditional payment instructions your manager provides.
