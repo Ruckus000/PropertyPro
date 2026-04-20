@@ -1,0 +1,105 @@
+---
+title: "Reviewing the audit trail"
+description: "Read, filter, and export the compliance audit log — your statutory record of who did what and when."
+category: "audit"
+slug: "reviewing-the-audit-trail"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - audit
+  - log
+  - history
+  - compliance
+  - records
+  - trail
+tags:
+  - audit
+  - admin
+  - florida
+updatedAt: "2026-04-19"
+relatedArticles:
+  - reviewing-the-compliance-dashboard
+  - document-posting-requirements
+featured: false
+contextPaths:
+  - /audit-trail
+---
+
+The audit trail is an append-only log of every mutation that matters for compliance — documents posted, notices sent, elections run, violations issued. Florida's record-keeping requirements lean on this.
+
+## What's logged
+
+Every action with compliance or security relevance:
+
+- Document uploads, replacements, and category changes
+- Meeting notices and minutes posted
+- Violations issued, updated, resolved
+- Elections created, opened, closed, certified
+- Ballot submissions (without revealing ballots)
+- Admin logins and password resets
+- Access-plan grants and revocations
+- FAQ edits
+- Emergency broadcasts sent
+
+Each entry captures: the actor, the resource, the action, timestamps, and enough context to reconstruct what happened.
+
+## Reading the trail
+
+<StepByStep>
+<Step title="Open /audit-trail">
+Admin-only route in the sidebar. The most recent actions appear first.
+</Step>
+
+<Step title="Filter">
+Narrow by actor (which admin), resource type (documents, meetings, violations), date range, or action type (create, update, delete).
+</Step>
+
+<Step title="Inspect an entry">
+Click any row to see the full record — before/after values (where applicable), metadata, and IP/user-agent if available.
+</Step>
+</StepByStep>
+
+## When to consult the trail
+
+- **Compliance review** — satisfy yourself (and the board) that required actions happened on time.
+- **Disputed action** — a resident claims they didn't receive a notice; the trail proves whether it was sent.
+- **Personnel change** — before offboarding an admin, review their recent actions.
+- **Incident investigation** — unusual pattern (mass deletions, after-hours access) warrants a look.
+
+## Retention and immutability
+
+<Callout type="florida-statute" title="Append-only by design">
+Audit-log entries cannot be edited or deleted. Florida statute expects associations to preserve records for specific retention windows (seven years for most financial records; permanent for governance records). PropertyPro enforces immutability at the database level so an insider cannot erase evidence.
+</Callout>
+
+## Exporting
+
+For official records, annual reviews, or turning over records to a new board:
+
+1. On the audit trail page, set your filters.
+2. Click **Export** (if available for your community) or screenshot paginated views for smaller scopes.
+3. The export contains the same fields as the on-screen view in a standard format (CSV or JSON).
+
+## Limits
+
+- Reads from the audit log are metered; a year of everything is a lot of rows.
+- The trail does not capture read-only views (who looked at a document). If that level of detail is needed, compliance considerations usually require a separate tool.
+- PII is captured where necessary — treat the export as sensitive.
+
+## What you shouldn't do
+
+- Don't share raw audit exports outside the board and authorized parties.
+- Don't use the audit trail as a surveillance tool on staff or residents — it exists for compliance, not micromanagement.
+- Don't edit records based on the trail's content; update the underlying data through proper interfaces, which will themselves be logged.
+
+## Common follow-ups
+
+- **Late document postings** — if the trail shows a pattern, tighten your cadence.
+- **Unusual admin activity** — investigate; it may be benign or warrant a password reset.
+- **Gaps in records** — Florida statute sets minimums; if the trail shows a gap, document why (system outage, staff change) in the next board minutes.

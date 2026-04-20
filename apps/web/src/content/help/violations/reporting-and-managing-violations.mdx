@@ -1,0 +1,114 @@
+---
+title: "Reporting and managing violations"
+description: "Log a new violation, triage the inbox, and move notices through cure windows to resolution."
+category: "violations"
+slug: "reporting-and-managing-violations"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - violation
+  - notice
+  - fine
+  - cure
+  - hearing
+  - enforcement
+tags:
+  - violations
+  - admin
+  - florida
+updatedAt: "2026-04-19"
+statutes:
+  - "HB 1203"
+relatedArticles:
+  - arc-acc-submissions
+  - responding-to-a-violation-notice
+featured: false
+contextPaths:
+  - /violations
+  - /violations/*
+---
+
+The violations workflow in PropertyPro is the record-keeping surface for rule enforcement: log the issue, notice the resident, track the cure window, and capture the outcome.
+
+<Callout type="florida-statute" title="HB 1203 requires specific written reasons">
+Florida's HB 1203 (2024) tightened the content of violation notices. Every notice must cite the specific rule and reason. PropertyPro prompts you for these fields when you create the notice.
+</Callout>
+
+## The inbox
+
+Open `/violations/inbox` to see every open violation for your community. Columns cover:
+
+- Unit and resident
+- Alleged violation (summary)
+- Status — Open / Cure Period / Fined / Hearing / Closed
+- Cure date
+- Who's handling it
+
+Sort by cure date to see what's coming up this week.
+
+## Creating a new violation
+
+<StepByStep>
+<Step title="Open Report Violation">
+Click Report Violation from the sidebar, or open the Violations page and click **New violation**.
+</Step>
+
+<Step title="Identify the unit">
+Search by unit number or resident name. The selected unit populates ownership and contact info automatically.
+</Step>
+
+<Step title="Cite the rule">
+Pick the specific rule or covenant violated from the dropdown, or describe it in free text. This is required per HB 1203.
+</Step>
+
+<Step title="Describe the violation">
+What happened, when, and where. Attach photos — they're your best evidence if the resident contests.
+</Step>
+
+<Step title="Set the cure window">
+Per your bylaws (usually 14 days). The clock starts when the notice is delivered.
+</Step>
+
+<Step title="Send the notice">
+The resident receives an email and an in-app notification. The notice and its evidence are saved to the violation record.
+</Step>
+</StepByStep>
+
+## Tracking the cure window
+
+Each violation shows its deadline prominently. Before the window closes:
+
+- **Resident cures** → mark as Cured and close the record.
+- **Resident comments** → respond on the timeline; the window can be extended if you agree.
+- **Resident ignores** → at the deadline, decide: fine, schedule hearing, or escalate.
+
+## Fining
+
+Fines are applied via a separate notice on the same violation record. Enter the amount (per your bylaws — flat or per-day) and the start date. The fine appears on the resident's Payments page at the next billing cycle.
+
+<Callout type="warning" title="Stick to the bylaws">
+PropertyPro does not enforce fine caps or cooldowns automatically. Your bylaws are the authoritative source for how much, how often, and under what procedure you may fine. If you're unsure, consult your association attorney before sending.
+</Callout>
+
+## Hearings
+
+For contested violations, schedule a hearing from the violation record. A hearing notice goes to the resident (typically 14 days in advance per bylaws) and is added as a calendar event. After the hearing, record the outcome on the same record — Affirmed / Dismissed / Modified.
+
+## Closing a violation
+
+- **Cured**: issue resolved, no fine.
+- **Paid**: fine collected; no further action.
+- **Appealed**: outcome under review; leave open until resolved.
+- **Withdrawn**: notice was issued in error; include a note explaining.
+
+Closing a violation keeps the record in the system for audit but removes it from the open inbox.
+
+## Audit trail
+
+Every action on a violation — notice sent, comment added, status change, fine applied — is timestamped and captured in the compliance audit log. That trail is your defense if a resident later challenges a decision.

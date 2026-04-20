@@ -1,0 +1,117 @@
+---
+title: "Sending an e-sign submission"
+description: "Turn a template into a live signing request for one or more residents — with tracking and reminders."
+category: "esign"
+slug: "sending-an-esign-submission"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - esign
+  - submission
+  - send
+  - signer
+  - tracking
+  - reminder
+tags:
+  - esign
+  - admin
+updatedAt: "2026-04-19"
+relatedArticles:
+  - creating-an-esign-template
+  - signing-documents-electronically
+featured: false
+contextPaths:
+  - /esign/submissions
+  - /esign/submissions/*
+---
+
+A submission is one instance of a template being sent to specific signers. This guide walks sending, tracking, and finalizing a submission.
+
+## Creating a submission
+
+<StepByStep>
+<Step title="Open E-Sign → Submissions → New">
+From E-Sign in the sidebar, click Submissions, then New submission.
+</Step>
+
+<Step title="Pick a template">
+Choose the template that matches what you're sending. One-off documents can bypass templates — upload the file directly and place fields on the fly.
+</Step>
+
+<Step title="Assign signers">
+For each signer role defined in the template, pick the actual person. You can search by name or email. External signers (non-residents) can be invited by email address.
+</Step>
+
+<Step title="Add a message">
+Write a short note for the signers. This appears in the invitation email — useful for context ("This is your annual insurance acknowledgement; due by April 30").
+</Step>
+
+<Step title="Set a deadline (optional)">
+Submissions can have a soft deadline. Signers get reminder emails as the deadline approaches.
+</Step>
+
+<Step title="Send">
+Each signer receives an email with a personalized signing link.
+</Step>
+</StepByStep>
+
+## Tracking progress
+
+Open the submission record to see real-time status per signer:
+
+- **Not yet opened** — email sent; signer hasn't clicked the link
+- **Opened** — link clicked; review in progress
+- **Signed** — their portion is complete
+- **Declined** — signer chose not to sign (with optional reason)
+
+For sequential submissions, the next signer only gets their email after the previous signer finishes.
+
+## Sending reminders
+
+Haven't heard back from a signer?
+
+1. Open the submission.
+2. Click **Send reminder** next to their row.
+3. They receive another email with the same link.
+
+Reminders are throttled to prevent spam (one per day typical). PropertyPro also sends automatic reminders 3 days and 1 day before deadline if one is set.
+
+## Cancelling a submission
+
+If you sent to the wrong person, or the submission is no longer needed:
+
+1. Open the submission.
+2. Click **Cancel**.
+3. All outstanding signing links expire. Signers are notified.
+
+<Callout type="warning" title="Can't cancel partial signatures">
+If any signer has already completed their signature, you cannot delete the signatures they already provided. You can mark the submission Cancelled, but the partial record remains. Be deliberate about who you send to.
+</Callout>
+
+## Completed submissions
+
+Once every signer has signed:
+
+- A final combined PDF is generated with every signer's marks, timestamps, IP addresses, and consent records.
+- The PDF is delivered to every signer by email.
+- The submission is archived to the community's Documents library under the Contracts category (or as configured).
+
+## Common patterns
+
+- **Send to one person** — a lease, a unit-specific amendment.
+- **Send to every owner** — annual disclosures, major bylaw amendments. Use the Bulk send feature to generate one submission per owner from a recipient list.
+- **Multi-party submissions** — three-way contracts with association, vendor, and board president as signers in order.
+
+## Audit trail
+
+Every submission's lifecycle — sent, opened, signed, completed — is captured in the compliance audit log. If a signer later disputes that they signed, you have timestamped evidence of the signing event including IP address.
+
+## What if a signer asks for changes?
+
+The signer must decline the current submission with a reason ("Paragraph 3 is unclear"). You then edit the template or this specific submission, cancel the current request, and resend with the changes.
