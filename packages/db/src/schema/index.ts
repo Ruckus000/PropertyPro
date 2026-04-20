@@ -64,6 +64,7 @@ export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
 export * from './elections';
 export * from './faqs';
+export * from './help-article-feedback';
 export * from './stripe-prices';
 export * from './conversion-events';
 export * from './public-site-templates';
@@ -397,6 +398,16 @@ export type NewElectionEligibilitySnapshot = typeof electionEligibilitySnapshots
 import type { faqs } from './faqs';
 export type Faq = typeof faqs.$inferSelect;
 export type NewFaq = typeof faqs.$inferInsert;
+
+// Help article feedback & views
+import type {
+  helpArticleFeedback,
+  helpArticleViews,
+} from './help-article-feedback';
+export type HelpArticleFeedback = typeof helpArticleFeedback.$inferSelect;
+export type NewHelpArticleFeedback = typeof helpArticleFeedback.$inferInsert;
+export type HelpArticleView = typeof helpArticleViews.$inferSelect;
+export type NewHelpArticleView = typeof helpArticleViews.$inferInsert;
 
 // Denied Visitors
 import type { deniedVisitors } from './denied-visitors';

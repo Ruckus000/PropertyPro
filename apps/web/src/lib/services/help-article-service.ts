@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
 
@@ -21,12 +22,17 @@ export interface HelpArticleMetadata {
   slug: string;
   roles: string[];
   keywords: string[];
+  tags: string[];
   relatedArticles: string[];
   featured: boolean;
   excerpt?: string;
   filePath: string;
   contextPaths?: string[];
+  statutes?: string[];
+  featureGates?: string[];
+  updatedAt?: string;
   readTimeMinutes?: number;
+  contentHash: string;
 }
 
 export type ArticleMetadata = HelpArticleMetadata;
@@ -34,6 +40,10 @@ export type ArticleMetadata = HelpArticleMetadata;
 export interface HelpArticleSource {
   metadata: HelpArticleMetadata;
   rawContent: string;
+}
+
+export interface FeatureGateEvaluator {
+  (gate: string): boolean;
 }
 
 let cachedArticleSources: HelpArticleSource[] | null = null;
@@ -84,6 +94,7 @@ export function parseArticleFrontmatter(
     slug: String(data.slug ?? ''),
     roles: Array.isArray(data.roles) ? data.roles.map(String) : [],
     keywords: Array.isArray(data.keywords) ? data.keywords.map(String) : [],
+    tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     relatedArticles: Array.isArray(data.relatedArticles)
       ? data.relatedArticles.map(String)
       : [],
@@ -91,7 +102,11 @@ export function parseArticleFrontmatter(
     excerpt: extractExcerpt(content),
     filePath,
     contextPaths: Array.isArray(data.contextPaths) ? data.contextPaths.map(String) : [],
+    statutes: Array.isArray(data.statutes) ? data.statutes.map(String) : [],
+    featureGates: Array.isArray(data.featureGates) ? data.featureGates.map(String) : [],
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
     readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
+    contentHash: crypto.createHash('sha256').update(rawContent).digest('hex').slice(0, 16),
   };
 
   // Keep `excerpt` accessible to runtime code without breaking older exact-equality tests
@@ -151,10 +166,21 @@ export function isArticleVisibleToRole(
   return article.roles.includes(role);
 }
 
+export function isArticleAvailableForFeatures(
+  article: Pick<HelpArticleMetadata, 'featureGates'>,
+  hasFeature: FeatureGateEvaluator,
+): boolean {
+  const gates = article.featureGates ?? [];
+  if (!gates.length) {
+    return true;
+  }
+  return gates.every((gate) => hasFeature(gate));
+}
+
 export function matchesArticleQuery(
   article: Pick<
     HelpArticleMetadata,
-    'title' | 'description' | 'keywords' | 'category' | 'slug' | 'excerpt'
+    'title' | 'description' | 'keywords' | 'category' | 'slug' | 'excerpt' | 'tags'
   >,
   query: string,
 ): boolean {
@@ -170,7 +196,28 @@ export function matchesArticleQuery(
     article.slug,
     article.excerpt ?? '',
     ...(article.keywords ?? []),
+    ...(article.tags ?? []),
   ].some((value) => String(value).toLowerCase().includes(normalized));
+}
+
+export function getArticlesByTag(tag: string): HelpArticleMetadata[] {
+  const normalized = tag.trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+  return getAllArticles().filter((article) =>
+    article.tags.some((entry) => entry.toLowerCase() === normalized),
+  );
+}
+
+export function getAllTags(): string[] {
+  const tags = new Set<string>();
+  for (const article of getAllArticles()) {
+    for (const tag of article.tags) {
+      tags.add(tag);
+    }
+  }
+  return Array.from(tags).sort();
 }
 
 export function getFeaturedForRole(role: string): HelpArticleMetadata[] {

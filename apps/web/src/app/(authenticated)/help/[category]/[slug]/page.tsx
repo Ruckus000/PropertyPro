@@ -1,9 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
-import { helpMdxComponents } from '@/components/help/mdx-components';
+import { ArticleBreadcrumbs } from '@/components/help/article-breadcrumbs';
+import { ArticleFeedback } from '@/components/help/article-feedback';
+import { ArticleViewTracker } from '@/components/help/article-view-tracker';
+import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
+import { extractTableOfContents } from '@/lib/help/toc';
 import {
   getAllArticles,
   getArticle,
@@ -13,6 +17,13 @@ import {
 interface HelpArticlePageProps {
   params: Promise<{ category: string; slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function formatUpdatedAt(value: string | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
 }
 
 export default async function HelpArticlePage({
@@ -37,7 +48,11 @@ export default async function HelpArticlePage({
   const { content } = await compileMDX({
     source: article.rawContent,
     components: helpMdxComponents,
+    options: { parseFrontmatter: true },
   });
+
+  const tocItems = extractTableOfContents(article.rawContent);
+  const formattedUpdatedAt = formatUpdatedAt(article.metadata.updatedAt);
 
   const related = article.metadata.relatedArticles
     .map((relatedSlug) => getAllArticles().find((candidate) => candidate.slug === relatedSlug))
@@ -48,28 +63,33 @@ export default async function HelpArticlePage({
 
   return (
     <div className="space-y-8">
+      <ArticleViewTracker
+        communityId={context.communityId}
+        articleSlug={article.metadata.slug}
+        articleCategory={article.metadata.category}
+      />
+
       <PageHeader
         title={article.metadata.title}
         description={article.metadata.description}
         breadcrumb={
-          <div className="flex items-center gap-2">
-            <Link href={`/help?communityId=${context.communityId}`} className="hover:text-content">
-              Help Center
-            </Link>
-            <span>/</span>
-            <Link
-              href={`/help/${article.metadata.category}?communityId=${context.communityId}`}
-              className="capitalize hover:text-content"
-            >
-              {article.metadata.category.replace(/-/g, ' ')}
-            </Link>
-          </div>
+          <ArticleBreadcrumbs
+            communityId={context.communityId}
+            category={article.metadata.category}
+            currentTitle={article.metadata.title}
+          />
         }
       />
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-content-tertiary">
         {typeof article.metadata.readTimeMinutes === 'number' && (
           <span>{article.metadata.readTimeMinutes} min read</span>
+        )}
+        {formattedUpdatedAt && (
+          <>
+            <span aria-hidden="true">/</span>
+            <span>Updated {formattedUpdatedAt}</span>
+          </>
         )}
         {article.metadata.roles.length > 0 && (
           <>
@@ -86,11 +106,42 @@ export default async function HelpArticlePage({
             </div>
           </>
         )}
+        {(article.metadata.statutes ?? []).length > 0 && (
+          <>
+            <span aria-hidden="true">/</span>
+            <div className="flex flex-wrap gap-2">
+              {(article.metadata.statutes ?? []).map((statute) => (
+                <span
+                  key={statute}
+                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900"
+                >
+                  § {statute.replace(/^§\s*/, '')}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-        {content}
-      </article>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
+          {content}
+        </article>
+
+        {tocItems.length > 0 && (
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <TableOfContents items={tocItems} />
+            </div>
+          </aside>
+        )}
+      </div>
+
+      <ArticleFeedback
+        communityId={context.communityId}
+        articleSlug={article.metadata.slug}
+        articleCategory={article.metadata.category}
+      />
 
       {related.length > 0 && (
         <section className="space-y-4">
