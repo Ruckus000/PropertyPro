@@ -83,6 +83,7 @@ const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'election_eligibility_snapshots',
   'maintenance_comments',
   'esign_events',
+  'help_article_views',
 ]);
 
 /**

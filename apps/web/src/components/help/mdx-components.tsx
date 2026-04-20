@@ -1,7 +1,8 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { Children, isValidElement } from 'react';
+import { isValidElement } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { slugifyHeading } from '@/lib/help/anchors';
 
 function linkClasses() {
   return 'font-medium text-[var(--interactive-primary)] underline underline-offset-2';
@@ -18,12 +19,11 @@ function extractText(node: ReactNode): string {
   return '';
 }
 
-function headingId(children: ReactNode): string {
-  return extractText(children)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 60);
+function headingId(children: ReactNode): string | undefined {
+  const text = extractText(children);
+  if (!text) return undefined;
+  const slug = slugifyHeading(text);
+  return slug || undefined;
 }
 
 const CALLOUT_STYLES = {
@@ -281,7 +281,7 @@ export const helpMdxComponents = {
     <h1 className="text-3xl font-semibold tracking-tight text-content" {...props} />
   ),
   h2: ({ children, id, ...props }: ComponentPropsWithoutRef<'h2'>) => {
-    const anchor = id ?? (typeof Children.toArray(children)[0] !== 'undefined' ? headingId(children) : undefined);
+    const anchor = id ?? headingId(children);
     return (
       <h2
         id={anchor}
@@ -293,7 +293,7 @@ export const helpMdxComponents = {
     );
   },
   h3: ({ children, id, ...props }: ComponentPropsWithoutRef<'h3'>) => {
-    const anchor = id ?? (typeof Children.toArray(children)[0] !== 'undefined' ? headingId(children) : undefined);
+    const anchor = id ?? headingId(children);
     return (
       <h3
         id={anchor}

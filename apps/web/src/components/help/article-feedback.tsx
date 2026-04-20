@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +15,11 @@ interface ArticleFeedbackProps {
 type Rating = 1 | -1 | null;
 type SubmitState = 'idle' | 'submitting' | 'submitted' | 'error';
 
+interface FeedbackSnapshot {
+  rating: Rating;
+  comment: string;
+}
+
 export function ArticleFeedback({
   communityId,
   articleSlug,
@@ -25,6 +30,33 @@ export function ArticleFeedback({
   const [showComment, setShowComment] = useState(false);
   const [state, setState] = useState<SubmitState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrate(): Promise<void> {
+      try {
+        const query = new URLSearchParams({
+          communityId: String(communityId),
+          articleSlug,
+        });
+        const response = await fetch(`/api/v1/help/feedback?${query.toString()}`);
+        if (!response.ok) return;
+        const payload = (await response.json()) as { data: FeedbackSnapshot | null };
+        if (cancelled || !payload.data) return;
+        setRating(payload.data.rating as Rating);
+        setComment(payload.data.comment ?? '');
+      } catch {
+        /* best-effort hydration — failures keep the widget in pristine state */
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    }
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [communityId, articleSlug]);
 
   async function submit(nextRating: 1 | -1, withComment = false): Promise<void> {
     setState('submitting');
@@ -46,8 +78,11 @@ export function ArticleFeedback({
       }
       setRating(nextRating);
       setState('submitted');
-      if (!withComment) {
-        setShowComment(nextRating === -1);
+      // Open the comment box the first time the user reacts negatively.
+      // Once opened it stays open (even if they later flip to Helpful) so a
+      // draft comment isn't hidden mid-edit.
+      if (nextRating === -1) {
+        setShowComment(true);
       }
     } catch (error) {
       setState('error');
@@ -63,6 +98,7 @@ export function ArticleFeedback({
     <section
       aria-labelledby="article-feedback-heading"
       className="rounded-[var(--radius-md)] border border-edge bg-surface-card p-5"
+      data-hydrated={hydrated ? 'true' : 'false'}
     >
       <h2
         id="article-feedback-heading"
