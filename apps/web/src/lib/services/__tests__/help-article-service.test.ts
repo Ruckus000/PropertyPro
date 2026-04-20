@@ -44,11 +44,16 @@ describe('help-article-service', () => {
         slug: 'test-article',
         roles: ['owner', 'tenant'],
         keywords: ['test', 'help'],
+        tags: [],
         relatedArticles: [],
         featured: false,
         contextPaths: [],
+        statutes: [],
+        featureGates: [],
+        updatedAt: undefined,
         readTimeMinutes: expect.any(Number),
         filePath: '/fake/path.mdx',
+        contentHash: expect.any(String),
       });
     });
 
@@ -99,8 +104,8 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', roles: [], featured: false, contextPaths: [], relatedArticles: [], readTimeMinutes: 3, filePath: '/a.mdx' },
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], readTimeMinutes: 2, filePath: '/b.mdx' },
+        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 3, filePath: '/a.mdx', contentHash: 'test' },
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'compliance');
@@ -112,7 +117,7 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], readTimeMinutes: 2, filePath: '/b.mdx' },
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'pdf');

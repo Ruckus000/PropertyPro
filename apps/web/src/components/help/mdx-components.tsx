@@ -1,9 +1,29 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { Children, isValidElement } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 function linkClasses() {
   return 'font-medium text-[var(--interactive-primary)] underline underline-offset-2';
+}
+
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (isValidElement(node)) {
+    const element = node as React.ReactElement<{ children?: ReactNode }>;
+    return extractText(element.props.children);
+  }
+  return '';
+}
+
+function headingId(children: ReactNode): string {
+  return extractText(children)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 60);
 }
 
 const CALLOUT_STYLES = {
@@ -136,20 +156,154 @@ export function Screenshot({ src, alt, caption }: ScreenshotProps) {
   );
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Owner',
+  tenant: 'Tenant',
+  resident: 'Resident',
+  board_member: 'Board member',
+  board_president: 'Board president',
+  cam: 'CAM',
+  site_manager: 'Site manager',
+  property_manager_admin: 'Property manager',
+  manager: 'Property manager',
+  pm_admin: 'Property manager',
+};
+
+interface RoleBadgeProps {
+  role: string;
+  children?: ReactNode;
+}
+
+export function RoleBadge({ role, children }: RoleBadgeProps) {
+  const label = ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium capitalize text-content-secondary"
+      aria-label={`Role: ${label}`}
+    >
+      {children ?? label}
+    </span>
+  );
+}
+
+interface FeatureGateProps {
+  feature: string;
+  children: ReactNode;
+}
+
+export function FeatureGate({ feature, children }: FeatureGateProps) {
+  return (
+    <div
+      role="note"
+      className="my-4 rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-muted p-3 text-sm text-content-secondary"
+    >
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
+        Available on {feature}
+      </p>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+interface StatuteRefProps {
+  cite: string;
+  title?: string;
+  children?: ReactNode;
+}
+
+export function StatuteRef({ cite, title, children }: StatuteRefProps) {
+  return (
+    <span
+      className="inline-flex items-baseline gap-1 rounded-md bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-900"
+      title={title}
+      aria-label={title ? `Florida statute ${cite}: ${title}` : `Florida statute ${cite}`}
+    >
+      <span aria-hidden="true">§</span>
+      <span>{cite.replace(/^§\s*/, '')}</span>
+      {children && <span className="text-purple-800">— {children}</span>}
+    </span>
+  );
+}
+
+interface TocItem {
+  depth: 2 | 3;
+  label: string;
+  anchor: string;
+}
+
+interface TableOfContentsProps {
+  items: TocItem[];
+}
+
+export function TableOfContents({ items }: TableOfContentsProps) {
+  if (items.length === 0) return null;
+  return (
+    <nav
+      aria-label="Article contents"
+      className="rounded-[var(--radius-md)] border border-edge bg-surface-card p-4"
+    >
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
+        On this page
+      </p>
+      <ul className="space-y-1 text-sm">
+        {items.map((item) => (
+          <li
+            key={item.anchor}
+            className={cn(
+              'leading-6',
+              item.depth === 3 && 'pl-4 text-content-secondary',
+            )}
+          >
+            <a
+              href={`#${item.anchor}`}
+              className="text-content-secondary hover:text-[var(--interactive-primary)] hover:underline"
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+export type { TocItem };
+
 export const helpMdxComponents = {
   Callout,
   StepByStep,
   Step,
   Screenshot,
+  RoleBadge,
+  FeatureGate,
+  StatuteRef,
   h1: (props: ComponentPropsWithoutRef<'h1'>) => (
     <h1 className="text-3xl font-semibold tracking-tight text-content" {...props} />
   ),
-  h2: (props: ComponentPropsWithoutRef<'h2'>) => (
-    <h2 className="mt-8 text-2xl font-semibold tracking-tight text-content" {...props} />
-  ),
-  h3: (props: ComponentPropsWithoutRef<'h3'>) => (
-    <h3 className="mt-6 text-xl font-semibold text-content" {...props} />
-  ),
+  h2: ({ children, id, ...props }: ComponentPropsWithoutRef<'h2'>) => {
+    const anchor = id ?? (typeof Children.toArray(children)[0] !== 'undefined' ? headingId(children) : undefined);
+    return (
+      <h2
+        id={anchor}
+        className="mt-8 scroll-mt-24 text-2xl font-semibold tracking-tight text-content"
+        {...props}
+      >
+        {children}
+      </h2>
+    );
+  },
+  h3: ({ children, id, ...props }: ComponentPropsWithoutRef<'h3'>) => {
+    const anchor = id ?? (typeof Children.toArray(children)[0] !== 'undefined' ? headingId(children) : undefined);
+    return (
+      <h3
+        id={anchor}
+        className="mt-6 scroll-mt-24 text-xl font-semibold text-content"
+        {...props}
+      >
+        {children}
+      </h3>
+    );
+  },
   p: (props: ComponentPropsWithoutRef<'p'>) => (
     <p className="mt-4 leading-7 text-content-secondary" {...props} />
   ),
