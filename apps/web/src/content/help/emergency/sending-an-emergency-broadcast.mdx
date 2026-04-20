@@ -30,7 +30,7 @@ contextPaths:
   - /emergency/*
 ---
 
-Emergency broadcasts fan out community-wide through every channel you have — email, in-app, SMS where configured. They ignore quiet hours and notification preferences. Use them for real emergencies only.
+Emergency broadcasts fan out community-wide via SMS and email. They ignore quiet hours and notification preferences. Use them for real emergencies only.
 
 <Callout type="warning" title="Real emergencies only">
 Emergency broadcasts disrupt residents at any time of day. Using them for non-emergencies (social events, policy reminders) damages trust and leads residents to ignore future alerts. Keep them reserved for life-safety, property-damage, or other genuinely urgent situations.
@@ -68,21 +68,19 @@ Shelter locations, evacuation routes, emergency-contact numbers — anything tha
 </Step>
 
 <Step title="Choose the audience">
-By default, every community member. For building-specific issues, narrow to the affected building or wing.
+Pick **All members** (default) or **Owners only**. Narrower building or floor targeting is planned for a future release.
 </Step>
 
-<Step title="Require acknowledgement (optional)">
-For life-safety, require residents to tap Acknowledge. You'll see who has and hasn't — essential for headcounts during evacuation.
-</Step>
-
-<Step title="Send">
-The broadcast goes out across every channel immediately. You cannot recall it — additional announcements can correct or update.
+<Step title="Confirm and send">
+Review once and click Send. PropertyPro gives you a short undo window (about 10 seconds) to cancel if you realize something is wrong. After that, the broadcast goes out across the chosen channels and cannot be recalled — any correction must be a follow-up broadcast or announcement.
 </Step>
 </StepByStep>
 
-## Tracking acknowledgements
+## Tracking delivery
 
-If you required acknowledgement, the broadcast page shows a live count of acknowledgements, and you can see the list of residents who have and haven't. Staff can follow up on unaccounted residents physically.
+The broadcast page shows aggregate delivery telemetry — how many recipients were targeted, how many messages were sent, delivered, or failed. Updates flow in from the SMS and email providers as they confirm delivery.
+
+If a high number of failures appears, staff may need to follow up on those residents through another channel (phone, in-person) to make sure they got the information.
 
 ## Post-event follow-up
 
