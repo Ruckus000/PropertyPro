@@ -1,39 +1,98 @@
 ---
-title: "Understanding Your Compliance Score"
-description: "How PropertyPro calculates your community's compliance score and what actions improve it."
+title: "How the compliance score is calculated"
+description: "What goes into your community's compliance score, how each bucket affects it, and how to move it up."
 category: "compliance"
 slug: "compliance-scoring-explained"
-roles: ["board_member", "board_president", "cam", "property_manager_admin"]
-keywords: ["compliance", "score", "percentage", "documents", "posting", "statute"]
-relatedArticles: ["document-posting-requirements"]
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - compliance
+  - scoring
+  - calculation
+  - audit
+  - posting
+  - overdue
+tags:
+  - compliance
+  - admin
+  - florida
+updatedAt: "2026-04-19"
+statutes:
+  - "§718.111(12)(g)"
+  - "§720.303"
+relatedArticles:
+  - reviewing-the-compliance-dashboard
+  - document-posting-requirements
 featured: true
-contextPaths: ["/communities/*/compliance", "/compliance"]
+contextPaths:
+  - /communities/*/compliance
+  - /compliance
 ---
 
-# Understanding Your Compliance Score
+Your community's compliance score reflects how well you're meeting the Florida statutory requirements that apply to your community type. A higher score means more obligations are satisfied on time.
 
-Your compliance score is a percentage that reflects how well your community meets Florida's statutory requirements for document posting, meeting notices, and record-keeping.
-
-## How the Score Is Calculated
-
-The score considers several factors:
-
-- **Document posting timeliness** — Are required documents posted within 30 days of creation?
-- **Meeting notice compliance** — Are owner meeting notices posted 14 days in advance? Are board meeting notices posted 48 hours ahead?
-- **Required document categories** — Does your community have all statutorily required document types posted?
-
-<Callout type="info" title="Score ranges">
-A score above 90% indicates strong compliance. Between 70-90% means there are items to address. Below 70% requires immediate attention to avoid potential statutory violations.
+<Callout type="florida-statute" title="What the score measures">
+The score only measures the posting and record-keeping obligations enforced by Florida statute — primarily §718.111(12)(g) for condos and §720.303 for HOAs. It does not assess the financial health, governance quality, or operational state of your association.
 </Callout>
 
-## Improving Your Score
+## How the math works
 
-The compliance dashboard highlights specific actions you can take to improve your score. Common improvements include:
+Every applicable statutory requirement counts equally:
 
-1. Uploading missing required documents
-2. Posting overdue meeting minutes
-3. Ensuring meeting notices are created with sufficient lead time
+- **Satisfied** = full credit.
+- **Unsatisfied** = no credit (but no penalty beyond that).
+- **Overdue** = no credit **and** contributes to the urgency meter at the top of the dashboard.
+- **Not applicable** = excluded from the score entirely.
 
-<Callout type="florida-statute" title="§718.111(12)(g)">
-Condominium associations with 25 or more units must post official records on their website within a reasonable time after the records are created. PropertyPro considers the 30-day posting window the standard benchmark.
+The score is `satisfied ÷ (satisfied + unsatisfied + overdue)`, displayed as a whole-number percentage. Posting late still counts as Satisfied, but the record's timing shows in the audit history so late posting patterns are visible to the board.
+
+## What moves the score
+
+<StepByStep>
+<Step title="Post any overdue records">
+The fastest score improvement comes from clearing Overdue rows. Each one flips to Satisfied as soon as the required file is attached.
+</Step>
+
+<Step title="Attach the right category">
+Each requirement looks for a specific document category (e.g. "Annual Budget", "Meeting Minutes"). Uploading the file under the correct category is what links it to the requirement.
+</Step>
+
+<Step title="Mark applicability correctly">
+If your community truly doesn't meet the threshold for a requirement, mark it Not Applicable. Do not leave it Unsatisfied — it will keep weighing the score down.
+</Step>
+
+<Step title="Keep meeting records current">
+Meeting notices and minutes have tight windows (14 days before, 30 days after). Posting them on time prevents the drift that slowly pulls the score down.
+</Step>
+</StepByStep>
+
+## Timing thresholds
+
+The urgency meter on the dashboard escalates color based on the time until the deadline:
+
+- **Calm** (more than 30 days out)
+- **Aware** (8 – 30 days)
+- **Urgent** (1 – 7 days)
+- **Critical** (overdue)
+
+<Callout type="tip" title="Aim for Calm">
+If every open requirement is Calm, your posting cadence is healthy. Ambers and reds mean you're working against the clock — shift them earlier in your weekly review.
 </Callout>
+
+## What the score does not cover
+
+- Financial audits and reserve adequacy (see your SIRS filing and CPA).
+- Architectural review outcomes (tracked separately in Violations/ARC).
+- Member communication frequency.
+
+The score is narrow by design. A 100% score means you're posting required records on time — which is necessary but not sufficient for a well-run association.
+
+## Exporting for the board
+
+Click **Export report** on the compliance dashboard to download a PDF of the current state, audit history, and upcoming deadlines. Attach it to the board packet before the next meeting.

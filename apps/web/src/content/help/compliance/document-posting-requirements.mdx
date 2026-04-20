@@ -1,39 +1,101 @@
 ---
-title: "Document Posting Requirements"
-description: "Which documents must be posted and the timelines for compliance."
+title: "Document posting requirements"
+description: "Which documents Florida law requires you to post, the windows that apply, and how PropertyPro tracks each one."
 category: "compliance"
 slug: "document-posting-requirements"
-roles: ["board_member", "board_president", "cam", "property_manager_admin"]
-keywords: ["documents", "posting", "requirements", "timeline", "30 days", "statute"]
-relatedArticles: ["compliance-scoring-explained", "uploading-documents"]
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - document posting
+  - 30-day rule
+  - statutory
+  - records
+  - bylaws
+  - budget
+  - minutes
+tags:
+  - compliance
+  - documents
+  - florida
+updatedAt: "2026-04-19"
+statutes:
+  - "§718.111(12)(g)"
+  - "§720.303"
+relatedArticles:
+  - reviewing-the-compliance-dashboard
+  - compliance-scoring-explained
+  - finding-community-documents
 featured: false
-contextPaths: ["/communities/*/documents", "/documents"]
+contextPaths:
+  - /documents
+  - /communities/*/documents
+  - /communities/*/compliance
 ---
 
-# Document Posting Requirements
+Florida statute specifies both **which** records associations must make available and **when** — usually within 30 days of the record being finalized. PropertyPro links each document category to the specific obligation it satisfies.
 
-Florida statute requires associations to maintain and post specific categories of documents. This guide covers what must be posted, when, and how it affects your compliance score.
-
-## Required Document Categories
-
-Condominium associations under §718.111(12)(g) must post:
-
-- **Governing documents** — Declaration of condominium, articles of incorporation, bylaws
-- **Financial records** — Annual budget, financial statements, reserve studies
-- **Meeting records** — Board and owner meeting minutes, agendas, notices
-- **Insurance** — Current insurance policies and certificates
-- **Contracts** — Vendor agreements above a threshold set by your bylaws
-
-<Callout type="warning" title="30-day posting window">
-Documents should be posted within 30 days of creation to maintain full compliance. Documents posted after 30 days still count but will temporarily reduce your compliance score.
+<Callout type="florida-statute" title="Condo: § 718.111(12)(g)">
+Condo associations with 25 or more units must post certain records on an association-managed website. The statute calls out bylaws, articles, rules, financial records, contracts over a threshold, meeting materials, and more.
 </Callout>
 
-## How to Post a Document
+<Callout type="florida-statute" title="HOA: § 720.303">
+HOAs with 100 or more parcels have parallel requirements. Document categories differ slightly; the compliance dashboard shows only the categories that apply to your community type.
+</Callout>
 
-1. Navigate to **Documents** from the sidebar
-2. Click **Upload Document**
-3. Select the appropriate category
-4. Add a title and optional description
-5. Upload the file and confirm
+## Categories we track
 
-Your compliance score updates automatically after each upload.
+The compliance engine maps each posted document to one of these statutory categories:
+
+- **Governing documents** — declaration / bylaws / articles of incorporation / rules.
+- **Financial records** — annual budget, financial report, reserve study, audit.
+- **Meeting materials** — agendas, notices, minutes.
+- **Contracts** — any vendor or service contract above the statutory threshold.
+- **Insurance** — current certificates of coverage.
+- **Elections** — candidate bios, ballots, voting outcomes.
+- **Official records summary** — a current index of what records are available.
+
+## How the 30-day window works
+
+<StepByStep>
+<Step title="A record is finalized">
+A document is approved, signed, or adopted — for example, meeting minutes are approved at the next meeting.
+</Step>
+
+<Step title="Upload it promptly">
+Upload the file under the correct category in Documents. The 30-day clock starts from the finalization date, not the upload date.
+</Step>
+
+<Step title="PropertyPro tracks the clock">
+Each posted document is checked against the statutory window. Items approaching 7 days flip the compliance row to Urgent.
+</Step>
+
+<Step title="Audit trail is preserved">
+Even if you post early, the posting time is saved in the audit log. Late postings are not retroactively "fixed" — they remain visible in the history.
+</Step>
+</StepByStep>
+
+## What counts as "posted"
+
+In PropertyPro, a document counts as posted the moment it's uploaded **and** assigned to the correct statutory category with its finalization date set. If the file is only uploaded but miscategorized, the compliance engine won't credit it.
+
+<Callout type="warning" title="Category matters">
+Uploading a budget under "Other" instead of "Annual Budget" won't satisfy the requirement even though the file is visible to residents. Always double-check the category dropdown.
+</Callout>
+
+## Common pitfalls
+
+- **Undated documents**: if no finalization date is set, the engine treats the upload date as the clock start. That can artificially mark an on-time record as late.
+- **Superseded records**: replacing an old file keeps the statutory obligation satisfied as long as the current version is available.
+- **Unit-count changes**: crossing the 25-unit (condo) or 100-parcel (HOA) threshold flips new categories from Not Applicable to required.
+
+## Where to look
+
+- Open **Documents** to review what's posted today.
+- Open **Compliance** to see what's missing or overdue.
+- Export the compliance report before each board meeting to keep the board oriented.

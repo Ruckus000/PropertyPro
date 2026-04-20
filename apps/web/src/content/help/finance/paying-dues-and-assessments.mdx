@@ -1,36 +1,98 @@
 ---
 title: "Paying dues and assessments"
-description: "How to review your balance, saved payment methods, and recent payment activity."
+description: "Review your balance, save a payment method, and pay online when your community has payments enabled."
 category: "finance"
 slug: "paying-dues-and-assessments"
-roles:
-  - owner
-  - board_member
-  - board_president
-  - cam
-  - site_manager
-  - property_manager_admin
-  - manager
-  - pm_admin
+roles: []
 keywords:
   - payments
   - dues
   - assessments
+  - stripe
   - balance
-  - charges
+  - autopay
+tags:
+  - finance
+  - residents
+updatedAt: "2026-04-19"
 relatedArticles:
   - welcome-to-propertypro
+  - understanding-your-dashboard
 featured: true
+contextPaths:
+  - /payments
+  - /communities/*/payments
+  - /communities/*/assessments
+  - /assessments
 ---
 
-## Review your current balance
+Payments in PropertyPro lets you see what you owe, pay online, and review your history without calling the management office.
 
-The Payments page shows the amount currently due, recent payment history, and any saved payment methods if your community has online payments enabled.
+<Callout type="tip" title="Community enablement varies">
+Online payments are only available if your community has connected Stripe. If you don't see a Pay button, your association still takes payments via the traditional method your manager communicates (mail, bank portal, etc.).
+</Callout>
 
-## Complete a payment
+## What you see on the Payments page
 
-If your community accepts online payments, choose the payment method you want to use and follow the prompts to complete the transaction.
+- **Current balance** — what's due right now, if anything.
+- **Upcoming assessments** — scheduled charges with their due dates.
+- **Payment history** — past payments with timestamps and confirmation numbers.
+- **Payment methods** — any cards or bank accounts you've saved.
 
-## Need help with a charge?
+If your community is on a recurring assessment schedule (monthly, quarterly, annual), you'll see the next charge clearly labeled.
 
-If something looks wrong, use the Help Center contact section to reach management before retrying the payment.
+## Paying online
+
+<StepByStep>
+<Step title="Open Payments">
+Click Payments in the sidebar, or use the Pay Dues task card from the help center.
+</Step>
+
+<Step title="Review the balance">
+Check the amount due and the assessment breakdown. If anything looks wrong — a charge you don't recognize, a credit not applied — reach out to your community contact before paying.
+</Step>
+
+<Step title="Choose a payment method">
+Pick a saved method or click **Add payment method** to enter a new one. Cards and ACH (bank transfer) are both supported where enabled.
+</Step>
+
+<Step title="Submit the payment">
+Click **Pay now**. You'll see a confirmation screen with a reference number; a receipt is emailed within a few minutes.
+</Step>
+</StepByStep>
+
+## Saving a payment method
+
+Saved methods speed up future payments and are required for autopay.
+
+1. Go to **Settings → Payment methods** (or click **Add payment method** from the Payments page).
+2. Enter card or bank details. PropertyPro does not store card numbers — only the Stripe tokens that let you pay.
+3. Optionally mark the method as your default.
+
+You can delete a saved method at any time. If it's the method used for autopay, autopay will pause until you set a new default.
+
+## Autopay
+
+If your community enabled autopay, you can enroll from the Payments page:
+
+1. Click **Set up autopay**.
+2. Choose the method and the day of the month to charge.
+3. Confirm. The next scheduled assessment will use autopay automatically.
+
+You can cancel autopay at any time, including right before a scheduled charge.
+
+## Assessment vs. ad-hoc charges
+
+- **Assessments** are the recurring dues your association charges every member.
+- **Special assessments** are one-time charges approved by the board for a specific project.
+- **Late fees** may apply when an assessment isn't paid by its due date. The rules are in your association's governing documents.
+
+<Callout type="warning" title="Disputes">
+If you believe a charge is wrong — wrong amount, charged twice, already paid offline — open Help and choose Contact Management before paying. Paying and then disputing is much harder to unwind.
+</Callout>
+
+## Receipts and taxes
+
+- Each online payment generates an emailed receipt.
+- Download a full year of receipts from the Payments page (use the **Export** button) if you need it for records or taxes.
+- Association assessments are generally not tax-deductible for primary residences; consult a tax professional about your situation.

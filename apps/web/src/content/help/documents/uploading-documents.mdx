@@ -1,39 +1,118 @@
 ---
-title: "Uploading Documents"
-description: "How to upload, categorize, and manage documents in PropertyPro."
+title: "Uploading and categorizing documents"
+description: "The admin workflow for uploading a new document, picking the right category, and satisfying posting deadlines."
 category: "documents"
 slug: "uploading-documents"
-roles: ["board_member", "board_president", "cam", "property_manager_admin"]
-keywords: ["upload", "document", "file", "pdf", "category", "add"]
-relatedArticles: ["document-posting-requirements"]
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - upload
+  - documents
+  - category
+  - posting
+  - 30-day
+  - admin
+tags:
+  - documents
+  - admin
+  - florida
+updatedAt: "2026-04-19"
+statutes:
+  - "§718.111(12)(g)"
+relatedArticles:
+  - finding-community-documents
+  - document-posting-requirements
+  - reviewing-the-compliance-dashboard
 featured: false
-contextPaths: ["/communities/*/documents", "/documents"]
+contextPaths:
+  - /documents
+  - /communities/*/documents
 ---
 
-# Uploading Documents
+Uploading documents in PropertyPro isn't just a file transfer — the category and the finalization date are what connect the record to your community's statutory obligations.
 
-Keeping your document library current is essential for compliance. This guide walks through uploading and organizing documents.
+## Before you upload
 
-## Uploading a New Document
+Have these ready:
+
+- The file itself (PDF is preferred; Word and images are also accepted)
+- The date the record was **finalized** (signed, approved, or adopted) — not the date you are uploading
+- A one-line description for residents searching the library
+
+<Callout type="warning" title="The clock starts at finalization">
+Florida's 30-day posting window is measured from the date the record was finalized. Setting the correct date matters — an incorrect date can mark an on-time posting as late in the compliance history.
+</Callout>
+
+## Upload flow
 
 <StepByStep>
-<Step title="Navigate to Documents">
-Click **Documents** in the sidebar navigation. You'll see your community's document library organized by category.
+<Step title="Open Documents">
+Click Documents in the sidebar, then **Upload** in the top right of the library.
 </Step>
 
-<Step title="Click Upload Document">
-The upload button is at the top of the page. Click it to open the upload form.
+<Step title="Choose the file">
+Drag and drop or select up to 5 files per upload. Each file is processed independently — if one fails, the others still succeed.
 </Step>
 
-<Step title="Fill in the details">
-Select the appropriate **category** for the document (e.g., Financial Records, Meeting Minutes). Add a clear **title** and optional **description** so residents can find it easily.
+<Step title="Pick the correct category">
+Use the category dropdown: Governing Documents, Annual Budget, Financial Report, Meeting Minutes, and so on. The category is what links the upload to the correct compliance requirement.
 </Step>
 
-<Step title="Upload and confirm">
-Select the file from your computer. Supported formats include PDF, Word documents, and images. Click **Upload** to add it to the library.
+<Step title="Set the finalization date">
+Enter the date the record was signed or adopted. If you leave it blank, PropertyPro uses today's date.
+</Step>
+
+<Step title="Add a short description">
+One sentence describing what's inside — residents see this in the library list. This also powers search.
+</Step>
+
+<Step title="Set access">
+Most documents are visible to all community members. Choose **Admins only** or **Owners only** if a document should be restricted.
+</Step>
+
+<Step title="Save">
+Click Upload to publish. The document is immediately available and the compliance dashboard refreshes within a few seconds.
 </Step>
 </StepByStep>
 
-<Callout type="tip" title="Category matters">
-Choosing the right category helps your compliance score. A financial statement filed under "General" won't count toward the financial records compliance requirement.
+## Replacing an existing document
+
+Always replace in place rather than uploading a new file with a slightly different name. Replacing preserves the audit history and keeps the compliance linkage intact:
+
+1. Open the document in the library.
+2. Click **Replace file**.
+3. Upload the new version and optionally update the finalization date.
+4. Click Save.
+
+Residents see the new version immediately; the old version is archived in the document's history panel.
+
+## Categorization cheat sheet
+
+| Record | Category |
+|---|---|
+| Approved meeting minutes | Meeting Minutes |
+| Annual budget | Annual Budget |
+| Reserve study | Financial Report |
+| Management contract | Contracts |
+| Declaration / Articles / Bylaws | Governing Documents |
+| Rules and regulations | Governing Documents |
+| Insurance certificate | Insurance |
+| SIRS inspection summary | Financial Report |
+
+<Callout type="tip" title="When in doubt">
+If nothing obvious fits, upload as "Other" and add a clear description. Your compliance dashboard will flag whatever requirement remains unsatisfied so you can reclassify later.
 </Callout>
+
+## After uploading
+
+Visit Compliance to confirm the requirement flipped to Satisfied. If it didn't:
+
+- Check the category — the most common cause is a mismatch.
+- Check the finalization date — a future date or missing date can hide the upload from the calculator.
+- Check the file — a zero-byte or corrupt file won't satisfy the requirement.
