@@ -1,0 +1,107 @@
+---
+title: "Managing multiple communities"
+description: "Property managers: switch between communities, keep context clear, and handle cross-community tasks."
+category: "pm"
+slug: "managing-multiple-communities"
+roles:
+  - property_manager_admin
+  - pm_admin
+keywords:
+  - property manager
+  - portfolio
+  - multi-community
+  - switch
+  - context
+tags:
+  - pm
+  - admin
+updatedAt: "2026-04-20"
+relatedArticles:
+  - running-portfolio-reports
+  - sending-bulk-announcements-and-documents
+featured: false
+contextPaths:
+  - /pm/dashboard
+  - /pm/dashboard/communities
+  - /pm/dashboard/*
+---
+
+Property managers often oversee a dozen or more communities at once. PropertyPro's PM dashboard keeps portfolio-level work in one place while still letting you drop into any single community's full interface.
+
+## The PM dashboard
+
+Open `/pm/dashboard/communities` to see every community in your portfolio:
+
+- Name and subdomain
+- Type (condo, HOA, apartment)
+- Current compliance score
+- Number of open maintenance requests
+- Pending join requests awaiting review
+- Last admin action (who, when)
+
+Sort by compliance score to prioritize communities that need attention, or by last activity to find the quiet ones that may be drifting.
+
+## Switching into a community
+
+<StepByStep>
+<Step title="Click a community">
+From the PM dashboard, clicking any community drops you into that community's full dashboard — exactly what a local admin would see.
+</Step>
+
+<Step title="Work in context">
+Every page you visit is now scoped to that community. URLs include the community subdomain; data (documents, residents, meetings) is that community's data.
+</Step>
+
+<Step title="Return to the portfolio">
+Click PM Dashboard in the top bar to return to the multi-community view. Your session remains authenticated across the portfolio.
+</Step>
+</StepByStep>
+
+## Visual cues you're in PM mode
+
+When you're working at the portfolio level:
+
+- The top bar shows **PM Dashboard** as the current context.
+- Navigation shows portfolio tools (communities list, bulk operations, reports, branding).
+
+When you're inside a specific community:
+
+- The community's name appears in the top bar.
+- The community's branding (colors, logo) applies if configured.
+- Navigation matches what local admins see.
+
+## Adding a community
+
+To add a new community to your portfolio, click **Add community** on the dashboard. The flow:
+
+1. Community name and subdomain
+2. Community type (condo / HOA / apartment)
+3. Plan selection
+4. Initial admin (usually the CAM or board president)
+5. Billing setup
+
+The new community is spun up within a few minutes. You can then invite board members and start loading records.
+
+## Search scope
+
+Inside a community, the top-bar search is scoped to that community's data. When you need to compare across communities, run a portfolio report (see [Running portfolio reports](/help/pm/running-portfolio-reports)) — it aggregates data where the search bar doesn't.
+
+## Permission model
+
+<Callout type="tip" title="Property managers get full admin access in their communities">
+Once you add a community to your portfolio, you have full admin powers there. Exercise them carefully — board members expect CAMs and property managers to respect governance boundaries.
+</Callout>
+
+## Watching the portfolio score
+
+The portfolio dashboard shows an overall compliance score — the weighted average across your communities. Dips usually reflect one community slipping rather than a broad decline. Use the per-community breakdown to find the source.
+
+## Handoffs
+
+When a community leaves your portfolio (change of management company, owner takeover):
+
+1. Archive your PM-specific records (branding, bulk announcements).
+2. Verify the new management is added as admin before you lose access.
+3. Remove yourself only after the new team confirms they're set up.
+
+The community's data (documents, residents, records) stays with the community — it doesn't belong to your management company.

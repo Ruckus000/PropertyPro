@@ -1,0 +1,91 @@
+---
+title: "Running portfolio reports"
+description: "Generate cross-community reports on compliance, financials, and operations to share with stakeholders."
+category: "pm"
+slug: "running-portfolio-reports"
+roles:
+  - property_manager_admin
+  - pm_admin
+keywords:
+  - reports
+  - portfolio
+  - analytics
+  - export
+  - compliance
+  - financial
+tags:
+  - pm
+  - admin
+updatedAt: "2026-04-20"
+relatedArticles:
+  - managing-multiple-communities
+featured: false
+contextPaths:
+  - /pm/reports
+  - /pm/reports/*
+---
+
+Portfolio reports aggregate data across the communities you manage. They're the fastest way to prepare for a monthly owner review, a quarterly management committee, or your own performance tracking.
+
+## Available reports
+
+Open `/pm/reports` to see the available report types:
+
+- **Compliance summary** — score per community, trends over time, top Overdue items portfolio-wide.
+- **Financial summary** — collections, delinquency, and billed-vs-paid per community.
+- **Operations summary** — maintenance volume, average resolution time, open ticket aging.
+- **Activity summary** — admin actions per community (who's doing what, which communities get attention).
+
+Each report type has the same shape: you pick the date range and the communities to include.
+
+## Generating a report
+
+<StepByStep>
+<Step title="Pick a report type">
+Click the report type on the Reports index.
+</Step>
+
+<Step title="Configure">
+Choose the date range and which communities to include. By default, all of your communities are selected.
+</Step>
+
+<Step title="Generate">
+Click Generate. Most reports render in a few seconds. Very large portfolios or long date ranges may take longer.
+</Step>
+
+<Step title="Export">
+Each generated report has a download button — usually PDF and CSV. The CSV is handy for further analysis in Excel; the PDF is ready to share.
+</Step>
+</StepByStep>
+
+## Example uses
+
+- **Monthly management report** — financial + operations summaries for your management committee.
+- **Owner transparency** — compliance summary for communities where owners are asking for accountability data.
+- **Internal performance review** — activity summary to see admin workload distribution across your team.
+- **Year-end review** — all four summaries across the full fiscal year.
+
+## Going deeper
+
+When a report row surfaces something worth investigating, open the community directly from the PM dashboard to get into its detail pages — compliance, maintenance inbox, residents. The report tells you where to look; the community dashboard is where you dig in.
+
+## Re-running with the same settings
+
+For frequently-used configurations (monthly compliance review, quarterly financial recap), bookmark the URL after you generate the report — PropertyPro encodes the filters in the URL so the bookmark reproduces the same view next time.
+
+## Limits
+
+- **Data freshness**: reports reflect the state when you generated them. Re-run for fresh data; PropertyPro does not live-refresh a rendered report.
+- **Historic reach**: reports go back as far as PropertyPro has data for each community, which is usually the community's onboarding date.
+- **Custom fields**: if your portfolio tracks data beyond PropertyPro's schema, export the CSV and add context manually.
+
+## Cadence
+
+- **Weekly**: operations summary — catch maintenance backlogs early.
+- **Monthly**: compliance + financial summaries — material for your management committee.
+- **Quarterly**: full portfolio review — spot trends before they become problems.
+- **Annually**: year-over-year comparison — useful for proposing changes.
+
+<Callout type="tip" title="Share wisely">
+Reports contain sensitive operational data. When sharing externally, redact specific resident names and financial details unless the recipient already has a right to see them.
+</Callout>

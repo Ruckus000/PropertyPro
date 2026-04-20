@@ -1,0 +1,120 @@
+---
+title: "Logging visitors"
+description: "Track visitors to secure apartment communities — pre-authorized guests, walk-ins, and denied entry."
+category: "apartment"
+slug: "logging-visitors"
+roles:
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - visitor
+  - guest
+  - entry
+  - security
+  - front desk
+tags:
+  - apartment
+  - admin
+updatedAt: "2026-04-20"
+featureGates:
+  - hasVisitorLogging
+relatedArticles:
+  - logging-packages
+featured: false
+contextPaths:
+  - /dashboard/visitors
+---
+
+Visitor logging keeps an auditable record of who entered the community — useful for security investigations, insurance claims, and resolving disputes between residents and their guests.
+
+<FeatureGate feature="apartment communities only">
+Visitor logging is part of the apartment concierge toolkit. Condos and HOAs typically don't run centralized guest logs.
+</FeatureGate>
+
+## Who gets logged
+
+Every non-resident entering the community:
+
+- **Pre-authorized guests** — residents added them to their guest list in advance
+- **Walk-in visitors** — show up unannounced; staff contacts the resident
+- **Service personnel** — contractors, delivery beyond packages, cleaning services
+- **Denied entry** — visitors who couldn't reach the resident or weren't authorized
+
+## Checking in a visitor
+
+<StepByStep>
+<Step title="Open Visitors → New entry">
+From the Visitors page, click New entry.
+</Step>
+
+<Step title="Search for the resident">
+Enter the resident's name or unit. Their pre-authorized guest list (if any) appears.
+</Step>
+
+<Step title="Match or add the visitor">
+If the visitor is on the resident's list, select them. If not, enter name and optionally ID. Take a photo if community policy requires.
+</Step>
+
+<Step title="Contact the resident (for walk-ins)">
+For walk-ins, call or message the resident to confirm they're expecting the visitor. Record the resident's response.
+</Step>
+
+<Step title="Grant or deny entry">
+If confirmed, mark as admitted and note the destination (unit number). If denied, record the reason briefly.
+</Step>
+</StepByStep>
+
+## Pre-authorized guests
+
+Recurring guests — family members, regular friends, caregivers — can be pre-authorized so check-in is a formality rather than a call. Where this is supported in your community, staff can add the guest to the resident's authorized list during a prior visit, or the resident can ask staff to pre-authorize by name.
+
+Pre-authorization speeds up check-in dramatically, especially for residents with frequent visitors like home health aides or grandparents.
+
+## Denied entry
+
+<Callout type="warning" title="Document every denial">
+If you deny entry, log the specific reason — "resident unreachable," "visitor declined to wait," "resident denied authorization." Denials without documentation can look arbitrary later if the visitor complains.
+</Callout>
+
+## Denied-visitor list
+
+Communities can maintain a denied-visitor list — individuals who are never to be admitted (domestic incidents, prior trespass, court order):
+
+- Added by admin only
+- Checked automatically against every incoming visitor
+- Entries are private to staff, not visible to other residents
+
+## Resident view
+
+Residents see their own visitor history:
+
+- Who visited (name)
+- When
+- Whether they were admitted or denied
+
+They don't see visitors who came for other residents.
+
+## Privacy
+
+Visitor data is sensitive. Policy guidelines:
+
+- **Don't share** visitor history outside staff, the resident, and law-enforcement requests with a warrant
+- **Retention** — follow your community's retention policy (typically 12-24 months for routine entries)
+- **Incidents** — preserve any visit records tied to an ongoing incident until resolved
+
+## Emergency situations
+
+If a visitor becomes threatening or refuses to leave:
+
+1. Call 911 if there's any safety concern.
+2. Log the visitor's details in the Incidents section (not just Visitors) for follow-up.
+3. Consider adding them to the denied-visitor list after the fact.
+
+## Staffing patterns
+
+- **Peak hours** — weekends, evenings, holiday periods. Staff accordingly.
+- **Off-hours** — if the front desk is unstaffed, consider a keypad or intercom system that logs entry even without staff on site.
+- **Events** — for large resident gatherings (holiday parties), pre-authorize en masse or use a temporary guest list tied to the event.

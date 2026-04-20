@@ -1,0 +1,105 @@
+---
+title: "Sending bulk announcements and documents"
+description: "Send the same announcement or upload the same document across multiple communities in one operation."
+category: "pm"
+slug: "sending-bulk-announcements-and-documents"
+roles:
+  - property_manager_admin
+  - pm_admin
+keywords:
+  - bulk
+  - multiple communities
+  - broadcast
+  - fan-out
+  - templates
+tags:
+  - pm
+  - admin
+updatedAt: "2026-04-20"
+relatedArticles:
+  - managing-multiple-communities
+  - creating-and-publishing-announcements
+featured: false
+contextPaths:
+  - /pm/dashboard
+---
+
+When the same thing needs to happen in many communities — a management-company-wide announcement, a new insurance certificate, a policy update — the bulk operations save hours of clicking.
+
+## Bulk announcements
+
+<StepByStep>
+<Step title="Open the PM dashboard → Bulk announcements">
+Available only to property-manager-admin roles.
+</Step>
+
+<Step title="Compose the announcement">
+Write the headline and body as you would for a single community. You can include placeholders — `{{community.name}}`, `{{community.manager}}` — that expand per community.
+</Step>
+
+<Step title="Select communities">
+Check each community that should receive the announcement. For "all of them," click the Select all toggle.
+</Step>
+
+<Step title="Preview one">
+Click Preview to see the announcement as it will appear in the first selected community. Confirm placeholders resolved correctly.
+</Step>
+
+<Step title="Publish">
+PropertyPro creates one announcement in each selected community with the right context. Residents see their community's version on their dashboards and in email.
+</Step>
+</StepByStep>
+
+<Callout type="warning" title="Bulk announcements are visible immediately">
+There's no scheduled send for bulk operations today. Double-check the content before publishing — editing a single community's copy is possible, but undoing a multi-community publish takes coordinated effort.
+</Callout>
+
+## Bulk document uploads
+
+For documents that apply across the portfolio — your management company's service agreement, shared insurance certificate, policies — upload once to multiple communities:
+
+<StepByStep>
+<Step title="Bulk documents tool">
+From the PM dashboard, open Bulk documents.
+</Step>
+
+<Step title="Upload the file">
+Pick the PDF. The file uploads once; PropertyPro replicates the reference across communities.
+</Step>
+
+<Step title="Set category and date">
+The category (e.g., Contracts, Insurance) and finalization date apply to every copy.
+</Step>
+
+<Step title="Select target communities">
+Same picker as bulk announcements. Choose the communities that should have this document.
+</Step>
+
+<Step title="Publish">
+Each community's document library gets the new record; residents see it in their library.
+</Step>
+</StepByStep>
+
+## What not to do in bulk
+
+- **Community-specific content** — if the message only applies to one community, post it there natively. Bulk announcements should be genuinely portfolio-wide.
+- **Private records** — don't bulk-upload a single community's meeting minutes; keep those in that community's library.
+- **Anything requiring customization beyond placeholders** — some communications need hand-crafted language per community (disputes, sensitive topics). Write those individually.
+
+## Cadence
+
+Most PM teams use bulk operations monthly or quarterly — for a company-wide policy update, an annual insurance refresh, a seasonal reminder (hurricane prep, winter maintenance). Use sparingly; residents can tell when a message is templated and may disengage if every communication feels impersonal.
+
+## Tracking
+
+The PM dashboard keeps a log of every bulk operation — who sent it, when, which communities were targeted, how many messages were sent per community. Use this for your own records and for any management committee reporting.
+
+## Undoing a bulk send
+
+You can't undo a bulk announcement in one click. To retract:
+
+1. Open the community list you targeted.
+2. Unpublish the announcement in each community.
+3. Send a follow-up explaining the retraction.
+
+Because retractions are painful, pause and preview twice before every bulk publish.
