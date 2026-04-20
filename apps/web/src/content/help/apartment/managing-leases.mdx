@@ -1,0 +1,131 @@
+---
+title: "Managing leases"
+description: "Track lease agreements for apartment communities — start, renewal, termination, and resident linkage."
+category: "apartment"
+slug: "managing-leases"
+roles:
+  - board_member
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - lease
+  - rental
+  - tenant
+  - renewal
+  - termination
+tags:
+  - apartment
+  - admin
+updatedAt: "2026-04-20"
+featureGates:
+  - hasLeaseTracking
+relatedArticles:
+  - move-in-move-out-checklists
+featured: false
+contextPaths:
+  - /dashboard/leases
+---
+
+Lease management is an apartment-specific feature. Condos and HOAs don't typically track leases at the association level.
+
+<FeatureGate feature="apartment communities only">
+Lease tracking is available in communities configured as apartments. Condos and HOAs won't see this feature.
+</FeatureGate>
+
+## What the leases module tracks
+
+For each unit that's under a lease:
+
+- **Current tenant(s)** — who signed the lease
+- **Lease term** — start date, end date, current phase (active / expiring / expired)
+- **Rent** — monthly amount, due date
+- **Security deposit** — amount held, date received
+- **Signed lease PDF** — the actual agreement
+- **Status** — active / pending / terminated / renewal-pending
+
+## Creating a lease record
+
+<StepByStep>
+<Step title="Open Leases">
+Click Leases in the sidebar, then **New lease**.
+</Step>
+
+<Step title="Pick the unit">
+Search for the unit by number. Units already under lease will show a warning — ending the prior lease first keeps history clean.
+</Step>
+
+<Step title="Add tenant(s)">
+Add every person signing the lease. If they already have a PropertyPro account, search by name. If not, invite them first.
+</Step>
+
+<Step title="Enter lease details">
+Start date, end date, monthly rent, deposit amount. Attach the signed lease PDF.
+</Step>
+
+<Step title="Save">
+The lease becomes active as of the start date. Tenants see it on their dashboard.
+</Step>
+</StepByStep>
+
+## Lease lifecycle
+
+Leases move through these phases automatically:
+
+- **Pending** — signed but start date is in the future.
+- **Active** — currently in term.
+- **Expiring** — within 60 days of the end date (triggers renewal reminders).
+- **Expired** — past end date; manually confirm the renewal or termination.
+- **Terminated** — early termination recorded.
+
+## Renewals
+
+<StepByStep>
+<Step title="Open the expiring lease">
+Leases entering the expiring phase appear in a dashboard card.
+</Step>
+
+<Step title="Start the renewal">
+Click **Start renewal**. The new lease inherits tenant, unit, and prior terms. Adjust dates, rent, and deposit as agreed.
+</Step>
+
+<Step title="Send for signature">
+Use the e-sign flow to send the renewed lease to tenants. Once signed, the new lease becomes pending and the old one marks renewed.
+</Step>
+
+<Step title="Verify the handoff">
+On the start date of the new lease, it auto-activates and the old one marks closed.
+</Step>
+</StepByStep>
+
+## Terminations
+
+Terminations can happen mid-lease for various reasons (mutual agreement, breach, buyout). To record:
+
+1. Open the active lease.
+2. Click **Terminate**.
+3. Enter the termination date, reason, and any remaining charges or refunds.
+4. Attach any termination agreement.
+
+The tenant's access to the community ends on the termination date (or the move-out date, whichever you prefer).
+
+## Staff vs. resident views
+
+- **Staff** see every lease for the community in the Leases list.
+- **Residents** see only their own lease on their dashboard.
+
+Lease data is sensitive — rent amounts, deposit holdings, and legal agreements — and access is gated accordingly.
+
+## Compliance
+
+<Callout type="warning" title="Florida landlord-tenant law applies">
+Florida Statutes Chapter 83 governs residential leases. PropertyPro records the agreement but does not enforce statutory requirements (notice periods, security deposit handling, habitability). Work with your legal counsel to ensure lease terms comply with Chapter 83.
+</Callout>
+
+## Common patterns
+
+- **Month-to-month after expiration** — record by setting a specific end date or mark as month-to-month in the status notes.
+- **Multi-tenant leases** — every signer is listed; any one can surface payments or maintenance.
+- **Rent escalations** — PropertyPro applies the new rent automatically on the date you specify during renewal.

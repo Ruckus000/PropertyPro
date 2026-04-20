@@ -1,0 +1,132 @@
+---
+title: "Logging packages"
+description: "Front-desk workflow for accepting, logging, and releasing resident packages."
+category: "apartment"
+slug: "logging-packages"
+roles:
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - package
+  - delivery
+  - concierge
+  - front desk
+  - pickup
+tags:
+  - apartment
+  - admin
+updatedAt: "2026-04-20"
+featureGates:
+  - hasPackageLogging
+relatedArticles:
+  - logging-visitors
+featured: false
+contextPaths:
+  - /dashboard/packages
+---
+
+Packages are a daily front-desk workflow in apartment communities. PropertyPro logs what came in, who it's for, and when it was picked up — so lost packages become rare and disputes have evidence.
+
+<FeatureGate feature="apartment communities only">
+Package logging is available in communities with concierge or package-hold services. Condos and HOAs usually don't run this workflow centrally.
+</FeatureGate>
+
+## What staff log
+
+For each package:
+
+- **Recipient** — which resident or unit
+- **Carrier** — USPS, UPS, FedEx, Amazon, etc.
+- **Tracking number** (optional)
+- **Package description** — small box, large box, envelope, refrigerated, etc.
+- **Location** — where it's being held (package room, locker, front desk)
+- **Photos** — optional but useful for large or valuable items
+
+## Accepting a package
+
+<StepByStep>
+<Step title="Open Packages → New package">
+From the Packages page, click New package.
+</Step>
+
+<Step title="Scan or enter recipient">
+Search for the resident by name or unit. If the package is for a resident you don't recognize, verify against the directory before accepting.
+</Step>
+
+<Step title="Record details">
+Carrier, optional tracking number, description, location. The more detail, the easier pickup becomes.
+</Step>
+
+<Step title="Notify the resident">
+Residents get an automatic notification (email or in-app) that a package arrived. You can add a personal note if there's something unusual (refrigerated item, signature required).
+</Step>
+
+<Step title="Place it in the hold location">
+Follow your community's storage plan — labeled locker, package room shelf, secure back room.
+</Step>
+</StepByStep>
+
+## Releasing a package
+
+When the resident arrives:
+
+<StepByStep>
+<Step title="Search for the package">
+Enter the resident's name or unit. All open packages for that resident appear.
+</Step>
+
+<Step title="Verify identity">
+For valuable packages or unusual situations, ask for ID. For routine deliveries, visual recognition is usually enough.
+</Step>
+
+<Step title="Mark as picked up">
+Tap Picked up. PropertyPro records the date, time, and the staff member who released. The package drops off the open list.
+</Step>
+
+<Step title="Optional signature">
+For high-value items, have the resident sign on screen. The signature attaches to the pickup record.
+</Step>
+</StepByStep>
+
+## What residents see
+
+Residents see only their own package history:
+
+- **Open packages** — currently at the desk waiting for pickup
+- **Recent packages** — last 30 days
+- **Full history** — in their profile if they want to look back further
+
+They can filter by sender or time range.
+
+## Common scenarios
+
+- **Package for a former resident** — refuse or return. Never release to someone other than the current resident of record.
+- **Packages held too long** — PropertyPro highlights packages not picked up after a few days. Follow up via notification, then phone if needed.
+- **Mis-addressed packages** — if a package arrives for a unit that doesn't exist, mark as unknown and return to the carrier.
+- **Refused packages** — if a resident refuses their package (incorrect order, returned purchase), mark refused and return to the carrier.
+
+## Reporting
+
+Weekly or monthly, you can pull reports on:
+
+- Packages by carrier (helps with capacity planning and carrier negotiations)
+- Average time to pickup
+- Residents with pending packages
+- Peak delivery days / times (staffing implications)
+
+## Liability
+
+<Callout type="tip" title="Be clear about limits">
+The package log is a service, not insurance. Post your community's package-handling policy — typically something like "The association makes reasonable efforts to accept and secure packages but cannot be held liable for loss." Train staff on that language so they don't accidentally accept broader liability.
+</Callout>
+
+## When automated lockers are in use
+
+If your community has a locker system (Luxer, Package Concierge):
+
+- Lockers log independently; PropertyPro can mirror or augment the locker data
+- Oversized packages typically still come to the front desk
+- Keep the concierge as a backup for carrier overflow
