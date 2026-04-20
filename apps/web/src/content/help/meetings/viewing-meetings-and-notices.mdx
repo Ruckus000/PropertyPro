@@ -1,38 +1,78 @@
 ---
 title: "Viewing meetings and notices"
-description: "Where to find upcoming meetings, posted notices, and past records."
+description: "Find upcoming meetings, read posted notices and agendas, and catch up on past minutes."
 category: "meetings"
 slug: "viewing-meetings-and-notices"
-roles:
-  - owner
-  - tenant
-  - resident
-  - board_member
-  - board_president
-  - cam
-  - site_manager
-  - property_manager_admin
-  - manager
-  - pm_admin
+roles: []
 keywords:
   - meetings
   - notices
-  - calendar
   - agenda
   - minutes
+  - board
+  - owner meeting
+tags:
+  - meetings
+  - residents
+updatedAt: "2026-04-19"
 relatedArticles:
+  - meeting-notices-explained
   - welcome-to-propertypro
-featured: true
+  - reviewing-the-compliance-dashboard
+featured: false
+contextPaths:
+  - /meetings
+  - /communities/*/meetings
 ---
 
-## Upcoming meetings
+Meetings lists every board or owner meeting your association has scheduled, along with the notice, agenda, and posted materials. You can also see past meetings once their minutes are approved.
 
-Open Meetings to review upcoming dates, times, locations, and agendas. Communities often attach supporting materials there before the meeting begins.
+## Find upcoming meetings
 
-## Past records
+<StepByStep>
+<Step title="Click Meetings in the sidebar">
+The default view shows upcoming meetings first, with the next meeting at the top.
+</Step>
 
-Past meetings remain useful after the event. Return to the same page to find minutes and related documents when they have been posted.
+<Step title="Review the notice">
+Each row shows the meeting type (board, annual, special, owner), the date and time, and the location or call-in details. Click the row to open the full notice.
+</Step>
 
-## For admins
+<Step title="Open the agenda">
+If an agenda is posted, it appears on the meeting page along with any supporting materials. Download or read inline.
+</Step>
 
-Admins can also use the Meetings area to create notices and keep required materials visible for the community.
+<Step title="Save it to your calendar">
+Use your browser's date-picker integration, or copy the meeting into your calendar app manually. ICS calendar feeds are available at `/api/v1/calendar/meetings.ics` and `/api/v1/calendar/my-meetings.ics` — paste those URLs into Google Calendar, Apple Calendar, or Outlook to subscribe and see new meetings automatically.
+</Step>
+</StepByStep>
+
+## Past meetings and minutes
+
+Scroll below the upcoming list to see past meetings. Once a meeting's minutes are approved and posted, the minutes appear on the meeting page.
+
+<Callout type="tip" title="Minutes follow approval">
+Minutes don't appear until the board has approved them at a subsequent meeting. If minutes are missing for a meeting that happened weeks ago, the board may still be finalizing them.
+</Callout>
+
+## Statutory context
+
+<Callout type="florida-statute" title="Why the notice timing matters">
+Florida statute sets minimum notice windows — generally 14 days for owner meetings and 48 hours for board meetings. Your notices are marked with their posting status so you can see that the rule was followed.
+</Callout>
+
+## What you can do from a meeting page
+
+As a resident, you can:
+
+- Download the notice, agenda, and any attached materials.
+- Subscribe to updates (notifications fire when the agenda changes or minutes are posted).
+- See whether there's a quorum expected for an owner meeting.
+
+If your community has board polls or e-voting enabled, those links also appear on the meeting page when they're relevant.
+
+## Can't find a meeting?
+
+- **Check the community switcher** at the top of the page if you belong to more than one community.
+- **Look in the past meetings list** — if the meeting already happened, scroll down.
+- **Ask your contact** — if the meeting was announced verbally but never posted, the notice may be late. Contact Management through the help center.
