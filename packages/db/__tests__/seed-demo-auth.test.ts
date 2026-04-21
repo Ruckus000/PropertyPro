@@ -103,6 +103,35 @@ describe('ensureDemoAuthUser password handling', () => {
     expect(mockCreateUser).not.toHaveBeenCalled();
   });
 
+  it('preserves unrelated user_metadata on the existing auth user', async () => {
+    mockListUsers.mockResolvedValueOnce({
+      data: {
+        users: [
+          {
+            id: EXISTING_AUTH_USER_ID,
+            email: DEMO_EMAIL,
+            user_metadata: {
+              full_name: 'Stale Name',
+              avatar_url: 'https://cdn.example.com/a.png',
+              custom_flag: true,
+            },
+          },
+        ],
+      },
+      error: null,
+    });
+    mockUpdateUserById.mockResolvedValue({ data: { user: {} }, error: null });
+
+    await ensureDemoAuthUser(DEMO_EMAIL);
+
+    const [, updatedAttrs] = mockUpdateUserById.mock.calls[0]!;
+    expect(updatedAttrs.user_metadata).toEqual({
+      avatar_url: 'https://cdn.example.com/a.png',
+      custom_flag: true,
+      full_name: 'Sam President',
+    });
+  });
+
   it('uses DEMO_DEFAULT_PASSWORD when creating a new auth user', async () => {
     mockListUsers.mockResolvedValueOnce({
       data: { users: [] },

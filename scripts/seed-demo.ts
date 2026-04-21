@@ -232,14 +232,14 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
 
   if (existingByEmail[0]) {
     let effectiveId = existingByEmail[0].id;
-    const authId = await findAuthUserIdByEmail(normalizedEmail);
-    if (authId && existingByEmail[0].id !== authId) {
-      await reconcilePublicUserIdWithAuthId(existingByEmail[0].id, authId, {
+    const authUser = await findAuthUserByEmail(normalizedEmail);
+    if (authUser && existingByEmail[0].id !== authUser.id) {
+      await reconcilePublicUserIdWithAuthId(existingByEmail[0].id, authUser.id, {
         email: normalizedEmail,
         fullName: demoUser.fullName,
         phone: demoUser.phone,
       });
-      effectiveId = authId;
+      effectiveId = authUser.id;
     }
 
     await db
@@ -263,7 +263,12 @@ async function ensureDemoUserRecord(email: string, preferredId?: string): Promis
   return userId;
 }
 
-async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+interface MatchedAuthUser {
+  id: string;
+  userMetadata: Record<string, unknown>;
+}
+
+async function findAuthUserByEmail(email: string): Promise<MatchedAuthUser | null> {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return null;
   }
@@ -280,7 +285,10 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
 
     const matched = listed.data.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
     if (matched) {
-      return matched.id;
+      return {
+        id: matched.id,
+        userMetadata: (matched.user_metadata ?? {}) as Record<string, unknown>,
+      };
     }
 
     if (listed.data.users.length < perPage) {
@@ -303,18 +311,18 @@ export async function ensureDemoAuthUser(email: string): Promise<string | null> 
     return null;
   }
 
-  const existingId = await findAuthUserIdByEmail(email);
+  const existing = await findAuthUserByEmail(email);
   const admin = createAdminClient();
 
-  if (existingId) {
-    const updateResult = await admin.auth.admin.updateUserById(existingId, {
+  if (existing) {
+    const updateResult = await admin.auth.admin.updateUserById(existing.id, {
       password: getDefaultPassword(),
-      user_metadata: { full_name: demoUser.fullName },
+      user_metadata: { ...existing.userMetadata, full_name: demoUser.fullName },
     });
     if (updateResult.error) {
       throw updateResult.error;
     }
-    return existingId;
+    return existing.id;
   }
 
   const createResult = await admin.auth.admin.createUser({
