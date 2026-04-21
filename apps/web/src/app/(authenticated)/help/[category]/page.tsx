@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getCategoryTree } from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface CategoryPageProps {
   params: Promise<{ category: string }>;
@@ -29,25 +31,22 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
     return a.title.localeCompare(b.title);
   });
 
-  const categoryLabel = category.replace(/-/g, ' ');
+  const categoryLabel = category
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 lg:px-6">
-      {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-sm text-content-tertiary">
-        <Link href="/help" className="hover:text-content-secondary transition-colors">
-          Help
-        </Link>
-        <ChevronRight size={14} aria-hidden="true" />
-        <span className="capitalize text-content-secondary">{categoryLabel}</span>
-      </nav>
-
-      <h1 className="text-2xl font-semibold capitalize text-content">
-        {categoryLabel}
-      </h1>
-      <p className="mt-1 text-sm text-content-tertiary">
-        {sorted.length} {sorted.length === 1 ? 'article' : 'articles'}
-      </p>
+      <PageHeader
+        title={categoryLabel}
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Help Center', href: `/help?communityId=${membership.communityId}` }]}
+            currentLabel={categoryLabel}
+          />
+        }
+        description={`${sorted.length} ${sorted.length === 1 ? 'article' : 'articles'}`}
+      />
 
       <HelpSearchInput className="mt-6" />
 
