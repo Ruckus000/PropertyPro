@@ -59,7 +59,8 @@ const DEFAULT_CLAIM_LIMIT = 500;
 const DAY_MS = 86_400_000;
 const OPEN_ASSESSMENT_STATUSES = ['pending', 'overdue'] as const;
 
-type ReminderEventKind = 'meeting' | 'my_assessment_due' | 'assessment_due';
+/** @internal exported for testing */
+export type ReminderEventKind = 'meeting' | 'my_assessment_due' | 'assessment_due';
 
 interface ActiveCommunity {
   id: number;
@@ -103,7 +104,8 @@ interface CommunityPreferenceRow {
   inAppElections: boolean;
 }
 
-interface CommunityRecipient {
+/** @internal exported for testing */
+export interface CommunityRecipient {
   userId: string;
   email: string;
   fullName: string;
@@ -248,13 +250,15 @@ function formatUnitLabel(row: UnitLabelRow): string {
   return row.building ? `${row.building} ${row.unitNumber}` : row.unitNumber;
 }
 
-function addDaysToDateOnly(value: string, days: number): string {
+/** @internal exported for testing */
+export function addDaysToDateOnly(value: string, days: number): string {
   const [year, month, day] = value.split('-').map(Number);
   const utcDate = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
   return addDays(utcDate, days).toISOString().slice(0, 10);
 }
 
-function getMeetingTriggerAt(
+/** @internal exported for testing */
+export function getMeetingTriggerAt(
   startsAt: Date,
   timezone: string,
   preset: CalendarReminderPreset,
@@ -275,7 +279,8 @@ function isTriggerInWindow(triggerAt: Date, windowStart: Date, now: Date): boole
   return triggerAt.getTime() > windowStart.getTime() && triggerAt.getTime() <= now.getTime();
 }
 
-function getBackoffMinutes(attemptCount: number): number {
+/** @internal exported for testing */
+export function getBackoffMinutes(attemptCount: number): number {
   const index = Math.max(0, Math.min(RETRY_MINUTES_BY_ATTEMPT.length - 1, attemptCount - 1));
   return RETRY_MINUTES_BY_ATTEMPT[index] ?? 720;
 }
@@ -363,7 +368,7 @@ async function loadCommunityRecipients(
       inArray(users.id, userIds),
     ),
     scoped.selectFrom<CommunityPreferenceRow>(notificationPreferences, {
-      userId: userRoles.userId,
+      userId: notificationPreferences.userId,
       emailFrequency: notificationPreferences.emailFrequency,
       emailAnnouncements: notificationPreferences.emailAnnouncements,
       emailMeetings: notificationPreferences.emailMeetings,
@@ -434,7 +439,8 @@ async function loadCommunityRecipients(
   return recipients;
 }
 
-function isEligibleForEventKind(
+/** @internal exported for testing */
+export function isEligibleForEventKind(
   recipient: CommunityRecipient,
   eventKind: ReminderEventKind,
 ): boolean {
