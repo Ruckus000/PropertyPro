@@ -11,6 +11,13 @@ export function ForgotPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  function handleEmailChange(value: string): void {
+    setEmail(value);
+    if (error) {
+      setError('');
+    }
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
@@ -69,7 +76,7 @@ export function ForgotPasswordForm() {
           autoComplete="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => handleEmailChange(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="you@example.com"
           disabled={loading}

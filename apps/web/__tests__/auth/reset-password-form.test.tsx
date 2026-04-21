@@ -98,4 +98,25 @@ describe('ResetPasswordForm reset → login flow', () => {
     expect(signOutMock).not.toHaveBeenCalled();
     expect(routerMock.replace).not.toHaveBeenCalled();
   });
+
+  it('clears stale validation errors when password fields change', async () => {
+    const form = await renderFormAwaitReady();
+
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'Secure!123' } });
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'Mismatch!123' } });
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reset-password-error')).toHaveTextContent('Passwords do not match');
+    });
+
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'Secure!123' } });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('reset-password-error')).toBeNull();
+    });
+  });
 });

@@ -26,6 +26,20 @@ export function SetPasswordForm({ token, communityId }: Props) {
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
 
+  function handlePasswordChange(value: string): void {
+    setPassword(value);
+    if (error) {
+      setError('');
+    }
+  }
+
+  function handleConfirmPasswordChange(value: string): void {
+    setConfirmPassword(value);
+    if (error) {
+      setError('');
+    }
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
@@ -112,7 +126,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           minLength={8}
           maxLength={72}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => handlePasswordChange(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="Min. 8 characters with mixed case, number & symbol"
           disabled={loading}
@@ -136,7 +150,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           autoComplete="new-password"
           required
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={(e) => handleConfirmPasswordChange(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="Re-enter your password"
           disabled={loading}

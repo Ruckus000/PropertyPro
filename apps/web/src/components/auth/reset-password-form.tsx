@@ -22,6 +22,27 @@ export function ResetPasswordForm() {
   const [manualTokenError, setManualTokenError] = useState('');
   const [manualTokenLoading, setManualTokenLoading] = useState(false);
 
+  function handlePasswordChange(value: string): void {
+    setPassword(value);
+    if (error) {
+      setError('');
+    }
+  }
+
+  function handleConfirmPasswordChange(value: string): void {
+    setConfirmPassword(value);
+    if (error) {
+      setError('');
+    }
+  }
+
+  function handleManualTokenChange(value: string): void {
+    setManualToken(value);
+    if (manualTokenError) {
+      setManualTokenError('');
+    }
+  }
+
   useEffect(() => {
     // Supabase appends the auth code as a URL fragment (#access_token=...&type=recovery)
     // The browser client picks it up automatically via onAuthStateChange.
@@ -148,7 +169,7 @@ export function ResetPasswordForm() {
                 type="text"
                 autoComplete="off"
                 value={manualToken}
-                onChange={(e) => setManualToken(e.target.value)}
+                onChange={(e) => handleManualTokenChange(e.target.value)}
                 className="w-full rounded-md border border-edge-strong px-3 py-2 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
                 placeholder="Paste your token here"
                 disabled={manualTokenLoading}
@@ -256,7 +277,7 @@ export function ResetPasswordForm() {
           minLength={8}
           maxLength={72}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => handlePasswordChange(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="At least 8 characters"
           disabled={loading}
@@ -280,7 +301,7 @@ export function ResetPasswordForm() {
           autoComplete="new-password"
           required
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={(e) => handleConfirmPasswordChange(e.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
           placeholder="Re-enter your new password"
           disabled={loading}

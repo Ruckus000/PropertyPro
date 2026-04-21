@@ -102,6 +102,32 @@ function pushReason(label: string): void {
   });
 }
 
+function fillRequiredSignupFields(): void {
+  fireEvent.change(screen.getByLabelText('Primary Contact Name'), {
+    target: { value: 'Jordan Admin' },
+  });
+  fireEvent.change(screen.getByLabelText('Email'), {
+    target: { value: 'jordan@example.com' },
+  });
+  fireEvent.change(screen.getByLabelText('Community Name'), {
+    target: { value: 'Ocean Breeze HOA' },
+  });
+  fireEvent.change(screen.getByLabelText('Address'), {
+    target: { value: '123 Palm Ave, West Palm Beach, FL 33401' },
+  });
+  fireEvent.change(screen.getByLabelText('County'), {
+    target: { value: 'Palm Beach' },
+  });
+  fireEvent.change(screen.getByLabelText('Unit Count'), {
+    target: { value: '120' },
+  });
+  fireEvent.change(screen.getByLabelText('Password', { selector: 'input' }), {
+    target: { value: 'abcdefgh' },
+  });
+  setSlug('ocean-breeze-hoa');
+  fireEvent.click(screen.getByRole('checkbox'));
+}
+
 describe('SignupForm submit gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -151,5 +177,25 @@ describe('SignupForm submit gating', () => {
     setSlug('valid-slug');
     pushReason('reason-available');
     expect(submitButton().disabled).toBe(false);
+  });
+
+  it('clears stale password errors when the password is corrected after submit', () => {
+    render(<SignupForm />);
+    fillRequiredSignupFields();
+
+    act(() => {
+      fireEvent.click(submitButton());
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Password must include an uppercase letter');
+    expect(screen.getByLabelText('Password requirements')).toHaveTextContent('Uppercase letter');
+
+    fireEvent.change(screen.getByLabelText('Password', { selector: 'input' }), {
+      target: { value: 'Abcdefg1!' },
+    });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByLabelText('Password requirements')).toBeNull();
+    expect(screen.getByTestId('password-strength-label')).toHaveTextContent('Strong');
   });
 });

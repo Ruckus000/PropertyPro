@@ -16,6 +16,20 @@ export function LoginForm({ returnTo }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function handleEmailChange(value: string): void {
+    setEmail(value);
+    if (error) {
+      setError(null);
+    }
+  }
+
+  function handlePasswordChange(value: string): void {
+    setPassword(value);
+    if (error) {
+      setError(null);
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -45,7 +59,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
           type="email"
           autoComplete="email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(event) => handleEmailChange(event.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           required
         />
@@ -56,7 +70,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
           type="password"
           autoComplete="current-password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => handlePasswordChange(event.target.value)}
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           required
         />

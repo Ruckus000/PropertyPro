@@ -41,6 +41,19 @@ interface SignupApiSuccess {
   message: string;
 }
 
+type SignupField =
+  | 'primaryContactName'
+  | 'email'
+  | 'password'
+  | 'communityName'
+  | 'address'
+  | 'county'
+  | 'unitCount'
+  | 'candidateSlug'
+  | 'termsAccepted'
+  | 'planKey'
+  | 'communityType';
+
 type VerificationState =
   | { status: 'idle' }
   | { status: 'confirming' }
@@ -79,6 +92,7 @@ export function SignupForm({
   const [candidateSlug, setCandidateSlug] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+  const [errorField, setErrorField] = useState<SignupField | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const plans = useMemo(
@@ -96,6 +110,16 @@ export function SignupForm({
       setPlanKey(plans[0]!.id);
     }
   }, [communityType, planKey, plans]);
+
+  function clearFieldFeedback(field: SignupField): void {
+    if (fieldErrors[field]) {
+      setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    }
+    if (errorField === field) {
+      setErrorMessage(null);
+      setErrorField(null);
+    }
+  }
 
   // O-01 fix: confirm email verification status on return from Supabase redirect
   const confirmVerification = useCallback(async (requestId: string) => {
@@ -139,6 +163,7 @@ export function SignupForm({
   }, [verificationReturn, initialSignupRequestId, confirmVerification]);
 
   function handleCommunityNameChange(value: string): void {
+    clearFieldFeedback('communityName');
     setCommunityName(value);
     if (!subdomainDirty) {
       setCandidateSlug(suggestSubdomainFromCommunityName(value));
@@ -146,6 +171,7 @@ export function SignupForm({
   }
 
   function handleSubdomainChange(value: string): void {
+    clearFieldFeedback('candidateSlug');
     setSubdomainDirty(true);
     setCandidateSlug(value);
   }
@@ -159,6 +185,7 @@ export function SignupForm({
     event.preventDefault();
     setErrorMessage(null);
     setFieldErrors({});
+    setErrorField(null);
     setIsSubmitting(true);
 
     try {
@@ -185,9 +212,11 @@ export function SignupForm({
           errors[field] = msgs?.[0];
         }
         setFieldErrors(errors);
+        const firstField = Object.entries(errors).find(([, message]) => Boolean(message))?.[0] as SignupField | undefined;
         const firstMsg = Object.values(errors).find(Boolean)
           ?? flat.formErrors[0]
           ?? 'Please check your signup details.';
+        setErrorField(firstField ?? null);
         setErrorMessage(firstMsg);
         return;
       }
@@ -207,12 +236,20 @@ export function SignupForm({
       };
 
       if (!response.ok || !payload.data) {
-        const fieldErrors = payload.error?.details?.fieldErrors;
+        const responseFieldErrors = payload.error?.details?.fieldErrors;
+        const normalizedFieldErrors = Object.fromEntries(
+          Object.entries(responseFieldErrors ?? {}).map(([field, messages]) => [field, messages?.[0]]),
+        );
+        if (Object.keys(normalizedFieldErrors).length > 0) {
+          setFieldErrors(normalizedFieldErrors);
+        }
+        const firstField = Object.entries(normalizedFieldErrors).find(([, message]) => Boolean(message))?.[0] as SignupField | undefined;
         const firstFromFields =
-          fieldErrors
-          && Object.values(fieldErrors)
+          responseFieldErrors
+          && Object.values(responseFieldErrors)
             .flat()
             .find((m): m is string => Boolean(m));
+        setErrorField(firstField ?? null);
         setErrorMessage(
           firstFromFields
           ?? payload.error?.message
@@ -226,6 +263,7 @@ export function SignupForm({
       const verifyUrl = `/signup/verify?signupRequestId=${encodeURIComponent(payload.data.signupRequestId)}&email=${encodeURIComponent(maskEmail(email))}`;
       router.push(verifyUrl);
     } catch {
+      setErrorField(null);
       setErrorMessage('Unable to complete signup right now.');
     } finally {
       setIsSubmitting(false);
@@ -300,7 +338,10 @@ export function SignupForm({
           <input
             type="text"
             value={primaryContactName}
-            onChange={(event) => setPrimaryContactName(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('primaryContactName');
+              setPrimaryContactName(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.primaryContactName ? 'border-status-danger' : 'border-edge-strong'}`}
             required
             minLength={2}
@@ -317,7 +358,10 @@ export function SignupForm({
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('email');
+              setEmail(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.email ? 'border-status-danger' : 'border-edge-strong'}`}
             required
           />
@@ -334,7 +378,10 @@ export function SignupForm({
             type="password"
             autoComplete="new-password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('password');
+              setPassword(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.password ? 'border-status-danger' : 'border-edge-strong'}`}
             required
             minLength={8}
@@ -374,7 +421,10 @@ export function SignupForm({
           <input
             type="text"
             value={address}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('address');
+              setAddress(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.address ? 'border-status-danger' : 'border-edge-strong'}`}
             required
             minLength={5}
@@ -392,7 +442,10 @@ export function SignupForm({
           <input
             type="text"
             value={county}
-            onChange={(event) => setCounty(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('county');
+              setCounty(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.county ? 'border-status-danger' : 'border-edge-strong'}`}
             required
             minLength={2}
@@ -411,7 +464,10 @@ export function SignupForm({
             max={20000}
             step={1}
             value={unitCount}
-            onChange={(event) => setUnitCount(event.target.value)}
+            onChange={(event) => {
+              clearFieldFeedback('unitCount');
+              setUnitCount(event.target.value);
+            }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.unitCount ? 'border-status-danger' : 'border-edge-strong'}`}
             required
           />
@@ -423,7 +479,10 @@ export function SignupForm({
 
       <CommunityTypeSelector
         value={communityType}
-        onChange={(value) => setCommunityType(value)}
+        onChange={(value) => {
+          clearFieldFeedback('communityType');
+          setCommunityType(value);
+        }}
         disabled={isSubmitting}
       />
 
@@ -437,7 +496,10 @@ export function SignupForm({
                 key={plan.id}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => setPlanKey(plan.id)}
+                onClick={() => {
+                  clearFieldFeedback('planKey');
+                  setPlanKey(plan.id);
+                }}
                 disabled={isSubmitting}
                 className={`rounded-md border p-3 text-left transition-colors ${
                   selected
@@ -466,7 +528,10 @@ export function SignupForm({
         <input
           type="checkbox"
           checked={termsAccepted}
-          onChange={(event) => setTermsAccepted(event.target.checked)}
+          onChange={(event) => {
+            clearFieldFeedback('termsAccepted');
+            setTermsAccepted(event.target.checked);
+          }}
           className="mt-0.5 h-4 w-4 rounded border-edge-strong"
           required
         />
