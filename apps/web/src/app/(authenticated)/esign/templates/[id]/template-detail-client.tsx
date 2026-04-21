@@ -21,6 +21,8 @@ import {
 import { Badge } from '@propertypro/ui';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import dynamic from 'next/dynamic';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   useEsignTemplate,
   useArchiveEsignTemplate,
@@ -203,74 +205,60 @@ export function TemplateDetailClient({
   // -----------------------------------------------------------------------
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* Back link */}
-      <Link
-        href={`/esign/templates?communityId=${communityId}`}
-        className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-      >
-        <ChevronLeft className="size-4" />
-        Back to Templates
-      </Link>
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-              {template.name}
-            </h1>
+      <PageHeader
+        title={template.name}
+        description={template.description ?? undefined}
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
+            currentLabel={template.name}
+          />
+        }
+        actions={
+          <div className="flex items-center gap-2">
             <Badge
               variant={STATUS_VARIANT[template.status] ?? 'neutral'}
               size="sm"
             >
               {template.status}
             </Badge>
+            <Link
+              href={`/esign/templates/new?communityId=${communityId}`}
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
+            >
+              <Send className="size-4" />
+              Send for Signing
+            </Link>
+            <Link
+              href={`/esign/templates/new?communityId=${communityId}`}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+            >
+              <Edit className="size-4" />
+              Edit Fields
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setCloneName(`${template.name} (copy)`);
+                setShowCloneDialog(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+            >
+              <Copy className="size-4" />
+              Clone
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleArchive()}
+              disabled={archiveMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--status-danger)] transition-colors hover:bg-[var(--status-danger-bg)] disabled:opacity-40"
+            >
+              <Archive className="size-4" />
+              Archive
+            </button>
           </div>
-          {template.description && (
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {template.description}
-            </p>
-          )}
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href={`/esign/templates/new?communityId=${communityId}`}
-            className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
-          >
-            <Send className="size-4" />
-            Send for Signing
-          </Link>
-          <Link
-            href={`/esign/templates/new?communityId=${communityId}`}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
-          >
-            <Edit className="size-4" />
-            Edit Fields
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              setCloneName(`${template.name} (copy)`);
-              setShowCloneDialog(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
-          >
-            <Copy className="size-4" />
-            Clone
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleArchive()}
-            disabled={archiveMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--status-danger)] transition-colors hover:bg-[var(--status-danger-bg)] disabled:opacity-40"
-          >
-            <Archive className="size-4" />
-            Archive
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Metadata panel */}
       <div className="grid grid-cols-4 gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5">

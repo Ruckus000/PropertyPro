@@ -8,6 +8,8 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card } from '@propertypro/ui';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +34,6 @@ import type {
   EsignEventRecord,
 } from '@/lib/services/esign-service';
 import {
-  ArrowLeft,
   AlertTriangle,
   Send,
   Ban,
@@ -180,15 +181,16 @@ export function SubmissionDetail({
   const isPending = effectiveStatus === 'pending';
 
   return (
-    <div>
-      {/* Back link */}
-      <Link
-        href={`/esign?communityId=${communityId}`}
-        className="inline-flex items-center gap-1 text-sm text-content-tertiary hover:text-content-secondary mb-4"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to E-Sign
-      </Link>
+    <div className="space-y-6">
+      <PageHeader
+        title={submission.messageSubject ?? `Submission #${submission.id}`}
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
+            currentLabel={submission.messageSubject ?? `Submission #${submission.id}`}
+          />
+        }
+      />
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
