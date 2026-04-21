@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx
 /**
  * E-Sign Template Detail — read-only preview with field overlay.
  *

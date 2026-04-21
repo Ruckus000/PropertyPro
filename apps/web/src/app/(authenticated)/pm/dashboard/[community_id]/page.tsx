@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — redirect-only page
 /**
  * PM Community Context Switch — P3-46
  *

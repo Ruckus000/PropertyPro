@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/violations/ViolationDetailView.tsx
 /**
  * Violation Detail Page — Phase 1C
  *
