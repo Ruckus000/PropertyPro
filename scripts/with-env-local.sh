@@ -33,4 +33,15 @@ set -a
 source "$env_file"
 set +a
 
+# Drop NODE_ENV after sourcing. Older .env.local files (see .env.example
+# history) set `NODE_ENV=development`, which breaks `next build`: Next's
+# `module.compiled.js` picks `pages.runtime.dev.js` when NODE_ENV=development,
+# but the build pipeline is compiled for production. The two runtimes carry
+# different `HtmlContext` instances, so the Pages-Router `<Html>` consumer
+# reads a different context than the render-pipeline Provider, and prerender
+# of `/_error: /404` throws "<Html> should not be imported outside of
+# pages/_document". Let downstream commands (next build/dev, vitest, etc.)
+# set NODE_ENV themselves.
+unset NODE_ENV
+
 exec "$@"
