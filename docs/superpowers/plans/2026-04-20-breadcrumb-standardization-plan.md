@@ -140,10 +140,10 @@ export function Breadcrumbs({ items = [], currentLabel, className }: Breadcrumbs
           </li>
         </Fragment>
       ))}
-      <li>
+      <li className="min-w-0">
         <span
           aria-current="page"
-          className="font-medium text-content-secondary truncate max-w-[40ch] inline-block align-middle"
+          className="font-medium text-content-secondary truncate block max-w-full sm:max-w-[40ch]"
         >
           {currentLabel}
         </span>
@@ -151,6 +151,15 @@ export function Breadcrumbs({ items = [], currentLabel, className }: Breadcrumbs
     </ol>
   );
 }
+
+// Styling notes:
+// - `min-w-0` on the current <li> is required so it can shrink inside the
+//   flex parent (default min-width:auto would refuse to shrink below content).
+// - `max-w-full sm:max-w-[40ch]` caps the truncated label at 40ch on sm+
+//   viewports but defers to the parent width on <640px screens, preventing
+//   horizontal overflow on narrow mobile.
+// - No `align-middle` — that class is a no-op inside a flex parent using
+//   `items-center`.
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -174,10 +183,11 @@ PageHeader provides the <nav> landmark. Current item gets aria-current=page.
 
 ## Task 2: Migrate help center pages and delete ArticleBreadcrumbs
 
-The help center is the lowest-risk migration target — the breadcrumb pattern is already in use, and the change is purely "swap component, same shape."
+The help center is the lowest-risk migration target — the breadcrumb pattern is already in use (for the article page), and the change for each file is small.
 
 **Files:**
 - Modify: `apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx`
+- Modify: `apps/web/src/app/(authenticated)/help/[category]/page.tsx` **(added in first-pass review — previously missed; CI-guard matches this file because parent dir `[category]` is bracketed)**
 - Modify: `apps/web/src/app/(authenticated)/help/manage/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/help/contact/page.tsx`
 - Delete: `apps/web/src/components/help/article-breadcrumbs.tsx`
@@ -209,6 +219,7 @@ breadcrumb={
     items={[
       { label: 'Help Center', href: `/help?communityId=${context.communityId}` },
       {
+        // Match sibling /help/[category]/page.tsx's `<h1 className="capitalize">` rendering.
         label: article.metadata.category.replace(/-/g, ' '),
         href: `/help/${article.metadata.category}?communityId=${context.communityId}`,
       },
@@ -218,7 +229,41 @@ breadcrumb={
 }
 ```
 
-- [ ] **Step 2: Modify help/manage page**
+Wrap the span rendered by the new generic `Breadcrumbs` for the category crumb with Tailwind's `capitalize` only if you want the casing identical to the sibling page. A simpler alternative: pre-format once with a tiny helper (see `apps/web/src/lib/help/anchors.ts` for existing shared help helpers). Either option is acceptable; just keep casing consistent between this crumb and the `[category]` page's `<h1>`.
+
+- [ ] **Step 2: Migrate help/[category]/page.tsx (NEW — previously missed)**
+
+This file currently renders its own inline `<nav aria-label="Breadcrumb">` (lines 37-43) and a bare `<h1>` — no `<PageHeader>`. The CI guard will match this file (parent dir `[category]` is bracketed), so leaving it unmigrated will FAIL lint on merge.
+
+Apply these changes:
+
+1. Add imports at the top of the file:
+   ```tsx
+   import { PageHeader } from '@/components/shared/page-header';
+   import { Breadcrumbs } from '@/components/shared/breadcrumbs';
+   ```
+2. Remove the now-unused `ChevronRight` import from `lucide-react` (still need `Clock`, keep that).
+3. Delete the inline `<nav aria-label="Breadcrumb">...</nav>` block (currently lines 37-43) — required to prevent double-landmark.
+4. Delete the bare `<h1>` at line 45-47.
+5. Prepend a `<PageHeader>` above the `<HelpSearchInput>` call (currently line 52):
+   ```tsx
+   <PageHeader
+     title={categoryLabel}
+     breadcrumb={
+       <Breadcrumbs
+         items={[{ label: 'Help Center', href: '/help?communityId=...' }]}
+         currentLabel={categoryLabel}
+       />
+     }
+     description={`${sorted.length} ${sorted.length === 1 ? 'article' : 'articles'}`}
+   />
+   ```
+   (Resolve the href's `communityId` via `requirePageCommunityMembership`; the file already imports it at line 4. See the file for the existing `membership.communityId` resolution — or pass `context.communityId` if you add help-page context resolution here.)
+6. Remove the `<p className="mt-1 text-sm text-content-tertiary">` line-count paragraph (moved into `description`).
+
+Note: the page currently renders with `capitalize` on the `<h1>`. `PageHeader.title` is a plain string — apply the same `category.replace(/-/g, ' ')` before passing to `title`, or pre-Title-Case the value for consistency with the rendering used in the article page's parent crumb (Task 2 Step 1).
+
+- [ ] **Step 3: Modify help/manage page**
 
 In `apps/web/src/app/(authenticated)/help/manage/page.tsx`, replace the `breadcrumb` prop (currently lines 33-37):
 ```tsx
@@ -246,29 +291,29 @@ import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 Remove the now-unused `import Link from 'next/link';` if it has no other consumers in the file (verify by searching for `<Link` in the file before removing).
 
-- [ ] **Step 3: Modify help/contact page**
+- [ ] **Step 4: Modify help/contact page**
 
-In `apps/web/src/app/(authenticated)/help/contact/page.tsx`, apply the same pattern as Step 2 with `currentLabel="Management Contact"`.
+In `apps/web/src/app/(authenticated)/help/contact/page.tsx`, apply the same pattern as Step 3 with `currentLabel="Management Contact"`.
 
-- [ ] **Step 4: Delete the old ArticleBreadcrumbs component**
+- [ ] **Step 5: Delete the old ArticleBreadcrumbs component**
 
 ```bash
 rm apps/web/src/components/help/article-breadcrumbs.tsx
 ```
 
-- [ ] **Step 5: Verify nothing else imports ArticleBreadcrumbs**
+- [ ] **Step 6: Verify nothing else imports ArticleBreadcrumbs**
 
 Run: `grep -r "ArticleBreadcrumbs\|article-breadcrumbs" apps/web/src`
 
 Expected: No matches (other than possibly in this plan file, which is not in apps/web/src).
 
-- [ ] **Step 6: Typecheck**
+- [ ] **Step 7: Typecheck**
 
 Run: `pnpm typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/app/(authenticated)/help apps/web/src/components/help/article-breadcrumbs.tsx
@@ -284,12 +329,15 @@ aria-current=page); home glyph dropped, text label is sufficient.
 
 ## Task 3: Migrate Mode A detail pages
 
-Pages that render `<PageHeader>` directly in their server component. Each gets a `<Breadcrumbs>` in the breadcrumb slot.
+Pages that render `<PageHeader>` directly. Each gets a `<Breadcrumbs>` in the breadcrumb slot.
 
 **Files:**
-- Modify: `apps/web/src/app/(authenticated)/announcements/[id]/page.tsx`
-- Modify: `apps/web/src/app/(authenticated)/emergency/[id]/page.tsx`
-- Modify: `apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx`
+- Modify: `apps/web/src/app/(authenticated)/announcements/[id]/page.tsx` (server component)
+- Modify: `apps/web/src/app/(authenticated)/emergency/[id]/page.tsx` (`"use client"` — see client-component caveat below)
+- (`help/[category]/page.tsx` and `help/[category]/[slug]/page.tsx` are handled in Task 2.)
+- (`pm/dashboard/[community_id]/page.tsx` is redirect-only — exempt via Task 7.)
+
+**Client-component caveat:** `emergency/[id]/page.tsx` has four early-return branches (missing params / loading / error) before the main return. The breadcrumb only appears in the main return. Initial server-rendered HTML shows only the loading state. Existing behavior; not fixed here. No action required — the CI guard still passes because `<PageHeader breadcrumb=...>` exists in the source. Document this in the PR description.
 
 - [ ] **Step 1: Migrate `announcements/[id]/page.tsx` (the original repro)**
 
@@ -415,8 +463,7 @@ Expected: Original repro is resolved.
 
 ```bash
 git add apps/web/src/app/(authenticated)/announcements/[id]/page.tsx \
-        apps/web/src/app/(authenticated)/emergency/[id]/page.tsx \
-        apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx
+        apps/web/src/app/(authenticated)/emergency/[id]/page.tsx
 git commit -m "feat(nav): add breadcrumbs to Mode A detail pages
 
 Resolves the original repro: after publishing an announcement, the
@@ -434,7 +481,7 @@ crumb linked back to the list.
 **Files:**
 - Modify: `apps/web/src/app/(authenticated)/announcements/new/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/emergency/new/page.tsx`
-- Modify: `apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx`
+- (`pm/dashboard/communities/new/page.tsx` is **redirect-only** — verified in first-pass review: 9-line file with `redirect('/pm/dashboard/communities')`, no rendered output. Handled by Task 7 exemption, NOT migrated here.)
 
 - [ ] **Step 1: Modify `announcements/new/page.tsx`**
 
@@ -515,16 +562,9 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 ```
 
-- [ ] **Step 3: Inspect and migrate `pm/dashboard/communities/new/page.tsx`**
+- [ ] **Step 3: Skip `pm/dashboard/communities/new/page.tsx` — it is a redirect-only page**
 
-Read the file first:
-```bash
-cat "apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx"
-```
-
-Apply the same pattern as Step 2: add a `<PageHeader title="Add community" breadcrumb={<Breadcrumbs items={[{label: 'Portfolio', href: '/pm/dashboard/communities'}]} currentLabel="Add community" />} />` at the top of the page's rendered output. Wrap or replace the existing title rendering.
-
-If the file already uses `<PageHeader>`, just add the breadcrumb prop. If it has a back-button in the `actions` slot (verify by reading), remove it. (This is the only file in this task whose state is not pre-verified by the plan author; the engineer needs to read it first.)
+Verified in first-pass review: the file is 9 lines, only `redirect('/pm/dashboard/communities')`. No rendered output — migrating as a Mode A new page would add unreachable JSX (after `redirect()` throws). Exemption is handled by Task 7.
 
 - [ ] **Step 4: Typecheck**
 
@@ -545,8 +585,7 @@ This is a deliberate UX change; capture screenshots before/after for the PR desc
 
 ```bash
 git add apps/web/src/app/(authenticated)/announcements/new/page.tsx \
-        apps/web/src/app/(authenticated)/emergency/new/page.tsx \
-        apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx
+        apps/web/src/app/(authenticated)/emergency/new/page.tsx
 git commit -m "feat(nav): add breadcrumbs to Mode A new pages
 
 Removes legacy back-button affordance from the actions slot on these
@@ -692,80 +731,145 @@ Read the file (focus on the back link area near line 89).
 
 Replace the back-link `← Back to Forum` element with a PageHeader wrapper that renders the existing title content via the `title` prop and adds the breadcrumb. Specifics depend on the file's current shape — read it first, then refactor following the same pattern as Step 1.
 
-The breadcrumb shape should be:
+The breadcrumb shape:
 ```tsx
 breadcrumb={
   <Breadcrumbs
     items={[
-      { label: 'Board', href: `/communities/${communityId}/board?communityId=${communityId}` },
-      { label: 'Forum', href: `/communities/${communityId}/board/forum?communityId=${communityId}` },
+      { label: 'Board', href: `/communities/${communityId}/board/polls` },
+      { label: 'Forum', href: `/communities/${communityId}/board/forum` },
     ]}
     currentLabel={thread.title}
   />
 }
 ```
 
-(Verify the exact href format by reading the existing back link.)
+**No `?communityId=` query param** on these hrefs — nested `/communities/[id]/...` routes resolve tenant context from the `[id]` path segment, and the existing back-link in this file already omits the query param. Matches `nav-config.ts:107` (sidebar `'Board'` item's href is `/communities/${cid}/board/polls`).
+
+**Multi-branch caveat (spec Risks #7):** the file has loading / error / not-found early returns (lines 60-82) that render Skeletons, `<AlertBanner>`, or `<EmptyState>` only. The PageHeader+breadcrumb only appears in the loaded branch (line 86+). That's acceptable; loading and empty/error states don't need breadcrumbs. Do not add them to those branches.
 
 - [ ] **Step 3: Migrate `new-submission-form.tsx`**
 
-Read the file. The back link is at line 183 (verify with `grep -n "ArrowLeft" apps/web/src/components/esign/new-submission-form.tsx`).
+Read the file. The back link is at line 179-185 (text "Back to E-Sign" → `/esign?communityId=${communityId}`). The inline `<h1>Send Document for Signing</h1>` is at line 187, with a `<p>` tagline at line 190.
 
 The breadcrumb shape:
 ```tsx
 breadcrumb={
   <Breadcrumbs
-    items={[{ label: 'E-Sign Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
+    items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
     currentLabel="New submission"
   />
 }
 ```
 
-(Verify the parent route by inspecting how the existing back button navigates.)
+**Deliberate behavior change (spec Risks #9):** the existing back-link navigates to `/esign`, but the breadcrumb parent navigates to `/esign/submissions` (the list page that exists at that route). Reviewer must screenshot-diff and confirm this is intentional. If you prefer to preserve the old target, use `/esign?communityId=${communityId}` with label `'E-Sign'` — but pick one and keep `submission-detail.tsx` consistent.
+
+Replace the `<div className="max-w-2xl">` opener + back-link Link + inline `<h1>` + tagline `<p>` (lines 177-192) with:
+```tsx
+<div className="max-w-2xl space-y-6">
+  <PageHeader
+    title="Send Document for Signing"
+    description="Select a template, add signers, and send."
+    breadcrumb={<Breadcrumbs ... />}
+  />
+  ...
+```
+
+Remove the now-unused `ArrowLeft` import from `lucide-react` (keep the other icons).
 
 - [ ] **Step 4: Migrate `submission-detail.tsx`**
 
-Same pattern. Breadcrumb shape:
+This file has TWO render branches with independent back-links:
+- **Loaded branch** (lines 182+): back-link at lines 184-191 → `/esign?communityId=${communityId}` ("Back to E-Sign").
+- **Error branch** (lines 157-174): renders a `<Card>` with AlertTriangle + error message + its own back-link at lines 166-171 → `/esign?communityId=${communityId}` ("Back to E-Sign").
+
+Pick ONE strategy and apply consistently:
+- **(a)** Render `<PageHeader>` at the top of every branch (loading skeleton, error, loaded) so the breadcrumb is always present. Requires a placeholder title (e.g., `currentLabel={submission?.messageSubject ?? 'Submission'}`) — but `submission` is undefined in loading/error branches, so the placeholder text is what actually renders.
+- **(b)** Render `<PageHeader>` only in the loaded branch; leave the standalone back-link in the error branch intact so users with a failed fetch can still navigate out.
+
+Recommended: **(b)**. The loaded branch's PageHeader shape:
+
 ```tsx
 breadcrumb={
   <Breadcrumbs
-    items={[{ label: 'E-Sign Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
-    currentLabel={submission.title /* or whatever the title source is */}
+    items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
+    currentLabel={submission.messageSubject ?? `Submission #${submission.id}`}
   />
 }
 ```
+
+(Title source matches the existing inline `<h2>` at line 228-230 of the original file.)
+
+**Same deliberate parent-href change (spec Risks #9) as Step 3.** Keep the two files consistent.
+
+Remove the now-unused `ArrowLeft` import if no other consumers remain.
 
 - [ ] **Step 5: Migrate `template-builder-client.tsx`**
 
-Two back-link sites at lines 372 and 583 (per the spec audit). Replace both with a single PageHeader at the top of the component output.
+This file has TWO render branches (phases), not two "back-link sites":
+- **Phase 1 (Setup)** — lines 364-562. Contains a "Back to Templates" link at lines 368-374 with `<ChevronLeft>`. This IS the back-to-templates link — migrate it.
+- **Phase 2 (Editor)** — lines 573+. Contains a "Setup" button at lines 578-585 with `<ArrowLeft>`. This is **phase navigation** (calls `setPhase(1)`) within the wizard — **NOT** a back-to-templates link. **Leave it unchanged.**
 
-Breadcrumb shape:
+Replace the Phase 1 back-link + the bare `<h1>Create Template</h1>` (lines 368-378) with a PageHeader at the top of the Phase 1 return:
+
 ```tsx
-breadcrumb={
-  <Breadcrumbs
-    items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-    currentLabel="New template"
+<div className="mx-auto max-w-2xl space-y-6">
+  <PageHeader
+    title="Create Template"
+    breadcrumb={
+      <Breadcrumbs
+        items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
+        currentLabel="New template"
+      />
+    }
   />
-}
+  <div className="space-y-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">
+    ...
 ```
 
-Verify whether the two back-link sites are part of a multi-step wizard (one for "back to templates," one for "previous step"). Only replace the "back to templates" one with the breadcrumb; keep wizard step navigation (previous/next step) as-is.
+The Phase 2 layout uses `h-[calc(100vh-4rem)]` full-height chrome with its own editor header — do not disturb.
+
+Remove the now-unused `ChevronLeft` import from `lucide-react` (keep `ArrowLeft` — still used by the Phase 2 "Setup" button).
 
 - [ ] **Step 6: Migrate `template-detail-client.tsx`**
 
-Two back-link sites at lines 194 and 211. These appear to be the same affordance rendered in two different render branches (loading vs loaded). Both should be replaced with a single PageHeader at the top of the component.
+This file has THREE render branches (not two, as earlier drafts suggested):
+- **Loading** (lines 176-182): renders only `<Loader2>`. No back-link today. No breadcrumb.
+- **Error** (lines 184-199): renders "Template not found" + a standalone back-link with `<ChevronLeft>` at lines 190-196. Full-page replacement UI.
+- **Loaded** (lines 204+): main render with a back-link at lines 207-213 + inline `<h1>` at line 219.
 
-Breadcrumb shape:
+Pick ONE strategy and apply consistently (spec Risks #7):
+
+- **(a) PageHeader in every branch.** Requires handling `template` being undefined. Title becomes `template?.name ?? 'Loading template…'` (or an error string in the error branch).
+- **(b) PageHeader in the loaded branch only.** Keep the error branch's standalone back-link intact so users with a failed fetch still have a way out. Loading branch stays with just `<Loader2>` (matches today's behavior).
+
+**Recommended: (b).** Simpler, preserves the existing error-branch exit, and matches the approach used for `forum-thread-detail.tsx` and `submission-detail.tsx`.
+
+Loaded-branch PageHeader shape (to replace the inline `<h1>` + Badge row + description `<p>` at lines 216-234):
 ```tsx
-breadcrumb={
-  <Breadcrumbs
-    items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-    currentLabel={template.title /* or "Loading..." in the loading branch */}
-  />
-}
+<PageHeader
+  title={template.name}
+  description={template.description ?? undefined}
+  breadcrumb={
+    <Breadcrumbs
+      items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
+      currentLabel={template.name}
+    />
+  }
+  actions={
+    <div className="flex items-center gap-2">
+      <Badge variant={STATUS_VARIANT[template.status] ?? 'neutral'} size="sm">
+        {template.status}
+      </Badge>
+      {/* keep existing action buttons: Send for Signing, Edit Fields, Clone, Archive */}
+    </div>
+  }
+/>
 ```
 
-For the loading branch, use `currentLabel="Loading template…"` so the breadcrumb still renders meaningfully.
+**CI-guard prop-ordering constraint:** `breadcrumb=` must come before `actions=` in the source (see Task 11 — the CI guard regex halts at the first `>` between `<PageHeader` and `breadcrumb=`, and `actions={<div>...</div>}` contains a `>`).
+
+Document the chosen strategy ((a) or (b)) in the PR description.
 
 - [ ] **Step 7: Typecheck**
 
@@ -802,27 +906,32 @@ See spec Risks #5 — visual diff for these pages reviewed in PR screenshots.
 
 The page files for Mode B routes are thin server components that delegate to the client components migrated in Task 6. The redirect-only files don't render anything. Both classes will fail the CI guard unless they carry an exemption comment.
 
-**Files:**
+**Files (Mode B delegated):**
 - Modify: `apps/web/src/app/(authenticated)/violations/[id]/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/esign/submissions/[id]/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/esign/templates/[id]/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/communities/[id]/board/forum/[threadId]/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/esign/submissions/new/page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/esign/templates/new/page.tsx`
-- Modify: `apps/web/src/app/(authenticated)/communities/[id]/announcements/page.tsx` (redirect)
-- Modify: `apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx` (redirect)
 
-- [ ] **Step 1: Add exemption comment to each delegated page**
+**Files (redirect-only):**
+- Modify: `apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx`
+- Modify: `apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx` **(added in first-pass review — 9-line file with only `redirect('/pm/dashboard/communities')`; was incorrectly scheduled as a Mode A new page in earlier drafts.)**
 
-For each file in the list above (except the redirect-only `communities/[id]/announcements/page.tsx`), add at the very top of the file (before any imports):
+**NOT exempted (out of CI guard scope):**
+- `apps/web/src/app/(authenticated)/communities/[id]/announcements/page.tsx` — this is a redirect-only file, but its parent dir is `announcements` (not bracketed / `new` / `edit`), so the CI guard's `findInScopePages` walker does not match it. Adding an exemption comment would be wasted work and could mislead future readers into thinking this path is enforced. **Leave the file untouched.**
+
+- [ ] **Step 1: Add exemption comment to each delegated Mode B page**
+
+For each Mode B delegated page (6 files), add at the very top of the file (before any imports):
 
 ```tsx
 // breadcrumbs:exempt — delegated to apps/web/src/components/<path>/<Component>.tsx
 ```
 
-Substitute the correct delegated file path per page (matches the components edited in Task 6).
+Substitute the correct delegated file path per page (matches the components edited in Task 6). For `esign/templates/[id]/page.tsx` and `esign/templates/new/page.tsx`, the delegates live under `apps/web/src/app/(authenticated)/esign/templates/...` (co-located with the page file), not under `apps/web/src/components/`.
 
-For the two redirect-only files (`communities/[id]/announcements/page.tsx` and `pm/dashboard/[community_id]/page.tsx`), add:
+For the two redirect-only files (`pm/dashboard/[community_id]/page.tsx` and `pm/dashboard/communities/new/page.tsx`), add:
 
 ```tsx
 // breadcrumbs:exempt — redirect-only page
@@ -838,8 +947,8 @@ for f in \
   "apps/web/src/app/(authenticated)/communities/[id]/board/forum/[threadId]/page.tsx" \
   "apps/web/src/app/(authenticated)/esign/submissions/new/page.tsx" \
   "apps/web/src/app/(authenticated)/esign/templates/new/page.tsx" \
-  "apps/web/src/app/(authenticated)/communities/[id]/announcements/page.tsx" \
-  "apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx"; do
+  "apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx" \
+  "apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx"; do
   echo "=== $f ==="
   head -1 "$f"
 done
@@ -856,8 +965,8 @@ git add "apps/web/src/app/(authenticated)/violations/[id]/page.tsx" \
         "apps/web/src/app/(authenticated)/communities/[id]/board/forum/[threadId]/page.tsx" \
         "apps/web/src/app/(authenticated)/esign/submissions/new/page.tsx" \
         "apps/web/src/app/(authenticated)/esign/templates/new/page.tsx" \
-        "apps/web/src/app/(authenticated)/communities/[id]/announcements/page.tsx" \
-        "apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx"
+        "apps/web/src/app/(authenticated)/pm/dashboard/[community_id]/page.tsx" \
+        "apps/web/src/app/(authenticated)/pm/dashboard/communities/new/page.tsx"
 git commit -m "chore(nav): mark Mode B and redirect-only pages exempt from breadcrumbs guard"
 ```
 
@@ -872,25 +981,31 @@ These are pages and components that are not in the CI guard's glob (they're list
 
 - [ ] **Step 1: Migrate `import-residents-client.tsx`**
 
-Read the file (focus on the back button at line 194). The page that renders this is a static `apps/web/src/app/(authenticated)/dashboard/import-residents/page.tsx`.
+Read the file (focus on the back button at line 189-195, which renders `<ArrowLeft>` inside a `<Link>` with `aria-label="Back to residents"`). The page that renders this is a static `apps/web/src/app/(authenticated)/dashboard/import-residents/page.tsx`.
 
-Two options here, pick whichever fits:
+Two options, pick whichever fits:
 - (a) Move the PageHeader to the parent server page file and pass title down as a prop.
 - (b) Render PageHeader inside the client component.
 
 Choose (b) for parity with Task 6.
 
-Replace the back button block with PageHeader + Breadcrumbs. The breadcrumb shape:
+Replace the existing `<div className="flex items-center gap-3">` header (lines 187-197) containing the back-arrow Link + `<h1>` with PageHeader + Breadcrumbs:
+
 ```tsx
-breadcrumb={
-  <Breadcrumbs
-    items={[{ label: 'Residents', href: `/dashboard?communityId=${communityId}` /* verify the right parent — may be `/residents?communityId=...` */ }]}
-    currentLabel="Import residents"
-  />
-}
+<PageHeader
+  title="Import Residents"
+  breadcrumb={
+    <Breadcrumbs
+      items={[{ label: 'Residents', href: `/dashboard/residents?communityId=${communityId}` }]}
+      currentLabel="Import residents"
+    />
+  }
+/>
 ```
 
-Verify the parent path by reading where the existing back button navigates to.
+**Parent href:** use `/dashboard/residents?communityId=${communityId}` — this matches the existing back-link target in the same file AND the Residents sidebar item in `nav-config.ts:178` (`href: (cid) => \`/dashboard/residents?communityId=${cid}\``). Do NOT use `/dashboard` (the generic dashboard) or `/residents` (does not exist).
+
+Remove the now-unused `ArrowLeft` import from `lucide-react` (if no other consumers in the file).
 
 - [ ] **Step 2: Typecheck**
 
@@ -915,6 +1030,9 @@ git commit -m "feat(nav): standardize import-residents back affordance on Breadc
 - Create: `scripts/__fixtures__/breadcrumbs/failing-page.tsx`
 - Create: `scripts/__fixtures__/breadcrumbs/delegated-page.tsx`
 - Create: `scripts/__fixtures__/breadcrumbs/delegated-target.tsx`
+- Create: `scripts/__fixtures__/breadcrumbs/delegated-missing-target.tsx` **(added to cover the "delegated target not found" case — see Step 2)**
+- Create: `scripts/__fixtures__/breadcrumbs/delegated-target-without-breadcrumb.tsx` **(added to cover the "delegated target exists but has no breadcrumb" case)**
+- Create: `scripts/__fixtures__/breadcrumbs/exempt-redirect-page.tsx` **(added to cover the "redirect-only exemption" case)**
 - Create: `scripts/__tests__/verify-page-breadcrumbs.test.ts`
 
 - [ ] **Step 1: Create fixtures**
@@ -963,6 +1081,33 @@ export function Target() {
 }
 ```
 
+Create `scripts/__fixtures__/breadcrumbs/delegated-missing-target.tsx`:
+```tsx
+// breadcrumbs:exempt — delegated to scripts/__fixtures__/breadcrumbs/does-not-exist.tsx
+export default function Page() {
+  return null;
+}
+```
+
+Create `scripts/__fixtures__/breadcrumbs/delegated-target-without-breadcrumb.tsx`:
+```tsx
+import { PageHeader } from '@/components/shared/page-header';
+
+export function Target() {
+  return <PageHeader title="Test" />;
+}
+```
+(Used indirectly — see the test case below that points a delegated page at this file.)
+
+Create `scripts/__fixtures__/breadcrumbs/exempt-redirect-page.tsx`:
+```tsx
+// breadcrumbs:exempt — redirect-only page
+import { redirect } from 'next/navigation';
+export default function Page() {
+  redirect('/somewhere');
+}
+```
+
 - [ ] **Step 2: Write failing tests**
 
 Create `scripts/__tests__/verify-page-breadcrumbs.test.ts`:
@@ -995,12 +1140,21 @@ describe('verifyFile', () => {
   });
 
   it('fails when delegated target file does not exist', () => {
-    // Synthesize a temp page pointing to a nonexistent target
-    // (Add another fixture if needed; or use a temp-file pattern.)
-    // For now, ensure the contract is documented:
-    // verifyFile returns { ok: false, reason: 'delegated target not found' }
-    // when the delegation path resolves to a missing file.
+    const result = verifyFile(resolve(fixtures, 'delegated-missing-target.tsx'));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/delegated target not found/i);
   });
+
+  it('passes a redirect-only exempt page', () => {
+    const result = verifyFile(resolve(fixtures, 'exempt-redirect-page.tsx'));
+    expect(result.ok).toBe(true);
+  });
+
+  // Smoke test for the prop-ordering false-negative documented in
+  // spec §CI Guard: a page whose <PageHeader> has `actions={<Button>…</Button>}`
+  // BEFORE `breadcrumb=` is known to fail the regex. We don't add a fixture
+  // asserting the false-negative (it would be a strange contract to lock in);
+  // reviewers rely on the rule in .claude/rules/design.md instead.
 });
 ```
 
@@ -1015,6 +1169,29 @@ Expected: FAIL — module not found.
 Create `scripts/verify-page-breadcrumbs.ts`:
 
 ```ts
+// scripts/verify-page-breadcrumbs.ts
+//
+// CI guard: every in-scope page.tsx under apps/web/src/app/(authenticated)/
+// must contain <PageHeader ... breadcrumb=…> OR a // breadcrumbs:exempt comment.
+//
+// In-scope glob (matched by findInScopePages below):
+//   **/[<param>]/page.tsx      (parent dir bracketed → entity detail)
+//   **/new/page.tsx            (parent dir is `new`)
+//   **/[<param>]/edit/page.tsx (parent dir `edit`, grandparent bracketed)
+//
+// Known false-negative classes (see spec §CI Guard):
+//   1. `breadcrumb={someExpression}` that evaluates to `null` at runtime.
+//   2. `<PageHeader>` rendered conditionally where one branch passes breadcrumb
+//      and another doesn't (regex matches the source, not the runtime).
+//   3. A delegated component that itself delegates further (two-hop only).
+//   4. Prop ordering: `<PageHeader>` with a JSX-valued prop containing `>`
+//      (e.g., `actions={<Button>Cancel</Button>}`) placed BEFORE `breadcrumb=`.
+//      The [^>]* halts at the first `>` inside the nested JSX. Mitigation:
+//      .claude/rules/design.md requires `breadcrumb=` before any JSX-valued
+//      prop on <PageHeader>.
+//
+// These are documented limitations; a grep guard is not a type checker.
+
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, relative, basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1028,6 +1205,9 @@ export interface VerifyResult {
   reason?: string;
 }
 
+// See false-negative class 4 above — `[^>]*` halts at the first `>`.
+// Every migrated <PageHeader> must place `breadcrumb=` before `actions=`
+// or any other JSX-valued prop.
 const PAGE_HEADER_BREADCRUMB_RE = /<PageHeader\b[^>]*\sbreadcrumb=/s;
 const EXEMPT_RE = /^\s*\/\/\s*breadcrumbs:exempt(.*)$/m;
 const DELEGATED_RE = /delegated\s+to\s+(\S+)/;
@@ -1125,9 +1305,12 @@ Expected: PASS.
 
 Run: `pnpm exec tsx scripts/verify-page-breadcrumbs.ts`
 
-Expected: PASS, reporting "Breadcrumb guard passed: N in-scope pages verified" with N >= 14.
+Expected: PASS, reporting `Breadcrumb guard passed: 15 in-scope pages verified.` (15 pages: 13 active migrations + 2 redirect-only exempt; the first-pass inventory missed `help/[category]/page.tsx`, which Task 2 Step 2 now migrates.)
 
-If FAIL: identify which page is missing a breadcrumb or exemption comment, fix it, and re-run.
+If FAIL: identify which page is missing a breadcrumb or exemption comment, fix it, and re-run. Common causes:
+- An in-scope page.tsx that was never touched by Tasks 2-7 (check the guard's error message for the file path).
+- A Mode B exemption with a typo in the delegated path (the guard checks `existsSync` on the resolved path and reports "delegated target not found").
+- A migrated `<PageHeader>` with `actions={<Foo>...</Foo>}` placed BEFORE `breadcrumb=` (prop-ordering false-negative; move `breadcrumb=` to be the first JSX-valued prop).
 
 - [ ] **Step 7: Commit**
 
@@ -1191,8 +1374,18 @@ After the existing `## UX Writing` section (or as a new top-level section under 
 
 - Every authenticated detail/new/edit page MUST render
   `<PageHeader breadcrumb={<Breadcrumbs items={[...]} currentLabel="..." />}>`.
-- Breadcrumb labels for parent crumbs match the sidebar nav label exactly
-  (`apps/web/src/components/layout/nav-config.ts`).
+- Breadcrumb labels for parent crumbs match the sidebar nav label
+  (`apps/web/src/components/layout/nav-config.ts`) when a sidebar entry exists
+  for that route. When the parent section has no sidebar entry (e.g.,
+  `/emergency`, `/esign/templates`, `/esign/submissions`), use a human-readable
+  section name and keep it consistent across every breadcrumb that links to
+  that section. Canonical mappings: `'Announcements'`, `'Board'`, `'E-Sign'`,
+  `'Violations Inbox'`, `'Residents'`, `'Communities'` (PM sidebar — not
+  "Portfolio").
+- Breadcrumb hrefs to nested `/communities/[id]/...` routes must NOT append
+  `?communityId=...` — the `[id]` path segment is the authoritative tenant id
+  for those routes. Hrefs to top-level routes keep the `?communityId=` query
+  param as today.
 - Current page label matches the page's `<h1>` title.
 - Pages that delegate chrome to a client component opt out with a top-of-file
   `// breadcrumbs:exempt — delegated to <path>` comment naming the file that
@@ -1202,8 +1395,14 @@ After the existing `## UX Writing` section (or as a new top-level section under 
 - The CI guard (`pnpm guard:breadcrumbs`) enforces this on the in-scope glob:
   `**/[<param>]/page.tsx`, `**/new/page.tsx`, `**/[<param>]/edit/page.tsx`
   under `apps/web/src/app/(authenticated)/`.
-- Do not add ad-hoc `← Back` links elsewhere on a page. The breadcrumb is the
-  back affordance.
+- **On any page that renders `<PageHeader breadcrumb=…>`, the breadcrumb is
+  the only back affordance.** Do not also place a back-link in the `actions`
+  slot or inline above the header. List/static pages that do not render a
+  breadcrumb may still use ad-hoc back affordances when appropriate.
+- **Within `<PageHeader>`, place `breadcrumb=` *before* any JSX-valued prop**
+  (e.g., `actions={<Button>...</Button>}`). The CI guard regex halts at the
+  first `>` between `<PageHeader` and `breadcrumb=`; prop ordering keeps the
+  check valid.
 ```
 
 - [ ] **Step 2: Commit**
@@ -1278,5 +1477,9 @@ The PR description must include:
 - All 12 tasks completed.
 - All commits squashed-or-merged into the `claude/interesting-khorana-2c7bca` branch.
 - PR open against `main`.
-- All CI jobs green.
+- All CI jobs green — in particular, `pnpm guard:breadcrumbs` reports `Breadcrumb guard passed: 15 in-scope pages verified.` (13 actively migrated + 2 redirect-only exempt).
 - Original repro resolved.
+- PR description includes:
+  - Screenshot diffs for Risks #4, #5, and #9 (the deliberate e-sign parent-href change).
+  - The chosen strategy ((a) PageHeader-in-every-branch vs (b) loaded-branch-only) for each multi-branch Mode B component (`template-detail-client.tsx`, `submission-detail.tsx`, `forum-thread-detail.tsx`).
+  - A note that client-component pages (`emergency/[id]`, several Mode B components) render the breadcrumb only after their data fetch resolves — initial server-rendered HTML shows the loading state without chrome. Not a regression.
