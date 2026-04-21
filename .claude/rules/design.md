@@ -60,4 +60,38 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 - Button labels: verb-first ("Upload Document", "Add Owners", "Export Report")
 - Status labels: use `STATUS_CONFIG` from `docs/design-system/constants/status.ts` for consistent naming
 
+## Page Navigation & Breadcrumbs
+
+- Every authenticated detail/new/edit page MUST render
+  `<PageHeader breadcrumb={<Breadcrumbs items={[...]} currentLabel="..." />}>`.
+- Breadcrumb labels for parent crumbs match the sidebar nav label
+  (`apps/web/src/components/layout/nav-config.ts`) when a sidebar entry exists
+  for that route. When the parent section has no sidebar entry (e.g.,
+  `/emergency`, `/esign/templates`, `/esign/submissions`), use a human-readable
+  section name and keep it consistent across every breadcrumb that links to
+  that section. Canonical mappings: `'Announcements'`, `'Board'`, `'E-Sign'`,
+  `'Violations Inbox'`, `'Residents'`, `'Communities'` (PM sidebar — not
+  "Portfolio").
+- Breadcrumb hrefs to nested `/communities/[id]/...` routes must NOT append
+  `?communityId=...` — the `[id]` path segment is the authoritative tenant id
+  for those routes. Hrefs to top-level routes keep the `?communityId=` query
+  param as today.
+- Current page label matches the page's `<h1>` title.
+- Pages that delegate chrome to a client component opt out with a top-of-file
+  `// breadcrumbs:exempt — delegated to <path>` comment naming the file that
+  contains the actual `<PageHeader breadcrumb=…>` invocation.
+- Redirect-only pages opt out with a top-of-file
+  `// breadcrumbs:exempt — redirect-only page` comment.
+- The CI guard (`pnpm guard:breadcrumbs`) enforces this on the in-scope glob:
+  `**/[<param>]/page.tsx`, `**/new/page.tsx`, `**/[<param>]/edit/page.tsx`
+  under `apps/web/src/app/(authenticated)/`.
+- **On any page that renders `<PageHeader breadcrumb=…>`, the breadcrumb is
+  the only back affordance.** Do not also place a back-link in the `actions`
+  slot or inline above the header. List/static pages that do not render a
+  breadcrumb may still use ad-hoc back affordances when appropriate.
+- **Within `<PageHeader>`, place `breadcrumb=` *before* any JSX-valued prop**
+  (e.g., `actions={<Button>...</Button>}`). The CI guard regex halts at the
+  first `>` between `<PageHeader` and `breadcrumb=`; prop ordering keeps the
+  check valid.
+
 </important>
