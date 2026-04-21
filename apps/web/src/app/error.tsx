@@ -3,12 +3,12 @@
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
-interface ErrorProps {
+interface RootErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
 }
 
-export default function Error({ error, reset }: ErrorProps) {
+export default function RootError({ error, reset }: RootErrorProps) {
   useEffect(() => {
     Sentry.captureException(error);
   }, [error]);
