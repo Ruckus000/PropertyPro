@@ -301,7 +301,7 @@ async function findAuthUserByEmail(email: string): Promise<MatchedAuthUser | nul
   return null;
 }
 
-export async function ensureDemoAuthUser(email: string): Promise<string | null> {
+async function ensureDemoAuthUser(email: string): Promise<string | null> {
   const demoUser = demoUsersByEmail.get(email) ?? demoUsersByEmail.get(email.toLowerCase());
   if (!demoUser) {
     throw new Error(`Missing demo user config for ${email}`);

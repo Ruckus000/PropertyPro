@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockDb } = vi.hoisted(() => {
   const mockDb = {
@@ -21,7 +21,31 @@ vi.mock('../../src/supabase/admin', () => ({
   createAdminClient: vi.fn(),
 }));
 
-const { seedCommunity } = await import('../../src/seed/seed-community');
+const { seedCommunity, getDefaultPassword } = await import('../../src/seed/seed-community');
+
+describe('getDefaultPassword', () => {
+  const originalPw = process.env.DEMO_DEFAULT_PASSWORD;
+
+  afterEach(() => {
+    if (originalPw === undefined) {
+      delete process.env.DEMO_DEFAULT_PASSWORD;
+    } else {
+      process.env.DEMO_DEFAULT_PASSWORD = originalPw;
+    }
+  });
+
+  it('returns the env var when set', () => {
+    process.env.DEMO_DEFAULT_PASSWORD = 'CorrectHorseBatteryStaple1!';
+    expect(getDefaultPassword()).toBe('CorrectHorseBatteryStaple1!');
+  });
+
+  it('throws with a clear message when unset', () => {
+    delete process.env.DEMO_DEFAULT_PASSWORD;
+    expect(() => getDefaultPassword()).toThrow(
+      /DEMO_DEFAULT_PASSWORD environment variable must be set/,
+    );
+  });
+});
 
 describe('seedCommunity config validation', () => {
   beforeEach(() => {
