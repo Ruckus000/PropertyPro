@@ -27,7 +27,8 @@
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness",
+    "guard:breadcrumbs": "tsx scripts/verify-page-breadcrumbs.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs",
     "clean": "turbo run clean"
   },
   "pnpm": {
