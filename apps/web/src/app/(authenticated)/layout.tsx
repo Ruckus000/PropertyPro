@@ -11,6 +11,8 @@ import { MotionProvider } from '@/components/providers/motion-provider';
 import { SupportBanner } from '@/components/support/SupportBanner';
 import { getPageShellBranding, getPageShellContext } from '@/lib/request/page-shell-context';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AuthenticatedLayout({
   children,
 }: {
