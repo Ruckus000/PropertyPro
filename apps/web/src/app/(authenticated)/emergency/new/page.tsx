@@ -13,6 +13,8 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -45,7 +47,15 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-2xl font-semibold text-content">Send Emergency Alert</h1>
+      <PageHeader
+        title="Send Emergency Alert"
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Emergency', href: `/emergency?communityId=${context.communityId}` }]}
+            currentLabel="Send emergency alert"
+          />
+        }
+      />
       <BroadcastComposer
         communityId={context.communityId}
         communityName={communityName}
