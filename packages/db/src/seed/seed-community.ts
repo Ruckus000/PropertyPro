@@ -186,7 +186,7 @@ export async function ensureSeededDocumentStorage(
   return pdfBytes.byteLength;
 }
 
-function getDefaultPassword(): string {
+export function getDefaultPassword(): string {
   const pw = process.env.DEMO_DEFAULT_PASSWORD;
   if (!pw) {
     throw new Error(

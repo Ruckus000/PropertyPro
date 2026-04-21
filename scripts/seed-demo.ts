@@ -23,6 +23,7 @@ import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import {
   ensureSeededDocumentStorage,
   ensureNotificationPreference,
+  getDefaultPassword,
   seedCommunity,
   seedDocumentCategories,
   reconcilePublicUserIdWithAuthId,
@@ -292,7 +293,7 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   return null;
 }
 
-async function ensureDemoAuthUser(email: string): Promise<string | null> {
+export async function ensureDemoAuthUser(email: string): Promise<string | null> {
   const demoUser = demoUsersByEmail.get(email) ?? demoUsersByEmail.get(email.toLowerCase());
   if (!demoUser) {
     throw new Error(`Missing demo user config for ${email}`);
@@ -307,6 +308,7 @@ async function ensureDemoAuthUser(email: string): Promise<string | null> {
 
   if (existingId) {
     const updateResult = await admin.auth.admin.updateUserById(existingId, {
+      password: getDefaultPassword(),
       user_metadata: { full_name: demoUser.fullName },
     });
     if (updateResult.error) {
@@ -317,7 +319,7 @@ async function ensureDemoAuthUser(email: string): Promise<string | null> {
 
   const createResult = await admin.auth.admin.createUser({
     email: demoUser.email,
-    password: process.env.DEMO_DEFAULT_PASSWORD ?? `Demo-${crypto.randomUUID()}-A1!`,
+    password: getDefaultPassword(),
     email_confirm: true,
     user_metadata: { full_name: demoUser.fullName },
   });
