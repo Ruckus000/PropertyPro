@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx
 /**
  * New E-Sign Template — two-phase template builder.
  *

@@ -10,6 +10,8 @@ import {
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,36 +62,46 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
   }
 
   return (
-    <article className="mx-auto max-w-3xl rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        {announcement.isPinned && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2.5 py-1 text-xs font-semibold text-interactive">
-            <Pin size={12} aria-hidden="true" />
-            Pinned
-          </span>
-        )}
-        {membership.isAdmin && (
-          <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-content-secondary">
-            {formatAnnouncementAudienceLabel(
-              announcement.audience as
-                | 'all'
-                | 'owners_only'
-                | 'board_only'
-                | 'tenants_only',
-            )}
-          </span>
-        )}
-      </div>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <PageHeader
+        title={announcement.title}
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Announcements', href: `/announcements?communityId=${communityId}` }]}
+            currentLabel={announcement.title}
+          />
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {announcement.isPinned && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2.5 py-1 text-xs font-semibold text-interactive">
+              <Pin size={12} aria-hidden="true" />
+              Pinned
+            </span>
+          )}
+          {membership.isAdmin && (
+            <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-content-secondary">
+              {formatAnnouncementAudienceLabel(
+                announcement.audience as
+                  | 'all'
+                  | 'owners_only'
+                  | 'board_only'
+                  | 'tenants_only',
+              )}
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-sm text-content-tertiary">
+          Published {formatDate(announcement.publishedAt)}
+        </p>
+      </PageHeader>
 
-      <h1 className="mt-4 text-3xl font-semibold text-content">{announcement.title}</h1>
-      <p className="mt-2 text-sm text-content-tertiary">
-        Published {formatDate(announcement.publishedAt)}
-      </p>
-
-      <div
-        className="prose prose-neutral mt-6 max-w-none text-content-secondary"
-        dangerouslySetInnerHTML={{ __html: announcement.body }}
-      />
-    </article>
+      <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
+        <div
+          className="prose prose-neutral max-w-none text-content-secondary"
+          dangerouslySetInnerHTML={{ __html: announcement.body }}
+        />
+      </article>
+    </div>
   );
 }

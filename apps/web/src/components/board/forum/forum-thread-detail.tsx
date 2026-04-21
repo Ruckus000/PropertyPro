@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,24 +86,29 @@ export function ForumThreadDetail({
 
   return (
     <div className="space-y-6">
-      <Link href={`/communities/${communityId}/board/forum`} className="inline-flex text-sm text-interactive hover:underline">
-        ← Back to Forum
-      </Link>
+      <PageHeader
+        title={thread.title}
+        description={`Started by ${getName(thread.authorUserId)} · ${new Date(thread.createdAt).toLocaleString()}`}
+        breadcrumb={
+          <Breadcrumbs
+            items={[
+              { label: 'Board', href: `/communities/${communityId}/board/polls` },
+              { label: 'Forum', href: `/communities/${communityId}/board/forum` },
+            ]}
+            currentLabel={thread.title}
+          />
+        }
+        actions={
+          thread.isPinned || thread.isLocked ? (
+            <div className="flex flex-wrap gap-2">
+              {thread.isPinned ? <StatusBadge status="submitted" label="Pinned" /> : null}
+              {thread.isLocked ? <StatusBadge status="closed" label="Locked" /> : null}
+            </div>
+          ) : undefined
+        }
+      />
 
       <div className="space-y-4 rounded-xl border border-edge bg-surface-card p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-content">{thread.title}</h1>
-            <p className="text-sm text-content-secondary">
-              Started by {getName(thread.authorUserId)} · {new Date(thread.createdAt).toLocaleString()}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {thread.isPinned ? <StatusBadge status="submitted" label="Pinned" /> : null}
-            {thread.isLocked ? <StatusBadge status="closed" label="Locked" /> : null}
-          </div>
-        </div>
-
         <p className="whitespace-pre-wrap text-sm leading-6 text-content">{thread.body}</p>
 
         {isAdmin ? (

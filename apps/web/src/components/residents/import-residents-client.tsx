@@ -9,12 +9,13 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ArrowLeft,
   FileSpreadsheet,
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 /* ─────── Types ─────── */
 
@@ -184,17 +185,15 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link
-          href={`/dashboard/residents?communityId=${communityId}`}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:bg-surface-muted hover:text-content"
-          aria-label="Back to residents"
-        >
-          <ArrowLeft size={20} aria-hidden="true" />
-        </Link>
-        <h1 className="text-2xl font-semibold text-content">Import Residents</h1>
-      </div>
+      <PageHeader
+        title="Import Residents"
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Residents', href: `/dashboard/residents?communityId=${communityId}` }]}
+            currentLabel="Import residents"
+          />
+        }
+      />
 
       {/* Step 1: Upload */}
       {step === 'upload' && (

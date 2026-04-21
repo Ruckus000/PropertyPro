@@ -10,17 +10,17 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronLeft,
   Loader2,
   Plus,
   Save,
   Trash2,
   Upload,
 } from 'lucide-react';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   ESIGN_TEMPLATE_TYPES,
   type EsignFieldDefinition,
@@ -364,18 +364,15 @@ export function TemplateBuilderClient({
   if (phase === 1) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        {/* Back link */}
-        <Link
-          href={`/esign/templates?communityId=${communityId}`}
-          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          <ChevronLeft className="size-4" />
-          Back to Templates
-        </Link>
-
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          Create Template
-        </h1>
+        <PageHeader
+          title="Create Template"
+          breadcrumb={
+            <Breadcrumbs
+              items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
+              currentLabel="New template"
+            />
+          }
+        />
 
         <div className="space-y-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">
           {/* Name */}

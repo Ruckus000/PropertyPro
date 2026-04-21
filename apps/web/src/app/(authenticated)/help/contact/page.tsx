@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createScopedClient, communities, type Community } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 
 interface HelpContactPageProps {
@@ -30,9 +31,10 @@ export default async function HelpContactPage({ searchParams }: HelpContactPageP
         title="Management Contact"
         description="Reach your management team using the contact details configured for this community."
         breadcrumb={
-          <Link href={`/help?communityId=${context.communityId}`} className="hover:text-content">
-            Help Center
-          </Link>
+          <Breadcrumbs
+            items={[{ label: 'Help Center', href: `/help?communityId=${context.communityId}` }]}
+            currentLabel="Management Contact"
+          />
         }
       />
 

@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/board/forum/forum-thread-detail.tsx
 import { ForumThreadDetail } from '@/components/board/forum/forum-thread-detail';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';

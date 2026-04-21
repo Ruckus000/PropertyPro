@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — redirect-only page
 import { redirect } from 'next/navigation';
 
 /**

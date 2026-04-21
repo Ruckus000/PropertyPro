@@ -7,9 +7,10 @@
 "use client";
 
 import { useSearchParams, useParams } from 'next/navigation';
-import Link from 'next/link';
 import { useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
 import { DeliveryReport } from '@/components/emergency/DeliveryReport';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 export default function BroadcastDetailPage() {
   const params = useParams();
@@ -39,18 +40,22 @@ export default function BroadcastDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center gap-4">
-        <Link
-          href={`/emergency?communityId=${communityId}`}
-          className="text-sm text-content-link hover:underline"
-        >
-          &larr; Back
-        </Link>
-        <h1 className="text-2xl font-semibold text-content">{report.title}</h1>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-surface-muted'}`}>
-          {report.severity}
-        </span>
-      </div>
+      <PageHeader
+        title={report.title}
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Emergency', href: `/emergency?communityId=${communityId}` }]}
+            currentLabel={report.title}
+          />
+        }
+        actions={
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-surface-muted'}`}
+          >
+            {report.severity}
+          </span>
+        }
+      />
 
       {/* Status banner */}
       {report.canceledAt && (

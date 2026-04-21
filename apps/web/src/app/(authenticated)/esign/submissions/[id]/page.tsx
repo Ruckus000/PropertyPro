@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/esign/submission-detail.tsx
 /**
  * E-Sign submission detail page.
  *

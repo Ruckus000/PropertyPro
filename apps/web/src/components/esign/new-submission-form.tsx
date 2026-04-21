@@ -12,8 +12,9 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { Button, Card } from '@propertypro/ui';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import { useCreateEsignSubmission } from '@/hooks/use-esign-submissions';
@@ -24,7 +25,6 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import {
-  ArrowLeft,
   Check,
   ChevronsUpDown,
   ChevronDown,
@@ -174,22 +174,17 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
   ]);
 
   return (
-    <div className="max-w-2xl">
-      {/* Back link */}
-      <Link
-        href={`/esign?communityId=${communityId}`}
-        className="inline-flex items-center gap-1 text-sm text-content-tertiary hover:text-content-secondary mb-4"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to E-Sign
-      </Link>
-
-      <h1 className="text-2xl font-semibold text-content mb-1">
-        Send Document for Signing
-      </h1>
-      <p className="text-sm text-content-tertiary mb-6">
-        Select a template, add signers, and send.
-      </p>
+    <div className="max-w-2xl space-y-6">
+      <PageHeader
+        title="Send Document for Signing"
+        description="Select a template, add signers, and send."
+        breadcrumb={
+          <Breadcrumbs
+            items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
+            currentLabel="New submission"
+          />
+        }
+      />
 
       <div className="space-y-6">
         {/* Step 1: Template */}

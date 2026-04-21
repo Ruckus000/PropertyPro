@@ -8,4 +8,5 @@ export default defineWorkspace([
   "packages/shared",
   "apps/web",
   "apps/admin",
+  "scripts",
 ]);

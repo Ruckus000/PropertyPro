@@ -6,11 +6,12 @@
  * Shows all fields, status timeline, and admin actions.
  */
 import { useState } from 'react';
-import Link from 'next/link';
 import type { ViolationRecord } from '@/lib/services/violations-service';
 import { ViolationStatusTransition } from './ViolationStatusTransition';
 import { FinesSummary } from './FinesSummary';
 import type { ViolationItem, ViolationFineItem } from '@/lib/api/violations';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 const STATUS_STYLES: Record<string, string> = {
   reported: 'bg-status-warning-bg text-status-warning',
@@ -120,26 +121,24 @@ export function ViolationDetailView({
   };
 
   return (
-    <div>
-      {/* Back link */}
-      <Link
-        href={isAdmin ? `/violations/inbox?communityId=${communityId}` : `/violations/report?communityId=${communityId}`}
-        className="mb-4 inline-flex items-center text-sm text-content-link hover:text-content-link"
-      >
-        &larr; Back to {isAdmin ? 'Violations Inbox' : 'Your Reports'}
-      </Link>
-
-      {/* Header */}
-      <div className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-content">
-              Violation #{violation.id}
-            </h1>
-            <p className="mt-1 text-sm text-content-tertiary">
-              {CATEGORY_LABELS[violation.category] ?? violation.category} &middot; Unit {violation.unitId}
-            </p>
-          </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={`Violation #${violation.id}`}
+        description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · Unit ${violation.unitId}`}
+        breadcrumb={
+          <Breadcrumbs
+            items={[
+              {
+                label: isAdmin ? 'Violations Inbox' : 'Your Reports',
+                href: isAdmin
+                  ? `/violations/inbox?communityId=${communityId}`
+                  : `/violations/report?communityId=${communityId}`,
+              },
+            ]}
+            currentLabel={`Violation #${violation.id}`}
+          />
+        }
+        actions={
           <div className="flex gap-2">
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${statusStyle}`}>
               {STATUS_LABELS[violation.status] ?? violation.status}
@@ -148,8 +147,8 @@ export function ViolationDetailView({
               {violation.severity}
             </span>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Description */}
       <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
