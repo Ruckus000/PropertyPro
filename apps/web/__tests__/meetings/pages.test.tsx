@@ -5,52 +5,25 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   redirectMock,
-  headersMock,
-  createScopedClientMock,
   meetingsPageShellMock,
   compactCardMock,
-  buildCalendarSubscribeUrlMock,
-  generateMyMeetingsSubscriptionTokenMock,
+  createScopedClientMock,
   meetingsTableMock,
-  communitiesTableMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   redirectMock: vi.fn(),
-  headersMock: vi.fn(),
-  createScopedClientMock: vi.fn(),
   meetingsPageShellMock: vi.fn(() => null),
   compactCardMock: vi.fn(() => null),
-  buildCalendarSubscribeUrlMock: vi.fn(),
-  generateMyMeetingsSubscriptionTokenMock: vi.fn(),
+  createScopedClientMock: vi.fn(),
   meetingsTableMock: {
     id: Symbol('meetings.id'),
     startsAt: Symbol('meetings.startsAt'),
   },
-  communitiesTableMock: {
-    id: Symbol('communities.id'),
-    slug: Symbol('communities.slug'),
-  },
 }));
-
-function makeSelectResult<T>(rows: T[]) {
-  const chainable = {
-    orderBy: vi.fn().mockReturnValue({
-      ...Promise.resolve(rows),
-      then: (r: (v: T[]) => unknown) => Promise.resolve(rows).then(r),
-      limit: vi.fn().mockResolvedValue(rows),
-    }),
-    then: (r: (v: T[]) => unknown) => Promise.resolve(rows).then(r),
-  };
-  return Object.assign(Promise.resolve(rows), chainable);
-}
 
 vi.mock('next/navigation', () => ({
   redirect: redirectMock,
-}));
-
-vi.mock('next/headers', () => ({
-  headers: headersMock,
 }));
 
 vi.mock('@/lib/request/page-auth-context', () => ({
@@ -64,7 +37,6 @@ vi.mock('@/lib/request/page-community-context', () => ({
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   meetings: meetingsTableMock,
-  communities: communitiesTableMock,
 }));
 
 vi.mock('@/components/meetings/meetings-page-shell', () => ({
@@ -73,14 +45,6 @@ vi.mock('@/components/meetings/meetings-page-shell', () => ({
 
 vi.mock('@/components/mobile/MobileMeetingsContent', () => ({
   MobileMeetingsContent: compactCardMock,
-}));
-
-vi.mock('@/lib/calendar/subscribe-url', () => ({
-  buildCalendarSubscribeUrl: buildCalendarSubscribeUrlMock,
-}));
-
-vi.mock('@/lib/calendar/subscription-token', () => ({
-  generateMyMeetingsSubscriptionToken: generateMyMeetingsSubscriptionTokenMock,
 }));
 
 vi.mock('@propertypro/shared', async (importOriginal) => {
@@ -112,16 +76,21 @@ describe('meetings pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
-    headersMock.mockResolvedValue(
-      new Headers([
-        ['host', 'metro-apartments.getpropertypro.com'],
-        ['x-forwarded-proto', 'https'],
-      ]),
-    );
-    buildCalendarSubscribeUrlMock
-      .mockReturnValueOnce('https://metro-apartments.getpropertypro.com/api/v1/calendar/meetings.ics')
-      .mockReturnValueOnce('https://metro-apartments.getpropertypro.com/api/v1/calendar/my-meetings.ics?token=secret');
-    generateMyMeetingsSubscriptionTokenMock.mockReturnValue('secret');
+    createScopedClientMock.mockReturnValue({
+      selectFrom: vi.fn(() => {
+        const rows: never[] = [];
+        const promise = Promise.resolve(rows);
+        return {
+          orderBy: vi.fn(() => ({
+            limit: vi.fn(() => promise),
+            then: promise.then.bind(promise),
+            [Symbol.toStringTag]: 'Promise',
+          })),
+          then: promise.then.bind(promise),
+          [Symbol.toStringTag]: 'Promise',
+        };
+      }),
+    });
   });
 
   it('desktop page passes apartment manager props into the meetings page shell', async () => {
@@ -138,10 +107,6 @@ describe('meetings pages', () => {
       timezone: 'America/New_York',
     });
 
-    createScopedClientMock.mockReturnValue({
-      selectFrom: vi.fn(() => makeSelectResult([{ slug: 'metro-apartments' }])),
-    });
-
     const result = await MeetingsPage({ params: Promise.resolve({ id: '7' }) });
 
     expect(result).toMatchObject({
@@ -150,9 +115,6 @@ describe('meetings pages', () => {
         userId: 'user-1',
         role: 'manager',
         canWrite: true,
-        canSubscribe: true,
-        publicSubscribeUrl: 'https://metro-apartments.getpropertypro.com/api/v1/calendar/meetings.ics',
-        personalSubscribeUrl: 'https://metro-apartments.getpropertypro.com/api/v1/calendar/my-meetings.ics?token=secret',
       }),
     });
   });
@@ -171,15 +133,17 @@ describe('meetings pages', () => {
       state: 'FL',
     });
 
-    createScopedClientMock.mockReturnValue({
-      selectFrom: vi.fn(() => makeSelectResult([])),
-    });
-
-    await MobileMeetingsPage({
+    const result = await MobileMeetingsPage({
       searchParams: Promise.resolve({ communityId: '7' }),
     });
 
     expect(redirectMock).not.toHaveBeenCalledWith('/mobile?communityId=7');
-    expect(compactCardMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      props: expect.objectContaining({
+        upcoming: [],
+        past: [],
+        timezone: 'America/New_York',
+      }),
+    });
   });
 });

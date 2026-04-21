@@ -55,15 +55,11 @@ vi.mock('@/lib/services/notification-service', async (importOriginal) => {
 type MeetingsRouteModule = typeof import('../../src/app/api/v1/meetings/route');
 type MeetingDetailRouteModule = typeof import('../../src/app/api/v1/meetings/[id]/route');
 type CalendarEventsRouteModule = typeof import('../../src/app/api/v1/calendar/events/route');
-type CalendarPublicRouteModule = typeof import('../../src/app/api/v1/calendar/meetings.ics/route');
-type CalendarMyRouteModule = typeof import('../../src/app/api/v1/calendar/my-meetings.ics/route');
 
 interface RouteModules {
   meetings: MeetingsRouteModule;
   meetingDetail: MeetingDetailRouteModule;
   calendarEvents: CalendarEventsRouteModule;
-  calendarPublic: CalendarPublicRouteModule;
-  calendarMy: CalendarMyRouteModule;
 }
 
 let state: TestKitState | null = null;
@@ -276,8 +272,6 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
       meetings: await import('../../src/app/api/v1/meetings/route'),
       meetingDetail: await import('../../src/app/api/v1/meetings/[id]/route'),
       calendarEvents: await import('../../src/app/api/v1/calendar/events/route'),
-      calendarPublic: await import('../../src/app/api/v1/calendar/meetings.ics/route'),
-      calendarMy: await import('../../src/app/api/v1/calendar/my-meetings.ics/route'),
     };
   });
 
@@ -358,47 +352,6 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
     const noFinanceResponse = await routeModules.calendarEvents.GET(new NextRequest(apiUrl(url)));
     const noFinanceJson = await parseJson<{ data: Array<{ type: string }> }>(noFinanceResponse);
     expect(noFinanceJson.data.some((event) => event.type !== 'meeting')).toBe(false);
-  });
-
-  it('calendar ICS feeds follow assessment visibility rules and expose no public assessment PII', async () => {
-    const testState = requireState();
-    const routeModules = requireRoutes();
-    const communityA = requireCommunity(testState, 'communityA');
-
-    const publicResponse = await routeModules.calendarPublic.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/meetings.ics?communityId=${communityA.id}`)),
-    );
-    expect(publicResponse.status).toBe(200);
-    const publicBody = await publicResponse.text();
-    expect(publicBody).toContain(assessmentTitle);
-    expect(publicBody).toContain('1 pending\\, 1 overdue');
-    expect(publicBody).not.toContain(ownerUnitLabel);
-    expect(publicBody).not.toContain('$125.00');
-
-    setActor(testState, 'actorA');
-    const adminResponse = await routeModules.calendarMy.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/my-meetings.ics?communityId=${communityA.id}`)),
-    );
-    const adminBody = await adminResponse.text();
-    expect(adminBody).toContain(assessmentTitle);
-    expect(adminBody).toContain('$255.00 total due');
-
-    setActorById(testState, ownerResidentUserId);
-    const ownerResponse = await routeModules.calendarMy.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/my-meetings.ics?communityId=${communityA.id}`)),
-    );
-    const ownerBody = await ownerResponse.text();
-    expect(ownerBody).toContain(ownerUnitLabel);
-    expect(ownerBody).toContain('$125.00');
-    expect(ownerBody).not.toContain(settledAssessmentTitle);
-
-    setActor(testState, 'tenantA');
-    const tenantResponse = await routeModules.calendarMy.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/my-meetings.ics?communityId=${communityA.id}`)),
-    );
-    const tenantBody = await tenantResponse.text();
-    expect(tenantBody).toContain(`April Board Meeting ${testState.runSuffix}`);
-    expect(tenantBody).not.toContain(assessmentTitle);
   });
 
   it('apartment tenant/site manager/property manager admin flows succeed on the meetings API', async () => {

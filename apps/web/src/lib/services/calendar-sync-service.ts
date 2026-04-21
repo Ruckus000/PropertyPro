@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   calendarSyncTokens,
   createScopedClient,
@@ -11,16 +10,8 @@ import { and, eq } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { deterministicGoogleCalendarAdapter } from '@/lib/calendar/google-calendar-adapter';
-import {
-  buildCalendarIcs,
-  type IcsAssessmentInput,
-  type IcsMeetingInput,
-} from '@/lib/calendar/ics';
-import {
-  listAggregateAssessmentDueRecords,
-  listCommunityCalendarMeetings,
-  listOwnerAssessmentDueRecords,
-} from '@/lib/services/calendar-data-service';
+import { listCommunityCalendarMeetings } from '@/lib/services/calendar-data-service';
+import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 
 interface CalendarSyncTokenRow {
   [key: string]: unknown;
@@ -47,28 +38,6 @@ function getCalendarCallbackUrl(): string {
   }
 
   return 'http://localhost:3000/api/v1/calendar/google/callback';
-}
-
-// ---------------------------------------------------------------------------
-// HMAC helpers — sign OAuth state to prevent forgery (per Google / Intuit / Xero guidance)
-// ---------------------------------------------------------------------------
-
-function getStateSecret(): string {
-  const secret = process.env.OAUTH_STATE_SECRET;
-  if (!secret) throw new Error('OAUTH_STATE_SECRET is not configured');
-  return secret;
-}
-
-export function signPayload(payload: string): string {
-  return createHmac('sha256', getStateSecret())
-    .update(payload)
-    .digest('base64url');
-}
-
-export function verifySignature(payload: string, signature: string): boolean {
-  const expected = signPayload(payload);
-  if (expected.length !== signature.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 
 function serializeState(communityId: number, userId: string): string {
@@ -128,116 +97,6 @@ async function getGoogleConnection(
     ),
   );
   return rows[0] ?? null;
-}
-
-function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(cents / 100);
-}
-
-function toOpenUnitDescription(
-  pendingCount: number,
-  unitCount: number,
-): string {
-  const overdueCount = Math.max(0, unitCount - pendingCount);
-  if (overdueCount === 0) {
-    return `${unitCount} units pending`;
-  }
-  if (pendingCount === 0) {
-    return `${unitCount} units overdue`;
-  }
-  return `${pendingCount} pending, ${overdueCount} overdue`;
-}
-
-export async function listCommunityAssessmentDueDates(
-  communityId: number,
-): Promise<IcsAssessmentInput[]> {
-  const records = await listAggregateAssessmentDueRecords(communityId);
-
-  return records.map((record) => ({
-    assessmentId: record.assessmentId,
-    dueDate: record.dueDate,
-    title: record.assessmentTitle,
-    description: toOpenUnitDescription(record.pendingCount, record.unitCount),
-  }));
-}
-
-export async function listMyAssessmentDueDates(
-  communityId: number,
-  actorUserId: string,
-  membership?: CommunityMembership,
-): Promise<IcsAssessmentInput[]> {
-  if (!membership) {
-    return [];
-  }
-
-  if (membership.isAdmin) {
-    const records = await listAggregateAssessmentDueRecords(communityId);
-    return records.map((record) => ({
-      assessmentId: record.assessmentId,
-      dueDate: record.dueDate,
-      title: record.assessmentTitle,
-      description: `${toOpenUnitDescription(record.pendingCount, record.unitCount)} • ${formatCurrency(record.totalAmountCents)} total due`,
-    }));
-  }
-
-  if (membership.role === 'resident' && membership.isUnitOwner) {
-    const records = await listOwnerAssessmentDueRecords(communityId, actorUserId);
-    return records.map((record) => ({
-      assessmentId: record.assessmentId,
-      dueDate: record.dueDate,
-      title: record.assessmentTitle,
-      description: `${record.unitLabel} • ${formatCurrency(record.amountCents)} • ${record.status}`,
-    }));
-  }
-
-  return [];
-}
-
-export async function generateCommunityCalendarIcs(
-  communityId: number,
-  calendarName?: string,
-): Promise<string> {
-  const [meetingsForCalendar, assessmentDueDates] = await Promise.all([
-    listCommunityCalendarMeetings(communityId),
-    listCommunityAssessmentDueDates(communityId),
-  ]);
-
-  return buildCalendarIcs(meetingsForCalendar, assessmentDueDates, {
-    calendarName,
-  });
-}
-
-export async function generateMyCalendarIcs(
-  communityId: number,
-  actorUserId: string,
-  membership?: CommunityMembership,
-): Promise<string> {
-  const [meetingsForCalendar, assessmentDueDates] = await Promise.all([
-    listCommunityCalendarMeetings(communityId),
-    listMyAssessmentDueDates(communityId, actorUserId, membership),
-  ]);
-
-  return buildCalendarIcs(meetingsForCalendar, assessmentDueDates, {
-    calendarName: `PropertyPro Meetings (${actorUserId.slice(0, 8)})`,
-  });
-}
-
-export async function generateCommunityMeetingsIcs(
-  communityId: number,
-  calendarName?: string,
-): Promise<string> {
-  return generateCommunityCalendarIcs(communityId, calendarName);
-}
-
-export async function generateMyMeetingsIcs(
-  communityId: number,
-  actorUserId: string,
-  membership?: CommunityMembership,
-): Promise<string> {
-  return generateMyCalendarIcs(communityId, actorUserId, membership);
 }
 
 export async function initiateGoogleCalendarConnect(

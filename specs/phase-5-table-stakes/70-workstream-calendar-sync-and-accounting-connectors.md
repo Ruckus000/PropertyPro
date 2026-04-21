@@ -9,13 +9,15 @@
 
 ## 1. Objective And Business Outcome
 
-Provide ICS calendar feeds for meetings, enable Google Calendar sync, and build accounting connector adapters for exporting financial data to third-party accounting systems (QuickBooks, Xero).
+Provide preference-driven email reminders for calendar events, maintain Google Calendar sync, and build accounting connector adapters for exporting financial data to third-party accounting systems (QuickBooks, Xero).
 
 ---
 
 ## 2. In Scope
 
-- ICS feed generation for community meetings (public URL, per-user filtering)
+- Calendar event reminder emails for meetings and assessment due dates
+- Reminder timing/preferences surfaced through notification settings
+- Internal reminder processor + idempotent delivery log
 - Google Calendar two-way sync for board/CAM users
 - Accounting connector adapter interface
 - QuickBooks Online connector (chart of accounts mapping, journal entry export)
@@ -25,6 +27,7 @@ Provide ICS calendar feeds for meetings, enable Google Calendar sync, and build 
 
 ## 3. Out Of Scope
 
+- Public or authenticated ICS subscription feeds
 - Apple Calendar push notifications (CalDAV)
 - Real-time calendar sync (webhook-based push channels are Tier 3 stretch)
 - Full accounting system integration (import from accounting system)
@@ -44,13 +47,16 @@ Provide ICS calendar feeds for meetings, enable Google Calendar sync, and build 
 
 ## 5. Data Model And Migrations
 
-### New Tables (migrations 0081-0085 range)
+### New Tables (migrations 0081-0085 range, plus follow-on reminder logging)
 
 **calendar_sync_tokens** — Per-user sync state for Google Calendar
 - id, communityId, userId, provider (google), accessToken (TEXT, AES-256-GCM encrypted at application layer), refreshToken (TEXT, AES-256-GCM encrypted at application layer), syncToken, channelId, channelExpiry, lastSyncAt, createdAt, updatedAt, deletedAt
 
 **accounting_connections** — Per-community accounting system connections
 - id, communityId, provider (quickbooks/xero), accessToken (TEXT, AES-256-GCM encrypted at application layer), refreshToken (TEXT, AES-256-GCM encrypted at application layer), tenantId, lastSyncAt, mappingConfig (JSONB), createdAt, updatedAt, deletedAt
+
+**calendar_event_reminder_log** — Service-only reminder queue + delivery log
+- id, communityId, userId, eventKind, eventKey, reminderPreset, status, attemptCount, nextAttemptAt, processingStartedAt, lastAttemptedAt, sentAt, providerMessageId, errorMessage, createdAt, updatedAt
 
 ### Token Encryption Strategy
 
@@ -70,9 +76,12 @@ Environment requirement: `TOKEN_ENCRYPTION_KEY` must be set in production. Tests
 ## 6. API Contracts
 
 ```
-# ICS Feeds
-GET    /api/v1/calendar/meetings.ics    — Public ICS feed for community meetings
-GET    /api/v1/calendar/my-meetings.ics — User-filtered ICS feed (auth required)
+# Calendar Reminder Preferences
+GET    /api/v1/notification-preferences — Read per-user reminder settings
+PATCH  /api/v1/notification-preferences — Update reminder timing + categories
+
+# Internal Reminder Processing
+POST   /api/v1/internal/calendar-event-reminders — Internal cron-triggered reminder processor
 
 # Google Calendar Sync
 POST   /api/v1/calendar/google/connect  — Initiate OAuth flow
@@ -93,8 +102,11 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 
 ## 7. Authorization + RLS Policy Family Mapping
 
-- ICS public feed: no auth required. Community is resolved via subdomain middleware (same as all other tenant-scoped routes). The feed URL is `https://[slug].getpropertypro.com/api/v1/calendar/meetings.ics`. Calendar apps bookmark this URL directly.
-- ICS user feed: authenticated, returns only user's relevant meetings
+- Calendar reminder preferences: any authenticated community member may manage their own row in `notification_preferences`
+- Reminder delivery log: service-only table (`calendar_event_reminder_log`) processed through an internal cron route authenticated with a server-side secret
+- Meetings reminders: recipients must be able to read meetings
+- Personal assessment reminders: resident owners with finance visibility only
+- Community assessment reminders: admin-tier users with finance visibility only
 - Google Calendar sync: board_president, cam, site_manager, property_manager_admin only
 - Accounting connectors: cam, site_manager, property_manager_admin only
 
@@ -104,7 +116,10 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 
 - Expired OAuth tokens → refresh flow with retry, notify user on permanent failure
 - Google sync token invalidation → full re-sync from scratch
-- ICS feed for community with no meetings → valid empty VCALENDAR
+- Reminder processor retry → idempotent queue rows keyed by community/user/event/preset
+- Meeting reschedule after enqueue → stale reminder row discarded because event key no longer matches
+- Reminder preferences or permissions change after enqueue → row discarded at send time
+- Florida timezone handling → assessment reminders fire at 9:00 AM community-local time; DST-safe conversion required
 - Accounting export with unmapped categories → skip with warning, don't fail entire export
 - Rate limiting from Google/QuickBooks APIs → exponential backoff with retry
 
@@ -113,7 +128,7 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 ## 10. Testing Plan
 
 ### Seed Strategy
-- Use existing meeting fixtures for ICS feed tests
+- Use existing meeting + assessment fixtures for reminder eligibility and trigger-window tests
 - Mock OAuth flows for unit tests; real sandbox for contract tests
 
 ### Teardown Rules
@@ -121,7 +136,7 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 - Encrypted tokens: ensure cleanup removes all sensitive data
 
 ### Tenant Isolation Matrix
-- communityA calendar feeds don't include communityB meetings
+- communityA reminder scans never deliver communityB events
 - Sync tokens are per-user-per-community
 
 ### Concurrency Cases
@@ -133,7 +148,8 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 - QuickBooks sandbox credentials — Required for contract tests (nightly)
 
 ### Required Test Coverage
-- ICS feed generation correctness (integration)
+- Notification preference route + settings form coverage for reminder fields
+- Reminder processor eligibility, idempotency, and timezone behavior
 - Calendar sync token lifecycle (integration)
 - Accounting export data mapping (integration)
 - Cross-tenant isolation (integration)
@@ -144,7 +160,7 @@ DELETE /api/v1/accounting/disconnect    — Remove connection
 
 ## 12. Definition Of Done + Evidence Required
 
-- [ ] ICS feed generation for meetings
+- [ ] Calendar event reminder preferences + email delivery
 - [ ] Google Calendar sync (OAuth + two-way sync)
 - [ ] Accounting connector adapters (QuickBooks + Xero)
 - [ ] No-mock integration tests

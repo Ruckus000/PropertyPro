@@ -22,8 +22,6 @@ requireDatabaseUrlInCI('WS70 calendar/accounting integration tests');
 
 const describeDb = getDescribeDb();
 
-type CalendarPublicRouteModule = typeof import('../../src/app/api/v1/calendar/meetings.ics/route');
-type CalendarMyRouteModule = typeof import('../../src/app/api/v1/calendar/my-meetings.ics/route');
 type GoogleConnectRouteModule = typeof import('../../src/app/api/v1/calendar/google/connect/route');
 type GoogleCallbackRouteModule = typeof import('../../src/app/api/v1/calendar/google/callback/route');
 type GoogleSyncRouteModule = typeof import('../../src/app/api/v1/calendar/google/sync/route');
@@ -35,8 +33,6 @@ type AccountingMappingRouteModule = typeof import('../../src/app/api/v1/accounti
 type AccountingDisconnectRouteModule = typeof import('../../src/app/api/v1/accounting/disconnect/route');
 
 interface RouteModules {
-  calendarPublic: CalendarPublicRouteModule;
-  calendarMy: CalendarMyRouteModule;
   googleConnect: GoogleConnectRouteModule;
   googleCallback: GoogleCallbackRouteModule;
   googleSync: GoogleSyncRouteModule;
@@ -168,8 +164,6 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
     });
 
     routes = {
-      calendarPublic: await import('../../src/app/api/v1/calendar/meetings.ics/route'),
-      calendarMy: await import('../../src/app/api/v1/calendar/my-meetings.ics/route'),
       googleConnect: await import('../../src/app/api/v1/calendar/google/connect/route'),
       googleCallback: await import('../../src/app/api/v1/calendar/google/callback/route'),
       googleSync: await import('../../src/app/api/v1/calendar/google/sync/route'),
@@ -191,44 +185,6 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
     if (state) {
       await teardownTestKit(state);
     }
-  });
-
-  it('serves ICS feeds and enforces membership on my-meetings feed', async () => {
-    const kit = requireState();
-    const routeModules = requireRoutes();
-    const communityA = requireCommunity(kit, 'communityA');
-    const communityB = requireCommunity(kit, 'communityB');
-
-    const publicResponse = await routeModules.calendarPublic.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/meetings.ics?communityId=${communityA.id}`)),
-    );
-    expect(publicResponse.status).toBe(200);
-
-    const publicBody = await publicResponse.text();
-    expect(publicBody).toContain(`WS70 Board Meeting ${kit.runSuffix}`);
-    expect(publicBody).not.toContain(`WS70 HOA Meeting ${kit.runSuffix}`);
-
-    setActor(kit, 'actorA');
-    const myFeedResponse = await routeModules.calendarMy.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/my-meetings.ics?communityId=${communityA.id}`)),
-    );
-    expect(myFeedResponse.status).toBe(200);
-
-    const myFeedBody = await myFeedResponse.text();
-    expect(myFeedBody).toContain(`WS70 Board Meeting ${kit.runSuffix}`);
-
-    setActor(kit, 'actorB');
-    const crossTenantResponse = await routeModules.calendarMy.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/my-meetings.ics?communityId=${communityA.id}`)),
-    );
-    expect(crossTenantResponse.status).toBe(403);
-
-    const publicCommunityB = await routeModules.calendarPublic.GET(
-      new NextRequest(apiUrl(`/api/v1/calendar/meetings.ics?communityId=${communityB.id}`)),
-    );
-    expect(publicCommunityB.status).toBe(200);
-    const publicCommunityBBody = await publicCommunityB.text();
-    expect(publicCommunityBBody).toContain(`WS70 HOA Meeting ${kit.runSuffix}`);
   });
 
   it('runs deterministic Google calendar connect/sync/disconnect lifecycle', async () => {

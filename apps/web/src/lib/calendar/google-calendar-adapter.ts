@@ -1,4 +1,11 @@
-import type { IcsMeetingInput } from './ics';
+export interface GoogleCalendarMeetingInput {
+  id: number;
+  title: string;
+  meetingType: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  location: string;
+}
 
 export interface GoogleCalendarTokenExchange {
   accessToken: string;
@@ -59,7 +66,7 @@ export const deterministicGoogleCalendarAdapter = {
   async syncMeetings(params: {
     accessToken: string;
     refreshToken: string;
-    meetings: readonly IcsMeetingInput[];
+    meetings: readonly GoogleCalendarMeetingInput[];
     previousSyncToken?: string | null;
   }): Promise<GoogleSyncResult> {
     const seed = [

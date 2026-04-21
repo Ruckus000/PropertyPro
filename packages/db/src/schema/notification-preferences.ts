@@ -21,6 +21,11 @@ export const notificationPreferences = pgTable(
     emailAnnouncements: boolean('email_announcements').notNull().default(true),
     emailMeetings: boolean('email_meetings').notNull().default(true),
     inAppEnabled: boolean('in_app_enabled').notNull().default(true),
+    // Reminder emails for scheduled calendar events (meetings + finance dates)
+    calendarReminderPreset: text('calendar_reminder_preset').notNull().default('7_days_before'),
+    calendarReminderMeetings: boolean('calendar_reminder_meetings').notNull().default(true),
+    calendarReminderPersonalAssessments: boolean('calendar_reminder_personal_assessments').notNull().default(true),
+    calendarReminderCommunityAssessments: boolean('calendar_reminder_community_assessments').notNull().default(false),
     // In-app per-category muting toggles (all default true)
     // Master toggle inAppEnabled takes precedence — if false, none deliver.
     inAppAnnouncements: boolean('in_app_announcements').notNull().default(true),

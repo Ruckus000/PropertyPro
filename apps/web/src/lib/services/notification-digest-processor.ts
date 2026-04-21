@@ -152,20 +152,39 @@ async function runWithConcurrency<T>(
 }
 
 function coercePreferences(row: Record<string, unknown> | undefined): UserNotificationPreferences {
-  if (!row) return getDefaultPreferences();
+  const defaults = getDefaultPreferences();
+  if (!row) return defaults;
   return {
     emailFrequency:
       (row['emailFrequency'] as 'immediate' | 'daily_digest' | 'weekly_digest' | 'never' | undefined)
-      ?? 'immediate',
-    emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-    emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-    inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
-    inAppAnnouncements: true,
-    inAppDocuments: true,
-    inAppMeetings: true,
-    inAppMaintenance: true,
-    inAppViolations: true,
-    inAppElections: true,
+      ?? defaults.emailFrequency,
+    emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? defaults.emailAnnouncements,
+    emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? defaults.emailMeetings,
+    calendarReminderPreset:
+      (row['calendarReminderPreset'] as UserNotificationPreferences['calendarReminderPreset'] | undefined)
+      ?? defaults.calendarReminderPreset,
+    calendarReminderMeetings:
+      (row['calendarReminderMeetings'] as boolean | undefined)
+      ?? defaults.calendarReminderMeetings,
+    calendarReminderPersonalAssessments:
+      (row['calendarReminderPersonalAssessments'] as boolean | undefined)
+      ?? defaults.calendarReminderPersonalAssessments,
+    calendarReminderCommunityAssessments:
+      (row['calendarReminderCommunityAssessments'] as boolean | undefined)
+      ?? defaults.calendarReminderCommunityAssessments,
+    inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? defaults.inAppEnabled,
+    inAppAnnouncements:
+      (row['inAppAnnouncements'] as boolean | undefined) ?? defaults.inAppAnnouncements,
+    inAppDocuments:
+      (row['inAppDocuments'] as boolean | undefined) ?? defaults.inAppDocuments,
+    inAppMeetings:
+      (row['inAppMeetings'] as boolean | undefined) ?? defaults.inAppMeetings,
+    inAppMaintenance:
+      (row['inAppMaintenance'] as boolean | undefined) ?? defaults.inAppMaintenance,
+    inAppViolations:
+      (row['inAppViolations'] as boolean | undefined) ?? defaults.inAppViolations,
+    inAppElections:
+      (row['inAppElections'] as boolean | undefined) ?? defaults.inAppElections,
   };
 }
 

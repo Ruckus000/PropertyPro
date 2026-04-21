@@ -90,7 +90,7 @@ vi.mock('@/lib/services/violations-service', () => ({
   markMatchingViolationFinePaid: vi.fn(),
 }));
 
-vi.mock('@/lib/services/calendar-sync-service', () => ({
+vi.mock('@/lib/services/oauth-state', () => ({
   signPayload: vi.fn(),
   verifySignature: vi.fn(),
 }));

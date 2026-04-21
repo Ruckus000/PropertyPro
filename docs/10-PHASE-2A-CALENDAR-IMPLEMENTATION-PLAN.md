@@ -1,5 +1,7 @@
 # Phase 2A: Calendar View + iCal Feed — Implementation Plan
 
+> Historical note: this document describes the original ICS-based calendar subscription design. External ICS subscription feeds were retired on April 20, 2026 in favor of preference-driven email calendar reminders. Keep the details below for implementation history only.
+
 **Date:** March 18, 2026
 **Status:** Plan (pre-implementation)
 **Source:** [09-IMPLEMENTATION-ROADMAP-2026-03-16.md](09-IMPLEMENTATION-ROADMAP-2026-03-16.md) lines 344-369

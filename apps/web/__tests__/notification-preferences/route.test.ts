@@ -31,7 +31,7 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
-vi.mock('drizzle-orm', () => ({
+vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn((col: unknown, value: unknown) => ({ col, value })),
 }));
 
@@ -63,6 +63,10 @@ describe('p1-26 notification-preferences route', () => {
         emailFrequency: 'immediate',
         emailAnnouncements: true,
         emailMeetings: true,
+        calendarReminderPreset: '7_days_before',
+        calendarReminderMeetings: true,
+        calendarReminderPersonalAssessments: true,
+        calendarReminderCommunityAssessments: false,
         inAppEnabled: true,
       }),
     );
@@ -96,6 +100,10 @@ describe('p1-26 notification-preferences route', () => {
         emailFrequency: 'never',
         emailAnnouncements: false,
         emailMeetings: true,
+        calendarReminderPreset: '3_days_before',
+        calendarReminderMeetings: true,
+        calendarReminderPersonalAssessments: false,
+        calendarReminderCommunityAssessments: true,
         inAppEnabled: true,
       }),
     });
@@ -109,6 +117,10 @@ describe('p1-26 notification-preferences route', () => {
         emailFrequency: 'never',
         emailAnnouncements: false,
         emailMeetings: true,
+        calendarReminderPreset: '3_days_before',
+        calendarReminderMeetings: true,
+        calendarReminderPersonalAssessments: false,
+        calendarReminderCommunityAssessments: true,
         inAppEnabled: true,
       }),
     );
@@ -144,10 +156,6 @@ describe('p1-26 notification-preferences route', () => {
       },
       body: JSON.stringify({
         communityId: 42,
-        emailFrequency: 'immediate',
-        emailAnnouncements: true,
-        emailMeetings: true,
-        inAppEnabled: true,
         smsEnabled: true,
         smsEmergencyOnly: true,
       }),

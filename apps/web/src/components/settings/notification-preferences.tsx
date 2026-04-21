@@ -1,23 +1,39 @@
 "use client";
 import React, { useEffect, useState, type FormEvent } from 'react';
-import { type EmailFrequency } from '@/lib/utils/email-preferences';
+import {
+  type CalendarReminderPreset,
+  type EmailFrequency,
+} from '@/lib/utils/email-preferences';
 
 interface PreferencesState {
   emailFrequency: EmailFrequency;
   emailAnnouncements: boolean;
   emailMeetings: boolean;
+  calendarReminderPreset: CalendarReminderPreset;
+  calendarReminderMeetings: boolean;
+  calendarReminderPersonalAssessments: boolean;
+  calendarReminderCommunityAssessments: boolean;
   inAppEnabled: boolean;
 }
 
 interface Props {
   communityId: number;
+  reminderVisibility: {
+    meetings: boolean;
+    personalAssessments: boolean;
+    communityAssessments: boolean;
+  };
 }
 
-export function NotificationPreferencesForm({ communityId }: Props) {
+export function NotificationPreferencesForm({ communityId, reminderVisibility }: Props) {
   const [values, setValues] = useState<PreferencesState>({
     emailFrequency: 'immediate',
     emailAnnouncements: true,
     emailMeetings: true,
+    calendarReminderPreset: '7_days_before',
+    calendarReminderMeetings: true,
+    calendarReminderPersonalAssessments: true,
+    calendarReminderCommunityAssessments: false,
     inAppEnabled: true,
   });
   const [loading, setLoading] = useState(true);
@@ -103,6 +119,90 @@ export function NotificationPreferencesForm({ communityId }: Props) {
           <option value="never">Never</option>
         </select>
       </div>
+
+      {(reminderVisibility.meetings
+        || reminderVisibility.personalAssessments
+        || reminderVisibility.communityAssessments) ? (
+          <div className="space-y-3 rounded border border-edge-strong p-4">
+            <div className="space-y-1">
+              <label
+                className="block text-sm font-medium text-content-secondary"
+                htmlFor="calendarReminderPreset"
+              >
+                Calendar event reminder timing
+              </label>
+              <p className="text-xs text-content-secondary">
+                Meeting reminders send relative to the meeting start time. Assessment reminders
+                send at 9:00 AM in your community&apos;s timezone on the selected day.
+              </p>
+            </div>
+            <select
+              id="calendarReminderPreset"
+              value={values.calendarReminderPreset}
+              onChange={(e) =>
+                setValues((v) => ({
+                  ...v,
+                  calendarReminderPreset: e.target.value as CalendarReminderPreset,
+                }))
+              }
+              className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
+            >
+              <option value="morning_of">Morning of</option>
+              <option value="1_day_before">1 day before</option>
+              <option value="3_days_before">3 days before</option>
+              <option value="7_days_before">7 days before</option>
+              <option value="off">Off</option>
+            </select>
+
+            <div className="space-y-2">
+              {reminderVisibility.meetings ? (
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={values.calendarReminderMeetings}
+                    onChange={(e) =>
+                      setValues((v) => ({
+                        ...v,
+                        calendarReminderMeetings: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm text-content">Meetings</span>
+                </label>
+              ) : null}
+              {reminderVisibility.personalAssessments ? (
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={values.calendarReminderPersonalAssessments}
+                    onChange={(e) =>
+                      setValues((v) => ({
+                        ...v,
+                        calendarReminderPersonalAssessments: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm text-content">My assessment due dates</span>
+                </label>
+              ) : null}
+              {reminderVisibility.communityAssessments ? (
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={values.calendarReminderCommunityAssessments}
+                    onChange={(e) =>
+                      setValues((v) => ({
+                        ...v,
+                        calendarReminderCommunityAssessments: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm text-content">Community assessment due dates</span>
+                </label>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
       <div className="space-y-2">
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2">

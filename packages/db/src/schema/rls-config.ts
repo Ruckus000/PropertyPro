@@ -52,6 +52,7 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_admin_write',
     notes: 'Calendar sync credentials are scoped per user/community and mutated only through authenticated calendar-sync routes.',
   },
+  { tableName: 'calendar_event_reminder_log', policyFamily: 'service_only' },
   {
     tableName: 'accounting_connections',
     policyFamily: 'tenant_admin_write',
@@ -283,7 +284,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 51;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 52;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

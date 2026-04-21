@@ -25,6 +25,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   getDefaultPreferences,
+  type CalendarReminderPreset,
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -37,13 +38,24 @@ const emailFrequencySchema = z.enum([
   'weekly_digest',
   'never',
 ]) as z.ZodType<EmailFrequency>;
+const calendarReminderPresetSchema = z.enum([
+  'morning_of',
+  '1_day_before',
+  '3_days_before',
+  '7_days_before',
+  'off',
+]) as z.ZodType<CalendarReminderPreset>;
 
 const patchSchema = z.object({
   communityId: z.number().int().positive(),
-  emailFrequency: emailFrequencySchema.default('immediate'),
-  emailAnnouncements: z.boolean(),
-  emailMeetings: z.boolean(),
-  inAppEnabled: z.boolean(),
+  emailFrequency: emailFrequencySchema.optional(),
+  emailAnnouncements: z.boolean().optional(),
+  emailMeetings: z.boolean().optional(),
+  calendarReminderPreset: calendarReminderPresetSchema.optional(),
+  calendarReminderMeetings: z.boolean().optional(),
+  calendarReminderPersonalAssessments: z.boolean().optional(),
+  calendarReminderCommunityAssessments: z.boolean().optional(),
+  inAppEnabled: z.boolean().optional(),
   // Phase 1B: SMS consent fields (optional — backwards-compatible)
   smsEnabled: z.boolean().optional(),
   smsEmergencyOnly: z.boolean().optional(),
@@ -73,6 +85,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         emailFrequency: (row['emailFrequency'] as EmailFrequency | undefined) ?? 'immediate',
         emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
+        calendarReminderPreset:
+          (row['calendarReminderPreset'] as CalendarReminderPreset | undefined)
+          ?? defaults.calendarReminderPreset,
+        calendarReminderMeetings:
+          (row['calendarReminderMeetings'] as boolean | undefined)
+          ?? defaults.calendarReminderMeetings,
+        calendarReminderPersonalAssessments:
+          (row['calendarReminderPersonalAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderPersonalAssessments,
+        calendarReminderCommunityAssessments:
+          (row['calendarReminderCommunityAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderCommunityAssessments,
         inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
         // Phase 1B: SMS consent fields
         smsEnabled: (row['smsEnabled'] as boolean | undefined) ?? false,
@@ -94,7 +118,18 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
   await assertNotDemoGrace(communityId);
-  const { emailFrequency, emailAnnouncements, emailMeetings, inAppEnabled, smsEnabled, smsEmergencyOnly } = result.data;
+  const {
+    emailFrequency,
+    emailAnnouncements,
+    emailMeetings,
+    calendarReminderPreset,
+    calendarReminderMeetings,
+    calendarReminderPersonalAssessments,
+    calendarReminderCommunityAssessments,
+    inAppEnabled,
+    smsEnabled,
+    smsEmergencyOnly,
+  } = result.data;
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const userAgent = req.headers.get('user-agent') ?? 'unknown';
 
@@ -107,12 +142,23 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     (r) => r['userId'] === userId,
   );
 
-  const updateValues: Record<string, unknown> = {
-    emailFrequency,
-    emailAnnouncements,
-    emailMeetings,
-    inAppEnabled,
-  };
+  const updateValues: Record<string, unknown> = {};
+  if (emailFrequency !== undefined) updateValues['emailFrequency'] = emailFrequency;
+  if (emailAnnouncements !== undefined) updateValues['emailAnnouncements'] = emailAnnouncements;
+  if (emailMeetings !== undefined) updateValues['emailMeetings'] = emailMeetings;
+  if (calendarReminderPreset !== undefined) {
+    updateValues['calendarReminderPreset'] = calendarReminderPreset;
+  }
+  if (calendarReminderMeetings !== undefined) {
+    updateValues['calendarReminderMeetings'] = calendarReminderMeetings;
+  }
+  if (calendarReminderPersonalAssessments !== undefined) {
+    updateValues['calendarReminderPersonalAssessments'] = calendarReminderPersonalAssessments;
+  }
+  if (calendarReminderCommunityAssessments !== undefined) {
+    updateValues['calendarReminderCommunityAssessments'] = calendarReminderCommunityAssessments;
+  }
+  if (inAppEnabled !== undefined) updateValues['inAppEnabled'] = inAppEnabled;
 
   // Phase 1B: Handle SMS consent with TCPA timestamps
   if (smsEnabled !== undefined) {
@@ -136,6 +182,10 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
   if (smsEmergencyOnly !== undefined) {
     updateValues['smsEmergencyOnly'] = smsEmergencyOnly;
+  }
+
+  if (Object.keys(updateValues).length === 0) {
+    throw new ValidationError('No preference updates provided');
   }
 
   if (!existing) {

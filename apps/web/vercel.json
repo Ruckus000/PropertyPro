@@ -31,10 +31,6 @@
       "schedule": "0 5 1 * *"
     },
     {
-      "path": "/api/v1/internal/assessment-due-reminders",
-      "schedule": "0 8 * * *"
-    },
-    {
       "path": "/api/v1/internal/expire-demos",
       "schedule": "0 3 * * *"
     },

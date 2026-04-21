@@ -16,6 +16,10 @@ describe('email-preferences util (p1-26)', () => {
       emailFrequency: 'immediate',
       emailAnnouncements: true,
       emailMeetings: true,
+      calendarReminderPreset: '7_days_before',
+      calendarReminderMeetings: true,
+      calendarReminderPersonalAssessments: true,
+      calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
       inAppAnnouncements: true,
       inAppDocuments: true,
@@ -38,6 +42,10 @@ describe('email-preferences util (p1-26)', () => {
       emailFrequency: 'never' as const,
       emailAnnouncements: false,
       emailMeetings: false,
+      calendarReminderPreset: 'off' as const,
+      calendarReminderMeetings: false,
+      calendarReminderPersonalAssessments: false,
+      calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
     };
 
@@ -51,6 +59,10 @@ describe('email-preferences util (p1-26)', () => {
       emailFrequency: 'immediate' as const,
       emailAnnouncements: true,
       emailMeetings: false,
+      calendarReminderPreset: '7_days_before' as const,
+      calendarReminderMeetings: true,
+      calendarReminderPersonalAssessments: true,
+      calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
     };
 
@@ -63,6 +75,10 @@ describe('email-preferences util (p1-26)', () => {
       emailFrequency: 'daily_digest' as const,
       emailAnnouncements: true,
       emailMeetings: true,
+      calendarReminderPreset: '7_days_before' as const,
+      calendarReminderMeetings: true,
+      calendarReminderPersonalAssessments: true,
+      calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
     };
     expect(shouldSendEmailNow('announcement', prefs)).toBe(false);

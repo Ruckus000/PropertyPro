@@ -29,10 +29,6 @@ vi.mock('@propertypro/db/filters', () => ({
 vi.mock('@/lib/calendar/google-calendar-adapter', () => ({
   deterministicGoogleCalendarAdapter: {},
 }));
-vi.mock('@/lib/calendar/ics', () => ({
-  buildCalendarIcs: vi.fn(),
-  buildMeetingsIcs: vi.fn(),
-}));
 vi.mock('@/lib/accounting/adapters', () => ({
   getAccountingAdapter: vi.fn(),
 }));
@@ -48,7 +44,7 @@ afterAll(() => {
 
 describe('OAuth state HMAC signing (calendar)', () => {
   it('signPayload produces a consistent HMAC for the same input', async () => {
-    const { signPayload } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
     const payload = '{"communityId":1,"userId":"user-1","ts":1700000000000}';
     const sig1 = signPayload(payload);
     const sig2 = signPayload(payload);
@@ -57,27 +53,27 @@ describe('OAuth state HMAC signing (calendar)', () => {
   });
 
   it('signPayload produces different signatures for different inputs', async () => {
-    const { signPayload } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
     const sig1 = signPayload('payload-a');
     const sig2 = signPayload('payload-b');
     expect(sig1).not.toBe(sig2);
   });
 
   it('verifySignature returns true for valid signature', async () => {
-    const { signPayload, verifySignature } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload, verifySignature } = await import('@/lib/services/oauth-state');
     const payload = 'test-payload';
     const sig = signPayload(payload);
     expect(verifySignature(payload, sig)).toBe(true);
   });
 
   it('verifySignature returns false for tampered payload', async () => {
-    const { signPayload, verifySignature } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload, verifySignature } = await import('@/lib/services/oauth-state');
     const sig = signPayload('original');
     expect(verifySignature('tampered', sig)).toBe(false);
   });
 
   it('verifySignature returns false for forged signature', async () => {
-    const { verifySignature } = await import('@/lib/services/calendar-sync-service');
+    const { verifySignature } = await import('@/lib/services/oauth-state');
     // A base64url string of the same length as a real HMAC-SHA256 but wrong
     const fakeSignature = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_';
     expect(verifySignature('some-payload', fakeSignature)).toBe(false);
@@ -86,7 +82,8 @@ describe('OAuth state HMAC signing (calendar)', () => {
 
 describe('validateOAuthState (calendar)', () => {
   it('accepts a valid HMAC-signed state with matching communityId and userId', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const communityId = 42;
     const userId = 'user-abc';
@@ -109,7 +106,8 @@ describe('validateOAuthState (calendar)', () => {
   });
 
   it('rejects tampered state with "signature invalid"', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const payload = JSON.stringify({ communityId: 1, userId: 'user-1', ts: Date.now() });
     const sig = signPayload(payload);
@@ -122,7 +120,8 @@ describe('validateOAuthState (calendar)', () => {
   });
 
   it('rejects state with mismatched communityId', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const payload = JSON.stringify({ communityId: 1, userId: 'user-1', ts: Date.now() });
     const sig = signPayload(payload);
@@ -133,7 +132,8 @@ describe('validateOAuthState (calendar)', () => {
   });
 
   it('rejects state with mismatched userId', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const payload = JSON.stringify({ communityId: 1, userId: 'user-1', ts: Date.now() });
     const sig = signPayload(payload);
@@ -143,7 +143,8 @@ describe('validateOAuthState (calendar)', () => {
   });
 
   it('rejects expired state (>10 minutes old)', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const elevenMinutesAgo = Date.now() - 11 * 60 * 1000;
     const payload = JSON.stringify({ communityId: 1, userId: 'user-1', ts: elevenMinutesAgo });
@@ -154,7 +155,8 @@ describe('validateOAuthState (calendar)', () => {
   });
 
   it('accepts state just under 10 minutes old', async () => {
-    const { signPayload, validateOAuthState } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
+    const { validateOAuthState } = await import('@/lib/services/calendar-sync-service');
 
     const nineMinutesAgo = Date.now() - 9 * 60 * 1000;
     const payload = JSON.stringify({ communityId: 1, userId: 'user-1', ts: nineMinutesAgo });
@@ -167,7 +169,7 @@ describe('validateOAuthState (calendar)', () => {
 
 describe('validateAccountingOAuthState', () => {
   it('accepts valid signed state with matching provider', async () => {
-    const { signPayload } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
     const { validateAccountingOAuthState } = await import('@/lib/services/accounting-connectors-service');
 
     const communityId = 10;
@@ -181,7 +183,7 @@ describe('validateAccountingOAuthState', () => {
   });
 
   it('rejects tampered accounting state with "signature invalid"', async () => {
-    const { signPayload } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
     const { validateAccountingOAuthState } = await import('@/lib/services/accounting-connectors-service');
 
     const payload = JSON.stringify({ communityId: 1, userId: 'u', provider: 'quickbooks', ts: Date.now() });
@@ -194,7 +196,7 @@ describe('validateAccountingOAuthState', () => {
   });
 
   it('rejects mismatched provider even with valid signature', async () => {
-    const { signPayload } = await import('@/lib/services/calendar-sync-service');
+    const { signPayload } = await import('@/lib/services/oauth-state');
     const { validateAccountingOAuthState } = await import('@/lib/services/accounting-connectors-service');
 
     const payload = JSON.stringify({ communityId: 1, userId: 'u', provider: 'quickbooks', ts: Date.now() });

@@ -1,4 +1,10 @@
 export type EmailFrequency = 'immediate' | 'daily_digest' | 'weekly_digest' | 'never';
+export type CalendarReminderPreset =
+  | 'morning_of'
+  | '1_day_before'
+  | '3_days_before'
+  | '7_days_before'
+  | 'off';
 
 export type NotificationKind =
   | 'password_reset' // critical
@@ -13,6 +19,10 @@ export interface UserNotificationPreferences {
   emailFrequency: EmailFrequency;
   emailAnnouncements: boolean;
   emailMeetings: boolean;
+  calendarReminderPreset: CalendarReminderPreset;
+  calendarReminderMeetings: boolean;
+  calendarReminderPersonalAssessments: boolean;
+  calendarReminderCommunityAssessments: boolean;
   inAppEnabled: boolean;
   // Per-category in-app muting (default true = unmuted)
   inAppAnnouncements: boolean;
@@ -29,6 +39,10 @@ export function getDefaultPreferences(): UserNotificationPreferences {
     emailFrequency: 'immediate',
     emailAnnouncements: true,
     emailMeetings: true,
+    calendarReminderPreset: '7_days_before',
+    calendarReminderMeetings: true,
+    calendarReminderPersonalAssessments: true,
+    calendarReminderCommunityAssessments: false,
     inAppEnabled: true,
     inAppAnnouncements: true,
     inAppDocuments: true,
@@ -54,6 +68,24 @@ export function isDigestFrequency(
 /** True if frequency disables all email. */
 export function isNeverFrequency(freq: EmailFrequency): freq is 'never' {
   return freq === 'never';
+}
+
+export function getCalendarReminderLeadDays(
+  preset: CalendarReminderPreset,
+): number | null {
+  switch (preset) {
+    case 'morning_of':
+      return 0;
+    case '1_day_before':
+      return 1;
+    case '3_days_before':
+      return 3;
+    case '7_days_before':
+      return 7;
+    case 'off':
+    default:
+      return null;
+  }
 }
 
 /**

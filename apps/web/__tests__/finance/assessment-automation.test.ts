@@ -5,13 +5,11 @@ const mockSelectFrom = vi.fn();
 const mockUpdate = vi.fn();
 const mockInsert = vi.fn();
 const mockPostLedgerEntry = vi.fn();
-const mockSendEmail = vi.fn();
 
 const mockUnscopedDb = {
   select: vi.fn().mockReturnThis(),
   from: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
-  innerJoin: vi.fn().mockReturnThis(),
 };
 
 vi.mock('@propertypro/db', () => ({
@@ -44,17 +42,8 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => mockUnscopedDb),
 }));
 
-vi.mock('@propertypro/email', () => ({
-  AssessmentDueReminderEmail: () => null,
-  sendEmail: mockSendEmail,
-}));
-
 vi.mock('@/lib/services/finance-service', () => ({
   generateAssessmentLineItemsForCommunity: vi.fn(),
-}));
-
-vi.mock('@/lib/finance/common', () => ({
-  centsToDollars: vi.fn((c: number) => (c / 100).toFixed(2)),
 }));
 
 describe('assessment-automation-service', () => {
@@ -257,65 +246,6 @@ describe('assessment-automation-service', () => {
       expect(summary.assessmentsProcessed).toBe(1);
       expect(summary.totalInserted).toBe(3);
       expect(summary.totalSkipped).toBe(1);
-    });
-  });
-
-  describe('processAssessmentDueReminders', () => {
-    it('sends reminder emails for items due in 7 days', async () => {
-      const { processAssessmentDueReminders } = await import(
-        '../../src/lib/services/assessment-automation-service'
-      );
-
-      // Items due in 7 days
-      mockSelectFrom.mockResolvedValueOnce([
-        { id: 10, assessmentId: 1, unitId: 1, amountCents: 35000, dueDate: '2026-03-08', lateFeeCents: 0 },
-      ]);
-      // Assessment titles
-      mockSelectFrom.mockResolvedValueOnce([
-        { id: 1, title: 'Monthly Maintenance' },
-      ]);
-      // Owner lookup via unscoped db
-      mockUnscopedDb.where
-        .mockResolvedValueOnce([{ id: 1, name: 'Test Community' }]) // communities
-        .mockResolvedValueOnce([{ unitId: 1, email: 'owner@test.com', fullName: 'Test Owner' }]); // users
-
-      mockSendEmail.mockResolvedValue({ success: true });
-
-      const summary = await processAssessmentDueReminders(new Date('2026-03-01'));
-
-      expect(summary.communitiesScanned).toBe(1);
-      expect(summary.emailsSent).toBe(1);
-      expect(summary.errors).toBe(0);
-      expect(mockSendEmail).toHaveBeenCalledOnce();
-      expect(mockSendEmail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: 'owner@test.com',
-          category: 'transactional',
-        }),
-      );
-    });
-
-    it('handles email send failure gracefully', async () => {
-      const { processAssessmentDueReminders } = await import(
-        '../../src/lib/services/assessment-automation-service'
-      );
-
-      mockSelectFrom.mockResolvedValueOnce([
-        { id: 10, assessmentId: 1, unitId: 1, amountCents: 35000, dueDate: '2026-03-08', lateFeeCents: 0 },
-      ]);
-      mockSelectFrom.mockResolvedValueOnce([
-        { id: 1, title: 'Monthly Maintenance' },
-      ]);
-      mockUnscopedDb.where
-        .mockResolvedValueOnce([{ id: 1, name: 'Test Community' }])
-        .mockResolvedValueOnce([{ unitId: 1, email: 'owner@test.com', fullName: 'Test Owner' }]);
-
-      mockSendEmail.mockRejectedValue(new Error('Email service down'));
-
-      const summary = await processAssessmentDueReminders(new Date('2026-03-01'));
-
-      expect(summary.emailsSent).toBe(0);
-      expect(summary.errors).toBe(1);
     });
   });
 });

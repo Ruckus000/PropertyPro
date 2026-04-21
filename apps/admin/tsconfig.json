@@ -19,6 +19,12 @@
       "@propertypro/ui/*": [
         "../../packages/ui/src/*"
       ],
+      "@propertypro/email": [
+        "../../packages/email/src"
+      ],
+      "@propertypro/email/*": [
+        "../../packages/email/src/*"
+      ],
       "@propertypro/db": [
         "../../packages/db/src"
       ],

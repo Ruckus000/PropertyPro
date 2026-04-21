@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useLargeText } from '@/hooks/useLargeText';
 import { MobileBackHeader } from '@/components/mobile/MobileBackHeader';
 import { PageTransition, SlideUp } from '@/components/motion';
+import type { CalendarReminderPreset } from '@/lib/utils/email-preferences';
 
 interface MobileSettingsContentProps {
   userName: string | null;
@@ -15,10 +16,19 @@ interface MobileSettingsContentProps {
   notificationPrefs: {
     emailAnnouncements: boolean;
     emailMeetings: boolean;
+    calendarReminderPreset: CalendarReminderPreset;
+    calendarReminderMeetings: boolean;
+    calendarReminderPersonalAssessments: boolean;
+    calendarReminderCommunityAssessments: boolean;
     inAppEnabled: boolean;
     emailFrequency: string;
     smsEnabled: boolean;
     smsConsentGivenAt: string | null;
+  };
+  reminderVisibility: {
+    meetings: boolean;
+    personalAssessments: boolean;
+    communityAssessments: boolean;
   };
   phoneVerified: boolean;
 }
@@ -115,6 +125,7 @@ export function MobileSettingsContent({
   userPhone,
   communityId,
   notificationPrefs,
+  reminderVisibility,
   phoneVerified,
 }: MobileSettingsContentProps) {
   // Form state — personal info
@@ -127,6 +138,18 @@ export function MobileSettingsContent({
   );
   const [emailMeetings, setEmailMeetings] = useState(
     notificationPrefs.emailMeetings,
+  );
+  const [calendarReminderPreset, setCalendarReminderPreset] = useState(
+    notificationPrefs.calendarReminderPreset,
+  );
+  const [calendarReminderMeetings, setCalendarReminderMeetings] = useState(
+    notificationPrefs.calendarReminderMeetings,
+  );
+  const [calendarReminderPersonalAssessments, setCalendarReminderPersonalAssessments] = useState(
+    notificationPrefs.calendarReminderPersonalAssessments,
+  );
+  const [calendarReminderCommunityAssessments, setCalendarReminderCommunityAssessments] = useState(
+    notificationPrefs.calendarReminderCommunityAssessments,
   );
   const [inAppEnabled, setInAppEnabled] = useState(
     notificationPrefs.inAppEnabled,
@@ -177,6 +200,10 @@ export function MobileSettingsContent({
           emailFrequency,
           emailAnnouncements,
           emailMeetings,
+          calendarReminderPreset,
+          calendarReminderMeetings,
+          calendarReminderPersonalAssessments,
+          calendarReminderCommunityAssessments,
           inAppEnabled,
           smsEnabled,
         }),
@@ -290,6 +317,70 @@ export function MobileSettingsContent({
             </Card>
           </div>
         </SlideUp>
+
+        {(reminderVisibility.meetings
+          || reminderVisibility.personalAssessments
+          || reminderVisibility.communityAssessments) ? (
+            <SlideUp delay={0.075}>
+              <div className="px-5 mt-5">
+                <SectionLabel>Calendar Reminders</SectionLabel>
+                <Card>
+                  <div className="border-b border-stone-100 p-4">
+                    <p className="text-[13px] leading-5 text-stone-500">
+                      Meeting reminders send relative to the meeting start time. Assessment due
+                      reminders send at 9:00 AM in your community&apos;s timezone.
+                    </p>
+                  </div>
+                  <div className="border-b border-stone-100 p-4">
+                    <select
+                      value={calendarReminderPreset}
+                      onChange={(e) =>
+                        setCalendarReminderPreset(e.target.value as CalendarReminderPreset)
+                      }
+                      aria-label="Calendar reminder timing"
+                      className={cn(
+                        inputClassName,
+                        'appearance-none bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2378716c%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E")] bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-10',
+                      )}
+                    >
+                      <option value="morning_of">Morning of</option>
+                      <option value="1_day_before">1 day before</option>
+                      <option value="3_days_before">3 days before</option>
+                      <option value="7_days_before">7 days before</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </div>
+                  {reminderVisibility.meetings ? (
+                    <ToggleRow
+                      label="Meetings"
+                      checked={calendarReminderMeetings}
+                      onChange={setCalendarReminderMeetings}
+                      isLast={
+                        !reminderVisibility.personalAssessments
+                        && !reminderVisibility.communityAssessments
+                      }
+                    />
+                  ) : null}
+                  {reminderVisibility.personalAssessments ? (
+                    <ToggleRow
+                      label="My Assessment Due Dates"
+                      checked={calendarReminderPersonalAssessments}
+                      onChange={setCalendarReminderPersonalAssessments}
+                      isLast={!reminderVisibility.communityAssessments}
+                    />
+                  ) : null}
+                  {reminderVisibility.communityAssessments ? (
+                    <ToggleRow
+                      label="Community Assessment Due Dates"
+                      checked={calendarReminderCommunityAssessments}
+                      onChange={setCalendarReminderCommunityAssessments}
+                      isLast
+                    />
+                  ) : null}
+                </Card>
+              </div>
+            </SlideUp>
+          ) : null}
 
         {/* Email Frequency */}
         <SlideUp delay={0.1}>

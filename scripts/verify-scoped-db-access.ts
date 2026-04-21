@@ -45,6 +45,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
   // Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
   resolve(repoRoot, 'apps/web/src/lib/services/assessment-automation-service.ts'),
+  // Calendar reminder cron — cross-community reminder enqueue + delivery
+  resolve(repoRoot, 'apps/web/src/lib/services/calendar-event-reminder-service.ts'),
   // Compliance alert cron — cross-community overdue scanning
   resolve(repoRoot, 'apps/web/src/lib/services/compliance-alert-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available

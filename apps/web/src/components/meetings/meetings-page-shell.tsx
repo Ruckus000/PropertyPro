@@ -1,8 +1,8 @@
 'use client';
 
 import { startTransition, useDeferredValue, useState } from 'react';
+import Link from 'next/link';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
-import { Copy } from 'lucide-react';
 import { Button, Card } from '@propertypro/ui';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { DayDetailPanel } from '@/components/calendar/day-detail-panel';
@@ -18,9 +18,6 @@ interface MeetingsPageShellProps {
   role: NewCommunityRole;
   timezone: string;
   canWrite: boolean;
-  canSubscribe: boolean;
-  publicSubscribeUrl: string;
-  personalSubscribeUrl: string | null;
 }
 
 export function MeetingsPageShell({
@@ -29,16 +26,12 @@ export function MeetingsPageShell({
   role,
   timezone,
   canWrite,
-  canSubscribe,
-  publicSubscribeUrl,
-  personalSubscribeUrl,
 }: MeetingsPageShellProps) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [activeMeetingId, setActiveMeetingId] = useState<number | null>(null);
   const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [copiedFeed, setCopiedFeed] = useState<'personal' | 'public' | null>(null);
 
   const deferredMonth = useDeferredValue(currentMonth);
   const rangeStart = format(startOfMonth(deferredMonth), 'yyyy-MM-dd');
@@ -49,15 +42,6 @@ export function MeetingsPageShell({
   const selectedDateEvents = selectedDate
     ? events.filter((event) => getCalendarEventDateKey(event, timezone) === format(selectedDate, 'yyyy-MM-dd'))
     : [];
-
-  async function handleCopySubscribeUrl(
-    url: string,
-    feed: 'personal' | 'public',
-  ) {
-    await navigator.clipboard.writeText(url);
-    setCopiedFeed(feed);
-    window.setTimeout(() => setCopiedFeed(null), 1500);
-  }
 
   function handleMonthChange(nextMonth: Date) {
     startTransition(() => {
@@ -123,62 +107,32 @@ export function MeetingsPageShell({
       <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
         <Card.Header bordered>
           <div className="space-y-1">
-            <Card.Title>Subscribe to Calendar</Card.Title>
+            <Card.Title>Email Calendar Reminders</Card.Title>
             <Card.Subtitle>
-              Add your private feed to Apple Calendar, Google Calendar, or Outlook.
+              Choose which scheduled events send reminder emails and how far ahead they arrive.
             </Card.Subtitle>
           </div>
         </Card.Header>
         <Card.Body className="space-y-4">
-          {canSubscribe && personalSubscribeUrl ? (
-            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3">
-              <div className="space-y-1">
-                <div className="text-sm font-medium text-[var(--text-primary)]">My calendar</div>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  Private subscription URL. Keep this link private because it includes your role-based assessment visibility.
-                </div>
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3">
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[var(--text-primary)]">
+                Reminders follow the same calendar visibility you already have
               </div>
-              <div className="break-all text-sm text-[var(--text-primary)]">{personalSubscribeUrl}</div>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="secondary"
-                  leftIcon={<Copy />}
-                  onClick={() => handleCopySubscribeUrl(personalSubscribeUrl, 'personal')}
+              <div className="text-sm text-[var(--text-secondary)]">
+                Meetings, owner assessment due dates, and community-wide assessment due dates can
+                each send email reminders based on your role and current notification settings.
+              </div>
+              <div className="text-sm text-[var(--text-secondary)]">
+                Manage reminder timing in{' '}
+                <Link
+                  href={`/settings?communityId=${communityId}`}
+                  className="font-medium text-[var(--interactive)] underline-offset-2 hover:underline"
                 >
-                  {copiedFeed === 'personal' ? 'Copied' : 'Copy My URL'}
-                </Button>
-                <span className="text-xs text-[var(--text-tertiary)]">
-                  Use this one for your own calendar subscription.
-                </span>
+                  Settings
+                </Link>
+                .
               </div>
-            </div>
-          ) : (
-            <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3 text-sm text-[var(--text-secondary)]">
-              {canSubscribe
-                ? 'Your private calendar link is temporarily unavailable. You can still use the community calendar below.'
-                : 'Calendar subscriptions are not enabled for your role.'}
-            </div>
-          )}
-
-          <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium text-[var(--text-primary)]">Community calendar</div>
-              <div className="text-xs text-[var(--text-secondary)]">
-                Public community-wide feed with meetings and aggregate assessment due dates.
-              </div>
-            </div>
-            <div className="break-all text-sm text-[var(--text-primary)]">{publicSubscribeUrl}</div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                leftIcon={<Copy />}
-                onClick={() => handleCopySubscribeUrl(publicSubscribeUrl, 'public')}
-              >
-                {copiedFeed === 'public' ? 'Copied' : 'Copy Community URL'}
-              </Button>
-              <span className="text-xs text-[var(--text-tertiary)]">
-                Share this one when you want the same feed for everyone.
-              </span>
             </div>
           </div>
         </Card.Body>

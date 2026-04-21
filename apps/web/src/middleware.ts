@@ -80,6 +80,7 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/signup', method: 'GET' },
   { path: '/api/v1/auth/signup', method: 'POST' },
   { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
+  { path: '/api/v1/internal/calendar-event-reminders', method: 'POST' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
@@ -92,10 +93,6 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/demo-login', method: 'GET' },
   // Public transparency page data endpoint (community opt-in gated)
   { path: '/api/v1/transparency', method: 'GET' },
-  // Public tenant ICS feed (community-scoped via middleware tenant headers)
-  { path: '/api/v1/calendar/meetings.ics', method: 'GET' },
-  // Token-authenticated personalized ICS feed (or session-authenticated in-browser)
-  { path: '/api/v1/calendar/my-meetings.ics', method: 'GET' },
   // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
   { path: '/api/v1/webhooks/twilio', method: 'POST' },
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]

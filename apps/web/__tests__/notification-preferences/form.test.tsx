@@ -38,6 +38,10 @@ describe('notification preferences form', () => {
             emailFrequency: 'daily_digest',
             emailAnnouncements: true,
             emailMeetings: false,
+            calendarReminderPreset: '3_days_before',
+            calendarReminderMeetings: true,
+            calendarReminderPersonalAssessments: true,
+            calendarReminderCommunityAssessments: false,
             inAppEnabled: true,
           },
         }),
@@ -49,7 +53,16 @@ describe('notification preferences form', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await act(async () => {
-      root.render(<NotificationPreferencesForm communityId={42} />);
+      root.render(
+        <NotificationPreferencesForm
+          communityId={42}
+          reminderVisibility={{
+            meetings: true,
+            personalAssessments: true,
+            communityAssessments: true,
+          }}
+        />,
+      );
       await flushEffects();
     });
 
@@ -89,6 +102,10 @@ describe('notification preferences form', () => {
         emailFrequency: 'weekly_digest',
         emailAnnouncements: true,
         emailMeetings: false,
+        calendarReminderPreset: '3_days_before',
+        calendarReminderMeetings: true,
+        calendarReminderPersonalAssessments: true,
+        calendarReminderCommunityAssessments: false,
         inAppEnabled: true,
       }),
     );
@@ -104,6 +121,10 @@ describe('notification preferences form', () => {
             emailFrequency: 'immediate',
             emailAnnouncements: true,
             emailMeetings: true,
+            calendarReminderPreset: '7_days_before',
+            calendarReminderMeetings: true,
+            calendarReminderPersonalAssessments: true,
+            calendarReminderCommunityAssessments: false,
             inAppEnabled: true,
           },
         }),
@@ -115,7 +136,16 @@ describe('notification preferences form', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await act(async () => {
-      root.render(<NotificationPreferencesForm communityId={77} />);
+      root.render(
+        <NotificationPreferencesForm
+          communityId={77}
+          reminderVisibility={{
+            meetings: true,
+            personalAssessments: false,
+            communityAssessments: false,
+          }}
+        />,
+      );
       await flushEffects();
     });
 
@@ -135,5 +165,6 @@ describe('notification preferences form', () => {
       unknown
     >;
     expect(patchBody['emailFrequency']).toBe('immediate');
+    expect(patchBody['calendarReminderPreset']).toBe('7_days_before');
   });
 });

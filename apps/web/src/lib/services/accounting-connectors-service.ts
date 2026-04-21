@@ -15,7 +15,7 @@ import {
   getAccountingAdapter,
   type AccountingMappingOption,
 } from '@/lib/accounting/adapters';
-import { signPayload, verifySignature } from '@/lib/services/calendar-sync-service';
+import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 
 interface AccountingConnectionRow extends AccountingConnection {
   [key: string]: unknown;

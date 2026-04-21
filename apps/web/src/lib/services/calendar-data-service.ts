@@ -30,6 +30,7 @@ export interface AggregateAssessmentDueRecord {
 }
 
 export interface OwnerAssessmentDueRecord {
+  lineItemId: number;
   assessmentId: number;
   dueDate: string;
   assessmentTitle: string;
@@ -278,6 +279,7 @@ export async function listOwnerAssessmentDueRecords(
   );
 
   return lineItems.map((row) => ({
+    lineItemId: row.id,
     assessmentId: row.assessmentId ?? 0,
     dueDate: row.dueDate,
     assessmentTitle: row.assessmentId

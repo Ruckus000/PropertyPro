@@ -31,7 +31,7 @@ import { generateCSV } from '@/lib/services/csv-export';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import { markMatchingViolationFinePaid } from '@/lib/services/violations-service';
 import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
-import { signPayload, verifySignature } from '@/lib/services/calendar-sync-service';
+import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import { generateFinanceStatementPdf } from '@/lib/utils/finance-pdf';

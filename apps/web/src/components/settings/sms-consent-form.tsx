@@ -97,10 +97,6 @@ export function SmsConsentForm({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           communityId,
-          emailFrequency: 'immediate',
-          emailAnnouncements: true,
-          emailMeetings: true,
-          inAppEnabled: true,
           smsEnabled: enabled,
           smsEmergencyOnly: true,
         }),

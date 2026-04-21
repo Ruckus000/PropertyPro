@@ -11,7 +11,17 @@ const DEFAULT_PREFS: UserNotificationPreferences = {
   emailFrequency: 'immediate',
   emailAnnouncements: true,
   emailMeetings: true,
+  calendarReminderPreset: '7_days_before',
+  calendarReminderMeetings: true,
+  calendarReminderPersonalAssessments: true,
+  calendarReminderCommunityAssessments: false,
   inAppEnabled: true,
+  inAppAnnouncements: true,
+  inAppDocuments: true,
+  inAppMeetings: true,
+  inAppMaintenance: true,
+  inAppViolations: true,
+  inAppElections: true,
 };
 
 describe('Emergency notification classification', () => {
@@ -75,7 +85,17 @@ describe('Emergency is always enabled', () => {
       emailFrequency: 'never',
       emailAnnouncements: false,
       emailMeetings: false,
+      calendarReminderPreset: 'off',
+      calendarReminderMeetings: false,
+      calendarReminderPersonalAssessments: false,
+      calendarReminderCommunityAssessments: false,
       inAppEnabled: false,
+      inAppAnnouncements: false,
+      inAppDocuments: false,
+      inAppMeetings: false,
+      inAppMaintenance: false,
+      inAppViolations: false,
+      inAppElections: false,
     };
 
     expect(isNotificationTypeEnabled('emergency', disabledPrefs)).toBe(true);

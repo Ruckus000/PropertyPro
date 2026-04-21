@@ -12,6 +12,7 @@ export * from './document-categories';
 export * from './documents';
 export * from './announcements';
 export * from './announcement-delivery-log';
+export * from './calendar-event-reminder-log';
 export * from './notification-digest-queue';
 export * from './notification-preferences';
 export * from './notifications';
@@ -82,6 +83,7 @@ import type { documentCategories } from './document-categories';
 import type { documents } from './documents';
 import type { announcements } from './announcements';
 import type { announcementDeliveryLog } from './announcement-delivery-log';
+import type { calendarEventReminderLog } from './calendar-event-reminder-log';
 import type { notificationDigestQueue } from './notification-digest-queue';
 import type { notificationPreferences } from './notification-preferences';
 import type { pendingSignups } from './pending-signups';
@@ -156,6 +158,10 @@ export type NewAnnouncement = typeof announcements.$inferInsert;
 // Announcement Delivery Log
 export type AnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferSelect;
 export type NewAnnouncementDeliveryLog = typeof announcementDeliveryLog.$inferInsert;
+
+// Calendar Event Reminder Log
+export type CalendarEventReminderLog = typeof calendarEventReminderLog.$inferSelect;
+export type NewCalendarEventReminderLog = typeof calendarEventReminderLog.$inferInsert;
 
 // Notification Digest Queue
 export type NotificationDigestQueue = typeof notificationDigestQueue.$inferSelect;

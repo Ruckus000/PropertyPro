@@ -133,9 +133,9 @@ export const DEFAULT_FAQS: DefaultFaqDefinition[] = [
     roleVisibility: ADMIN_HELP_ROLES,
   },
   {
-    question: 'How do I subscribe to the meeting calendar?',
+    question: 'How do meeting reminder emails work?',
     answer:
-      'Open Meetings and click Subscribe. Copy the feed URL into Google Calendar, Apple Calendar, or Outlook. Rescheduled or cancelled meetings update automatically once you subscribe.',
+      'Open Settings to choose when calendar event reminder emails arrive and which event types they cover. Meeting reminders and assessment due-date reminders follow the same calendar visibility rules you see in the app.',
     category: 'meetings',
   },
   {

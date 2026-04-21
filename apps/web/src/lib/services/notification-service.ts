@@ -331,6 +331,7 @@ async function resolveRecipientDeliveries(
     const userId = row['userId'];
     if (typeof userId === 'string') {
       const rawFrequency = row['emailFrequency'];
+      const defaults = getDefaultPreferences();
       preferencesByUserId.set(userId, {
         emailFrequency:
           rawFrequency === 'immediate' ||
@@ -338,16 +339,36 @@ async function resolveRecipientDeliveries(
           rawFrequency === 'weekly_digest' ||
           rawFrequency === 'never'
             ? rawFrequency
-            : 'immediate',
-        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-        emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
-        inAppAnnouncements: (row['inAppAnnouncements'] as boolean | undefined) ?? true,
-        inAppDocuments: (row['inAppDocuments'] as boolean | undefined) ?? true,
-        inAppMeetings: (row['inAppMeetings'] as boolean | undefined) ?? true,
-        inAppMaintenance: (row['inAppMaintenance'] as boolean | undefined) ?? true,
-        inAppViolations: (row['inAppViolations'] as boolean | undefined) ?? true,
-        inAppElections: (row['inAppElections'] as boolean | undefined) ?? true,
+            : defaults.emailFrequency,
+        emailAnnouncements:
+          (row['emailAnnouncements'] as boolean | undefined) ?? defaults.emailAnnouncements,
+        emailMeetings:
+          (row['emailMeetings'] as boolean | undefined) ?? defaults.emailMeetings,
+        calendarReminderPreset:
+          (row['calendarReminderPreset'] as UserNotificationPreferences['calendarReminderPreset'] | undefined)
+          ?? defaults.calendarReminderPreset,
+        calendarReminderMeetings:
+          (row['calendarReminderMeetings'] as boolean | undefined)
+          ?? defaults.calendarReminderMeetings,
+        calendarReminderPersonalAssessments:
+          (row['calendarReminderPersonalAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderPersonalAssessments,
+        calendarReminderCommunityAssessments:
+          (row['calendarReminderCommunityAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderCommunityAssessments,
+        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? defaults.inAppEnabled,
+        inAppAnnouncements:
+          (row['inAppAnnouncements'] as boolean | undefined) ?? defaults.inAppAnnouncements,
+        inAppDocuments:
+          (row['inAppDocuments'] as boolean | undefined) ?? defaults.inAppDocuments,
+        inAppMeetings:
+          (row['inAppMeetings'] as boolean | undefined) ?? defaults.inAppMeetings,
+        inAppMaintenance:
+          (row['inAppMaintenance'] as boolean | undefined) ?? defaults.inAppMaintenance,
+        inAppViolations:
+          (row['inAppViolations'] as boolean | undefined) ?? defaults.inAppViolations,
+        inAppElections:
+          (row['inAppElections'] as boolean | undefined) ?? defaults.inAppElections,
       });
     }
   }
@@ -717,6 +738,7 @@ async function resolveInAppRecipients(
     const userId = row['userId'];
     if (typeof userId === 'string') {
       const rawFrequency = row['emailFrequency'];
+      const defaults = getDefaultPreferences();
       preferencesByUserId.set(userId, {
         emailFrequency:
           rawFrequency === 'immediate' ||
@@ -724,16 +746,36 @@ async function resolveInAppRecipients(
           rawFrequency === 'weekly_digest' ||
           rawFrequency === 'never'
             ? rawFrequency
-            : 'immediate',
-        emailAnnouncements: (row['emailAnnouncements'] as boolean | undefined) ?? true,
-        emailMeetings: (row['emailMeetings'] as boolean | undefined) ?? true,
-        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
-        inAppAnnouncements: (row['inAppAnnouncements'] as boolean | undefined) ?? true,
-        inAppDocuments: (row['inAppDocuments'] as boolean | undefined) ?? true,
-        inAppMeetings: (row['inAppMeetings'] as boolean | undefined) ?? true,
-        inAppMaintenance: (row['inAppMaintenance'] as boolean | undefined) ?? true,
-        inAppViolations: (row['inAppViolations'] as boolean | undefined) ?? true,
-        inAppElections: (row['inAppElections'] as boolean | undefined) ?? true,
+            : defaults.emailFrequency,
+        emailAnnouncements:
+          (row['emailAnnouncements'] as boolean | undefined) ?? defaults.emailAnnouncements,
+        emailMeetings:
+          (row['emailMeetings'] as boolean | undefined) ?? defaults.emailMeetings,
+        calendarReminderPreset:
+          (row['calendarReminderPreset'] as UserNotificationPreferences['calendarReminderPreset'] | undefined)
+          ?? defaults.calendarReminderPreset,
+        calendarReminderMeetings:
+          (row['calendarReminderMeetings'] as boolean | undefined)
+          ?? defaults.calendarReminderMeetings,
+        calendarReminderPersonalAssessments:
+          (row['calendarReminderPersonalAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderPersonalAssessments,
+        calendarReminderCommunityAssessments:
+          (row['calendarReminderCommunityAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderCommunityAssessments,
+        inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? defaults.inAppEnabled,
+        inAppAnnouncements:
+          (row['inAppAnnouncements'] as boolean | undefined) ?? defaults.inAppAnnouncements,
+        inAppDocuments:
+          (row['inAppDocuments'] as boolean | undefined) ?? defaults.inAppDocuments,
+        inAppMeetings:
+          (row['inAppMeetings'] as boolean | undefined) ?? defaults.inAppMeetings,
+        inAppMaintenance:
+          (row['inAppMaintenance'] as boolean | undefined) ?? defaults.inAppMaintenance,
+        inAppViolations:
+          (row['inAppViolations'] as boolean | undefined) ?? defaults.inAppViolations,
+        inAppElections:
+          (row['inAppElections'] as boolean | undefined) ?? defaults.inAppElections,
       });
     }
   }

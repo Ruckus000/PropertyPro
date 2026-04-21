@@ -736,6 +736,13 @@
       "when": 1775640000000,
       "tag": "0143_help_article_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1775650000000,
+      "tag": "0144_calendar_event_reminders",
+      "breakpoints": true
     }
   ]
 }

@@ -12,8 +12,12 @@ import {
   createScopedClient,
   notificationPreferences,
 } from '@propertypro/db';
-import { getDefaultPreferences } from '@/lib/utils/email-preferences';
+import {
+  getDefaultPreferences,
+  type CalendarReminderPreset,
+} from '@/lib/utils/email-preferences';
 import { MobileSettingsContent } from '@/components/mobile/MobileSettingsContent';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 
 export default async function MobileSettingsPage() {
   const requestHeaders = await headers();
@@ -38,8 +42,9 @@ export default async function MobileSettingsPage() {
     redirect('/auth/login');
   }
 
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
-    await requireCommunityMembership(communityId, userId!);
+    membership = await requireCommunityMembership(communityId, userId!);
   } catch {
     redirect('/auth/login');
   }
@@ -49,6 +54,10 @@ export default async function MobileSettingsPage() {
   let notificationPrefs = {
     emailAnnouncements: defaults.emailAnnouncements,
     emailMeetings: defaults.emailMeetings,
+    calendarReminderPreset: defaults.calendarReminderPreset,
+    calendarReminderMeetings: defaults.calendarReminderMeetings,
+    calendarReminderPersonalAssessments: defaults.calendarReminderPersonalAssessments,
+    calendarReminderCommunityAssessments: defaults.calendarReminderCommunityAssessments,
     inAppEnabled: defaults.inAppEnabled,
     emailFrequency: defaults.emailFrequency as string,
     smsEnabled: false,
@@ -66,6 +75,18 @@ export default async function MobileSettingsPage() {
           (row['emailAnnouncements'] as boolean | undefined) ?? true,
         emailMeetings:
           (row['emailMeetings'] as boolean | undefined) ?? true,
+        calendarReminderPreset:
+          (row['calendarReminderPreset'] as CalendarReminderPreset | undefined)
+          ?? defaults.calendarReminderPreset,
+        calendarReminderMeetings:
+          (row['calendarReminderMeetings'] as boolean | undefined)
+          ?? defaults.calendarReminderMeetings,
+        calendarReminderPersonalAssessments:
+          (row['calendarReminderPersonalAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderPersonalAssessments,
+        calendarReminderCommunityAssessments:
+          (row['calendarReminderCommunityAssessments'] as boolean | undefined)
+          ?? defaults.calendarReminderCommunityAssessments,
         inAppEnabled:
           (row['inAppEnabled'] as boolean | undefined) ?? true,
         emailFrequency:
@@ -81,6 +102,26 @@ export default async function MobileSettingsPage() {
   }
 
   const phoneVerified = Boolean(userPhone && userPhone.length > 0);
+  const canReadMeetings = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'meetings',
+    'read',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
+  const canReadFinances = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'finances',
+    'read',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
 
   return (
     <MobileSettingsContent
@@ -89,6 +130,12 @@ export default async function MobileSettingsPage() {
       userPhone={userPhone}
       communityId={communityId}
       notificationPrefs={notificationPrefs}
+      reminderVisibility={{
+        meetings: canReadMeetings,
+        personalAssessments:
+          canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
+        communityAssessments: canReadFinances && membership.isAdmin,
+      }}
       phoneVerified={phoneVerified}
     />
   );

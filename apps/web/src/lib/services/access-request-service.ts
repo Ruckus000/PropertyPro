@@ -100,7 +100,7 @@ export async function submitAccessRequest(params: {
         otpCode: otp,
         expiresInMinutes: 10,
       }),
-    }).catch((err) => console.error('[access-request] OTP email failed:', err));
+    }).catch((err: unknown) => console.error('[access-request] OTP email failed:', err));
 
     return { requestId: pendingVerification['id'] as number, resent: true };
   }
@@ -155,7 +155,7 @@ export async function submitAccessRequest(params: {
       otpCode: otp,
       expiresInMinutes: 10,
     }),
-  }).catch((err) => console.error('[access-request] OTP email failed:', err));
+  }).catch((err: unknown) => console.error('[access-request] OTP email failed:', err));
 
   return { requestId: row['id'] as number, resent: false };
 }
@@ -259,7 +259,7 @@ export async function verifyOtp(params: {
         claimedUnit: (request['claimedUnitNumber'] as string) ?? undefined,
         dashboardUrl,
       }),
-    }).catch((err) => console.error('[access-request] Admin notification email failed:', err));
+    }).catch((err: unknown) => console.error('[access-request] Admin notification email failed:', err));
   }
 
   return { verified: true };
@@ -359,7 +359,7 @@ export async function approveAccessRequest(params: {
       recipientName: requestFullName,
       loginUrl,
     }),
-  }).catch((err) => console.error('[access-request] Welcome email failed:', err));
+  }).catch((err: unknown) => console.error('[access-request] Welcome email failed:', err));
 
   // Audit log
   await logAuditEvent({
@@ -429,7 +429,7 @@ export async function denyAccessRequest(params: {
       recipientName: request['fullName'] as string,
       reason,
     }),
-  }).catch((err) => console.error('[access-request] Denial email failed:', err));
+  }).catch((err: unknown) => console.error('[access-request] Denial email failed:', err));
 
   // Audit log
   await logAuditEvent({

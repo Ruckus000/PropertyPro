@@ -9,6 +9,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -44,6 +45,26 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
+  const canReadMeetings = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'meetings',
+    'read',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
+  const canReadFinances = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'finances',
+    'read',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
 
   return (
     <div className="space-y-8">
@@ -70,7 +91,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <p className="mb-4 text-sm text-content-secondary">
           Choose which emails you receive and when they should be delivered.
         </p>
-        <NotificationPreferencesForm communityId={context.communityId} />
+        <NotificationPreferencesForm
+          communityId={context.communityId}
+          reminderVisibility={{
+            meetings: canReadMeetings,
+            personalAssessments:
+              canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
+            communityAssessments: canReadFinances && membership.isAdmin,
+          }}
+        />
       </div>
       <AccessibilitySettings />
       {membership.isAdmin && (
