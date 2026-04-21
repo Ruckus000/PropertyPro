@@ -99,44 +99,52 @@ describe('calendar-event-reminder-service SQL-shape regression', () => {
     expect(sql.sql).toContain('"assessment_line_items"');
   });
 
-  it('builds meeting, assessment-title, unit, and users projections', () => {
-    expect(() =>
-      db
-        .select({
-          id: meetings.id,
-          title: meetings.title,
-          meetingType: meetings.meetingType,
-          startsAt: meetings.startsAt,
-          location: meetings.location,
-        })
-        .from(meetings)
-        .where(eq(meetings.id, 1))
-        .toSQL(),
-    ).not.toThrow();
+  it('builds meeting projection', () => {
+    const sql = db
+      .select({
+        id: meetings.id,
+        title: meetings.title,
+        meetingType: meetings.meetingType,
+        startsAt: meetings.startsAt,
+        location: meetings.location,
+      })
+      .from(meetings)
+      .where(eq(meetings.id, 1))
+      .toSQL();
+    expect(sql.sql).toContain('"meetings"');
+    expect(sql.sql).not.toContain('"user_roles"');
+    expect(sql.sql).not.toContain('"assessment_line_items"');
+  });
 
-    expect(() =>
-      db
-        .select({ id: assessments.id, title: assessments.title })
-        .from(assessments)
-        .where(eq(assessments.id, 1))
-        .toSQL(),
-    ).not.toThrow();
+  it('builds assessment-title projection', () => {
+    const sql = db
+      .select({ id: assessments.id, title: assessments.title })
+      .from(assessments)
+      .where(eq(assessments.id, 1))
+      .toSQL();
+    expect(sql.sql).toContain('"assessments"');
+    expect(sql.sql).not.toContain('"assessment_line_items"');
+  });
 
-    expect(() =>
-      db
-        .select({ id: units.id, unitNumber: units.unitNumber, building: units.building })
-        .from(units)
-        .where(eq(units.id, 1))
-        .toSQL(),
-    ).not.toThrow();
+  it('builds unit label projection', () => {
+    const sql = db
+      .select({ id: units.id, unitNumber: units.unitNumber, building: units.building })
+      .from(units)
+      .where(eq(units.id, 1))
+      .toSQL();
+    expect(sql.sql).toContain('"units"');
+    expect(sql.sql).not.toContain('"user_roles"');
+  });
 
-    expect(() =>
-      db
-        .select({ id: users.id, email: users.email, fullName: users.fullName })
-        .from(users)
-        .where(inArray(users.id, ['u1']))
-        .toSQL(),
-    ).not.toThrow();
+  it('builds users projection for recipient lookup', () => {
+    const sql = db
+      .select({ id: users.id, email: users.email, fullName: users.fullName })
+      .from(users)
+      .where(inArray(users.id, ['u1']))
+      .toSQL();
+    expect(sql.sql).toContain('"users"');
+    expect(sql.sql).not.toContain('"user_roles"');
+    expect(sql.sql).not.toContain('"notification_preferences"');
   });
 });
 
@@ -264,6 +272,23 @@ describe('isEligibleForEventKind', () => {
       expect(
         isEligibleForEventKind(
           makeRecipient({ role: 'manager', isAdmin: true }),
+          'assessment_due',
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects admins who have lost finance visibility', () => {
+      expect(
+        isEligibleForEventKind(
+          makeRecipient({
+            role: 'manager',
+            isAdmin: true,
+            canReadFinances: false,
+            preferences: {
+              ...getDefaultPreferences(),
+              calendarReminderCommunityAssessments: true,
+            },
+          }),
           'assessment_due',
         ),
       ).toBe(false);
