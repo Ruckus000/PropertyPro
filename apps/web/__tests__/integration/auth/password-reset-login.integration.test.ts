@@ -79,4 +79,72 @@ describeSupabase('password reset → sign-in', () => {
     expect(newAttempt.data.session).not.toBeNull();
     expect(newAttempt.data.user?.email).toBe(email);
   });
+
+  // Exercises Supabase's recovery-session SDK contract end-to-end: generate
+  // a recovery link, exchange its token for a live session, rotate the
+  // password on that session, and sign in with the new password. The
+  // admin-driven test above only proves admin-API password rotation; this
+  // one proves that a recovery-session client can rotate a password and the
+  // result is usable on a fresh sign-in.
+  //
+  // Note on fidelity: this uses the anon-key Supabase client (session in
+  // memory). Production runs the final `updateUser` call via `updatePassword()`
+  // in apps/web/src/lib/auth/password-reset.ts, which uses a server-side
+  // client that reads the session from the HTTP cookie jar. This test does
+  // NOT exercise the cookie-transport path — that would need a real browser
+  // or Playwright. It verifies the Supabase contract that `updatePassword()`
+  // depends on.
+  it('updates password via a real recovery session and accepts the new password on sign-in', async () => {
+    if (!admin || !userId) throw new Error('Supabase auth test setup did not complete');
+
+    const ROTATED_PASSWORD = 'Rotated!789';
+
+    // 1. Generate a deterministic recovery link via the admin API — same
+    //    signal Supabase emits when the user clicks the email, minus the
+    //    mail delivery step.
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+    });
+    expect(linkError).toBeNull();
+    const hashedToken = linkData?.properties?.hashed_token;
+    expect(hashedToken).toBeTruthy();
+
+    // 2. Exchange the hashed token for a live recovery session on a fresh
+    //    client. `verifyOtp` with `type: 'recovery'` is the programmatic
+    //    equivalent of the browser client picking up the session after the
+    //    email-link redirect completes.
+    const recoveryClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: verifyData, error: verifyError } = await recoveryClient.auth.verifyOtp({
+      token_hash: hashedToken!,
+      type: 'recovery',
+    });
+    expect(verifyError).toBeNull();
+    expect(verifyData.session).not.toBeNull();
+
+    // 3. Update the password via the recovery-session client. This mirrors
+    //    what `updatePassword()` in apps/web/src/lib/auth/password-reset.ts
+    //    does with the server-side client.
+    const { error: updateError } = await recoveryClient.auth.updateUser({
+      password: ROTATED_PASSWORD,
+    });
+    expect(updateError).toBeNull();
+
+    // 4. Sign out the recovery session so the subsequent sign-in is clean.
+    await recoveryClient.auth.signOut();
+
+    // 5. Fresh sign-in with the rotated password must succeed.
+    const loginClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const loginResult = await loginClient.auth.signInWithPassword({
+      email,
+      password: ROTATED_PASSWORD,
+    });
+    expect(loginResult.error).toBeNull();
+    expect(loginResult.data.session).not.toBeNull();
+    expect(loginResult.data.user?.email).toBe(email);
+  });
 });

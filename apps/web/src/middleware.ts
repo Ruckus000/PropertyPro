@@ -114,6 +114,7 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
 /** Public auth routes that should never trigger a redirect loop. */
 const AUTH_PATH_PREFIX = '/auth';
 const VERIFY_EMAIL_PATH = '/auth/verify-email';
+const RESET_PASSWORD_PATH = '/auth/reset-password';
 
 const TENANT_CACHE_MAX_ENTRIES = 256;
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -672,8 +673,18 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Redirect already-authenticated users away from auth pages (except verify-email)
-  if (pathname.startsWith(AUTH_PATH_PREFIX) && pathname !== VERIFY_EMAIL_PATH) {
+  // Redirect already-authenticated users away from auth pages. Exclusions:
+  // - verify-email: users arrive here precisely because they have an
+  //   unconfirmed session.
+  // - reset-password: users arrive here with a live Supabase recovery
+  //   session (PKCE code exchange on page load). Redirecting would intercept
+  //   the password-update Server Action POST before `supabase.auth.updateUser()`
+  //   can run, silently failing the reset.
+  if (
+    pathname.startsWith(AUTH_PATH_PREFIX) &&
+    pathname !== VERIFY_EMAIL_PATH &&
+    pathname !== RESET_PASSWORD_PATH
+  ) {
     const user = authChecked === undefined
       ? (
           middlewareUser ??
