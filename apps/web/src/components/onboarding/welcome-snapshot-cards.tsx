@@ -380,7 +380,7 @@ export function TenantCards({ communityId, community, unit }: TenantCardsProps) 
         <p className="text-sm text-content-secondary">
           Submit and track maintenance requests for your unit.
         </p>
-        <ActionLink href="/maintenance/submit" label="Submit a request" />
+        <ActionLink href={`/maintenance/submit?communityId=${communityId}`} label="Submit a request" />
       </SnapshotCard>
     </div>
   );

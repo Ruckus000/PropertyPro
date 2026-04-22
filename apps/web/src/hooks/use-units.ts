@@ -49,8 +49,10 @@ export function useCreateUnit(communityId: number) {
         body: JSON.stringify(input),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `Failed to create unit: ${res.status}`);
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(body.error?.message ?? `Failed to create unit: ${res.status}`);
       }
       const body = (await res.json()) as { data: Unit };
       return body.data;
