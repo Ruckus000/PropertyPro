@@ -20,6 +20,8 @@ describe('getEntityListPath', () => {
     ).toBe('/communities/7/meetings?q=board');
   });
 
+  // T11: admin/non-admin now produce the same URL — Operations hub handles
+  // role-based scope within the single /operations?tab=requests page.
   it('routes maintenance and residents to the correct in-app screens', () => {
     expect(
       getEntityListPath('maintenance', {
@@ -27,7 +29,7 @@ describe('getEntityListPath', () => {
         isAdmin: true,
         query: 'leak',
       }),
-    ).toBe('/maintenance/inbox?communityId=9&q=leak');
+    ).toBe('/communities/9/operations?tab=requests&q=leak');
 
     expect(
       getEntityListPath('maintenance', {
@@ -35,7 +37,7 @@ describe('getEntityListPath', () => {
         isAdmin: false,
         query: 'leak',
       }),
-    ).toBe('/maintenance/submit?communityId=9&q=leak');
+    ).toBe('/communities/9/operations?tab=requests&q=leak');
 
     expect(
       getEntityListPath('residents', {

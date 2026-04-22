@@ -41,6 +41,8 @@ export function getEntityListPath(
       return communityId
         ? withQuery(`/communities/${communityId}/meetings`, query)
         : withQuery('/meetings', query);
+    // T11: admin/non-admin collapse to the same URL — Operations hub handles
+    // role-based scope internally. isAdmin is not consulted here.
     case 'maintenance': {
       if (!communityId) return null;
       const base = operationsTabHref(communityId, 'requests');
