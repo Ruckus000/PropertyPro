@@ -31,14 +31,14 @@ export function PackageLogForm({
 }: PackageLogFormProps) {
   const createPackage = useCreatePackage(communityId);
 
-  const [unitId, setUnitId] = useState('');
+  const [unitNumber, setUnitNumber] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [notes, setNotes] = useState('');
 
   function resetForm() {
-    setUnitId('');
+    setUnitNumber('');
     setRecipientName('');
     setCarrier('');
     setTrackingNumber('');
@@ -48,18 +48,22 @@ export function PackageLogForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const parsedUnitId = Number(unitId);
-    if (!Number.isInteger(parsedUnitId) || parsedUnitId <= 0) return;
+    const trimmedUnitNumber = unitNumber.trim();
+    if (!trimmedUnitNumber) return;
     if (!recipientName.trim()) return;
     if (!carrier.trim()) return;
 
-    await createPackage.mutateAsync({
-      unitId: parsedUnitId,
-      recipientName: recipientName.trim(),
-      carrier: carrier.trim(),
-      trackingNumber: trackingNumber.trim() || null,
-      notes: notes.trim() || null,
-    });
+    try {
+      await createPackage.mutateAsync({
+        unitNumber: trimmedUnitNumber,
+        recipientName: recipientName.trim(),
+        carrier: carrier.trim(),
+        trackingNumber: trackingNumber.trim() || null,
+        notes: notes.trim() || null,
+      });
+    } catch {
+      return;
+    }
 
     resetForm();
     onOpenChange(false);
@@ -80,13 +84,24 @@ export function PackageLogForm({
             <Label htmlFor="pkg-unit">Unit</Label>
             <Input
               id="pkg-unit"
-              type="number"
-              min={1}
-              placeholder="e.g. 101"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
+              type="text"
+              autoComplete="off"
+              placeholder="e.g. 4B or 101"
+              value={unitNumber}
+              onChange={(e) => setUnitNumber(e.target.value)}
               required
             />
+            {createPackage.isError && (
+              <p
+                className="text-xs"
+                role="alert"
+                style={{ color: 'var(--text-danger)' }}
+              >
+                {createPackage.error instanceof Error
+                  ? createPackage.error.message
+                  : 'Failed to log package. Please try again.'}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

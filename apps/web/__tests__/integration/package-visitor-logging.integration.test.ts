@@ -140,7 +140,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const createPackageResponse = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityA.id,
-        unitId: unitAId,
+        unitNumber: unitALabel,
         recipientName: `Tenant A ${kit.runSuffix}`,
         carrier: 'UPS',
         trackingNumber: `1Z-${kit.runSuffix}`,
@@ -276,7 +276,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const hoaPackageCreate = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityB.id,
-        unitId: unitAId,
+        unitNumber: unitALabel,
         recipientName: 'HOA Resident',
         carrier: 'FedEx',
       }),
@@ -302,7 +302,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const apartmentPackageCreate = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityC.id,
-        unitId: unitCId,
+        unitNumber: unitCLabel,
         recipientName: 'Apartment Resident',
         carrier: 'USPS',
       }),
@@ -319,5 +319,24 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
       }),
     );
     expect(apartmentVisitorCreate.status).toBe(201);
+  });
+
+  it('returns 400 with a clear error when unitNumber does not resolve to a unit', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    setActor(kit, 'actorA');
+
+    const response = await routeModules.packages.POST(
+      jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
+        communityId: communityA.id,
+        unitNumber: `ZZZ-DOES-NOT-EXIST-${kit.runSuffix}`,
+        recipientName: 'Nobody',
+        carrier: 'UPS',
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(/No unit found/);
   });
 });

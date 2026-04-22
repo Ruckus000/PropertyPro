@@ -21,10 +21,11 @@ import {
   createPackageForCommunity,
   listPackagesForCommunity,
 } from '@/lib/services/package-visitor-service';
+import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
 
 const createPackageSchema = z.object({
   communityId: z.number().int().positive(),
-  unitId: z.number().int().positive(),
+  unitNumber: z.string().trim().min(1).max(100),
   recipientName: z.string().trim().min(1).max(240),
   carrier: z.string().trim().min(1).max(120),
   trackingNumber: z.string().trim().max(240).nullable().optional(),
@@ -98,12 +99,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   requirePackagesWritePermission(membership);
   requireStaffOperator(membership);
 
+  const resolution = await resolveUnitIdByLabel(communityId, parsed.data.unitNumber);
+  if (resolution.kind === 'ambiguous') {
+    throw new ValidationError(
+      `Multiple units share "${parsed.data.unitNumber}". Contact your administrator to resolve duplicates.`,
+    );
+  }
+  if (resolution.kind !== 'resolved') {
+    throw new ValidationError(
+      `No unit found with number "${parsed.data.unitNumber}". Please check the unit number and try again.`,
+    );
+  }
+
   const requestId = req.headers.get('x-request-id');
   const data = await createPackageForCommunity(
     communityId,
     actorUserId,
     {
-      unitId: parsed.data.unitId,
+      unitId: resolution.unitId,
       recipientName: parsed.data.recipientName,
       carrier: parsed.data.carrier,
       trackingNumber: parsed.data.trackingNumber ?? null,

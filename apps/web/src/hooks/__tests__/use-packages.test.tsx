@@ -97,7 +97,7 @@ describe('useCreatePackage invalidation', () => {
 
     const create = renderHook(() => useCreatePackage(COMMUNITY_ID), { wrapper });
     await create.result.current.mutateAsync({
-      unitId: 10,
+      unitNumber: '10',
       recipientName: 'Jane Smith',
       carrier: 'UPS',
     });

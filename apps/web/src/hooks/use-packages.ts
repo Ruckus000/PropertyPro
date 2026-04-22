@@ -77,7 +77,7 @@ export function useCreatePackage(communityId: number) {
 
   return useMutation({
     mutationFn: async (payload: {
-      unitId: number;
+      unitNumber: string;
       recipientName: string;
       carrier: string;
       trackingNumber?: string | null;
