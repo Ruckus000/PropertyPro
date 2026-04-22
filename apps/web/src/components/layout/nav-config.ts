@@ -180,6 +180,14 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/dashboard/residents'],
   },
   {
+    id: 'units',
+    label: 'Units',
+    icon: Building2,
+    href: (cid) => `/dashboard/units?communityId=${cid}`,
+    roles: ADMIN_ROLES,
+    matchPrefixes: ['/dashboard/units'],
+  },
+  {
     id: 'contracts',
     label: 'Contracts',
     icon: FileText,
@@ -271,6 +279,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   navSection('Admin', [
     'compliance',
     'residents',
+    'units',
     'contracts',
     'esign',
     'violations-inbox',
@@ -436,6 +445,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
   finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
   residents: { title: 'Residents', subtitle: 'Manage community members' },
+  units: { title: 'Units', subtitle: 'Manage community units' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Branding', subtitle: 'White-label settings' },
   leases: { title: 'Leases', subtitle: 'Manage unit leases' },
