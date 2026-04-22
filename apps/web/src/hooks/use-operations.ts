@@ -29,6 +29,29 @@ export interface OperationsListResponse {
   };
 }
 
+export const WORK_ORDER_STATUSES = [
+  'created',
+  'assigned',
+  'in_progress',
+  'completed',
+  'closed',
+] as const;
+
+export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
+
+/**
+ * Narrow an arbitrary string (e.g. a URL query param) to a WorkOrderStatus.
+ * Returns `undefined` for unknown inputs so callers can pass `undefined` to
+ * hooks that treat it as "no filter" rather than coercing a bad value into
+ * a typed slot and sending it to the API.
+ */
+export function parseWorkOrderStatus(value: string | undefined): WorkOrderStatus | undefined {
+  if (!value) return undefined;
+  return (WORK_ORDER_STATUSES as readonly string[]).includes(value)
+    ? (value as WorkOrderStatus)
+    : undefined;
+}
+
 export interface WorkOrderListItem {
   id: number;
   title: string;
@@ -36,7 +59,7 @@ export interface WorkOrderListItem {
   unitId: number | null;
   vendorId: number | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'created' | 'assigned' | 'in_progress' | 'completed' | 'closed';
+  status: WorkOrderStatus;
   slaResponseHours: number | null;
   slaCompletionHours: number | null;
   assignedAt: string | null;

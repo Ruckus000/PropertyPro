@@ -10,12 +10,12 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  parseWorkOrderStatus,
   useMaintenanceRequests,
   useOperations,
   useReservations,
   useWorkOrders,
   type MaintenanceRequestScope,
-  type WorkOrderListItem,
 } from '@/hooks/use-operations';
 import { cn } from '@/lib/utils';
 import { formatInCommunityTimezone } from '@/lib/utils/format-date';
@@ -133,7 +133,11 @@ export function OperationsHub({
   );
   const workOrdersQuery = useWorkOrders(
     communityId,
-    { status: filters.status as WorkOrderListItem['status'], unitId: filters.unitId },
+    // Work orders accept a narrower status union than maintenance requests
+    // (no 'submitted', etc). Parse the URL string rather than casting — if
+    // the user arrives with a non-WO status in the URL, we drop the filter
+    // instead of sending a bogus value to the API.
+    { status: parseWorkOrderStatus(filters.status), unitId: filters.unitId },
     { enabled: workOrdersEnabled },
   );
   const reservationsQuery = useReservations(communityId, { enabled: reservationsEnabled });

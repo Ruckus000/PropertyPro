@@ -26,12 +26,20 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(searchParamsMock()),
 }));
 
-vi.mock('@/hooks/use-operations', () => ({
-  useMaintenanceRequests: useMaintenanceRequestsMock,
-  useOperations: useOperationsMock,
-  useWorkOrders: useWorkOrdersMock,
-  useReservations: useReservationsMock,
-}));
+vi.mock('@/hooks/use-operations', async () => {
+  // Preserve non-hook exports (constants, parsers) so the hub can import them
+  // at module load without the test having to stub each one.
+  const actual = await vi.importActual<typeof import('@/hooks/use-operations')>(
+    '@/hooks/use-operations',
+  );
+  return {
+    ...actual,
+    useMaintenanceRequests: useMaintenanceRequestsMock,
+    useOperations: useOperationsMock,
+    useWorkOrders: useWorkOrdersMock,
+    useReservations: useReservationsMock,
+  };
+});
 
 describe('OperationsHub', () => {
   beforeEach(() => {

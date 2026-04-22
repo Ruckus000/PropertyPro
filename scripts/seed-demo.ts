@@ -122,9 +122,15 @@ const DEMO_PM_PORTFOLIO_CUSTOMER_METADATA = {
   portfolioKey: DEMO_PM_PORTFOLIO_KEY,
 };
 
+// Demo plans: keep each demo on a plan that exercises its community type's
+// feature surface so demos can showcase the full product. `professional`
+// enables maintenance requests, work orders, and amenities for the condo/HOA
+// demos — needed so the Operations hub renders on those communities after
+// the Phase 1 plan-gating unification. `operations_plus` covers the
+// apartment feature set.
 const PM_PORTFOLIO_PLAN_BY_SLUG: Record<DemoCommunitySlug, PlanId> = {
-  'sunset-condos': 'essentials',
-  'palm-shores-hoa': 'essentials',
+  'sunset-condos': 'professional',
+  'palm-shores-hoa': 'professional',
   'sunset-ridge-apartments': 'operations_plus',
 };
 
