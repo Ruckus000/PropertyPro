@@ -11,8 +11,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@propertypro/db': path.resolve(__dirname, '../../packages/db/src'),
+      '@propertypro/email': path.resolve(__dirname, '../../packages/email/src'),
+      '@propertypro/shared': path.resolve(__dirname, '../../packages/shared/src'),
       '@propertypro/theme': path.resolve(__dirname, '../../packages/theme/src'),
       '@propertypro/tokens': path.resolve(__dirname, '../../packages/tokens/src'),
+      '@propertypro/ui': path.resolve(__dirname, '../../packages/ui/src'),
     },
   },
   test: {

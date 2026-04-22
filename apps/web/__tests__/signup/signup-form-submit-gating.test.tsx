@@ -112,8 +112,17 @@ function fillRequiredSignupFields(): void {
   fireEvent.change(screen.getByLabelText('Community Name'), {
     target: { value: 'Ocean Breeze HOA' },
   });
-  fireEvent.change(screen.getByLabelText('Address'), {
-    target: { value: '123 Palm Ave, West Palm Beach, FL 33401' },
+  fireEvent.change(screen.getByLabelText('Street Address'), {
+    target: { value: '123 Palm Ave' },
+  });
+  fireEvent.change(screen.getByLabelText('City'), {
+    target: { value: 'West Palm Beach' },
+  });
+  fireEvent.change(screen.getByLabelText('State'), {
+    target: { value: 'FL' },
+  });
+  fireEvent.change(screen.getByLabelText('ZIP Code'), {
+    target: { value: '33401' },
   });
   fireEvent.change(screen.getByLabelText('County'), {
     target: { value: 'Palm Beach' },

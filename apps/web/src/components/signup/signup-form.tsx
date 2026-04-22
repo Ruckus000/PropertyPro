@@ -20,6 +20,7 @@ import {
   SubdomainChecker,
   type SubdomainAvailability,
 } from './subdomain-checker';
+import { SignupAddressAutocomplete } from './address-autocomplete';
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -46,7 +47,10 @@ type SignupField =
   | 'email'
   | 'password'
   | 'communityName'
-  | 'address'
+  | 'addressLine1'
+  | 'city'
+  | 'state'
+  | 'zipCode'
   | 'county'
   | 'unitCount'
   | 'candidateSlug'
@@ -86,10 +90,14 @@ export function SignupForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [communityName, setCommunityName] = useState('');
-  const [address, setAddress] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [zipCode, setZipCode] = useState('');
   const [county, setCounty] = useState('');
   const [unitCount, setUnitCount] = useState('1');
   const [candidateSlug, setCandidateSlug] = useState('');
+  const [selectedAddressSuggestionKey, setSelectedAddressSuggestionKey] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
   const [errorField, setErrorField] = useState<SignupField | null>(null);
@@ -195,7 +203,10 @@ export function SignupForm({
         email,
         password,
         communityName,
-        address,
+        addressLine1,
+        city,
+        state,
+        zipCode,
         county,
         unitCount: Number(unitCount),
         communityType,
@@ -417,26 +428,98 @@ export function SignupForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Address</span>
-          <input
-            type="text"
-            value={address}
-            onChange={(event) => {
-              clearFieldFeedback('address');
-              setAddress(event.target.value);
+          <span className="mb-1 block text-sm font-medium text-content-secondary">Street Address</span>
+          <SignupAddressAutocomplete
+            inputId="signup-address-line-1"
+            value={addressLine1}
+            selectedSuggestionKey={selectedAddressSuggestionKey}
+            onValueChange={(nextValue) => {
+              clearFieldFeedback('addressLine1');
+              setAddressLine1(nextValue);
             }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.address ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            minLength={5}
-            maxLength={240}
+            onSuggestionSelect={(suggestion) => {
+              clearFieldFeedback('addressLine1');
+              clearFieldFeedback('city');
+              clearFieldFeedback('state');
+              clearFieldFeedback('zipCode');
+              clearFieldFeedback('county');
+              setAddressLine1(suggestion.addressLine1);
+              setCity(suggestion.city);
+              setState(suggestion.state);
+              setZipCode(suggestion.zipCode);
+              setCounty(suggestion.county);
+            }}
+            onSelectedSuggestionChange={setSelectedAddressSuggestionKey}
+            disabled={isSubmitting}
+            invalid={Boolean(fieldErrors.addressLine1)}
           />
-          {fieldErrors.address ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.address}</span>
+          {fieldErrors.addressLine1 ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.addressLine1}</span>
           ) : null}
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-content-secondary">City</span>
+          <input
+            type="text"
+            value={city}
+            onChange={(event) => {
+              clearFieldFeedback('city');
+              setSelectedAddressSuggestionKey(null);
+              setCity(event.target.value);
+            }}
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.city ? 'border-status-danger' : 'border-edge-strong'}`}
+            required
+            maxLength={100}
+          />
+          {fieldErrors.city ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.city}</span>
+          ) : null}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-content-secondary">State</span>
+          <input
+            type="text"
+            value={state}
+            onChange={(event) => {
+              clearFieldFeedback('state');
+              setSelectedAddressSuggestionKey(null);
+              setState(event.target.value.toUpperCase());
+            }}
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.state ? 'border-status-danger' : 'border-edge-strong'}`}
+            required
+            maxLength={2}
+          />
+          {fieldErrors.state ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.state}</span>
+          ) : null}
+        </label>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-content-secondary">ZIP Code</span>
+          <input
+            type="text"
+            value={zipCode}
+            onChange={(event) => {
+              clearFieldFeedback('zipCode');
+              setSelectedAddressSuggestionKey(null);
+              setZipCode(event.target.value);
+            }}
+            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.zipCode ? 'border-status-danger' : 'border-edge-strong'}`}
+            required
+            maxLength={10}
+            inputMode="numeric"
+          />
+          {fieldErrors.zipCode ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.zipCode}</span>
+          ) : null}
+        </label>
+
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-content-secondary">County</span>
           <input
@@ -444,6 +527,7 @@ export function SignupForm({
             value={county}
             onChange={(event) => {
               clearFieldFeedback('county');
+              setSelectedAddressSuggestionKey(null);
               setCounty(event.target.value);
             }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.county ? 'border-status-danger' : 'border-edge-strong'}`}

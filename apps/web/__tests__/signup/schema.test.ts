@@ -9,7 +9,10 @@ const validPayload = {
   email: 'jordan@example.com',
   password: 'Secure!123',
   communityName: 'Ocean Breeze HOA',
-  address: '123 Palm Ave, West Palm Beach, FL 33401',
+  addressLine1: '123 Palm Ave',
+  city: 'West Palm Beach',
+  state: 'FL',
+  zipCode: '33401',
   county: 'Palm Beach',
   unitCount: 120,
   communityType: 'hoa_720' as const,
@@ -29,13 +32,27 @@ describe('signup schema validation', () => {
     expect(errors.email?.length).toBeGreaterThan(0);
     expect(errors.password?.length).toBeGreaterThan(0);
     expect(errors.communityName?.length).toBeGreaterThan(0);
-    expect(errors.address?.length).toBeGreaterThan(0);
     expect(errors.county?.length).toBeGreaterThan(0);
     expect(errors.unitCount?.length).toBeGreaterThan(0);
     expect(errors.communityType?.length).toBeGreaterThan(0);
     expect(errors.planKey?.length).toBeGreaterThan(0);
     expect(errors.candidateSlug?.length).toBeGreaterThan(0);
     expect(errors.termsAccepted?.length).toBeGreaterThan(0);
+  });
+
+  it('requires an address when neither legacy nor structured address fields are provided', () => {
+    const result = signupSchema.safeParse({
+      ...validPayload,
+      addressLine1: undefined,
+      city: undefined,
+      state: undefined,
+      zipCode: undefined,
+    });
+    expect(result.success).toBe(false);
+
+    if (result.success) return;
+    const errors = result.error.flatten().fieldErrors;
+    expect(errors.address?.length).toBeGreaterThan(0);
   });
 
   it('requires Terms acceptance', () => {

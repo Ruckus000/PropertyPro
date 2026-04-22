@@ -3,6 +3,8 @@ import { PLAN_IDS, buildPasswordZodSchema, type PlanId } from '@propertypro/shar
 import { z } from 'zod';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
+const STATE_PATTERN = /^[A-Za-z]{2}$/;
+const ZIP_CODE_PATTERN = /^\d{5}(?:-\d{4})?$/;
 
 export interface SignupPlanOption {
   id: SignupPlanId;
@@ -73,6 +75,44 @@ export function suggestSubdomainFromCommunityName(communityName: string): string
   return normalizeSignupSubdomain(communityName);
 }
 
+interface RawSignupAddressFields {
+  address?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  county: string;
+}
+
+export interface NormalizedSignupAddressFields {
+  address: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  county: string;
+  usedStructuredAddress: boolean;
+}
+
+export function normalizeSignupAddressFields(
+  value: RawSignupAddressFields,
+): NormalizedSignupAddressFields {
+  const explicitAddressLine1 = value.addressLine1?.trim() ?? '';
+  const legacyAddress = value.address?.trim() ?? '';
+  const usedStructuredAddress = explicitAddressLine1.length > 0;
+  const addressLine1 = explicitAddressLine1 || legacyAddress;
+
+  return {
+    address: addressLine1,
+    addressLine1,
+    city: usedStructuredAddress ? value.city?.trim() ?? '' : '',
+    state: usedStructuredAddress ? (value.state?.trim().toUpperCase() ?? '') : '',
+    zipCode: usedStructuredAddress ? value.zipCode?.trim() ?? '' : '',
+    county: value.county.trim(),
+    usedStructuredAddress,
+  };
+}
+
 export function getSignupPlansForCommunityType(
   communityType: CommunityType,
 ): readonly SignupPlanOption[] {
@@ -113,8 +153,28 @@ export const signupSchema = z
     address: z
       .string()
       .trim()
-      .min(5, 'Address is required')
-      .max(240, 'Address must be at most 240 characters'),
+      .max(240, 'Address must be at most 240 characters')
+      .optional(),
+    addressLine1: z
+      .string()
+      .trim()
+      .max(240, 'Street address must be at most 240 characters')
+      .optional(),
+    city: z
+      .string()
+      .trim()
+      .max(100, 'City must be at most 100 characters')
+      .optional(),
+    state: z
+      .string()
+      .trim()
+      .max(2, 'State must be a 2-letter abbreviation')
+      .optional(),
+    zipCode: z
+      .string()
+      .trim()
+      .max(10, 'ZIP Code must be at most 10 characters')
+      .optional(),
     county: z
       .string()
       .trim()
@@ -148,6 +208,60 @@ export const signupSchema = z
       }),
   })
   .superRefine((value, ctx) => {
+    const normalizedAddress = normalizeSignupAddressFields(value);
+
+    if (!normalizedAddress.addressLine1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Street address is required',
+        path: [value.addressLine1 ? 'addressLine1' : 'address'],
+      });
+    } else if (normalizedAddress.addressLine1.length < 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: normalizedAddress.usedStructuredAddress
+          ? 'Street address is required'
+          : 'Address is required',
+        path: [normalizedAddress.usedStructuredAddress ? 'addressLine1' : 'address'],
+      });
+    }
+
+    if (normalizedAddress.usedStructuredAddress) {
+      if (!normalizedAddress.city) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'City is required',
+          path: ['city'],
+        });
+      }
+      if (!normalizedAddress.state) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'State is required',
+          path: ['state'],
+        });
+      } else if (!STATE_PATTERN.test(normalizedAddress.state)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'State must be a 2-letter abbreviation',
+          path: ['state'],
+        });
+      }
+      if (!normalizedAddress.zipCode) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'ZIP Code is required',
+          path: ['zipCode'],
+        });
+      } else if (!ZIP_CODE_PATTERN.test(normalizedAddress.zipCode)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Please enter a valid ZIP Code',
+          path: ['zipCode'],
+        });
+      }
+    }
+
     if (!isPlanAvailableForCommunityType(value.communityType, value.planKey)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -155,6 +269,19 @@ export const signupSchema = z
         path: ['planKey'],
       });
     }
+  })
+  .transform((value) => {
+    const normalizedAddress = normalizeSignupAddressFields(value);
+
+    return {
+      ...value,
+      address: normalizedAddress.address,
+      addressLine1: normalizedAddress.addressLine1,
+      city: normalizedAddress.city,
+      state: normalizedAddress.state,
+      zipCode: normalizedAddress.zipCode,
+      county: normalizedAddress.county,
+    };
   });
 
 export type SignupInput = z.infer<typeof signupSchema>;
