@@ -14,6 +14,7 @@ import {
 } from '@/lib/work-orders/common';
 import { updateAmenityForCommunity } from '@/lib/services/work-orders-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 const bookingRulesSchema = z.object({
   minDurationMinutes: z.number().int().positive().optional(),
@@ -52,6 +53,7 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);
+    await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesWritePermission(membership);
     requireAmenityAdminWrite(membership);
 
