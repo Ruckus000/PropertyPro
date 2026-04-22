@@ -28,7 +28,8 @@
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
     "guard:breadcrumbs": "tsx scripts/verify-page-breadcrumbs.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs",
+    "guard:operations-routes": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-operations-routes.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes",
     "clean": "turbo run clean"
   },
   "pnpm": {
