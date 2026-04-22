@@ -53,4 +53,16 @@ describe('WelcomeSnapshotCards — community-scoped hrefs', () => {
     expect(screen.getByRole('link', { name: /browse documents/i }))
       .toHaveAttribute('href', `/communities/${CID}/documents`);
   });
+
+  it('TenantCards maintenance link includes communityId', () => {
+    render(
+      <TenantCards
+        communityId={CID}
+        community={community}
+        unit={null}
+      />,
+    );
+    expect(screen.getByRole('link', { name: /submit a request/i }))
+      .toHaveAttribute('href', `/maintenance/submit?communityId=${CID}`);
+  });
 });

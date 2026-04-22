@@ -14,9 +14,10 @@ import { EmptyState } from '@/components/shared/empty-state';
 interface UnitsPageClientProps {
   communityId: number;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
+  canWrite: boolean;
 }
 
-export function UnitsPageClient({ communityId, communityType }: UnitsPageClientProps) {
+export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsPageClientProps) {
   const { data: units, isLoading, error } = useUnits(communityId);
   const createUnit = useCreateUnit(communityId);
   const [open, setOpen] = useState(false);
@@ -38,7 +39,7 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
     setOpen(false);
   }
 
-  const addUnitButton = (
+  const addUnitButton = canWrite ? (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
@@ -97,7 +98,7 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
         </form>
       </DialogContent>
     </Dialog>
-  );
+  ) : null;
 
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading units…</p>;
@@ -123,7 +124,11 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
         <EmptyState
           icon="building"
           title="No units yet"
-          description="Add your first unit to start managing residents, leases, and compliance."
+          description={
+            canWrite
+              ? 'Add your first unit to start managing residents, leases, and compliance.'
+              : 'No units have been added to this community yet.'
+          }
           action={addUnitButton}
         />
       </div>
