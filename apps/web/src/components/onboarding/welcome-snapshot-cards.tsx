@@ -269,7 +269,7 @@ export function OwnerCards({
             <p className="mt-1 text-xs text-content-tertiary">
               {compliance.satisfiedItems} of {compliance.totalItems} items satisfied
             </p>
-            <ActionLink href="/compliance" label="View compliance" />
+            <ActionLink href={`/communities/${communityId}/compliance`} label="View compliance" />
           </>
         ) : (
           <p className="text-sm text-content-tertiary">Compliance tracking not yet set up</p>
@@ -282,12 +282,14 @@ export function OwnerCards({
 // ─── Board Member Cards ───────────────────────────────────────
 
 interface BoardMemberCardsProps {
+  communityId: number;
   community: CommunityData;
   compliance: ComplianceData;
   recentActivity: string;
 }
 
 export function BoardMemberCards({
+  communityId,
   community,
   compliance,
   recentActivity,
@@ -308,7 +310,7 @@ export function BoardMemberCards({
             <p className="mt-1 text-xs text-content-tertiary">
               {compliance.satisfiedItems} of {compliance.totalItems} items satisfied
             </p>
-            <ActionLink href="/compliance" label="Review compliance" />
+            <ActionLink href={`/communities/${communityId}/compliance`} label="Review compliance" />
           </>
         ) : (
           <p className="text-sm text-content-tertiary">Compliance tracking not yet set up</p>
@@ -328,7 +330,7 @@ export function BoardMemberCards({
           As a board member of {community.name}, you can review compliance, oversee documents,
           and participate in community governance.
         </p>
-        <ActionLink href="/dashboard" label="Go to dashboard" />
+        <ActionLink href={`/dashboard?communityId=${communityId}`} label="Go to dashboard" />
       </SnapshotCard>
     </div>
   );
@@ -337,11 +339,12 @@ export function BoardMemberCards({
 // ─── Tenant Cards ─────────────────────────────────────────────
 
 interface TenantCardsProps {
+  communityId: number;
   community: CommunityData;
   unit: UnitData | null;
 }
 
-export function TenantCards({ community, unit }: TenantCardsProps) {
+export function TenantCards({ communityId, community, unit }: TenantCardsProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {/* Unit info card */}
@@ -368,7 +371,7 @@ export function TenantCards({ community, unit }: TenantCardsProps) {
         <p className="text-sm text-content-secondary">
           Access governing documents, meeting minutes, and community policies for {community.name}.
         </p>
-        <ActionLink href="/documents" label="Browse documents" />
+        <ActionLink href={`/communities/${communityId}/documents`} label="Browse documents" />
       </SnapshotCard>
 
       {/* Maintenance card */}

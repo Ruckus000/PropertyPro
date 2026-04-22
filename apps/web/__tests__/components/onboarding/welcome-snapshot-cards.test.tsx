@@ -1,35 +1,56 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { OwnerCards } from '../../../src/components/onboarding/welcome-snapshot-cards';
+import {
+  OwnerCards,
+  BoardMemberCards,
+  TenantCards,
+} from '../../../src/components/onboarding/welcome-snapshot-cards';
 
-describe('OwnerCards', () => {
-  it('routes the latest announcement link to the scoped announcements list', () => {
+const CID = 42;
+const community = {
+  name: 'Sunset Condos', slug: 'sunset-condos',
+  city: 'Miami', state: 'FL', communityType: 'condo_718' as const,
+};
+const compliance = { score: 85, totalItems: 10, satisfiedItems: 8 };
+
+describe('WelcomeSnapshotCards — community-scoped hrefs', () => {
+  it('OwnerCards compliance link is community-scoped', () => {
     render(
       <OwnerCards
-        communityId={42}
-        community={{
-          name: 'Sunset Condos',
-          slug: 'sunset-condos',
-          city: 'Miami',
-          state: 'FL',
-          communityType: 'condo_718',
-        }}
-        announcement={{
-          id: 17,
-          title: 'Roof inspection scheduled',
-          publishedAt: '2026-04-10T12:00:00.000Z',
-        }}
-        compliance={{
-          score: 92,
-          totalItems: 12,
-          satisfiedItems: 11,
-        }}
+        communityId={CID}
+        community={community}
+        announcement={null}
+        compliance={compliance}
       />,
     );
+    expect(screen.getByRole('link', { name: /view compliance/i }))
+      .toHaveAttribute('href', `/communities/${CID}/compliance`);
+  });
 
-    expect(screen.getByRole('link', { name: 'View announcements' })).toHaveAttribute(
-      'href',
-      '/announcements?communityId=42',
+  it('BoardMemberCards compliance + dashboard links include communityId', () => {
+    render(
+      <BoardMemberCards
+        communityId={CID}
+        community={community}
+        compliance={compliance}
+        recentActivity="None"
+      />,
     );
+    expect(screen.getByRole('link', { name: /review compliance/i }))
+      .toHaveAttribute('href', `/communities/${CID}/compliance`);
+    expect(screen.getByRole('link', { name: /go to dashboard/i }))
+      .toHaveAttribute('href', `/dashboard?communityId=${CID}`);
+  });
+
+  it('TenantCards documents link is community-scoped', () => {
+    render(
+      <TenantCards
+        communityId={CID}
+        community={community}
+        unit={null}
+      />,
+    );
+    expect(screen.getByRole('link', { name: /browse documents/i }))
+      .toHaveAttribute('href', `/communities/${CID}/documents`);
   });
 });

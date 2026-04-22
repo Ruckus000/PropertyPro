@@ -185,6 +185,7 @@ export function WelcomeScreen({
         )}
         {cardCategory === 'board' && (
           <BoardMemberCards
+            communityId={communityId}
             community={community}
             compliance={compliance}
             recentActivity={recentActivity}
@@ -192,6 +193,7 @@ export function WelcomeScreen({
         )}
         {cardCategory === 'tenant' && (
           <TenantCards
+            communityId={communityId}
             community={community}
             unit={unit}
           />
