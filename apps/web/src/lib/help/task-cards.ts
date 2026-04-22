@@ -1,4 +1,5 @@
 import type { CommunityFeatures } from '@propertypro/shared';
+import { operationsTabHref } from '@/lib/operations/routes';
 
 export interface HelpTaskCard {
   id: string;
@@ -41,7 +42,7 @@ export function buildHelpTaskCards({
       id: 'maintenance',
       title: 'Submit Maintenance Request',
       description: 'Report an issue and follow status updates.',
-      href: `/maintenance/submit?communityId=${communityId}`,
+      href: operationsTabHref(communityId, 'requests'),
     },
     {
       id: 'meetings',
