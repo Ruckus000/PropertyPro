@@ -18,6 +18,7 @@ export interface Unit {
 export function useUnits(communityId: number) {
   return useQuery<Unit[]>({
     queryKey: ['units', communityId],
+    enabled: communityId > 0,
     queryFn: async () => {
       const res = await fetch(`/api/v1/units?communityId=${communityId}`);
       if (!res.ok) throw new Error(`Failed to load units: ${res.status}`);
