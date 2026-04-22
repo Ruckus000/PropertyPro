@@ -8,9 +8,13 @@
  *
  * This module is server-safe. It is imported from both server components
  * (feature-registry, redirect pages) and client components (operations-hub).
- * The rollback flag is read at module top-level; client bundles ship the
- * current build's flag state, so rollback requires a redeploy to take effect.
- * This is intentional.
+ * The rollback flag is read at module top-level. Because
+ * OPERATIONS_HUB_ROUTING is not NEXT_PUBLIC_*, Next.js does not inline it
+ * into client bundles — the client always resolves it as undefined and
+ * therefore always emits v2 URLs. Rollback to v1 takes effect server-side
+ * only (SSR feature-registry, redirect pages), which is intentional: new
+ * client-generated links stay on v2, while legacy-shape URLs are served
+ * only by the redirect pages after rollback.
  */
 
 export type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';

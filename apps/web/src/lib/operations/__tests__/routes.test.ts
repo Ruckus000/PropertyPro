@@ -96,6 +96,7 @@ describe('KNOWN_OPERATIONS_HREFS', () => {
     for (const tab of ['all', 'requests', 'work-orders', 'reservations'] as OperationsTab[]) {
       expect(KNOWN_OPERATIONS_HREFS.has(operationsTabHref(1, tab))).toBe(true);
     }
+    expect(KNOWN_OPERATIONS_HREFS.has(operationsHubHref(1))).toBe(true);
   });
 });
 
