@@ -63,6 +63,9 @@ export default async function OperationsPage({ params, searchParams }: PageProps
     ? 'You were redirected from a legacy maintenance page. Operations now holds requests, work orders, and reservations.'
     : null;
 
+  // membership.timezone is always defined; falls back to 'America/New_York'
+  // when the communities row has a null/invalid timezone. See
+  // requireCommunityMembership() in lib/api/community-membership.ts.
   const communityTimezone = membership.timezone;
 
   return (

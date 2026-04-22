@@ -42,7 +42,7 @@ export function formatDateOnly(value: string): string {
 export function formatInCommunityTimezone(value: string | Date, timeZone: string): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return '';
+    return '—';
   }
   return date.toLocaleString('en-US', {
     month: 'short',

@@ -335,6 +335,7 @@ export function OperationsHub({
               onClick={() => {
                 const params = new URLSearchParams(searchParams.toString());
                 if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
+                // TODO: wire to analytics service
                 // eslint-disable-next-line no-console
                 console.info('[analytics] operations_pagination_loaded', { tab: 'all', mechanism: 'cursor' });
                 router.replace(`${pathname}?${params.toString()}`);
@@ -364,9 +365,10 @@ export function OperationsHub({
               }
               isLoading={requestsQuery.isFetching}
               onClick={() => {
-                const nextPage = (filters.page ?? 1) + 1;
+                const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
+                // TODO: wire to analytics service
                 // eslint-disable-next-line no-console
                 console.info('[analytics] operations_pagination_loaded', { tab: 'requests', mechanism: 'page' });
                 router.replace(`${pathname}?${params.toString()}`);
