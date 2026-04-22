@@ -5,7 +5,8 @@ import {
   searchResidentsByTrigram,
   searchViolationsByTrigram,
 } from '@propertypro/db';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
+import type { CommunityFeatures } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { formatAnnouncementAudienceLabel, searchVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { getMembershipResourceAccess } from '@/lib/db/access-control';
@@ -18,7 +19,7 @@ const GENERIC_SEARCH_ERROR = 'Search is temporarily unavailable for this section
 function isGroupEnabled(
   group: SearchGroupConfig,
   isAdmin: boolean,
-  features: ReturnType<typeof getFeaturesForCommunity>,
+  features: CommunityFeatures,
   access: ReturnType<typeof getMembershipResourceAccess>,
 ): boolean {
   if (group.adminOnly && !isAdmin) {
@@ -187,7 +188,10 @@ async function executeSearchGroup(
 }
 
 export function getAccessibleSearchGroups(membership: CommunityMembership): readonly SearchGroupConfig[] {
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
   const access = getMembershipResourceAccess(membership);
   return SEARCH_GROUPS.filter((group) =>
     isGroupEnabled(group, membership.isAdmin, features, access),
