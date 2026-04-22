@@ -6,7 +6,7 @@ import {
 import { and, desc, eq, lt, lte, or } from '@propertypro/db/filters';
 import { ValidationError } from '@/lib/api/errors';
 
-export type OperationsSourceType = 'maintenance_request' | 'work_order';
+export type OperationsSourceType = 'maintenance_request' | 'work_order' | 'reservation';
 
 export interface OperationsListItem {
   id: number;
@@ -59,6 +59,7 @@ const SOURCE_TIMEOUT_MS = 3_000;
 const SOURCE_ORDER: Record<OperationsSourceType, number> = {
   maintenance_request: 0,
   work_order: 1,
+  reservation: 2,
 };
 
 function encodeCursor(payload: OperationsCursorPayload): string {
@@ -71,7 +72,9 @@ function decodeCursor(cursor: string): OperationsCursorPayload {
     if (
       typeof decoded.createdAt !== 'string' ||
       typeof decoded.id !== 'number' ||
-      (decoded.type !== 'maintenance_request' && decoded.type !== 'work_order')
+      (decoded.type !== 'maintenance_request'
+        && decoded.type !== 'work_order'
+        && decoded.type !== 'reservation')
     ) {
       throw new Error('Invalid cursor');
     }
@@ -276,4 +279,8 @@ export async function listOperationsForCommunity(
 
 export function encodeOperationsCursorForTests(payload: OperationsCursorPayload): string {
   return encodeCursor(payload);
+}
+
+export function decodeOperationsCursorForTests(cursor: string): OperationsCursorPayload {
+  return decodeCursor(cursor);
 }
