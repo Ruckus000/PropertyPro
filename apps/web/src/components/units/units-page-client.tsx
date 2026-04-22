@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
-import { Upload, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useUnits, useCreateUnit } from '@/hooks/use-units';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -100,16 +99,6 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
     </Dialog>
   );
 
-  const importCsvLink = (
-    <Link
-      href={`/dashboard/import-residents?communityId=${communityId}`}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-    >
-      <Upload size={16} aria-hidden="true" />
-      Import CSV
-    </Link>
-  );
-
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading units…</p>;
   }
@@ -134,13 +123,8 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
         <EmptyState
           icon="building"
           title="No units yet"
-          description="Add your first unit to start managing residents, leases, and compliance. Got a spreadsheet? Import from CSV."
-          action={
-            <div className="flex flex-wrap justify-center gap-2">
-              {importCsvLink}
-              {addUnitButton}
-            </div>
-          }
+          description="Add your first unit to start managing residents, leases, and compliance."
+          action={addUnitButton}
         />
       </div>
     );
@@ -150,10 +134,7 @@ export function UnitsPageClient({ communityId, communityType }: UnitsPageClientP
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-content">Units</h1>
-        <div className="flex items-center gap-2">
-          {importCsvLink}
-          {addUnitButton}
-        </div>
+        {addUnitButton}
       </div>
 
       <div className="overflow-hidden rounded-md border border-edge bg-surface-card">

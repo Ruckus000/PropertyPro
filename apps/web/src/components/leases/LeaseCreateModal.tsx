@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useCreateLease, useUnits } from '@/hooks/use-leases';
+import { useCreateLease } from '@/hooks/use-leases';
+import { useUnits } from '@/hooks/use-units';
 import { parseRentInput } from '@/lib/utils/lease-utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { ResidentSearchCombobox } from '@/components/shared/ResidentSearchCombobox';
