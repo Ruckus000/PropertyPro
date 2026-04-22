@@ -54,6 +54,8 @@ describe('WelcomeSnapshotCards — community-scoped hrefs', () => {
       .toHaveAttribute('href', `/communities/${CID}/documents`);
   });
 
+  // T11: maintenance hrefs route through operationsTabHref — expect the
+  // Operations hub URL, not the legacy /maintenance/submit path.
   it('TenantCards maintenance link includes communityId', () => {
     render(
       <TenantCards
@@ -63,6 +65,6 @@ describe('WelcomeSnapshotCards — community-scoped hrefs', () => {
       />,
     );
     expect(screen.getByRole('link', { name: /submit a request/i }))
-      .toHaveAttribute('href', `/maintenance/submit?communityId=${CID}`);
+      .toHaveAttribute('href', `/communities/${CID}/operations?tab=requests`);
   });
 });
