@@ -8,6 +8,7 @@ import {
   requireAmenitiesReadPermission,
 } from '@/lib/work-orders/common';
 import { listReservationsForActor } from '@/lib/services/work-orders-service';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -15,6 +16,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireAmenitiesEnabled(membership);
+  await requirePlanFeature(communityId, 'hasAmenities');
   requireAmenitiesReadPermission(membership);
 
   const data = await listReservationsForActor(communityId, actorUserId);
