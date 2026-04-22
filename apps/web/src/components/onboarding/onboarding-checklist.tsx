@@ -8,27 +8,21 @@ import { cn } from '@/lib/utils';
 
 type ChecklistAction = {
   label: string;
-  href: string | ((communityId: number) => string);
+  href: (communityId: number) => string;
 };
 
 const ACTION_ROUTES: Record<string, ChecklistAction> = {
-  upload_first_document: { label: 'Upload', href: '/documents' },
-  upload_community_rules: { label: 'Upload', href: '/documents' },
-  add_units: { label: 'Add', href: '/settings/units' },
-  invite_first_member: { label: 'Invite', href: '/residents' },
-  review_compliance: { label: 'View', href: '/compliance' },
-  post_announcement: {
-    label: 'Create',
-    href: (communityId: number) => `/announcements/new?communityId=${communityId}`,
-  },
-  customize_portal: { label: 'Customize', href: '/settings/branding' },
-  review_announcement: {
-    label: 'View',
-    href: (communityId: number) => `/announcements?communityId=${communityId}`,
-  },
-  check_compliance: { label: 'View', href: '/compliance' },
-  access_document: { label: 'Browse', href: '/documents' },
-  update_preferences: { label: 'Update', href: '/settings/notifications' },
+  upload_first_document: { label: 'Upload',    href: (cid) => `/communities/${cid}/documents` },
+  upload_community_rules: { label: 'Upload',   href: (cid) => `/communities/${cid}/documents` },
+  add_units:             { label: 'Add',       href: (cid) => `/dashboard/units?communityId=${cid}` },
+  invite_first_member:   { label: 'Add',       href: (cid) => `/dashboard/residents?communityId=${cid}` },
+  review_compliance:     { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
+  post_announcement:     { label: 'Create',    href: (cid) => `/announcements/new?communityId=${cid}` },
+  customize_portal:      { label: 'Customize', href: (cid) => `/pm/settings/branding?communityId=${cid}` },
+  review_announcement:   { label: 'View',      href: (cid) => `/announcements?communityId=${cid}` },
+  check_compliance:      { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
+  access_document:       { label: 'Browse',    href: (cid) => `/communities/${cid}/documents` },
+  update_preferences:    { label: 'Update',    href: (cid) => `/settings?communityId=${cid}` },
 };
 
 interface OnboardingChecklistProps {
@@ -70,7 +64,7 @@ export function OnboardingChecklist({
         onDismiss={handleDismiss}
         onViewCompliance={() => {
           handleDismiss();
-          router.push('/compliance');
+          router.push(`/communities/${communityId}/compliance`);
         }}
       />
     );
@@ -137,10 +131,7 @@ export function OnboardingChecklist({
         {items.map((item) => {
           const isComplete = item.completedAt != null;
           const action = ACTION_ROUTES[item.itemKey];
-          const actionHref =
-            typeof action?.href === 'function'
-              ? action.href(communityId)
-              : action?.href;
+          const actionHref = action?.href(communityId);
 
           return (
             <li
