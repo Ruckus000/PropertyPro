@@ -40,7 +40,10 @@ export function formatDateOnly(value: string): string {
  * Use this instead of toLocaleString() anywhere community-scoped times are displayed.
  */
 export function formatInCommunityTimezone(value: string | Date, timeZone: string): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
   return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',

@@ -79,17 +79,27 @@ export function OperationsHub({
   requestActionHref,
   requestActionLabel,
   communityTimezone,
+  // initialTab/initialFilters are accepted for SSR hydration symmetry,
+  // but we read live state from useSearchParams() to stay in sync with
+  // URL changes after mount. The server's initial values are the same
+  // values useSearchParams() exposes on first client render, so no
+  // hydration divergence.
+  initialTab: _initialTab,
+  initialFilters: _initialFilters,
 }: OperationsHubProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = (searchParams.get('tab') ?? 'requests') as OperationsTab;
 
+  // URL contract: `q` is accepted and round-tripped (e.g. by the command
+  // palette) so deep links survive, but Phase 1 hooks don't accept a free-
+  // text search parameter. Phase 2 wires `q` into a text-search filter.
   const filters = {
     status: searchParams.get('status') ?? undefined,
     priority: searchParams.get('priority') ?? undefined,
     unitId: searchParams.get('unitId') ? Number(searchParams.get('unitId')) : undefined,
-    q: searchParams.get('q') ?? undefined,
+    _q: searchParams.get('q') ?? undefined,
     cursor: searchParams.get('cursor') ?? undefined,
     page: searchParams.get('page') ? Math.max(1, Number(searchParams.get('page'))) : 1,
   };
