@@ -1,4 +1,6 @@
 import {
+  amenities,
+  amenityReservations,
   createScopedClient,
   maintenanceRequests,
   workOrders,
@@ -100,6 +102,43 @@ function mapSummaryRow(type: OperationsSourceType, row: OperationSummaryRecord):
   };
 }
 
+async function attachReservationTitles(
+  communityId: number,
+  rows: OperationSummaryRecord[],
+): Promise<OperationSummaryRecord[]> {
+  const amenityIds = Array.from(
+    new Set(
+      rows
+        .map((row) => (row as unknown as { amenityId?: number }).amenityId)
+        .filter((id): id is number => typeof id === 'number'),
+    ),
+  );
+  if (amenityIds.length === 0) return rows;
+
+  const scoped = createScopedClient(communityId);
+  const amenityRows = await scoped
+    .selectFrom<{ id: number; name: string }>(
+      amenities,
+      { id: amenities.id, name: amenities.name },
+    )
+    .orderBy(desc(amenities.id));
+
+  const nameById = new Map<number, string>();
+  for (const amenity of amenityRows) {
+    if (amenityIds.includes(amenity.id)) nameById.set(amenity.id, amenity.name);
+  }
+
+  return rows.map((row) => {
+    const amenityId = (row as unknown as { amenityId?: number }).amenityId;
+    const amenityName = typeof amenityId === 'number' ? nameById.get(amenityId) : undefined;
+    return {
+      ...row,
+      title: amenityName ? `Reservation — ${amenityName}` : 'Reservation',
+      priority: 'normal',
+    };
+  });
+}
+
 function buildCursorFilter(
   type: OperationsSourceType,
   cursor: OperationsCursorPayload,
@@ -155,6 +194,45 @@ async function fetchSourceRows(
   const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT) + 1;
   const cursor = params.cursor ? decodeCursor(params.cursor) : null;
   const filters: unknown[] = [];
+
+  if (sourceType === 'reservation') {
+    if (params.unitId != null) {
+      filters.push(eq(amenityReservations.unitId, params.unitId));
+    }
+    if (params.status) {
+      filters.push(eq(amenityReservations.status, params.status as never));
+    }
+    // Ignore params.priority — reservations have no priority column.
+    if (cursor) {
+      filters.push(
+        buildCursorFilter(
+          sourceType,
+          cursor,
+          amenityReservations.createdAt,
+          amenityReservations.id,
+        ),
+      );
+    }
+    const where = filters.length > 0 ? and(...(filters as [never, ...never[]])) : undefined;
+    const rows = await scoped
+      .selectFrom<OperationSummaryRecord>(
+        amenityReservations,
+        {
+          id: amenityReservations.id,
+          // Placeholder columns — overwritten by attachReservationTitles below.
+          title: amenityReservations.id,
+          status: amenityReservations.status,
+          priority: amenityReservations.id,
+          unitId: amenityReservations.unitId,
+          createdAt: amenityReservations.createdAt,
+          amenityId: amenityReservations.amenityId,
+        },
+        where as never,
+      )
+      .orderBy(desc(amenityReservations.createdAt), desc(amenityReservations.id))
+      .limit(limit);
+    return rows as OperationSummaryRecord[];
+  }
 
   if (params.status) {
     filters.push(
@@ -219,7 +297,7 @@ export async function listOperationsForCommunity(
   communityId: number,
   params: OperationsListParams = {},
 ): Promise<OperationsListResponse> {
-  const sources: OperationsSourceType[] = params.type ? [params.type] : ['maintenance_request', 'work_order'];
+  const sources: OperationsSourceType[] = params.type ? [params.type] : ['maintenance_request', 'work_order', 'reservation'];
   const settled = await Promise.allSettled(
     sources.map((sourceType) =>
       withTimeout(
@@ -231,7 +309,7 @@ export async function listOperationsForCommunity(
   );
 
   const unavailableSources: OperationsSourceType[] = [];
-  const items: OperationsListItem[] = [];
+  const rawItemsByType = new Map<OperationsSourceType, OperationSummaryRecord[]>();
 
   settled.forEach((result, index) => {
     const sourceType = sources[index]!;
@@ -239,11 +317,20 @@ export async function listOperationsForCommunity(
       unavailableSources.push(sourceType);
       return;
     }
+    rawItemsByType.set(sourceType, result.value);
+  });
 
-    for (const row of result.value.slice(0, (params.limit ?? DEFAULT_LIMIT) + 1)) {
+  const reservationRows = rawItemsByType.get('reservation');
+  if (reservationRows && reservationRows.length > 0) {
+    rawItemsByType.set('reservation', await attachReservationTitles(communityId, reservationRows));
+  }
+
+  const items: OperationsListItem[] = [];
+  for (const [sourceType, rows] of rawItemsByType.entries()) {
+    for (const row of rows.slice(0, (params.limit ?? DEFAULT_LIMIT) + 1)) {
       items.push(mapSummaryRow(sourceType, row));
     }
-  });
+  }
 
   items.sort((a, b) => {
     const createdAtDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
