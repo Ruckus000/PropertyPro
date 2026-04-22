@@ -131,7 +131,7 @@ export function WelcomeScreen({
     } catch {
       // Non-blocking: checklist bootstrap failure should not prevent navigation
     }
-    router.push('/dashboard');
+    router.push(`/dashboard?communityId=${communityId}`);
   }
 
   return (
