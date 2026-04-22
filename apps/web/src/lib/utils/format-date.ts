@@ -30,3 +30,23 @@ export function formatShortDate(value: string | Date, timeZone?: string): string
 export function formatDateOnly(value: string): string {
   return new Date(value + 'T00:00:00').toLocaleDateString('en-US', SHORT_DATE_FORMAT);
 }
+
+/**
+ * Format an ISO datetime string or Date as a human-readable date+time string,
+ * localized to the given IANA timezone (e.g. "America/New_York").
+ *
+ * Example output: "Jan 1, 2025, 3:45 PM"
+ *
+ * Use this instead of toLocaleString() anywhere community-scoped times are displayed.
+ */
+export function formatInCommunityTimezone(value: string | Date, timeZone: string): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  });
+}
