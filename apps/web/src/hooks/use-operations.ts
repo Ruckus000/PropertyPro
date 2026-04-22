@@ -11,7 +11,7 @@ import { requestJson } from '@/lib/api/request-json';
 
 export interface OperationsListItem {
   id: number;
-  type: 'maintenance_request' | 'work_order';
+  type: 'maintenance_request' | 'work_order' | 'reservation';
   title: string;
   status: string;
   priority: string;
@@ -27,6 +27,26 @@ export interface OperationsListResponse {
     partialFailure: boolean;
     unavailableSources: string[];
   };
+}
+
+export interface WorkOrderListResponse {
+  data: WorkOrderListItem[];
+  meta: { page: number; limit: number; total: number };
+}
+
+export interface ReservationListResponse {
+  data: ReservationListItem[];
+  meta: { page: number; limit: number; total: number };
+}
+
+export interface VendorListItem {
+  id: number;
+  name: string;
+  company: string | null;
+  phone: string | null;
+  email: string | null;
+  specialties: string[] | null;
+  isActive: boolean;
 }
 
 export const WORK_ORDER_STATUSES = [
@@ -133,15 +153,24 @@ export const MAINTENANCE_REQUEST_KEYS = {
 
 export const WORK_ORDER_KEYS = {
   all: ['work-orders'] as const,
-  list: (communityId: number, params?: { status?: string; unitId?: number }) =>
-    ['work-orders', 'list', communityId, params?.status ?? 'all', params?.unitId ?? 'all'] as const,
+  list: (
+    communityId: number,
+    params?: { status?: string; unitId?: number; page?: number; limit?: number },
+  ) => [
+    'work-orders', 'list', communityId,
+    params?.status ?? 'all',
+    params?.unitId ?? 'all',
+    params?.page ?? 1,
+    params?.limit ?? 20,
+  ] as const,
   detail: (communityId: number, workOrderId: number) =>
     ['work-orders', 'detail', communityId, workOrderId] as const,
 } as const;
 
 export const RESERVATION_KEYS = {
   all: ['reservations'] as const,
-  list: (communityId: number) => ['reservations', 'list', communityId] as const,
+  list: (communityId: number, params?: { page?: number; limit?: number }) =>
+    ['reservations', 'list', communityId, params?.page ?? 1, params?.limit ?? 20] as const,
   detail: (communityId: number, reservationId: number) =>
     ['reservations', 'detail', communityId, reservationId] as const,
 } as const;
@@ -177,19 +206,24 @@ export function useOperations(
 
 export function useWorkOrders(
   communityId: number,
-  params?: { status?: WorkOrderListItem['status']; unitId?: number },
+  params?: { status?: WorkOrderListItem['status']; unitId?: number; page?: number; limit?: number },
   options?: { enabled?: boolean },
 ) {
   const enabled = options?.enabled ?? true;
+  const page = params?.page ?? 1;
+  const limit = params?.limit ?? 20;
 
   return useQuery({
-    queryKey: WORK_ORDER_KEYS.list(communityId, params),
+    queryKey: WORK_ORDER_KEYS.list(communityId, { ...params, page, limit }),
     queryFn: async () => {
-      const searchParams = new URLSearchParams({ communityId: String(communityId) });
+      const searchParams = new URLSearchParams({
+        communityId: String(communityId),
+        page: String(page),
+        limit: String(limit),
+      });
       if (params?.status) searchParams.set('status', params.status);
       if (params?.unitId) searchParams.set('unitId', String(params.unitId));
-
-      return requestJson<WorkOrderListItem[]>(`/api/v1/work-orders?${searchParams.toString()}`);
+      return requestJson<WorkOrderListResponse>(`/api/v1/work-orders?${searchParams.toString()}`);
     },
     enabled: enabled && communityId > 0,
     staleTime: 60_000,
@@ -226,13 +260,25 @@ export function useMaintenanceRequests(
   });
 }
 
-export function useReservations(communityId: number, options?: { enabled?: boolean }) {
+export function useReservations(
+  communityId: number,
+  params?: { page?: number; limit?: number },
+  options?: { enabled?: boolean },
+) {
   const enabled = options?.enabled ?? true;
+  const page = params?.page ?? 1;
+  const limit = params?.limit ?? 20;
 
   return useQuery({
-    queryKey: RESERVATION_KEYS.list(communityId),
-    queryFn: async () =>
-      requestJson<ReservationListItem[]>(`/api/v1/reservations?communityId=${communityId}`),
+    queryKey: RESERVATION_KEYS.list(communityId, { page, limit }),
+    queryFn: async () => {
+      const sp = new URLSearchParams({
+        communityId: String(communityId),
+        page: String(page),
+        limit: String(limit),
+      });
+      return requestJson<ReservationListResponse>(`/api/v1/reservations?${sp.toString()}`);
+    },
     enabled: enabled && communityId > 0,
     staleTime: 60_000,
   });
@@ -253,8 +299,107 @@ export function useCancelReservation(communityId: number) {
       ),
     onSuccess: async (_data, reservationId) => {
       await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.detail(communityId, reservationId) });
-      await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.list(communityId) });
+      await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.all });
       await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
     },
+  });
+}
+
+export interface CreateMaintenanceRequestInput {
+  title: string;
+  description: string;
+  category: 'plumbing' | 'electrical' | 'hvac' | 'general' | 'other';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  storagePaths?: string[];
+}
+
+export function useCreateMaintenanceRequest(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateMaintenanceRequestInput) =>
+      requestJson<MaintenanceRequestItem>('/api/v1/maintenance-requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'create', communityId, ...input }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['maintenance-requests', 'list'] });
+      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
+    },
+  });
+}
+
+export interface CreateWorkOrderInput {
+  title: string;
+  description: string | null;
+  unitId: number | null;
+  vendorId: number | null;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  slaResponseHours: number | null;
+  slaCompletionHours: number | null;
+  notes: string | null;
+}
+
+export function useCreateWorkOrder(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateWorkOrderInput) =>
+      requestJson<WorkOrderListItem>('/api/v1/work-orders', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, ...input }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: WORK_ORDER_KEYS.all });
+      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
+    },
+  });
+}
+
+export interface CreateReservationInput {
+  amenityId: number;
+  unitId: number | null;
+  startTime: string;
+  endTime: string;
+  notes: string | null;
+}
+
+export function useCreateReservation(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateReservationInput) =>
+      requestJson<ReservationListItem>(
+        `/api/v1/amenities/${input.amenityId}/reserve`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            communityId,
+            unitId: input.unitId,
+            startTime: input.startTime,
+            endTime: input.endTime,
+            notes: input.notes,
+          }),
+        },
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: RESERVATION_KEYS.all });
+      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
+    },
+  });
+}
+
+export const VENDOR_KEYS = {
+  all: ['vendors'] as const,
+  list: (communityId: number) => ['vendors', 'list', communityId] as const,
+} as const;
+
+export function useVendors(communityId: number) {
+  return useQuery({
+    queryKey: VENDOR_KEYS.list(communityId),
+    queryFn: () =>
+      requestJson<VendorListItem[]>(`/api/v1/vendors?communityId=${communityId}`),
+    enabled: communityId > 0,
+    staleTime: 5 * 60_000,
   });
 }
