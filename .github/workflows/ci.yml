@@ -204,8 +204,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Build
         run: pnpm build
+
+      - name: Run PDF.js production smoke test
+        run: pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 
       - name: Run performance budget check
         run: pnpm perf:check

@@ -17,7 +17,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +25,16 @@ const FIXTURE_PDF = path.join(__dirname, 'fixtures', 'sample.pdf');
 
 /** Demo seed slug with e-sign templates + Violation Acknowledgment. */
 const SUNSET_CONDOS_SLUG = 'sunset-condos';
+
+async function assertPdfJsAssetsReachable(page: Page) {
+  const [moduleResponse, workerResponse] = await Promise.all([
+    page.request.get('/pdfjs/pdf.mjs'),
+    page.request.get('/pdfjs/pdf.worker.min.mjs'),
+  ]);
+
+  expect(moduleResponse.status()).toBe(200);
+  expect(workerResponse.status()).toBe(200);
+}
 
 test.describe.configure({ mode: 'serial' });
 
@@ -94,6 +104,7 @@ test.describe('E-Sign send flow (CAM)', () => {
 
     await page.goto(`/sign/${externalId}/${slug}`, { waitUntil: 'networkidle' });
 
+    await assertPdfJsAssetsReachable(page);
     await expect(page.getByText(/Signing as:/i)).toBeVisible();
     await expect(page.getByText(/tenant\.one@sunset\.local/i)).toBeVisible();
     await expect(page.locator('canvas').first()).toBeVisible();
@@ -161,6 +172,7 @@ test.describe('Library documents (board admin → tenant)', () => {
     const seededDoc = page.getByText('Sunset Condos Annual Budget').first();
     await expect(seededDoc).toBeVisible();
     await seededDoc.click();
+    await assertPdfJsAssetsReachable(page);
     await expect(page.locator('canvas').first()).toBeVisible();
     await expect(page.locator('iframe')).toHaveCount(0);
 
