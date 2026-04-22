@@ -15,8 +15,10 @@ import {
   useReservations,
   useWorkOrders,
   type MaintenanceRequestScope,
+  type WorkOrderListItem,
 } from '@/hooks/use-operations';
 import { cn } from '@/lib/utils';
+import { formatInCommunityTimezone } from '@/lib/utils/format-date';
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
 
@@ -27,6 +29,25 @@ const TABS: ReadonlyArray<{ id: OperationsTab; label: string }> = [
   { id: 'reservations', label: 'Reservations' },
 ];
 
+function LoadMoreButton({
+  onClick,
+  isLoading,
+  visible,
+}: {
+  onClick: () => void;
+  isLoading: boolean;
+  visible: boolean;
+}) {
+  if (!visible) return null;
+  return (
+    <div className="flex justify-center pt-2">
+      <Button variant="outline" size="sm" onClick={onClick} disabled={isLoading}>
+        {isLoading ? 'Loading…' : 'Load more'}
+      </Button>
+    </div>
+  );
+}
+
 interface OperationsHubProps {
   communityId: number;
   legacyNotice?: string | null;
@@ -36,6 +57,16 @@ interface OperationsHubProps {
   requestScope: MaintenanceRequestScope;
   requestActionHref?: string;
   requestActionLabel?: string;
+  communityTimezone: string;
+  initialTab?: string;
+  initialFilters?: {
+    status?: string;
+    priority?: string;
+    unitId?: string;
+    q?: string;
+    cursor?: string;
+    page?: string;
+  };
 }
 
 export function OperationsHub({
@@ -47,11 +78,22 @@ export function OperationsHub({
   requestScope,
   requestActionHref,
   requestActionLabel,
+  communityTimezone,
 }: OperationsHubProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = (searchParams.get('tab') ?? 'requests') as OperationsTab;
+
+  const filters = {
+    status: searchParams.get('status') ?? undefined,
+    priority: searchParams.get('priority') ?? undefined,
+    unitId: searchParams.get('unitId') ? Number(searchParams.get('unitId')) : undefined,
+    q: searchParams.get('q') ?? undefined,
+    cursor: searchParams.get('cursor') ?? undefined,
+    page: searchParams.get('page') ? Math.max(1, Number(searchParams.get('page'))) : 1,
+  };
+
   const summaryEnabled = requestsEnabled && workOrdersEnabled && requestScope === 'community';
   const availableTabs = TABS.filter((candidate) => {
     switch (candidate.id) {
@@ -68,12 +110,32 @@ export function OperationsHub({
   const defaultTab = availableTabs[0]?.id ?? 'requests';
   const selectedTab = availableTabs.some((candidate) => candidate.id === tab) ? tab : defaultTab;
 
-  const operationsQuery = useOperations(communityId, { limit: 50 }, { enabled: summaryEnabled });
-  const workOrdersQuery = useWorkOrders(communityId, undefined, { enabled: workOrdersEnabled });
+  const operationsQuery = useOperations(
+    communityId,
+    {
+      limit: 50,
+      cursor: filters.cursor,
+      status: filters.status,
+      priority: filters.priority,
+      unitId: filters.unitId,
+    },
+    { enabled: summaryEnabled },
+  );
+  const workOrdersQuery = useWorkOrders(
+    communityId,
+    { status: filters.status as WorkOrderListItem['status'], unitId: filters.unitId },
+    { enabled: workOrdersEnabled },
+  );
   const reservationsQuery = useReservations(communityId, { enabled: reservationsEnabled });
   const requestsQuery = useMaintenanceRequests(communityId, {
     scope: requestScope,
     enabled: requestsEnabled,
+    params: {
+      status: filters.status,
+      priority: filters.priority,
+      page: filters.page,
+      limit: 20,
+    },
   });
 
   useEffect(() => {
@@ -250,13 +312,24 @@ export function OperationsHub({
                     </p>
                     <h2 className="text-lg font-semibold text-content">{item.title}</h2>
                     <p className="text-xs text-content-tertiary">
-                      Created {new Date(item.createdAt).toLocaleString()}
+                      Created {formatInCommunityTimezone(item.createdAt, communityTimezone)}
                     </p>
                   </div>
                   <StatusBadge status={item.status} />
                 </div>
               </article>
             ))}
+            <LoadMoreButton
+              visible={Boolean(operationsQuery.data?.meta.cursor)}
+              isLoading={operationsQuery.isFetching}
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
+                // eslint-disable-next-line no-console
+                console.info('[analytics] operations_pagination_loaded', { tab: 'all', mechanism: 'cursor' });
+                router.replace(`${pathname}?${params.toString()}`);
+              }}
+            />
           </div>
         ) : null}
 
@@ -273,6 +346,22 @@ export function OperationsHub({
                 </div>
               </article>
             ))}
+            <LoadMoreButton
+              visible={
+                requestsQuery.data
+                  ? requestsQuery.data.meta.page * requestsQuery.data.meta.limit < requestsQuery.data.meta.total
+                  : false
+              }
+              isLoading={requestsQuery.isFetching}
+              onClick={() => {
+                const nextPage = (filters.page ?? 1) + 1;
+                const params = new URLSearchParams(searchParams.toString());
+                params.set('page', String(nextPage));
+                // eslint-disable-next-line no-console
+                console.info('[analytics] operations_pagination_loaded', { tab: 'requests', mechanism: 'page' });
+                router.replace(`${pathname}?${params.toString()}`);
+              }}
+            />
           </div>
         ) : null}
 
@@ -291,6 +380,11 @@ export function OperationsHub({
                 </div>
               </article>
             ))}
+            {workOrdersQuery.data && workOrdersQuery.data.length > 0 ? (
+              <p className="pt-2 text-xs text-content-tertiary">
+                Showing {workOrdersQuery.data.length} result{workOrdersQuery.data.length === 1 ? '' : 's'}. Use filters above to narrow further.
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -304,13 +398,18 @@ export function OperationsHub({
                       Reservation #{reservation.id}
                     </h2>
                     <p className="text-sm text-content-secondary">
-                      {new Date(reservation.startTime).toLocaleString()} to {new Date(reservation.endTime).toLocaleString()}
+                      {formatInCommunityTimezone(reservation.startTime, communityTimezone)} to {formatInCommunityTimezone(reservation.endTime, communityTimezone)}
                     </p>
                   </div>
                   <StatusBadge status={reservation.status} />
                 </div>
               </article>
             ))}
+            {reservationsQuery.data && reservationsQuery.data.length > 0 ? (
+              <p className="pt-2 text-xs text-content-tertiary">
+                Showing {reservationsQuery.data.length} result{reservationsQuery.data.length === 1 ? '' : 's'}. Use filters above to narrow further.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </section>
