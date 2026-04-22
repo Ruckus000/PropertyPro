@@ -118,7 +118,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   // If the user already has checklist items, they have already been welcomed
   const alreadyWelcomed = await hasChecklistItems(communityId, user.id);
   if (alreadyWelcomed) {
-    redirect('/dashboard');
+    redirect(`/dashboard?communityId=${communityId}`);
   }
 
   // Fetch data in parallel
