@@ -389,6 +389,32 @@ export function useCreateReservation(communityId: number) {
   });
 }
 
+export interface AmenityListItem {
+  id: number;
+  name: string;
+  description: string | null;
+  location: string | null;
+}
+
+export const AMENITY_KEYS = {
+  all: ['amenities'] as const,
+  list: (communityId: number) => ['amenities', 'list', communityId] as const,
+} as const;
+
+export function useAmenities(communityId: number) {
+  return useQuery({
+    queryKey: AMENITY_KEYS.list(communityId),
+    queryFn: async () => {
+      const res = await requestJson<AmenityListItem[]>(
+        `/api/v1/amenities?communityId=${communityId}`,
+      );
+      return res;
+    },
+    enabled: communityId > 0,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export const VENDOR_KEYS = {
   all: ['vendors'] as const,
   list: (communityId: number) => ['vendors', 'list', communityId] as const,
