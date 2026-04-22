@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type {
   AnyCommunityRole,
   CommunityFeatures,
@@ -66,7 +66,10 @@ const getPageActiveCommunityShellContextCached = cache(
           plan: membership.subscriptionPlan,
         },
         role: membership.role as AnyCommunityRole,
-        features: getFeaturesForCommunity(membership.communityType),
+        features: getEffectiveFeatures(
+          membership.communityType,
+          resolvePlanId(membership.subscriptionPlan),
+        ),
         resourceAccess: getMembershipResourceAccess(membership),
         subscriptionStatus: membership.subscriptionStatus,
         freeAccessExpiresAt: membership.freeAccessExpiresAt,
