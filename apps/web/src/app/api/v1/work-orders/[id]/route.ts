@@ -8,6 +8,7 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   getActorUnitIds,
@@ -42,6 +43,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireWorkOrdersEnabled(membership);
+    await requirePlanFeature(communityId, 'hasWorkOrders');
     requireWorkOrdersReadPermission(membership);
 
     const data = await getWorkOrderForCommunity(communityId, workOrderId);
@@ -100,6 +102,7 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireWorkOrdersEnabled(membership);
+    await requirePlanFeature(communityId, 'hasWorkOrders');
     requireWorkOrdersWritePermission(membership);
 
     const requiresAdminWrite =
