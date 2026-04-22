@@ -131,7 +131,7 @@ export function WelcomeScreen({
     } catch {
       // Non-blocking: checklist bootstrap failure should not prevent navigation
     }
-    router.push('/dashboard');
+    router.push(`/dashboard?communityId=${communityId}`);
   }
 
   return (
@@ -185,6 +185,7 @@ export function WelcomeScreen({
         )}
         {cardCategory === 'board' && (
           <BoardMemberCards
+            communityId={communityId}
             community={community}
             compliance={compliance}
             recentActivity={recentActivity}
@@ -192,6 +193,7 @@ export function WelcomeScreen({
         )}
         {cardCategory === 'tenant' && (
           <TenantCards
+            communityId={communityId}
             community={community}
             unit={unit}
           />

@@ -9,7 +9,6 @@ export const ADMIN_CONDO_ITEMS = [
   'invite_first_member',
   'review_compliance',
   'post_announcement',
-  'customize_portal',
 ] as const;
 
 export const ADMIN_APARTMENT_ITEMS = [
@@ -18,6 +17,9 @@ export const ADMIN_APARTMENT_ITEMS = [
   'invite_first_member',
   'review_compliance',
   'post_announcement',
+] as const;
+
+export const PM_ADMIN_ITEMS = [
   'customize_portal',
 ] as const;
 
@@ -36,6 +38,7 @@ export const OWNER_TENANT_ITEMS = [
 export type ChecklistItemKey =
   | (typeof ADMIN_CONDO_ITEMS)[number]
   | (typeof ADMIN_APARTMENT_ITEMS)[number]
+  | (typeof PM_ADMIN_ITEMS)[number]
   | (typeof BOARD_MEMBER_ITEMS)[number]
   | (typeof OWNER_TENANT_ITEMS)[number];
 
@@ -44,7 +47,7 @@ export const CHECKLIST_DISPLAY: Record<ChecklistItemKey, string> = {
   upload_first_document: 'Upload your first compliance document',
   upload_community_rules: 'Upload your community rules',
   add_units: 'Add your units',
-  invite_first_member: 'Invite a board member or resident',
+  invite_first_member: 'Add a board member or resident',
   review_compliance: 'Review your compliance score',
   post_announcement: 'Post your first announcement',
   customize_portal: 'Customize your portal',
@@ -62,12 +65,13 @@ export function getItemKeysForRole(
   role: Role,
   communityType: CommunityType,
 ): readonly ChecklistItemKey[] {
-  // Admin roles (legacy + new role model)
-  if (
-    role === 'property_manager_admin' || role === 'pm_admin' ||
-    role === 'cam' || role === 'board_president' ||
-    role === 'manager'
-  ) {
+  // PM admin roles get the base admin set plus customize_portal
+  if (role === 'pm_admin' || role === 'property_manager_admin') {
+    const base = communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
+    return [...base, ...PM_ADMIN_ITEMS];
+  }
+  // Other admin roles (cam, board_president, manager) get just the base admin set
+  if (role === 'cam' || role === 'board_president' || role === 'manager') {
     return communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
   }
   if (role === 'board_member') {

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { useUnits, type Unit } from '@/hooks/use-units';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,12 +47,6 @@ export interface LeaseFilters {
   expiring_within_days?: number;
 }
 
-export interface UnitItem {
-  id: number;
-  communityId: number;
-  unitNumber: string;
-}
-
 export interface ResidentItem {
   id: string;
   name: string;
@@ -60,7 +55,7 @@ export interface ResidentItem {
 
 export interface EnrichedLeasesResult {
   leases: EnrichedLeaseListItem[];
-  units: UnitItem[];
+  units: Unit[];
   isLoading: boolean;       // true while primary leases query in-flight
   isEnriching: boolean;     // true while units/residents lookups in-flight
   isError: boolean;         // true only if the primary leases query failed
@@ -114,17 +109,6 @@ export function useRenewalChain(communityId: number, leaseId: number | null) {
       return requestJson<LeaseApiItem[]>(`/api/v1/leases?${params.toString()}`);
     },
     enabled: communityId > 0 && leaseId !== null,
-  });
-}
-
-export function useUnits(communityId: number) {
-  return useQuery({
-    queryKey: LEASE_KEYS.units(communityId),
-    queryFn: async () => {
-      const params = new URLSearchParams({ communityId: String(communityId) });
-      return requestJson<UnitItem[]>(`/api/v1/units?${params.toString()}`);
-    },
-    enabled: communityId > 0,
   });
 }
 
