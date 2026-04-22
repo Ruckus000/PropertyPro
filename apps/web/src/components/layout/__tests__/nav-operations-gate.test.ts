@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIDEBAR_NAV, getVisibleItems } from '../nav-config';
+import { NAV_ITEMS, getVisibleItems } from '../nav-config';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -7,7 +7,7 @@ function featuresFor(type: CommunityType, plan: string | null) {
   return getEffectiveFeatures(type, resolvePlanId(plan));
 }
 
-const operationsEntry = SIDEBAR_NAV.find((item) => item.id === 'operations');
+const operationsEntry = NAV_ITEMS.find((item) => item.id === 'operations');
 
 describe('Operations nav entry visibility — feature matrix', () => {
   it('exists in the sidebar config', () => {

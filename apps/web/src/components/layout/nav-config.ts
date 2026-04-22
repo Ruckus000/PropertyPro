@@ -253,9 +253,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   },
 ];
 
-/** Alias for NAV_ITEMS — use when you need a flat list of all sidebar entries. */
-export const SIDEBAR_NAV: readonly NavItemConfig[] = NAV_ITEMS;
-
 const NAV_ITEM_BY_ID = new Map(NAV_ITEMS.map((item) => [item.id, item] as const));
 
 function navItem(id: string): NavItemConfig {
