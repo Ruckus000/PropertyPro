@@ -11,7 +11,7 @@ type ChecklistAction = {
   href: (communityId: number) => string;
 };
 
-const ACTION_ROUTES: Record<string, ChecklistAction> = {
+export const ACTION_ROUTES: Record<string, ChecklistAction> = {
   upload_first_document: { label: 'Upload',    href: (cid) => `/communities/${cid}/documents` },
   upload_community_rules: { label: 'Upload',   href: (cid) => `/communities/${cid}/documents` },
   add_units:             { label: 'Add',       href: (cid) => `/dashboard/units?communityId=${cid}` },
