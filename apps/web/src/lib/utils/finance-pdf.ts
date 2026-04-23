@@ -19,6 +19,17 @@ interface FinanceStatementPayload {
   lineItems: FinanceStatementLineItem[];
 }
 
+interface CommunityFinanceStatementLineItem extends FinanceStatementLineItem {
+  unitNumber: string;
+}
+
+interface CommunityFinanceStatementPayload {
+  communityId: number;
+  balanceCents: number;
+  ledgerEntries: FinanceStatementLedgerEntry[];
+  lineItems: CommunityFinanceStatementLineItem[];
+}
+
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const START_X = 36;
@@ -77,7 +88,41 @@ export function generateFinanceStatementPdf(payload: FinanceStatementPayload): U
       `${entry.effectiveDate.padEnd(12)}${entry.entryType.padEnd(12)}$${toUsd(entry.amountCents).padStart(8)}  ${truncatedDescription}`,
     );
   }
+  return renderPdfFromLines(lines);
+}
 
+export function generateCommunityFinanceStatementPdf(
+  payload: CommunityFinanceStatementPayload,
+): Uint8Array {
+  const lines: string[] = [];
+  lines.push(`Community Finance Statement - Community #${payload.communityId}`);
+  lines.push(`Generated: ${new Date().toISOString()}`);
+  lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
+  lines.push('');
+  lines.push('Payables');
+  lines.push('Unit        Due Date     Status     Amount    Late Fee');
+  for (const item of payload.lineItems) {
+    const unitLabel = item.unitNumber ? `Unit ${item.unitNumber}` : `Unit #${item.unitNumber}`;
+    const unitCell = unitLabel.length > 10 ? `${unitLabel.slice(0, 9)}…` : unitLabel.padEnd(10);
+    lines.push(
+      `${unitCell}  ${item.dueDate.padEnd(12)}${item.status.padEnd(11)}$${toUsd(item.amountCents).padStart(8)}  $${toUsd(item.lateFeeCents).padStart(8)}`,
+    );
+  }
+  lines.push('');
+  lines.push('Ledger Entries');
+  lines.push('Date         Type        Amount    Description');
+  for (const entry of payload.ledgerEntries) {
+    const truncatedDescription = entry.description.length > 52
+      ? `${entry.description.slice(0, 49)}...`
+      : entry.description;
+    lines.push(
+      `${entry.effectiveDate.padEnd(12)}${entry.entryType.padEnd(12)}$${toUsd(entry.amountCents).padStart(8)}  ${truncatedDescription}`,
+    );
+  }
+  return renderPdfFromLines(lines);
+}
+
+function renderPdfFromLines(lines: string[]): Uint8Array {
   const pages = chunkLines(lines);
   const objectBodies: string[] = [];
   const xref: number[] = [0];
