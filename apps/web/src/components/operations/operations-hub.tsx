@@ -27,6 +27,14 @@ import { ReservationCreateSheet } from './ReservationCreateSheet';
  * OPERATIONS_HUB_CREATE_SHEETS env var (read at module load):
  *   - default / 'on': CTA buttons open drawer sheets via ?create= URL param.
  *   - 'off': CTAs render as Phase 1 <Link>s to legacy routes; ?create= is ignored.
+ *
+ * Escape-hatch scope: this flag disables Phase 2's drawer-opening behavior only.
+ * It does NOT restore Phase 1's pre-redirect submit pages — Phase 1 already rewrote
+ * /maintenance/submit and /maintenance/inbox as redirect-only shims back to
+ * Operations. Under this rollback, CTAs render as Links, but clicking them still
+ * lands on Operations. The flag is useful for suppressing the drawer during an
+ * incident; a full revert to the pre-Phase-1 submit form requires a git revert.
+ *
  * Client bundles inline this at build time; rollback requires redeploy.
  */
 const CREATE_SHEETS_ENABLED = process.env.OPERATIONS_HUB_CREATE_SHEETS !== 'off';
