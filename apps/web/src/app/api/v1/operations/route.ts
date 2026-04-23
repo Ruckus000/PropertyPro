@@ -13,7 +13,7 @@ import { listOperationsForCommunity } from '@/lib/services/operations-service';
 const operationsQuerySchema = z.object({
   cursor: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
-  type: z.enum(['maintenance_request', 'work_order']).optional(),
+  type: z.enum(['maintenance_request', 'work_order', 'reservation']).optional(),
   status: z.string().trim().min(1).max(64).optional(),
   priority: z.string().trim().min(1).max(32).optional(),
   unitId: z.coerce.number().int().positive().optional(),

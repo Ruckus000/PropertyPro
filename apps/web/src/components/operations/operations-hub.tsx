@@ -19,6 +19,33 @@ import {
 } from '@/hooks/use-operations';
 import { cn } from '@/lib/utils';
 import { formatInCommunityTimezone } from '@/lib/utils/format-date';
+import { RequestCreateSheet } from './RequestCreateSheet';
+import { WorkOrderCreateSheet } from './WorkOrderCreateSheet';
+import { ReservationCreateSheet } from './ReservationCreateSheet';
+
+/**
+ * OPERATIONS_HUB_CREATE_SHEETS env var (read at module load):
+ *   - default / 'on': CTA buttons open drawer sheets via ?create= URL param.
+ *   - 'off': CTAs render as Phase 1 <Link>s to legacy routes; ?create= is ignored.
+ *
+ * Escape-hatch scope: this flag disables Phase 2's drawer-opening behavior only.
+ * It does NOT restore Phase 1's pre-redirect submit pages — Phase 1 already rewrote
+ * /maintenance/submit and /maintenance/inbox as redirect-only shims back to
+ * Operations. Under this rollback, CTAs render as Links, but clicking them still
+ * lands on Operations. The flag is useful for suppressing the drawer during an
+ * incident; a full revert to the pre-Phase-1 submit form requires a git revert.
+ *
+ * Client bundles inline this at build time; rollback requires redeploy.
+ */
+const CREATE_SHEETS_ENABLED = process.env.OPERATIONS_HUB_CREATE_SHEETS !== 'off';
+
+type CreateValue = 'request' | 'work-order' | 'reservation';
+
+function legacyHrefFor(value: CreateValue, communityId: number): string {
+  if (value === 'request') return `/maintenance/submit?communityId=${communityId}`;
+  if (value === 'work-order') return `/communities/${communityId}/operations?tab=work-orders`;
+  return `/communities/${communityId}/operations?tab=reservations`;
+}
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
 
@@ -55,8 +82,8 @@ interface OperationsHubProps {
   workOrdersEnabled: boolean;
   reservationsEnabled: boolean;
   requestScope: MaintenanceRequestScope;
-  requestActionHref?: string;
-  requestActionLabel?: string;
+  isAdmin: boolean;
+  userId: string;
   communityTimezone: string;
   initialTab?: string;
   initialFilters?: {
@@ -66,6 +93,7 @@ interface OperationsHubProps {
     q?: string;
     cursor?: string;
     page?: string;
+    create?: string;
   };
 }
 
@@ -76,8 +104,8 @@ export function OperationsHub({
   workOrdersEnabled,
   reservationsEnabled,
   requestScope,
-  requestActionHref,
-  requestActionLabel,
+  isAdmin,
+  userId,
   communityTimezone,
   // initialTab/initialFilters are accepted for SSR hydration symmetry,
   // but we read live state from useSearchParams() to stay in sync with
@@ -120,6 +148,8 @@ export function OperationsHub({
   const defaultTab = availableTabs[0]?.id ?? 'requests';
   const selectedTab = availableTabs.some((candidate) => candidate.id === tab) ? tab : defaultTab;
 
+  const createValue = (searchParams.get('create') ?? undefined) as CreateValue | undefined;
+
   const operationsQuery = useOperations(
     communityId,
     {
@@ -133,14 +163,23 @@ export function OperationsHub({
   );
   const workOrdersQuery = useWorkOrders(
     communityId,
-    // Work orders accept a narrower status union than maintenance requests
-    // (no 'submitted', etc). Parse the URL string rather than casting — if
-    // the user arrives with a non-WO status in the URL, we drop the filter
-    // instead of sending a bogus value to the API.
-    { status: parseWorkOrderStatus(filters.status), unitId: filters.unitId },
+    {
+      // Work orders accept a narrower status union than maintenance requests
+      // (no 'submitted', etc). Parse the URL string rather than casting — if
+      // the user arrives with a non-WO status in the URL, we drop the filter
+      // instead of sending a bogus value to the API.
+      status: parseWorkOrderStatus(filters.status),
+      unitId: filters.unitId,
+      page: filters.page,
+      limit: 20,
+    },
     { enabled: workOrdersEnabled },
   );
-  const reservationsQuery = useReservations(communityId, { enabled: reservationsEnabled });
+  const reservationsQuery = useReservations(
+    communityId,
+    { page: filters.page, limit: 20 },
+    { enabled: reservationsEnabled },
+  );
   const requestsQuery = useMaintenanceRequests(communityId, {
     scope: requestScope,
     enabled: requestsEnabled,
@@ -181,13 +220,13 @@ export function OperationsHub({
         return {
           isLoading: workOrdersQuery.isLoading,
           error: workOrdersQuery.error,
-          hasData: Boolean(workOrdersQuery.data?.length),
+          hasData: Boolean(workOrdersQuery.data?.data.length),
         };
       case 'reservations':
         return {
           isLoading: reservationsQuery.isLoading,
           error: reservationsQuery.error,
-          hasData: Boolean(reservationsQuery.data?.length),
+          hasData: Boolean(reservationsQuery.data?.data.length),
         };
     }
   }, [operationsQuery, requestsQuery, reservationsQuery, selectedTab, workOrdersQuery]);
@@ -205,6 +244,46 @@ export function OperationsHub({
     router.replace(`${pathname}?${params.toString()}`);
   }
 
+  interface CtaConfig { label: string; createValue: CreateValue; }
+
+  function getCta(currentTab: OperationsTab): CtaConfig | null {
+    if (currentTab === 'reservations') {
+      return reservationsEnabled ? { label: 'Reserve Amenity', createValue: 'reservation' } : null;
+    }
+    if (currentTab === 'work-orders') {
+      return isAdmin && workOrdersEnabled
+        ? { label: 'Dispatch Work Order', createValue: 'work-order' }
+        : null;
+    }
+    if (currentTab === 'requests') {
+      return requestsEnabled ? { label: 'Submit Request', createValue: 'request' } : null;
+    }
+    // 'all' tab
+    if (isAdmin && workOrdersEnabled) return { label: 'Dispatch Work Order', createValue: 'work-order' };
+    if (requestsEnabled) return { label: 'Submit Request', createValue: 'request' };
+    return null;
+  }
+
+  const cta = getCta(selectedTab);
+
+  /**
+   * Spec §5.2 requires "Back button closes" — opening a drawer must add a
+   * history entry so the browser back button pops it off. We push on open,
+   * and the close callback calls router.back() to pop the same entry.
+   * Tab switches continue to use router.replace (unchanged from Phase 1)
+   * so they don't bloat history.
+   */
+  function openCreate(value: CreateValue) {
+    if (!CREATE_SHEETS_ENABLED) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('create', value);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function closeCreate() {
+    router.back();
+  }
+
   const requestsDescription = requestScope === 'community'
     ? 'Review community requests, work orders, and reservations from one hub.'
     : 'Track your requests, work orders, and reservations from one hub.';
@@ -212,7 +291,7 @@ export function OperationsHub({
   const requestsEmptyState = selectedTab === 'requests'
     ? (
       <EmptyState
-        title={requestScope === 'community' ? 'No maintenance requests yet' : 'No maintenance requests yet'}
+        title="No maintenance requests yet"
         description={
           requestScope === 'community'
             ? 'Resident submissions will appear here as they come in.'
@@ -220,11 +299,13 @@ export function OperationsHub({
         }
         icon="wrench"
         action={
-          requestActionHref && requestActionLabel ? (
-            <Button asChild size="sm">
-              <Link href={requestActionHref}>{requestActionLabel}</Link>
-            </Button>
-          ) : undefined
+          cta && CREATE_SHEETS_ENABLED
+            ? (
+              <Button size="sm" onClick={() => openCreate(cta.createValue)}>
+                {cta.label}
+              </Button>
+            )
+            : undefined
         }
       />
     )
@@ -244,11 +325,19 @@ export function OperationsHub({
         title="Operations"
         description={requestsDescription}
         actions={
-          requestActionHref && requestActionLabel && requestsEnabled ? (
-            <Button asChild size="sm">
-              <Link href={requestActionHref}>{requestActionLabel}</Link>
-            </Button>
-          ) : undefined
+          cta
+            ? CREATE_SHEETS_ENABLED
+              ? (
+                <Button size="sm" onClick={() => openCreate(cta.createValue)}>
+                  {cta.label}
+                </Button>
+              )
+              : (
+                <Button asChild size="sm">
+                  <Link href={legacyHrefFor(cta.createValue, communityId)}>{cta.label}</Link>
+                </Button>
+              )
+            : undefined
         }
       />
 
@@ -383,7 +472,7 @@ export function OperationsHub({
 
         {!activeState.isLoading && !activeState.error && selectedTab === 'work-orders' && workOrdersQuery.data ? (
           <div className="space-y-4">
-            {workOrdersQuery.data.map((workOrder) => (
+            {workOrdersQuery.data.data.map((workOrder) => (
               <article key={workOrder.id} className="rounded-xl border border-edge bg-surface-card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
@@ -396,17 +485,28 @@ export function OperationsHub({
                 </div>
               </article>
             ))}
-            {workOrdersQuery.data && workOrdersQuery.data.length > 0 ? (
-              <p className="pt-2 text-xs text-content-tertiary">
-                Showing {workOrdersQuery.data.length} result{workOrdersQuery.data.length === 1 ? '' : 's'}. Use filters above to narrow further.
-              </p>
-            ) : null}
+            <LoadMoreButton
+              visible={
+                workOrdersQuery.data
+                  ? workOrdersQuery.data.meta.page * workOrdersQuery.data.meta.limit < workOrdersQuery.data.meta.total
+                  : false
+              }
+              isLoading={workOrdersQuery.isFetching}
+              onClick={() => {
+                const nextPage = filters.page + 1;
+                const params = new URLSearchParams(searchParams.toString());
+                params.set('page', String(nextPage));
+                // eslint-disable-next-line no-console
+                console.info('[analytics] operations_pagination_loaded', { tab: 'work-orders', mechanism: 'page' });
+                router.replace(`${pathname}?${params.toString()}`);
+              }}
+            />
           </div>
         ) : null}
 
         {!activeState.isLoading && !activeState.error && selectedTab === 'reservations' && reservationsQuery.data ? (
           <div className="space-y-4">
-            {reservationsQuery.data.map((reservation) => (
+            {reservationsQuery.data.data.map((reservation) => (
               <article key={reservation.id} className="rounded-xl border border-edge bg-surface-card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
@@ -421,14 +521,47 @@ export function OperationsHub({
                 </div>
               </article>
             ))}
-            {reservationsQuery.data && reservationsQuery.data.length > 0 ? (
-              <p className="pt-2 text-xs text-content-tertiary">
-                Showing {reservationsQuery.data.length} result{reservationsQuery.data.length === 1 ? '' : 's'}. Use filters above to narrow further.
-              </p>
-            ) : null}
+            <LoadMoreButton
+              visible={
+                reservationsQuery.data
+                  ? reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total
+                  : false
+              }
+              isLoading={reservationsQuery.isFetching}
+              onClick={() => {
+                const nextPage = filters.page + 1;
+                const params = new URLSearchParams(searchParams.toString());
+                params.set('page', String(nextPage));
+                // eslint-disable-next-line no-console
+                console.info('[analytics] operations_pagination_loaded', { tab: 'reservations', mechanism: 'page' });
+                router.replace(`${pathname}?${params.toString()}`);
+              }}
+            />
           </div>
         ) : null}
       </section>
+
+      <RequestCreateSheet
+        open={CREATE_SHEETS_ENABLED && createValue === 'request' && requestsEnabled}
+        onClose={closeCreate}
+        communityId={communityId}
+        userId={userId}
+      />
+      {isAdmin && workOrdersEnabled ? (
+        <WorkOrderCreateSheet
+          open={CREATE_SHEETS_ENABLED && createValue === 'work-order'}
+          onClose={closeCreate}
+          communityId={communityId}
+        />
+      ) : null}
+      {reservationsEnabled ? (
+        <ReservationCreateSheet
+          open={CREATE_SHEETS_ENABLED && createValue === 'reservation'}
+          onClose={closeCreate}
+          communityId={communityId}
+          communityTimezone={communityTimezone}
+        />
+      ) : null}
     </div>
   );
 }

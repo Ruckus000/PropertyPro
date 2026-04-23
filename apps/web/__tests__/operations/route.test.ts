@@ -113,4 +113,30 @@ describe('operations route', () => {
     expect(json.error?.message ?? json.error).toMatch(/resident/i);
     expect(listOperationsForCommunityMock).not.toHaveBeenCalled();
   });
+
+  it('accepts type=reservation and forwards it to listOperationsForCommunity', async () => {
+    listOperationsForCommunityMock.mockResolvedValue({
+      data: [
+        {
+          id: 9,
+          type: 'reservation',
+          title: 'Reservation — Pool',
+          status: 'confirmed',
+          priority: 'normal',
+          unitId: 3,
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      meta: { cursor: null, limit: 25, partialFailure: false, unavailableSources: [] },
+    });
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/operations?communityId=42&limit=25&type=reservation'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(listOperationsForCommunityMock).toHaveBeenCalledWith(42, expect.objectContaining({
+      type: 'reservation',
+    }));
+  });
 });

@@ -1,10 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OperationsHub } from '../../../src/components/operations/operations-hub';
 
 const {
   searchParamsMock,
   replaceMock,
+  pushMock,
+  backMock,
   useMaintenanceRequestsMock,
   useOperationsMock,
   useWorkOrdersMock,
@@ -12,6 +14,8 @@ const {
 } = vi.hoisted(() => ({
   searchParamsMock: vi.fn(),
   replaceMock: vi.fn(),
+  pushMock: vi.fn(),
+  backMock: vi.fn(),
   useMaintenanceRequestsMock: vi.fn(),
   useOperationsMock: vi.fn(),
   useWorkOrdersMock: vi.fn(),
@@ -19,9 +23,7 @@ const {
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: replaceMock,
-  }),
+  useRouter: () => ({ replace: replaceMock, push: pushMock, back: backMock }),
   usePathname: () => '/communities/42/operations',
   useSearchParams: () => new URLSearchParams(searchParamsMock()),
 }));
@@ -40,6 +42,19 @@ vi.mock('@/hooks/use-operations', async () => {
     useReservations: useReservationsMock,
   };
 });
+
+vi.mock('../../../src/components/operations/RequestCreateSheet', () => ({
+  RequestCreateSheet: (props: { open: boolean; onClose: () => void }) =>
+    props.open ? <div role="heading">Submit Request</div> : null,
+}));
+vi.mock('../../../src/components/operations/WorkOrderCreateSheet', () => ({
+  WorkOrderCreateSheet: (props: { open: boolean }) =>
+    props.open ? <div role="heading">Dispatch Work Order</div> : null,
+}));
+vi.mock('../../../src/components/operations/ReservationCreateSheet', () => ({
+  ReservationCreateSheet: (props: { open: boolean }) =>
+    props.open ? <div role="heading">Reserve Amenity</div> : null,
+}));
 
 describe('OperationsHub', () => {
   beforeEach(() => {
@@ -65,13 +80,13 @@ describe('OperationsHub', () => {
     useWorkOrdersMock.mockReturnValue({
       isLoading: false,
       error: null,
-      data: [],
+      data: { data: [], meta: { page: 1, limit: 20, total: 0 } },
     });
     useReservationsMock.mockReturnValue({
       isLoading: false,
       error: null,
-      data: [
-        {
+      data: {
+        data: [{
           id: 17,
           amenityId: 9,
           unitId: 12,
@@ -81,8 +96,9 @@ describe('OperationsHub', () => {
           notes: null,
           createdAt: '2026-03-27T14:00:00.000Z',
           updatedAt: '2026-03-27T14:00:00.000Z',
-        },
-      ],
+        }],
+        meta: { page: 1, limit: 20, total: 1 },
+      },
     });
   });
 
@@ -94,8 +110,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={false}
         reservationsEnabled={true}
         requestScope="mine"
-        requestActionHref="/maintenance/submit?communityId=42"
-        requestActionLabel="Submit Request"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -119,39 +135,38 @@ describe('OperationsHub', () => {
     const panel = screen.getByRole('tabpanel');
     expect(panel).toHaveAttribute('id', 'operations-panel-reservations');
     expect(panel).toHaveAttribute('aria-labelledby', 'operations-tab-reservations');
-    expect(screen.getByRole('link', { name: 'Submit Request' })).toHaveAttribute(
-      'href',
-      '/maintenance/submit?communityId=42',
-    );
+
+    // The bug-pinning assertion that was fixed by Phase 2:
+    // Reservations tab MUST show "Reserve Amenity", NOT "Submit Request".
+    expect(screen.getByRole('button', { name: 'Reserve Amenity' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Submit Request' })).not.toBeInTheDocument();
     expect(screen.getByText('Reservation #17')).toBeInTheDocument();
   });
 
-  it('loads community-wide requests for staff and shows the inbox CTA', () => {
+  it('loads community-wide requests for staff and shows the request CTA', () => {
     searchParamsMock.mockReturnValue('tab=requests');
     useMaintenanceRequestsMock.mockReturnValue({
       isLoading: false,
       error: null,
       data: {
-        data: [
-          {
-            id: 99,
-            communityId: 42,
-            unitId: null,
-            submittedById: 'resident-1',
-            title: 'Lobby light out',
-            description: 'Front entry fixture is dark.',
-            status: 'submitted',
-            priority: 'high',
-            category: 'electrical',
-            assignedToId: null,
-            resolutionDescription: null,
-            resolutionDate: null,
-            photos: null,
-            createdAt: '2026-03-27T14:00:00.000Z',
-            updatedAt: '2026-03-27T14:00:00.000Z',
-            comments: [],
-          },
-        ],
+        data: [{
+          id: 99,
+          communityId: 42,
+          unitId: null,
+          submittedById: 'resident-1',
+          title: 'Lobby light out',
+          description: 'Front entry fixture is dark.',
+          status: 'submitted',
+          priority: 'high',
+          category: 'electrical',
+          assignedToId: null,
+          resolutionDescription: null,
+          resolutionDate: null,
+          photos: null,
+          createdAt: '2026-03-27T14:00:00.000Z',
+          updatedAt: '2026-03-27T14:00:00.000Z',
+          comments: [],
+        }],
         meta: { total: 1, page: 1, limit: 20 },
       },
     });
@@ -163,8 +178,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={true}
         reservationsEnabled={false}
         requestScope="community"
-        requestActionHref="/maintenance/inbox?communityId=42"
-        requestActionLabel="Open Inbox"
+        isAdmin={true}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -178,10 +193,8 @@ describe('OperationsHub', () => {
       }),
     );
     expect(screen.getByText('Lobby light out')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Inbox' })).toHaveAttribute(
-      'href',
-      '/maintenance/inbox?communityId=42',
-    );
+    // Staff on Requests tab still see "Submit Request" (they can submit on behalf).
+    expect(screen.getByRole('button', { name: 'Submit Request' })).toBeInTheDocument();
   });
 
   it('hides the All tab for residents even when maintenance and work orders are both enabled', () => {
@@ -194,8 +207,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={true}
         reservationsEnabled={true}
         requestScope="mine"
-        requestActionHref="/maintenance/submit?communityId=42"
-        requestActionLabel="Submit Request"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -219,8 +232,8 @@ describe('OperationsHub', () => {
     useReservationsMock.mockReturnValue({
       isLoading: false,
       error: null,
-      data: [
-        {
+      data: {
+        data: [{
           id: 1,
           amenityId: 1,
           unitId: null,
@@ -230,8 +243,9 @@ describe('OperationsHub', () => {
           notes: null,
           createdAt: '2026-03-27T14:00:00.000Z',
           updatedAt: '2026-03-27T14:00:00.000Z',
-        },
-      ],
+        }],
+        meta: { page: 1, limit: 20, total: 1 },
+      },
     });
 
     render(
@@ -241,8 +255,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={false}
         reservationsEnabled={true}
         requestScope="mine"
-        requestActionHref="/communities/42/operations?tab=requests"
-        requestActionLabel="Submit Request"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -269,6 +283,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={false}
         reservationsEnabled={false}
         requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -316,6 +332,8 @@ describe('OperationsHub', () => {
         workOrdersEnabled={false}
         reservationsEnabled={false}
         requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
       />,
     );
@@ -337,10 +355,84 @@ describe('OperationsHub', () => {
         workOrdersEnabled={false}
         reservationsEnabled={false}
         requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
         communityTimezone="America/New_York"
         legacyNotice="You were redirected from a legacy maintenance page."
       />,
     );
     expect(screen.getByText(/redirected from a legacy maintenance page/i)).toBeInTheDocument();
+  });
+
+  it('Work Orders tab shows Dispatch Work Order for admins, hides CTA for residents', () => {
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    const { rerender } = render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={true}
+        reservationsEnabled={false}
+        requestScope="community"
+        isAdmin={true}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Dispatch Work Order' })).toBeInTheDocument();
+
+    rerender(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={true}
+        reservationsEnabled={false}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /dispatch work order/i })).not.toBeInTheDocument();
+  });
+
+  it('opens a drawer when ?create=request is set in the URL', () => {
+    searchParamsMock.mockReturnValue('tab=requests&create=request');
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(screen.getByRole('heading', { name: /submit request/i })).toBeInTheDocument();
+  });
+
+  it('pushes ?create=request when the CTA button is clicked', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    // Both the PageHeader and the empty-state render a "Submit Request"
+    // button; either click should push the same URL. Use the first (header).
+    const buttons = screen.getAllByRole('button', { name: 'Submit Request' });
+    fireEvent.click(buttons[0]!);
+    // Open uses push (not replace) so the browser Back button can close the drawer.
+    expect(pushMock).toHaveBeenCalledWith(
+      expect.stringContaining('create=request'),
+    );
   });
 });

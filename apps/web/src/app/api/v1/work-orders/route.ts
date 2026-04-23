@@ -46,6 +46,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get('status');
   const rawUnitId = searchParams.get('unitId');
+  const rawPage = searchParams.get('page');
+  const rawLimit = searchParams.get('limit');
+  const page = rawPage ? parsePositiveInt(rawPage, 'page') : 1;
+  const limit = rawLimit ? Math.min(parsePositiveInt(rawLimit, 'limit'), 100) : 20;
 
   const parsedStatus = rawStatus ? listStatusSchema.safeParse(rawStatus) : null;
   if (rawStatus && !parsedStatus?.success) {
@@ -76,13 +80,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  const data = await listWorkOrdersForCommunity(communityId, {
+  const { data, total } = await listWorkOrdersForCommunity(communityId, {
     status,
     unitId,
     allowedUnitIds,
+    page,
+    limit,
   });
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: { data, meta: { page, limit, total } } });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
