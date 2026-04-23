@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   },
 };
 
+// Force per-request evaluation so the PDFJS_TEST_ENABLED gate below reflects
+// the runtime env, not the build-time env (which would otherwise prerender
+// a permanent 404 into the static output).
+export const dynamic = 'force-dynamic';
+
 export default async function PdfJsTestPage({
   searchParams,
 }: {
