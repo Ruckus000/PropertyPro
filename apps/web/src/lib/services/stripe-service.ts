@@ -66,6 +66,36 @@ export async function resolveStripePrice(
 }
 
 /**
+ * Resolve a canonical PlanId from a Stripe Price ID.
+ *
+ * Inverse of `resolveStripePrice`: maps `stripe_prices.stripe_price_id` → `plan_id`.
+ * Used by the `customer.subscription.updated` webhook when `price.lookup_key` is
+ * missing (the primary path), so we never write a raw `price_…` string into
+ * `communities.subscription_plan`.
+ *
+ * Throws `STRIPE_PRICE_CONFIG_MISSING` rather than returning null: the webhook
+ * caller deliberately lets this bubble so Stripe retries on 500 instead of
+ * writing garbage.
+ */
+export async function resolvePlanIdFromStripePriceId(priceId: string): Promise<PlanId> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ planId: stripePrices.planId })
+    .from(stripePrices)
+    .where(eq(stripePrices.stripePriceId, priceId))
+    .limit(1);
+
+  if (!row) {
+    throw new AppError(
+      `No Stripe price configured for priceId=${priceId}`,
+      500,
+      'STRIPE_PRICE_CONFIG_MISSING',
+    );
+  }
+  return row.planId as PlanId;
+}
+
+/**
  * Create a Stripe Embedded Checkout session and update pending_signups status.
  *
  * The clientSecret is returned to the client component to mount <EmbeddedCheckout>.
