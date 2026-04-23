@@ -32,12 +32,13 @@ interface PageProps {
     q?: string;
     cursor?: string;
     page?: string;
+    create?: string;
   }>;
 }
 
 export default async function OperationsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { from, tab, status, priority, unitId, q, cursor, page } = await searchParams;
+  const { from, tab, status, priority, unitId, q, cursor, page, create } = await searchParams;
   const communityId = Number(id);
   const userId = await requirePageAuthenticatedUserId();
   const membership = await requirePageCommunityMembership(communityId, userId);
@@ -50,10 +51,6 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   const workOrdersEnabled = features.hasWorkOrders && canReadResource(membership, 'work_orders');
   const reservationsEnabled = features.hasAmenities && canReadResource(membership, 'amenities');
   const requestScope = membership.role === 'resident' ? 'mine' : 'community';
-  const requestActionHref = membership.role === 'resident'
-    ? `/maintenance/submit?communityId=${communityId}`
-    : `/maintenance/inbox?communityId=${communityId}`;
-  const requestActionLabel = membership.role === 'resident' ? 'Submit Request' : 'Open Inbox';
 
   if (!requestsEnabled && !workOrdersEnabled && !reservationsEnabled) {
     throw new ForbiddenError('Operations are not enabled for this community or role');
@@ -76,11 +73,11 @@ export default async function OperationsPage({ params, searchParams }: PageProps
       workOrdersEnabled={workOrdersEnabled}
       reservationsEnabled={reservationsEnabled}
       requestScope={requestScope}
-      requestActionHref={requestActionHref}
-      requestActionLabel={requestActionLabel}
+      isAdmin={membership.isAdmin}
+      userId={userId}
       communityTimezone={communityTimezone}
       initialTab={tab}
-      initialFilters={{ status, priority, unitId, q, cursor, page }}
+      initialFilters={{ status, priority, unitId, q, cursor, page, create }}
     />
   );
 }
