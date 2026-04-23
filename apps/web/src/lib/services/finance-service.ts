@@ -34,7 +34,10 @@ import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityErro
 import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { listActorUnitIds } from '@/lib/units/actor-units';
-import { generateFinanceStatementPdf } from '@/lib/utils/finance-pdf';
+import {
+  generateCommunityFinanceStatementPdf,
+  generateFinanceStatementPdf,
+} from '@/lib/utils/finance-pdf';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
 export type AssessmentLineItemStatus = 'pending' | 'paid' | 'overdue' | 'waived';
@@ -985,22 +988,33 @@ export async function listPaymentHistoryForCommunity(
   });
 }
 
+export interface StatementLineItem {
+  id: number;
+  assessmentId: number | null;
+  unitId: number;
+  dueDate: string;
+  status: PayableStatus;
+  amountCents: number;
+  lateFeeCents: number;
+  paidAt: Date | null;
+  paymentIntentId: string | null;
+}
+
+export interface UnitStatement {
+  unitId: number;
+  balanceCents: number;
+  ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
+  lineItems: StatementLineItem[];
+}
+
+const STATEMENT_LINE_ITEM_LIMIT = 200;
+
 export async function buildUnitStatement(
   communityId: number,
   unitId: number,
   startDate?: string,
   endDate?: string,
-): Promise<{
-  unitId: number;
-  balanceCents: number;
-  ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
-  lineItems: Array<{
-    dueDate: string;
-    status: PayableStatus;
-    amountCents: number;
-    lateFeeCents: number;
-  }>;
-}> {
+): Promise<UnitStatement> {
   const scoped = createScopedClient(communityId);
   const lineItemFilters = [eq(assessmentLineItems.unitId, unitId)];
 
@@ -1014,7 +1028,8 @@ export async function buildUnitStatement(
   const lineItemsWhere = lineItemFilters.length === 1 ? lineItemFilters[0] : and(...lineItemFilters);
   const assessmentRows = await scoped
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, lineItemsWhere)
-    .orderBy(asc(assessmentLineItems.dueDate), asc(assessmentLineItems.id));
+    .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
+    .limit(STATEMENT_LINE_ITEM_LIMIT);
 
   const rentFilters = [eq(rentObligations.unitId, unitId)];
   if (startDate !== undefined) {
@@ -1028,7 +1043,8 @@ export async function buildUnitStatement(
   try {
     rentRows = await scoped
       .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
-      .orderBy(asc(rentObligations.dueDate), asc(rentObligations.id));
+      .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
+      .limit(STATEMENT_LINE_ITEM_LIMIT);
   } catch (err) {
     if (!isMissingRelationError(err)) {
       throw err;
@@ -1043,24 +1059,172 @@ export async function buildUnitStatement(
   });
   const balanceCents = await getUnitLedgerBalance(scoped, unitId);
 
+  const combined: StatementLineItem[] = [
+    ...assessmentRows.map<StatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: row.assessmentId,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: assertLineItemStatus(row.status),
+      amountCents: row.amountCents,
+      lateFeeCents: row.lateFeeCents,
+      paidAt: row.paidAt,
+      paymentIntentId: row.paymentIntentId,
+    })),
+    ...rentRows.map<StatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: null,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: row.status,
+      amountCents: row.amountCents,
+      lateFeeCents: 0,
+      paidAt: null,
+      paymentIntentId: null,
+    })),
+  ]
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+
   return {
     unitId,
     balanceCents,
     ledgerEntries: ledgerEntriesForUnit,
-    lineItems: [
-      ...assessmentRows.map((row) => ({
-        dueDate: row.dueDate,
-        status: assertLineItemStatus(row.status),
-        amountCents: row.amountCents,
-        lateFeeCents: row.lateFeeCents,
-      })),
-      ...rentRows.map((row) => ({
-        dueDate: row.dueDate,
-        status: row.status,
-        amountCents: row.amountCents,
-        lateFeeCents: 0,
-      })),
-    ].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    lineItems: combined,
+  };
+}
+
+export interface CommunityStatementLineItem extends StatementLineItem {
+  unitNumber: string;
+}
+
+export interface CommunityStatement {
+  balanceCents: number;
+  ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
+  lineItems: CommunityStatementLineItem[];
+}
+
+/**
+ * Builds a community-wide statement for staff roles (pm_admin, cam, board, etc.).
+ *
+ * Aggregates ledger entries and payable line items across every unit in the
+ * community within the given date window. Each line item includes both
+ * `unitId` and `unitNumber` so staff can identify which unit each entry
+ * belongs to.
+ *
+ * Line items are sorted newest first and capped at {@link STATEMENT_LINE_ITEM_LIMIT}
+ * (200) to keep query cost in line with the unit-scoped mode.
+ */
+export async function buildCommunityStatement(
+  communityId: number,
+  startDate?: string,
+  endDate?: string,
+): Promise<CommunityStatement> {
+  const scoped = createScopedClient(communityId);
+
+  // Unit lookup — used to hydrate unitNumber on every line item.
+  interface UnitLookupRow {
+    [key: string]: unknown;
+    id: number;
+    unitNumber: string;
+  }
+  const unitRows = await scoped.selectFrom<UnitLookupRow>(
+    units,
+    { id: units.id, unitNumber: units.unitNumber },
+  );
+  const unitNumberById = new Map<number, string>();
+  for (const row of unitRows) {
+    unitNumberById.set(row.id, row.unitNumber);
+  }
+
+  const assessmentFilters: Array<ReturnType<typeof eq>> = [];
+  if (startDate !== undefined) {
+    assessmentFilters.push(gte(assessmentLineItems.dueDate, startDate));
+  }
+  if (endDate !== undefined) {
+    assessmentFilters.push(lte(assessmentLineItems.dueDate, endDate));
+  }
+  const assessmentWhere = assessmentFilters.length === 0
+    ? undefined
+    : assessmentFilters.length === 1
+      ? assessmentFilters[0]
+      : and(...assessmentFilters);
+
+  const assessmentRows = await scoped
+    .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentWhere)
+    .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
+    .limit(STATEMENT_LINE_ITEM_LIMIT);
+
+  const rentFilters: Array<ReturnType<typeof eq>> = [];
+  if (startDate !== undefined) {
+    rentFilters.push(gte(rentObligations.dueDate, startDate));
+  }
+  if (endDate !== undefined) {
+    rentFilters.push(lte(rentObligations.dueDate, endDate));
+  }
+  const rentWhere = rentFilters.length === 0
+    ? undefined
+    : rentFilters.length === 1
+      ? rentFilters[0]
+      : and(...rentFilters);
+
+  let rentRows: RentObligationRecord[] = [];
+  try {
+    rentRows = await scoped
+      .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
+      .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
+      .limit(STATEMENT_LINE_ITEM_LIMIT);
+  } catch (err) {
+    if (!isMissingRelationError(err)) {
+      throw err;
+    }
+  }
+
+  const ledgerEntriesForCommunity = await listLedgerEntries(scoped, {
+    startDate,
+    endDate,
+    limit: 500,
+  });
+
+  // Community balance = sum of per-unit balances across all known units.
+  let balanceCents = 0;
+  for (const row of unitRows) {
+    balanceCents += await getUnitLedgerBalance(scoped, row.id);
+  }
+
+  const combinedLineItems: CommunityStatementLineItem[] = [
+    ...assessmentRows.map<CommunityStatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: row.assessmentId,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: assertLineItemStatus(row.status),
+      amountCents: row.amountCents,
+      lateFeeCents: row.lateFeeCents,
+      paidAt: row.paidAt,
+      paymentIntentId: row.paymentIntentId,
+      unitNumber: unitNumberById.get(row.unitId) ?? '',
+    })),
+    ...rentRows.map<CommunityStatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: null,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: row.status,
+      amountCents: row.amountCents,
+      lateFeeCents: 0,
+      paidAt: null,
+      paymentIntentId: null,
+      unitNumber: unitNumberById.get(row.unitId) ?? '',
+    })),
+  ]
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+
+  return {
+    balanceCents,
+    ledgerEntries: ledgerEntriesForCommunity,
+    lineItems: combinedLineItems,
   };
 }
 
@@ -1207,6 +1371,26 @@ export async function exportStatementPdf(
 ): Promise<Uint8Array> {
   const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
   return generateFinanceStatementPdf(statement);
+}
+
+export async function exportCommunityStatementPdf(
+  communityId: number,
+  startDate?: string,
+  endDate?: string,
+): Promise<Uint8Array> {
+  const statement = await buildCommunityStatement(communityId, startDate, endDate);
+  return generateCommunityFinanceStatementPdf({
+    communityId,
+    balanceCents: statement.balanceCents,
+    ledgerEntries: statement.ledgerEntries,
+    lineItems: statement.lineItems.map((item) => ({
+      unitNumber: item.unitNumber,
+      dueDate: item.dueDate,
+      status: item.status,
+      amountCents: item.amountCents,
+      lateFeeCents: item.lateFeeCents,
+    })),
+  });
 }
 
 function getStripeBaseUrl(): string {

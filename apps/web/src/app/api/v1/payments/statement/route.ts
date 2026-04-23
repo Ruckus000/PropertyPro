@@ -5,7 +5,12 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { buildUnitStatement, listActorUnitIdsForFinance, resolveStatementDateRange } from '@/lib/services/finance-service';
+import {
+  buildCommunityStatement,
+  buildUnitStatement,
+  listActorUnitIdsForFinance,
+  resolveStatementDateRange,
+} from '@/lib/services/finance-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -20,15 +25,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const { startDate, endDate } = resolveStatementDateRange(rawStartDate, rawEndDate);
 
-  let unitId: number;
+  // Resident / unit-owner path — preserve existing behaviour exactly.
   if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
     if (actorUnitIds.length === 0) {
       throw new ForbiddenError('No unit association found for this owner');
     }
-    if (!rawUnitId && actorUnitIds.length > 1) {
-      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
-    }
+
+    let unitId: number;
     if (rawUnitId) {
       const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
       if (!actorUnitIds.includes(requestedUnitId)) {
@@ -42,16 +46,24 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       }
       unitId = onlyUnitId;
     } else {
-      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
+      throw new BadRequestError(
+        'unitId query parameter is required when you are associated with multiple units',
+      );
     }
-  } else {
-    requireFinanceReadPermission(membership);
-    if (!rawUnitId) {
-      throw new BadRequestError('unitId query parameter is required');
-    }
-    unitId = parsePositiveInt(rawUnitId, 'unitId');
+
+    const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
+    return NextResponse.json({ mode: 'unit', data: statement });
   }
 
-  const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
-  return NextResponse.json({ data: statement });
+  // Staff / manager path — either pick a specific unit or get the community rollup.
+  requireFinanceReadPermission(membership);
+
+  if (rawUnitId) {
+    const unitId = parsePositiveInt(rawUnitId, 'unitId');
+    const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
+    return NextResponse.json({ mode: 'unit', data: statement });
+  }
+
+  const communityStatement = await buildCommunityStatement(communityId, startDate, endDate);
+  return NextResponse.json({ mode: 'community', data: communityStatement });
 });
