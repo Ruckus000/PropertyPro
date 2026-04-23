@@ -2,8 +2,9 @@
  * Provisioning service — P2-35
  *
  * Implements the resumable state machine that creates a complete community
- * on successful Stripe checkout. Triggered fire-and-forget from the webhook
- * handler after a provisioning_jobs stub is inserted at status='initiated'.
+ * on successful Stripe checkout. The Stripe webhook inserts a
+ * provisioning_jobs stub at status='initiated', then awaits this state machine
+ * so Stripe can retry if provisioning fails before completion.
  *
  * State machine contract (PHASE2_EXECUTION_PLAN.md):
  *   community_created → user_linked → checklist_generated →
@@ -512,9 +513,9 @@ export interface ProvisioningWatchdogSummary {
  * Finds paid signups whose provisioning job is stuck and resumes them through
  * the same idempotent state machine used by the Stripe webhook/manual retry.
  *
- * This is the durable safety net for serverless fire-and-forget loss: if the
- * webhook records payment completion but the background promise is dropped,
- * the job remains non-terminal and this watchdog can finish it.
+ * This is the durable safety net for non-terminal jobs: if a webhook retry,
+ * deployment interruption, timeout, or historical fire-and-forget loss leaves
+ * payment completed but provisioning unfinished, this watchdog can finish it.
  */
 export async function recoverStuckProvisioningJobs(
   options: ProvisioningWatchdogOptions = {},

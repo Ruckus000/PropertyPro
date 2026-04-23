@@ -85,7 +85,7 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
   { path: '/api/v1/internal/payment-reminders', method: 'POST' },
-  // Provisioning watchdog: recovers paid signups whose async provisioning was dropped
+  // Provisioning watchdog: recovers paid signups whose provisioning stayed non-terminal
   { path: '/api/v1/internal/provisioning-watchdog', method: 'GET' },
   { path: '/api/v1/internal/provisioning-watchdog', method: 'POST' },
   // Assessment crons: Bearer-token-authenticated, called by Vercel Cron [Phase 1A]
