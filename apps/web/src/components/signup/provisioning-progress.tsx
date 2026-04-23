@@ -32,7 +32,7 @@ const STAGES: Stage[] = [
   { label: 'Finalizing your account', Icon: Sparkles },
 ];
 
-const MAX_POLLS = 30; // was 15 — 60 seconds before showing failure
+const MAX_POLLS = 180; // 6 minutes before showing delayed/retry messaging
 const POLL_INTERVAL_MS = 2000;
 
 function mapProvisioningStep(step: string): number {
@@ -51,6 +51,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const [activeStage, setActiveStage] = useState(0);
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
   const [failed, setFailed] = useState(false);
+  const [delayed, setDelayed] = useState(false);
   const pollCount = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -80,11 +81,16 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     setFailed(true);
   }, [stopPolling]);
 
+  const handleDelayed = useCallback(() => {
+    stopPolling();
+    setDelayed(true);
+  }, [stopPolling]);
+
   const poll = useCallback(async () => {
     pollCount.current += 1;
 
     if (pollCount.current > MAX_POLLS) {
-      handleFailure();
+      handleDelayed();
       return;
     }
 
@@ -124,7 +130,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     } catch {
       // Network error — keep polling silently
     }
-  }, [signupRequestId, handleComplete, handleFailure]);
+  }, [signupRequestId, handleComplete, handleFailure, handleDelayed]);
 
   const startPolling = useCallback(() => {
     stopPolling();
@@ -163,6 +169,48 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
                   onClick={() => {
                     pollCount.current = 0;
                     setFailed(false);
+                    setDelayed(false);
+                    startPolling();
+                  }}
+                  className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
+                >
+                  Check again
+                </button>
+                <a
+                  href="/auth/login"
+                  className="text-sm text-content-secondary transition-colors hover:text-interactive"
+                >
+                  Or log in manually
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (delayed) {
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16">
+        <div
+          role="status"
+          className="rounded-[10px] border border-border bg-status-warning-subtle border-l-4 border-l-status-warning-border p-4"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" aria-hidden="true" />
+            <div>
+              <p className="text-base text-content">
+                Your portal is taking longer than usual to finish setting up. We&apos;re retrying
+                automatically, so you don&apos;t need to start over or create another account.
+              </p>
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    pollCount.current = 0;
+                    setFailed(false);
+                    setDelayed(false);
                     startPolling();
                   }}
                   className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"

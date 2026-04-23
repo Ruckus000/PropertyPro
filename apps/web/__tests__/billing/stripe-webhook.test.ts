@@ -33,6 +33,8 @@ const {
   sendPaymentFailedEmailMock,
   sendSubscriptionCanceledEmailMock,
   captureExceptionMock,
+  runProvisioningMock,
+  runAddToGroupProvisioningMock,
   createUnscopedClientMock,
   eqMock,
   communitiesTable,
@@ -71,6 +73,8 @@ const {
     sendPaymentFailedEmailMock: vi.fn().mockResolvedValue(undefined),
     sendSubscriptionCanceledEmailMock: vi.fn().mockResolvedValue(undefined),
     captureExceptionMock: vi.fn(),
+    runProvisioningMock: vi.fn().mockResolvedValue(undefined),
+    runAddToGroupProvisioningMock: vi.fn().mockResolvedValue(undefined),
     createUnscopedClientMock: vi.fn(() => makeChainingMock()),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     communitiesTable: {
@@ -146,6 +150,11 @@ vi.mock('@/lib/services/stripe-service', () => ({
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({
   sendPaymentFailedEmail: sendPaymentFailedEmailMock,
   sendSubscriptionCanceledEmail: sendSubscriptionCanceledEmailMock,
+}));
+
+vi.mock('@/lib/services/provisioning-service', () => ({
+  runProvisioning: runProvisioningMock,
+  runAddToGroupProvisioning: runAddToGroupProvisioningMock,
 }));
 
 // Route import must come after all vi.mock calls
@@ -442,7 +451,8 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       // First select (idempotency check) → empty; subsequent selects handled per query
       const selectCallResults: unknown[][] = [
-        [],   // idempotency check: no existing event
+        [], // idempotency check: no existing event
+        [{ id: 123 }], // provisioning job lookup
       ];
       let selectCallCount = 0;
       const selectMock = vi.fn(() => ({
@@ -477,6 +487,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       const res = await POST(makeRequest());
       expect(res.status).toBe(200);
+      expect(runProvisioningMock).toHaveBeenCalledWith(123);
 
       // Should have updated pendingSignups and inserted a provisioning job
       expect(updateMock).toHaveBeenCalled();
@@ -498,6 +509,60 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const processedAtCall = allSetPayloads.find((p) => 'processedAt' in p);
       expect(processedAtCall).toBeDefined();
       expect((processedAtCall as Record<string, unknown>).processedAt).toBeInstanceOf(Date);
+    });
+
+    it('returns 500 for Stripe retry when synchronous provisioning fails', async () => {
+      const session = {
+        id: 'cs_live_provisioning_failure',
+        status: 'complete',
+        metadata: { signupRequestId: 'req-failure' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_failure');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({ ...session, status: 'complete' });
+      runProvisioningMock.mockRejectedValueOnce(new Error('provisioning exploded'));
+
+      let selectCallCount = 0;
+      const selectCallResults: unknown[][] = [
+        [], // idempotency check: no existing event
+        [{ id: 456 }], // provisioning job lookup
+      ];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(selectCallResults[selectCallCount++] ?? [])),
+          })),
+        })),
+      }));
+
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      const setPayloads: Array<Record<string, unknown>> = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((payload: Record<string, unknown>) => {
+        setPayloads.push(payload);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      const body = (await res.json()) as { error: string };
+
+      expect(res.status).toBe(500);
+      expect(body.error).toBe('Webhook processing failed');
+      expect(runProvisioningMock).toHaveBeenCalledWith(456);
+      expect(captureExceptionMock).toHaveBeenCalled();
+      expect(setPayloads).not.toContainEqual(
+        expect.objectContaining({ processedAt: expect.any(Date) }),
+      );
     });
 
     it('skips processing when session status is not complete', async () => {

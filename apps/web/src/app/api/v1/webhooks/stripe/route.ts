@@ -273,14 +273,12 @@ async function handleCheckoutSessionCompleted(
     .limit(1);
 
   if (job) {
-    // Fire-and-forget: webhook must return 200 immediately. Provisioning is resumable
-    // if it fails — the job stays in the DB and can be retried via /api/v1/internal/provision.
-    void runProvisioning(job.id).catch((err) => {
-      captureException(err, { extra: { signupRequestId } });
-    });
+    // Await the resumable state machine so serverless cannot drop the work after
+    // the webhook returns. On failure, the outer handler returns 500 and Stripe retries.
+    await runProvisioning(job.id);
   }
 
-  logStripeWebhookEvent('info', 'Provisioning started from checkout.session.completed', {
+  logStripeWebhookEvent('info', 'Provisioning completed from checkout.session.completed', {
     eventId,
     eventType: 'checkout.session.completed',
     metricName: 'stripe_webhook_event',
