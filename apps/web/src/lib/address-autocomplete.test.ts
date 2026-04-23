@@ -15,11 +15,11 @@ const manifest: AddressAutocompleteManifest = {
     url: 'https://data.transportation.gov/download/fc2s-wawr/application/x-zip-compressed',
     sizeBytes: 8452531826,
   },
-  shardPrefixLength: 4,
-  minStreetTokenLength: 4,
+  shardPrefixLength: 3,
+  minStreetTokenLength: 3,
   maxShardRecords: 5000,
   prefixes: {
-    main: ['shard-main-1', 'shard-main-x'],
+    mai: ['shard-mai-1', 'shard-mai-x'],
   },
 };
 
@@ -51,7 +51,7 @@ describe('address autocomplete query helpers', () => {
       normalizedStreet: 'main',
       streetTokens: ['main'],
       addressNumber: '123',
-      shardPrefix: 'main',
+      shardPrefix: 'mai',
     });
   });
 
@@ -61,16 +61,22 @@ describe('address autocomplete query helpers', () => {
       normalizedStreet: 'main',
       streetTokens: ['main'],
       addressNumber: null,
-      shardPrefix: 'main',
+      shardPrefix: 'mai',
     });
+  });
+
+  it('accepts three-letter street tokens like "oak"', () => {
+    const parsed = parseAddressAutocompleteQuery('123 oak');
+    expect(parsed).not.toBeNull();
+    expect(parsed?.shardPrefix).toBe('oak');
   });
 
   it('narrows oversized shard fetches when a leading house-number digit is present', () => {
     const parsed = parseAddressAutocompleteQuery('123 main');
     expect(parsed).not.toBeNull();
     expect(resolveAddressAutocompleteShardIds(manifest, parsed!)).toEqual([
-      'shard-main-1',
-      'shard-main-x',
+      'shard-mai-1',
+      'shard-mai-x',
     ]);
   });
 

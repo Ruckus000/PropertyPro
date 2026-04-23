@@ -55,7 +55,7 @@ export function normalizeAddressAutocompleteText(value: string): string {
 
 export function parseAddressAutocompleteQuery(
   query: string,
-  minStreetTokenLength = 4,
+  minStreetTokenLength = 3,
 ): ParsedAddressAutocompleteQuery | null {
   const normalizedQuery = normalizeAddressAutocompleteText(query);
   if (!normalizedQuery) {

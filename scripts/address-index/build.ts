@@ -19,7 +19,7 @@ import {
 const NAD_RELEASE_URL = 'https://data.transportation.gov/download/fc2s-wawr/application/x-zip-compressed';
 const OUTPUT_DIR = path.resolve(process.cwd(), 'apps/web/public/address-autocomplete/v1');
 const MAX_SHARD_RECORDS = 5000;
-const MIN_STREET_TOKEN_LENGTH = 4;
+const MIN_STREET_TOKEN_LENGTH = 3;
 
 type BuildOptions = {
   outputDir: string;

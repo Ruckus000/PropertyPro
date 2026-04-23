@@ -209,20 +209,29 @@ export const signupSchema = z
   })
   .superRefine((value, ctx) => {
     const normalizedAddress = normalizeSignupAddressFields(value);
+    // The signup form submits `addressLine1: ''` (not undefined) when blank, so
+    // `usedStructuredAddress` (content-based) can't distinguish "structured form
+    // left blank" from "legacy caller". Routing the missing-address error by
+    // whether the structured surface was provided at all keeps the error under
+    // the visible `addressLine1` field instead of a silent `address` key.
+    const providedStructuredFields =
+      value.addressLine1 !== undefined ||
+      value.city !== undefined ||
+      value.state !== undefined ||
+      value.zipCode !== undefined;
+    const structuredSurface = providedStructuredFields || normalizedAddress.usedStructuredAddress;
 
     if (!normalizedAddress.addressLine1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Street address is required',
-        path: [value.addressLine1 ? 'addressLine1' : 'address'],
+        message: structuredSurface ? 'Street address is required' : 'Address is required',
+        path: [structuredSurface ? 'addressLine1' : 'address'],
       });
     } else if (normalizedAddress.addressLine1.length < 5) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: normalizedAddress.usedStructuredAddress
-          ? 'Street address is required'
-          : 'Address is required',
-        path: [normalizedAddress.usedStructuredAddress ? 'addressLine1' : 'address'],
+        message: structuredSurface ? 'Street address is required' : 'Address is required',
+        path: [structuredSurface ? 'addressLine1' : 'address'],
       });
     }
 

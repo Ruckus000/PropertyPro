@@ -2,6 +2,10 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
+    // rootDir is the package parent (not ./src) because the root tsconfig's
+    // @propertypro/* paths resolve to sibling package src/ directories. When
+    // source files from siblings are pulled in via those paths, scoping rootDir
+    // to ./src raises "File is not under 'rootDir'" errors during tsc build.
     "rootDir": ".."
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
