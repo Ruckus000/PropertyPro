@@ -5,11 +5,11 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireCommunityBoardEnabled,
-  requireForumModerationPermission,
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -85,7 +85,16 @@ export const DELETE = withErrorHandler(
 
     requireCommunityBoardEnabled(membership);
     requirePollWritePermission(membership);
-    requireForumModerationPermission(membership);
+    const canModerateReplies = membership.isAdmin && checkPermissionV2(
+      membership.role,
+      membership.communityType,
+      'polls',
+      'write',
+      {
+        isUnitOwner: membership.isUnitOwner,
+        permissions: membership.permissions,
+      },
+    );
 
     const requestId = req.headers.get('x-request-id');
     await deleteForumReplyForCommunity(
@@ -93,6 +102,7 @@ export const DELETE = withErrorHandler(
       threadId,
       parsed.data.replyId,
       actorUserId,
+      canModerateReplies,
       requestId,
       parsed.data.moderationReason,
     );
