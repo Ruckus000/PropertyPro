@@ -243,8 +243,10 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/reservations?communityId=${communityA.id}`)),
     );
     expect(reservationsResponse.status).toBe(200);
-    const reservationsJson = await parseJson<{ data: Array<Record<string, unknown>> }>(reservationsResponse);
-    expect(reservationsJson.data.some((row) => row.id === reservationId)).toBe(true);
+    const reservationsJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; meta: { page: number; limit: number; total: number } };
+    }>(reservationsResponse);
+    expect(reservationsJson.data.data.some((row) => row.id === reservationId)).toBe(true);
 
     const cancelResponse = await routeModules.reservationDetail.DELETE(
       new NextRequest(apiUrl(`/api/v1/reservations/${reservationId}?communityId=${communityA.id}`), {
