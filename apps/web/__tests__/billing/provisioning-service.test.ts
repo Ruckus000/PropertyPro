@@ -26,7 +26,12 @@ const {
   sendEmailMock,
   captureExceptionMock,
   andMock,
+  ascMock,
   eqMock,
+  inArrayMock,
+  isNullMock,
+  ltMock,
+  orMock,
   sqlMock,
   provisioningJobsTable,
   pendingSignupsTable,
@@ -43,7 +48,12 @@ const {
     sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_test_001' }),
     captureExceptionMock: vi.fn(),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
+    ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
+    inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
+    isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
+    ltMock: vi.fn((col: unknown, val: unknown) => ({ _lt: [col, val] })),
+    orMock: vi.fn((...conditions: unknown[]) => ({ _or: conditions })),
     sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
       _sql: { strings, values },
     })),
@@ -105,7 +115,12 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   and: andMock,
+  asc: ascMock,
   eq: eqMock,
+  inArray: inArrayMock,
+  isNull: isNullMock,
+  lt: ltMock,
+  or: orMock,
   sql: sqlMock,
 }));
 
@@ -119,7 +134,10 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 
 // Service import must come after all vi.mock calls
-import { runProvisioning } from '../../src/lib/services/provisioning-service';
+import {
+  recoverStuckProvisioningJobs,
+  runProvisioning,
+} from '../../src/lib/services/provisioning-service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -195,11 +213,14 @@ function buildDb(opts: {
     return Promise.resolve(rows);
   });
 
-  const selectMock = vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({ limit: limitMock })),
-    })),
+  const orderByMock = vi.fn(() => ({ limit: limitMock }));
+  const whereMock = vi.fn(() => ({ limit: limitMock, orderBy: orderByMock }));
+  const joinMock = vi.fn(() => ({ where: whereMock }));
+  const fromMock = vi.fn(() => ({
+    where: whereMock,
+    innerJoin: joinMock,
   }));
+  const selectMock = vi.fn(() => ({ from: fromMock }));
 
   const returningMock = vi.fn(() =>
     Promise.resolve(opts.insertReturning ?? [{ id: 10 }]),
@@ -534,5 +555,39 @@ describe('runProvisioning', () => {
     await runProvisioning(1);
 
     expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('watchdog resumes stale paid signup jobs through the idempotent state machine', async () => {
+    const staleJobRow = {
+      id: 1,
+      signupRequestId: CONDO_SIGNUP.signupRequestId,
+      status: 'initiated',
+      startedAt: null,
+      signupUpdatedAt: new Date('2026-04-23T00:00:00.000Z'),
+    };
+    const job = makeJob({});
+
+    buildDb({
+      selectSequence: [
+        [staleJobRow],                       // watchdog query
+        [job],                               // runProvisioning: load job
+        [CONDO_SIGNUP],                      // runProvisioning: load pending signup
+        [{ userId: 'auth-uuid-001' }],       // preferences_set lookup
+      ],
+    });
+
+    const summary = await recoverStuckProvisioningJobs({
+      now: new Date('2026-04-23T00:10:00.000Z'),
+      staleAfterMs: 5 * 60 * 1000,
+    });
+
+    expect(summary).toMatchObject({
+      scanned: 1,
+      attempted: 1,
+      completed: 1,
+      failed: 0,
+      failures: [],
+    });
+    expect(sendEmailMock).toHaveBeenCalledOnce();
   });
 });

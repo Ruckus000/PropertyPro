@@ -16,7 +16,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
-import { and, eq, sql } from '@propertypro/db/filters';
+import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 import {
   communities,
   complianceChecklistItems,
@@ -53,6 +53,23 @@ const STEP_SEQUENCE = [
 ] as const;
 
 type ProvisioningStepSuccess = typeof STEP_SEQUENCE[number];
+
+const RECOVERABLE_JOB_STATUSES = [
+  'initiated',
+  'community_created',
+  'user_linked',
+  'checklist_generated',
+  'categories_created',
+  'preferences_set',
+  'email_sent',
+  'failed',
+] as const;
+
+const RECOVERABLE_SIGNUP_STATUSES = ['payment_completed', 'provisioning'] as const;
+
+const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
+const DEFAULT_MAX_JOBS = 10;
+const DEFAULT_MAX_RETRY_COUNT = 5;
 
 function nextStep(last: string | null): ProvisioningStepSuccess {
   if (!last) return STEP_SEQUENCE[0];
@@ -470,6 +487,108 @@ export async function runProvisioning(jobId: number): Promise<void> {
       throw err; // re-throw so caller can capture to Sentry
     }
   }
+}
+
+export interface ProvisioningWatchdogOptions {
+  now?: Date;
+  staleAfterMs?: number;
+  maxJobs?: number;
+  maxRetryCount?: number;
+}
+
+export interface ProvisioningWatchdogSummary {
+  scanned: number;
+  attempted: number;
+  completed: number;
+  failed: number;
+  failures: Array<{
+    jobId: number;
+    signupRequestId: string | null;
+    errorMessage: string;
+  }>;
+}
+
+/**
+ * Finds paid signups whose provisioning job is stuck and resumes them through
+ * the same idempotent state machine used by the Stripe webhook/manual retry.
+ *
+ * This is the durable safety net for serverless fire-and-forget loss: if the
+ * webhook records payment completion but the background promise is dropped,
+ * the job remains non-terminal and this watchdog can finish it.
+ */
+export async function recoverStuckProvisioningJobs(
+  options: ProvisioningWatchdogOptions = {},
+): Promise<ProvisioningWatchdogSummary> {
+  const db = createUnscopedClient();
+  const now = options.now ?? new Date();
+  const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+  const maxJobs = options.maxJobs ?? DEFAULT_MAX_JOBS;
+  const maxRetryCount = options.maxRetryCount ?? DEFAULT_MAX_RETRY_COUNT;
+  const staleBefore = new Date(now.getTime() - staleAfterMs);
+
+  const rows = await db
+    .select({
+      id: provisioningJobs.id,
+      signupRequestId: provisioningJobs.signupRequestId,
+      status: provisioningJobs.status,
+      startedAt: provisioningJobs.startedAt,
+      signupUpdatedAt: pendingSignups.updatedAt,
+    })
+    .from(provisioningJobs)
+    .innerJoin(
+      pendingSignups,
+      eq(provisioningJobs.signupRequestId, pendingSignups.signupRequestId),
+    )
+    .where(
+      and(
+        inArray(provisioningJobs.status, [...RECOVERABLE_JOB_STATUSES]),
+        inArray(pendingSignups.status, [...RECOVERABLE_SIGNUP_STATUSES]),
+        sql`coalesce(${provisioningJobs.retryCount}, 0) < ${maxRetryCount}`,
+        or(
+          // Webhook inserted the job but the background promise never reached runProvisioning().
+          and(
+            eq(provisioningJobs.status, 'initiated'),
+            isNull(provisioningJobs.startedAt),
+            lt(pendingSignups.updatedAt, staleBefore),
+          ),
+          // Provisioning started but the process died before a terminal checkpoint.
+          and(
+            lt(provisioningJobs.startedAt, staleBefore),
+            sql`${provisioningJobs.status} <> 'completed'`,
+          ),
+          // Explicit failures are safe to retry because runProvisioning resumes
+          // after lastSuccessfulStatus and each step is idempotent.
+          eq(provisioningJobs.status, 'failed'),
+        ),
+      ),
+    )
+    .orderBy(asc(pendingSignups.updatedAt))
+    .limit(maxJobs);
+
+  const summary: ProvisioningWatchdogSummary = {
+    scanned: rows.length,
+    attempted: 0,
+    completed: 0,
+    failed: 0,
+    failures: [],
+  };
+
+  for (const row of rows) {
+    summary.attempted += 1;
+    try {
+      await runProvisioning(row.id);
+      summary.completed += 1;
+    } catch (err) {
+      summary.failed += 1;
+      summary.failures.push({
+        jobId: row.id,
+        signupRequestId: row.signupRequestId ?? null,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return summary;
 }
 
 // ---------------------------------------------------------------------------
