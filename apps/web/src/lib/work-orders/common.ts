@@ -1,8 +1,9 @@
 import type { NewCommunityRole } from '@propertypro/shared';
-import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
+import { getEffectiveFeatures } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
+import { resolvePlanIdWithTelemetry } from '@/lib/telemetry/plan-resolution';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
@@ -10,7 +11,10 @@ export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
 export function requireWorkOrdersEnabled(membership: CommunityMembership): void {
   const features = getEffectiveFeatures(
     membership.communityType,
-    resolvePlanId(membership.subscriptionPlan),
+    resolvePlanIdWithTelemetry(membership.subscriptionPlan, {
+      site: 'work-orders:requireWorkOrdersEnabled',
+      communityId: membership.communityId,
+    }),
   );
   if (!features.hasWorkOrders) {
     throw new ForbiddenError('Work orders are not enabled for this community or plan');
@@ -20,7 +24,10 @@ export function requireWorkOrdersEnabled(membership: CommunityMembership): void 
 export function requireAmenitiesEnabled(membership: CommunityMembership): void {
   const features = getEffectiveFeatures(
     membership.communityType,
-    resolvePlanId(membership.subscriptionPlan),
+    resolvePlanIdWithTelemetry(membership.subscriptionPlan, {
+      site: 'work-orders:requireAmenitiesEnabled',
+      communityId: membership.communityId,
+    }),
   );
   if (!features.hasAmenities) {
     throw new ForbiddenError('Amenities are not enabled for this community or plan');
