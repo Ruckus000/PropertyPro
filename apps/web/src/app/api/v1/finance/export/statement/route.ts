@@ -6,6 +6,7 @@ import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
+  exportCommunityStatementPdf,
   exportStatementPdf,
   listActorUnitIdsForFinance,
   resolveStatementDateRange,
@@ -23,15 +24,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const rawEndDate = searchParams.get('endDate');
   const { startDate, endDate } = resolveStatementDateRange(rawStartDate, rawEndDate);
 
-  let unitId: number;
+  // Resident / unit-owner path — preserve existing behaviour exactly.
   if (membership.role === 'resident' && membership.isUnitOwner) {
     const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
     if (actorUnitIds.length === 0) {
       throw new ForbiddenError('No unit association found for this owner');
     }
-    if (!rawUnitId && actorUnitIds.length > 1) {
-      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
-    }
+
+    let unitId: number;
     if (rawUnitId) {
       const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
       if (!actorUnitIds.includes(requestedUnitId)) {
@@ -45,22 +45,42 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       }
       unitId = onlyUnitId;
     } else {
-      throw new BadRequestError('unitId query parameter is required when you are associated with multiple units');
+      throw new BadRequestError(
+        'unitId query parameter is required when you are associated with multiple units',
+      );
     }
-  } else {
-    requireFinanceReadPermission(membership);
-    if (!rawUnitId) {
-      throw new BadRequestError('unitId query parameter is required');
-    }
-    unitId = parsePositiveInt(rawUnitId, 'unitId');
+
+    const pdf = await exportStatementPdf(communityId, unitId, startDate, endDate);
+    return new NextResponse(Buffer.from(pdf), {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename=\"statement-community-${communityId}-unit-${unitId}.pdf\"`,
+      },
+    });
   }
 
-  const pdf = await exportStatementPdf(communityId, unitId, startDate, endDate);
+  // Staff / manager path — unit-scoped when unitId provided, else community rollup.
+  requireFinanceReadPermission(membership);
+
+  if (rawUnitId) {
+    const unitId = parsePositiveInt(rawUnitId, 'unitId');
+    const pdf = await exportStatementPdf(communityId, unitId, startDate, endDate);
+    return new NextResponse(Buffer.from(pdf), {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename=\"statement-community-${communityId}-unit-${unitId}.pdf\"`,
+      },
+    });
+  }
+
+  const pdf = await exportCommunityStatementPdf(communityId, startDate, endDate);
   return new NextResponse(Buffer.from(pdf), {
     status: 200,
     headers: {
       'content-type': 'application/pdf',
-      'content-disposition': `attachment; filename=\"statement-community-${communityId}-unit-${unitId}.pdf\"`,
+      'content-disposition': `attachment; filename=\"statement-community-${communityId}.pdf\"`,
     },
   });
 });
