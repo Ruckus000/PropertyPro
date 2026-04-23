@@ -46,29 +46,41 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
     ? parsedUnitId
     : undefined;
 
+  // Staff / manager roles: community-wide dashboard. Skip the per-resident
+  // unit-picker flow entirely — PaymentPortal fetches aggregated data.
+  if (membership.role !== 'resident') {
+    return (
+      <PaymentPortal
+        communityId={communityId}
+        userRole={membership.role}
+        mode="community"
+      />
+    );
+  }
+
+  // Resident path — resolve the actor's visible unit(s) and decide whether to
+  // auto-select a single unit, require explicit selection, or pass through.
   let unitId = queryUnitId;
   let actorUnits: Array<{ id: number; label: string }> = [];
   let requiresExplicitUnitSelection = false;
 
-  if (membership.role === 'resident') {
-    const scoped = createScopedClient(communityId);
-    const actorUnitIds = await listActorUnitIds(scoped, userId);
-    const unitRows = await scoped.query(units);
-    const visibleUnitIdSet = new Set(actorUnitIds);
+  const scoped = createScopedClient(communityId);
+  const actorUnitIds = await listActorUnitIds(scoped, userId);
+  const unitRows = await scoped.query(units);
+  const visibleUnitIdSet = new Set(actorUnitIds);
 
-    actorUnits = (unitRows as Array<{ id: number; unitNumber: string }>)
-      .filter((unit) => visibleUnitIdSet.has(unit.id))
-      .map((unit) => ({ id: unit.id, label: `Unit ${unit.unitNumber}` }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+  actorUnits = (unitRows as Array<{ id: number; unitNumber: string }>)
+    .filter((unit) => visibleUnitIdSet.has(unit.id))
+    .map((unit) => ({ id: unit.id, label: `Unit ${unit.unitNumber}` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-    if (actorUnits.length === 1) {
-      unitId = actorUnits[0]?.id;
-    } else if (actorUnits.length > 1) {
-      const hasValidSelection = unitId !== undefined && visibleUnitIdSet.has(unitId);
-      requiresExplicitUnitSelection = !hasValidSelection;
-      if (!hasValidSelection) {
-        unitId = undefined;
-      }
+  if (actorUnits.length === 1) {
+    unitId = actorUnits[0]?.id;
+  } else if (actorUnits.length > 1) {
+    const hasValidSelection = unitId !== undefined && visibleUnitIdSet.has(unitId);
+    requiresExplicitUnitSelection = !hasValidSelection;
+    if (!hasValidSelection) {
+      unitId = undefined;
     }
   }
 
@@ -76,6 +88,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
     <PaymentPortal
       communityId={communityId}
       userRole={membership.role}
+      mode="unit"
       unitId={unitId}
       actorUnits={actorUnits}
       requiresExplicitUnitSelection={requiresExplicitUnitSelection}

@@ -12,7 +12,7 @@ import { formatDateOnly } from '@/lib/utils/format-date';
 
 type LineItemStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
 
-interface LineItem {
+interface UnitLineItem {
   id: number;
   assessmentId: number | null;
   unitId: number;
@@ -24,6 +24,12 @@ interface LineItem {
   lateFeeCents: number;
 }
 
+interface CommunityLineItem extends UnitLineItem {
+  unitNumber: string;
+}
+
+type LineItem = UnitLineItem | CommunityLineItem;
+
 interface LedgerEntry {
   id: number;
   entryType: string;
@@ -32,16 +38,31 @@ interface LedgerEntry {
   createdAt: string;
 }
 
-interface StatementData {
+interface UnitStatementData {
   unitId: number;
   balanceCents: number;
   ledgerEntries: LedgerEntry[];
-  lineItems: LineItem[];
+  lineItems: UnitLineItem[];
 }
+
+interface CommunityStatementData {
+  balanceCents: number;
+  ledgerEntries: LedgerEntry[];
+  lineItems: CommunityLineItem[];
+}
+
+interface StatementEnvelope {
+  mode: 'unit' | 'community';
+  data: UnitStatementData | CommunityStatementData;
+}
+
+export type PaymentPortalMode = 'unit' | 'community';
 
 interface PaymentPortalProps {
   communityId: number;
   userRole: string;
+  /** Defaults to `'unit'` for backwards compatibility. */
+  mode?: PaymentPortalMode;
   /** Required for non-owner roles; owners' unitId is resolved server-side. */
   unitId?: number;
   actorUnits?: Array<{ id: number; label: string }>;
@@ -94,13 +115,25 @@ function StatusBadge({ status }: { status: LineItemStatus }) {
 
 /* ─────── Fetch ─────── */
 
-async function fetchStatement(communityId: number, unitId?: number): Promise<StatementData> {
+async function fetchStatement(
+  communityId: number,
+  mode: PaymentPortalMode,
+  unitId?: number,
+): Promise<UnitStatementData | CommunityStatementData> {
   const params = new URLSearchParams({ communityId: String(communityId) });
   if (unitId) params.set('unitId', String(unitId));
   const res = await fetch(`/api/v1/payments/statement?${params}`);
   if (!res.ok) throw new Error('Failed to load payment data');
-  const json = await res.json();
-  return json.data;
+  const json = (await res.json()) as StatementEnvelope | { data: UnitStatementData };
+
+  // Back-compat: older servers (or mocks) may return `{ data }` without `mode`.
+  if ('mode' in json && typeof json.mode === 'string') {
+    if (mode === 'community' && json.mode !== 'community') {
+      throw new Error('Expected community statement, received unit statement');
+    }
+    return json.data;
+  }
+  return (json as { data: UnitStatementData }).data;
 }
 
 async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
@@ -115,21 +148,25 @@ async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
 export function PaymentPortal({
   communityId,
   userRole,
+  mode = 'unit',
   unitId,
   actorUnits = [],
   requiresExplicitUnitSelection = false,
 }: PaymentPortalProps) {
+  void userRole;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [payingLineItem, setPayingLineItem] = useState<LineItem | null>(null);
+  const [payingLineItem, setPayingLineItem] = useState<UnitLineItem | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
   const hasMultipleUnits = actorUnits.length > 1;
-  const canLoadData = !requiresExplicitUnitSelection;
+  const canLoadData = mode === 'community' || !requiresExplicitUnitSelection;
+  const showUnitColumn = mode === 'community';
+  const canPay = mode === 'unit';
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['payment-portal', communityId, unitId],
-    queryFn: () => fetchStatement(communityId, unitId),
+    queryKey: ['payment-portal', communityId, mode, unitId],
+    queryFn: () => fetchStatement(communityId, mode, unitId),
     enabled: canLoadData,
     staleTime: 30_000,
     retry: false,
@@ -147,7 +184,7 @@ export function PaymentPortal({
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  if (requiresExplicitUnitSelection) {
+  if (requiresExplicitUnitSelection && mode === 'unit') {
     return (
       <div className="space-y-4">
         <AlertBanner
@@ -194,18 +231,35 @@ export function PaymentPortal({
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
+        <p className="text-sm font-medium text-content">
+          {mode === 'community'
+            ? 'No payment activity yet for this community.'
+            : 'All caught up!'}
+        </p>
+        <p className="mt-1 text-sm text-content-tertiary">
+          {mode === 'community'
+            ? "Once assessments or rent are generated, you'll see them listed here."
+            : 'You have no outstanding assessments.'}
+        </p>
+      </div>
+    );
+  }
 
-  const unpaidItems = data.lineItems.filter(
+  const lineItems: LineItem[] = data.lineItems;
+  const unpaidItems = lineItems.filter(
     (li) => li.status === 'pending' || li.status === 'partially_paid' || li.status === 'overdue',
   );
-  const paidItems = data.lineItems.filter((li) => li.status === 'paid');
+  const paidItems = lineItems.filter((li) => li.status === 'paid');
   const totalDueCents = unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
   const overdueCount = unpaidItems.filter((li) => li.status === 'overdue').length;
+  const balanceLabel = mode === 'community' ? 'Community Balance' : 'Current Balance';
 
   return (
     <div className="space-y-6">
-      {hasMultipleUnits && (
+      {hasMultipleUnits && mode === 'unit' && (
         <UnitSelectCard
           actorUnits={actorUnits}
           selectedUnitId={unitId}
@@ -216,7 +270,7 @@ export function PaymentPortal({
       {/* Balance Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
-          label="Current Balance"
+          label={balanceLabel}
           value={formatCents(data.balanceCents)}
           accent={data.balanceCents > 0 ? 'red' : data.balanceCents === 0 ? 'green' : 'blue'}
         />
@@ -268,12 +322,15 @@ export function PaymentPortal({
         <UpcomingAssessments
           items={unpaidItems}
           onPay={setPayingLineItem}
-          canPay={true}
+          canPay={canPay}
           feePolicy={feePolicy}
+          showUnitColumn={showUnitColumn}
         />
       )}
 
-      {activeTab === 'history' && <PaymentHistory items={paidItems} />}
+      {activeTab === 'history' && (
+        <PaymentHistory items={paidItems} showUnitColumn={showUnitColumn} />
+      )}
 
       {/* Payment Dialog */}
       {payingLineItem && (
@@ -398,16 +455,25 @@ function TabButton({
   );
 }
 
+function unitLabel(item: LineItem): string {
+  if ('unitNumber' in item && item.unitNumber) {
+    return `Unit ${item.unitNumber}`;
+  }
+  return `Unit #${item.unitId}`;
+}
+
 function UpcomingAssessments({
   items,
   onPay,
   canPay,
   feePolicy,
+  showUnitColumn,
 }: {
   items: LineItem[];
   feePolicy?: PaymentFeePolicy;
-  onPay: (item: LineItem) => void;
+  onPay: (item: UnitLineItem) => void;
   canPay: boolean;
+  showUnitColumn: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -432,6 +498,9 @@ function UpcomingAssessments({
       <table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>
+            {showUnitColumn && (
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Unit</th>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Due Date</th>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
@@ -445,6 +514,9 @@ function UpcomingAssessments({
             const totalCents = item.amountCents + item.lateFeeCents;
             return (
               <tr key={item.id} className="hover:bg-surface-hover">
+                {showUnitColumn && (
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{unitLabel(item)}</td>
+                )}
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={item.status} />
@@ -478,7 +550,13 @@ function UpcomingAssessments({
   );
 }
 
-function PaymentHistory({ items }: { items: LineItem[] }) {
+function PaymentHistory({
+  items,
+  showUnitColumn,
+}: {
+  items: LineItem[];
+  showUnitColumn: boolean;
+}) {
   if (items.length === 0) {
     return (
       <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
@@ -492,6 +570,9 @@ function PaymentHistory({ items }: { items: LineItem[] }) {
       <table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>
+            {showUnitColumn && (
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Unit</th>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Due Date</th>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Paid On</th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase text-content-tertiary">Amount</th>
@@ -501,6 +582,9 @@ function PaymentHistory({ items }: { items: LineItem[] }) {
         <tbody className="divide-y divide-edge-subtle">
           {items.map((item) => (
             <tr key={item.id} className="hover:bg-surface-hover">
+              {showUnitColumn && (
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{unitLabel(item)}</td>
+              )}
               <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{formatDate(item.dueDate)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
                 {item.paidAt ? new Date(item.paidAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
