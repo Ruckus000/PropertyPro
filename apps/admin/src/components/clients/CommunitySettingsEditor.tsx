@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, Save, RotateCcw } from 'lucide-react';
 import {
   COMMUNITY_FEATURES,
+  PLAN_IDS,
   type CommunityType,
   type CommunityFeatures,
 } from '@propertypro/shared';
@@ -77,6 +78,12 @@ const WRITE_LEVEL_CONFIG: WriteLevelConfig[] = [
 ];
 
 const SUBSCRIPTION_OPTIONS = ['active', 'trialing', 'past_due', 'canceled'] as const;
+
+const PLAN_LABELS: Record<(typeof PLAN_IDS)[number], string> = {
+  essentials: 'Essentials',
+  professional: 'Professional',
+  operations_plus: 'Operations Plus',
+};
 
 const US_TIMEZONES = [
   'America/New_York',
@@ -177,7 +184,8 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
         community_settings: form.community_settings,
       };
 
-      if (form.subscription_plan) body.subscription_plan = form.subscription_plan;
+      // Plan: empty string ("Not set") means clear to null on the server.
+      body.subscription_plan = form.subscription_plan || null;
       if (form.subscription_status) {
         body.subscription_status = form.subscription_status;
       }
@@ -282,13 +290,16 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Plan</label>
-            <input
-              type="text"
+            <select
               value={form.subscription_plan}
               onChange={(e) => handleChange('subscription_plan', e.target.value)}
-              placeholder="e.g. starter, professional"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+            >
+              <option value="">Not set</option>
+              {PLAN_IDS.map((planId) => (
+                <option key={planId} value={planId}>{PLAN_LABELS[planId]}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
