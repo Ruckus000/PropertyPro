@@ -9,6 +9,7 @@ import {
   requireAmenitiesReadPermission,
 } from '@/lib/work-orders/common';
 import { getAmenityScheduleForCommunity } from '@/lib/services/work-orders-service';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -20,6 +21,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);
+    await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
 
     const data = await getAmenityScheduleForCommunity(communityId, amenityId);

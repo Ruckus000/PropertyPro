@@ -26,12 +26,20 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(searchParamsMock()),
 }));
 
-vi.mock('@/hooks/use-operations', () => ({
-  useMaintenanceRequests: useMaintenanceRequestsMock,
-  useOperations: useOperationsMock,
-  useWorkOrders: useWorkOrdersMock,
-  useReservations: useReservationsMock,
-}));
+vi.mock('@/hooks/use-operations', async () => {
+  // Preserve non-hook exports (constants, parsers) so the hub can import them
+  // at module load without the test having to stub each one.
+  const actual = await vi.importActual<typeof import('@/hooks/use-operations')>(
+    '@/hooks/use-operations',
+  );
+  return {
+    ...actual,
+    useMaintenanceRequests: useMaintenanceRequestsMock,
+    useOperations: useOperationsMock,
+    useWorkOrders: useWorkOrdersMock,
+    useReservations: useReservationsMock,
+  };
+});
 
 describe('OperationsHub', () => {
   beforeEach(() => {
@@ -41,7 +49,7 @@ describe('OperationsHub', () => {
     useMaintenanceRequestsMock.mockReturnValue({
       isLoading: false,
       error: null,
-      data: { data: [] },
+      data: { data: [], meta: { total: 0, page: 1, limit: 20 } },
     });
     useOperationsMock.mockReturnValue({
       isLoading: false,
@@ -88,13 +96,18 @@ describe('OperationsHub', () => {
         requestScope="mine"
         requestActionHref="/maintenance/submit?communityId=42"
         requestActionLabel="Submit Request"
+        communityTimezone="America/New_York"
       />,
     );
 
-    expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(42, {
-      scope: 'mine',
-      enabled: true,
-    });
+    expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        scope: 'mine',
+        enabled: true,
+        params: expect.objectContaining({ page: 1, limit: 20 }),
+      }),
+    );
     expect(screen.getByRole('tablist', { name: 'Operations tabs' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'All' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Work Orders' })).not.toBeInTheDocument();
@@ -139,6 +152,7 @@ describe('OperationsHub', () => {
             comments: [],
           },
         ],
+        meta: { total: 1, page: 1, limit: 20 },
       },
     });
 
@@ -151,13 +165,18 @@ describe('OperationsHub', () => {
         requestScope="community"
         requestActionHref="/maintenance/inbox?communityId=42"
         requestActionLabel="Open Inbox"
+        communityTimezone="America/New_York"
       />,
     );
 
-    expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(42, {
-      scope: 'community',
-      enabled: true,
-    });
+    expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        scope: 'community',
+        enabled: true,
+        params: expect.objectContaining({ page: 1, limit: 20 }),
+      }),
+    );
     expect(screen.getByText('Lobby light out')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Inbox' })).toHaveAttribute(
       'href',
@@ -177,6 +196,7 @@ describe('OperationsHub', () => {
         requestScope="mine"
         requestActionHref="/maintenance/submit?communityId=42"
         requestActionLabel="Submit Request"
+        communityTimezone="America/New_York"
       />,
     );
 
@@ -190,5 +210,137 @@ describe('OperationsHub', () => {
       expect.objectContaining({ limit: 50 }),
       expect.objectContaining({ enabled: false }),
     );
+  });
+
+  // ── Phase 1 regression tests ──────────────────────────────────────────────
+
+  it('renders timestamps in the community timezone, not browser local', () => {
+    searchParamsMock.mockReturnValue('tab=reservations');
+    useReservationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: [
+        {
+          id: 1,
+          amenityId: 1,
+          unitId: null,
+          status: 'confirmed',
+          startTime: '2026-03-28T14:00:00.000Z',
+          endTime: '2026-03-28T15:00:00.000Z',
+          notes: null,
+          createdAt: '2026-03-27T14:00:00.000Z',
+          updatedAt: '2026-03-27T14:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={true}
+        requestScope="mine"
+        requestActionHref="/communities/42/operations?tab=requests"
+        requestActionLabel="Submit Request"
+        communityTimezone="America/New_York"
+      />,
+    );
+
+    // 14:00 UTC = 10:00 EDT on 2026-03-28 (DST in effect).
+    // Assert rendered text contains 10:00 (or "10 AM") but NOT 14:00 (UTC).
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.textContent).toMatch(/10:00|10 AM/i);
+    expect(panel.textContent).not.toMatch(/14:00/);
+  });
+
+  it('passes filter params from URL to the requests query hook', () => {
+    searchParamsMock.mockReturnValue('tab=requests&status=new&priority=urgent&page=2');
+    useMaintenanceRequestsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: { data: [], meta: { total: 0, page: 2, limit: 20 } },
+    });
+
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        communityTimezone="America/New_York"
+      />,
+    );
+
+    expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        params: expect.objectContaining({ status: 'new', priority: 'urgent', page: 2 }),
+      }),
+    );
+  });
+
+  it('shows Load more button when requests have more pages', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    useMaintenanceRequestsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [{
+          id: 1,
+          communityId: 42,
+          unitId: null,
+          submittedById: 'u-1',
+          title: 'Test',
+          description: 'Test',
+          status: 'new',
+          priority: 'normal',
+          category: 'general',
+          assignedToId: null,
+          resolutionDescription: null,
+          resolutionDate: null,
+          photos: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          comments: [],
+        }],
+        meta: { total: 40, page: 1, limit: 20 },
+      },
+    });
+
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(screen.getByRole('button', { name: /load more/i })).toBeInTheDocument();
+  });
+
+  it('still renders the legacy-redirect banner when legacyNotice is set', () => {
+    searchParamsMock.mockReturnValue('tab=requests&from=maintenance');
+    useMaintenanceRequestsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: { data: [], meta: { total: 0, page: 1, limit: 20 } },
+    });
+
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        communityTimezone="America/New_York"
+        legacyNotice="You were redirected from a legacy maintenance page."
+      />,
+    );
+    expect(screen.getByText(/redirected from a legacy maintenance page/i)).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { operationsTabHref } from '@/lib/operations/routes';
 
 // ─── Data interfaces ──────────────────────────────────────────
 
@@ -380,7 +381,7 @@ export function TenantCards({ communityId, community, unit }: TenantCardsProps) 
         <p className="text-sm text-content-secondary">
           Submit and track maintenance requests for your unit.
         </p>
-        <ActionLink href={`/maintenance/submit?communityId=${communityId}`} label="Submit a request" />
+        <ActionLink href={operationsTabHref(communityId, 'requests')} label="Submit a request" />
       </SnapshotCard>
     </div>
   );

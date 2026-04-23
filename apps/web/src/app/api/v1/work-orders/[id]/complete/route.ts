@@ -7,6 +7,7 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireWorkOrderAdminWrite,
@@ -39,6 +40,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireWorkOrdersEnabled(membership);
+    await requirePlanFeature(communityId, 'hasWorkOrders');
     requireWorkOrdersWritePermission(membership);
     requireWorkOrderAdminWrite(membership);
 

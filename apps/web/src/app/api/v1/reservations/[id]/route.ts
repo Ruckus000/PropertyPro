@@ -12,6 +12,7 @@ import {
 } from '@/lib/work-orders/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { cancelReservationForCommunity } from '@/lib/services/work-orders-service';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 export const DELETE = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -24,6 +25,7 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);
+    await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesWritePermission(membership);
     requireReservationPermission(membership);
 

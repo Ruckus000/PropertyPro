@@ -52,6 +52,10 @@ vi.mock('@/lib/work-orders/common', () => ({
   requireReservationPermission: requireReservationPermissionMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({
+  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/services/work-orders-service', () => ({
   cancelReservationForCommunity: cancelReservationForCommunityMock,
 }));

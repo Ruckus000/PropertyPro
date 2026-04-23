@@ -60,6 +60,8 @@ export interface NavItemConfig {
   roles?: readonly CommunityRole[];
   /** Only show when this community feature is enabled. */
   featureKey?: keyof CommunityFeatures;
+  /** Visible when ANY of these features is enabled (any-of semantics). Evaluated alongside featureKey. */
+  featureKeys?: readonly (keyof CommunityFeatures)[];
   /** Pathname prefixes used for active-state matching. */
   matchPrefixes: readonly string[];
 }
@@ -113,7 +115,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Operations',
     icon: BriefcaseBusiness,
     href: (cid) => `/communities/${cid}/operations?tab=requests`,
-    featureKey: 'hasMaintenanceRequests',
+    featureKeys: ['hasMaintenanceRequests', 'hasWorkOrders', 'hasAmenities'],
     matchPrefixes: ['/operations'],
   },
   {
@@ -333,6 +335,10 @@ export function getVisibleItems(
       }
     }
     if (item.featureKey && features && !features[item.featureKey]) return false;
+    if (item.featureKeys && features) {
+      const anyEnabled = item.featureKeys.some((key) => features[key]);
+      if (!anyEnabled) return false;
+    }
     return true;
   });
 }
@@ -377,6 +383,10 @@ export function getVisibleItemsWithPlanGate(
       }
       // Community-type gate: if the TYPE doesn't support it, hide entirely
       if (item.featureKey && typeFeatures && !typeFeatures[item.featureKey]) return false;
+      if (item.featureKeys && typeFeatures) {
+        const anyTypeEnabled = item.featureKeys.some((key) => typeFeatures[key]);
+        if (!anyTypeEnabled) return false;
+      }
       return true;
     })
     .map((item) => {
@@ -391,6 +401,24 @@ export function getVisibleItemsWithPlanGate(
           // Find cheapest plan that includes this feature
           const upgrade = findCheapestPlanForFeature(item.featureKey!);
           upgradePlanName = upgrade?.displayName ?? null;
+        }
+      }
+
+      // featureKeys plan gate: locked only if ALL keys are plan-excluded
+      if (item.featureKeys && features && planId) {
+        const planConfig = PLAN_FEATURES[planId];
+        if (planConfig) {
+          const allPlanLocked = item.featureKeys.every(
+            (key) => !features[key] && !planConfig.features[key],
+          );
+          if (allPlanLocked) {
+            planLocked = true;
+            const candidates = item.featureKeys
+              .map((key) => findCheapestPlanForFeature(key))
+              .filter((x): x is NonNullable<typeof x> => Boolean(x));
+            const cheapest = candidates.sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
+            upgradePlanName = cheapest?.displayName ?? null;
+          }
         }
       }
 

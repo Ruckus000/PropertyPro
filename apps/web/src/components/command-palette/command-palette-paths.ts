@@ -1,3 +1,5 @@
+import { operationsTabHref } from '@/lib/operations/routes';
+
 interface EntityListPathOptions {
   communityId: number | null;
   isAdmin: boolean;
@@ -39,11 +41,14 @@ export function getEntityListPath(
       return communityId
         ? withQuery(`/communities/${communityId}/meetings`, query)
         : withQuery('/meetings', query);
-    case 'maintenance':
+    // T11: admin/non-admin collapse to the same URL — Operations hub handles
+    // role-based scope internally. isAdmin is not consulted here.
+    case 'maintenance': {
       if (!communityId) return null;
-      return isAdmin
-        ? withCommunityQuery('/maintenance/inbox', communityId, query)
-        : withCommunityQuery('/maintenance/submit', communityId, query);
+      const base = operationsTabHref(communityId, 'requests');
+      if (!query?.trim()) return base;
+      return `${base}&q=${encodeURIComponent(query.trim())}`;
+    }
     case 'violations':
       if (!communityId) return null;
       return isAdmin

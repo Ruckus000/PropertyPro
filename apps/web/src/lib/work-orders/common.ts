@@ -1,5 +1,5 @@
 import type { NewCommunityRole } from '@propertypro/shared';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
@@ -8,16 +8,22 @@ import { requirePermission } from '@/lib/db/access-control';
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
 
 export function requireWorkOrdersEnabled(membership: CommunityMembership): void {
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
   if (!features.hasWorkOrders) {
-    throw new ForbiddenError('Work orders are not enabled for this community type');
+    throw new ForbiddenError('Work orders are not enabled for this community or plan');
   }
 }
 
 export function requireAmenitiesEnabled(membership: CommunityMembership): void {
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
   if (!features.hasAmenities) {
-    throw new ForbiddenError('Amenities are not enabled for this community type');
+    throw new ForbiddenError('Amenities are not enabled for this community or plan');
   }
 }
 

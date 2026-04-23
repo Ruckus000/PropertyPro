@@ -1,4 +1,4 @@
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { OperationsHub } from '@/components/operations/operations-hub';
 import { ForbiddenError } from '@/lib/api/errors';
 import { checkPermissionV2 } from '@/lib/db/access-control';
@@ -23,16 +23,28 @@ function canReadResource(
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    tab?: string;
+    status?: string;
+    priority?: string;
+    unitId?: string;
+    q?: string;
+    cursor?: string;
+    page?: string;
+  }>;
 }
 
 export default async function OperationsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { from } = await searchParams;
+  const { from, tab, status, priority, unitId, q, cursor, page } = await searchParams;
   const communityId = Number(id);
   const userId = await requirePageAuthenticatedUserId();
   const membership = await requirePageCommunityMembership(communityId, userId);
-  const features = getFeaturesForCommunity(membership.communityType);
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
 
   const requestsEnabled = features.hasMaintenanceRequests && canReadResource(membership, 'maintenance');
   const workOrdersEnabled = features.hasWorkOrders && canReadResource(membership, 'work_orders');
@@ -51,6 +63,11 @@ export default async function OperationsPage({ params, searchParams }: PageProps
     ? 'You were redirected from a legacy maintenance page. Operations now holds requests, work orders, and reservations.'
     : null;
 
+  // membership.timezone is always defined; falls back to 'America/New_York'
+  // when the communities row has a null/invalid timezone. See
+  // requireCommunityMembership() in lib/api/community-membership.ts.
+  const communityTimezone = membership.timezone;
+
   return (
     <OperationsHub
       communityId={communityId}
@@ -61,6 +78,9 @@ export default async function OperationsPage({ params, searchParams }: PageProps
       requestScope={requestScope}
       requestActionHref={requestActionHref}
       requestActionLabel={requestActionLabel}
+      communityTimezone={communityTimezone}
+      initialTab={tab}
+      initialFilters={{ status, priority, unitId, q, cursor, page }}
     />
   );
 }

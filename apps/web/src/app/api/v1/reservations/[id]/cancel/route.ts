@@ -15,6 +15,7 @@ import {
 } from '@/lib/work-orders/common';
 import { cancelReservationForCommunity } from '@/lib/services/work-orders-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 const cancelReservationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -40,6 +41,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);
+    await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesWritePermission(membership);
     requireReservationPermission(membership);
 
