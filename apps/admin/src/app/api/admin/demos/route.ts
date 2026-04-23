@@ -21,6 +21,9 @@ import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEMO_TRIAL_DURATION_MS = 14 * DAY_MS;
+const DEMO_GRACE_DURATION_MS = 7 * DAY_MS;
 
 const createDemoSchema = z.object({
   templateType: z.enum(['condo_718', 'hoa_720', 'apartment']),
@@ -136,6 +139,9 @@ export async function POST(request: NextRequest) {
   };
 
   const strategy = contentStrategy !== undefined ? getStrategyById(contentStrategy) : undefined;
+  const now = Date.now();
+  const trialEndsAt = new Date(now + DEMO_TRIAL_DURATION_MS);
+  const demoExpiresAt = new Date(now + DEMO_TRIAL_DURATION_MS + DEMO_GRACE_DURATION_MS);
 
   let seedResult;
   try {
@@ -148,6 +154,8 @@ export async function POST(request: NextRequest) {
       city: 'Demo City',
       state: 'FL',
       zipCode: '00000',
+      trialEndsAt,
+      demoExpiresAt,
     };
     if (strategy?.seedHints) {
       seedConfig.seedHints = strategy.seedHints;
@@ -165,25 +173,6 @@ export async function POST(request: NextRequest) {
       { error: { code: 'SEED_ERROR', message } },
       { status: 500 },
     );
-  }
-
-  // Set trial_ends_at (14 days) and demo_expires_at (21 days) on the seeded community.
-  // 14-day trial + 7-day grace period model (replaces 30-day flat expiry).
-  // Note: uses untyped from() helper pattern (same as demo-queries.ts).
-  if (seedResult.communityId) {
-    const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
-    const GRACE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    const trialEndsAt = new Date(now + TRIAL_DURATION_MS).toISOString();
-    const expiresAt = new Date(now + TRIAL_DURATION_MS + GRACE_DURATION_MS).toISOString();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (createAdminClient() as any)
-      .from('communities')
-      .update({ trial_ends_at: trialEndsAt, demo_expires_at: expiresAt })
-      .eq('id', seedResult.communityId);
-    if (updateError) {
-      console.error('[demos/POST] Failed to set demo timestamps:', updateError.message);
-    }
   }
 
   // Generate and encrypt HMAC secret — encryption key is mandatory (DB CHECK constraint

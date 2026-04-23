@@ -5,7 +5,7 @@
  * - Typed interfaces for all records and inputs
  * - All tenant queries via createScopedClient(communityId)
  * - Audit events via logAuditEvent
- * - Signing flow uses createAdminClient for unscoped reads (slug lookup), scoped client for mutations
+ * - Signing flow uses unscoped DB reads for public token lookup, scoped client for mutations
  */
 import crypto from 'node:crypto';
 import { EsignInvitationEmail, EsignReminderEmail, sendEmail } from '@propertypro/email';
@@ -19,7 +19,8 @@ import {
   esignTemplates,
   logAuditEvent,
 } from '@propertypro/db';
-import { and, eq, gte, inArray, isNull, or } from '@propertypro/db/filters';
+import { and, eq, gte, inArray, isNull, lt, or } from '@propertypro/db/filters';
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   ESIGN_CONSENT_TEXT,
   ESIGN_MAX_REMINDERS,
@@ -1066,33 +1067,37 @@ export async function getSignerContext(
   isWaiting: boolean;
   waitingFor: string | null;
 }> {
-  const admin = getAdmin();
+  // Authorization contract: this unauthenticated public read is gated by
+  // possession of the signing-link token pair (submissionExternalId + slug).
+  // That token is the authorization boundary, so this lookup must bypass
+  // tenant scoping and resolve directly against the app database.
+  const db = createUnscopedClient();
 
-  const { data: signerRows, error: signerError } = await admin
-    .from('esign_signers')
-    .select('*')
-    .eq('slug', slug)
-    .is('deleted_at', null)
+  const signerRows = await db
+    .select()
+    .from(esignSigners)
+    .where(and(eq(esignSigners.slug, slug), isNull(esignSigners.deletedAt)))
     .limit(1);
 
-  if (signerError || !signerRows || signerRows.length === 0) {
+  if (signerRows.length === 0) {
     throw new NotFoundError('Invalid or expired signing link');
   }
 
-  const signer = mapSignerRow(signerRows[0] as AnyRow);
+  const signer = { ...(signerRows[0] as EsignSignerRecord) };
 
-  const { data: subRows } = await admin
-    .from('esign_submissions')
-    .select('*')
-    .eq('id', signer.submissionId)
-    .is('deleted_at', null)
+  const subRows = await db
+    .select()
+    .from(esignSubmissions)
+    .where(and(eq(esignSubmissions.id, signer.submissionId), isNull(esignSubmissions.deletedAt)))
     .limit(1);
 
-  if (!subRows || subRows.length === 0) {
+  if (subRows.length === 0) {
     throw new NotFoundError('Submission not found');
   }
 
-  const submission = mapSubmissionRow(subRows[0] as AnyRow);
+  const submission = withEffectiveStatus({
+    ...(subRows[0] as EsignSubmissionRecord),
+  });
 
   if (
     expectedSubmissionExternalId &&
@@ -1101,38 +1106,47 @@ export async function getSignerContext(
     throw new NotFoundError('Invalid or expired signing link');
   }
 
-  const { data: tplRows } = await admin
-    .from('esign_templates')
-    .select('*')
-    .eq('id', submission.templateId)
-    .is('deleted_at', null)
+  const tplRows = await db
+    .select()
+    .from(esignTemplates)
+    .where(and(eq(esignTemplates.id, submission.templateId), isNull(esignTemplates.deletedAt)))
     .limit(1);
 
-  if (!tplRows || tplRows.length === 0) {
+  if (tplRows.length === 0) {
     throw new NotFoundError('Template not found');
   }
 
-  const template = mapTemplateRow(tplRows[0] as AnyRow);
+  const template = { ...(tplRows[0] as EsignTemplateRecord) };
 
   // Check sequential signing
   let isWaiting = false;
   let waitingFor: string | null = null;
 
   if (submission.signingOrder === 'sequential') {
-    const { data: priorSigners } = await admin
-      .from('esign_signers')
-      .select('*')
-      .eq('submission_id', signer.submissionId)
-      .lt('sort_order', signer.sortOrder)
-      .is('deleted_at', null);
+    const priorSigners = await db
+      .select({
+        name: esignSigners.name,
+        status: esignSigners.status,
+        sortOrder: esignSigners.sortOrder,
+      })
+      .from(esignSigners)
+      .where(
+        and(
+          eq(esignSigners.submissionId, signer.submissionId),
+          eq(esignSigners.communityId, signer.communityId),
+          isNull(esignSigners.deletedAt),
+          lt(esignSigners.sortOrder, signer.sortOrder),
+        ),
+      );
 
-    const incompleteSigners = (priorSigners ?? []).filter(
-      (s: AnyRow) => s.status !== 'completed',
+    const incompleteSigners = priorSigners.filter(
+      (candidate) => candidate.status !== 'completed',
     );
 
     if (incompleteSigners.length > 0) {
+      const priorSigner = incompleteSigners.sort((left, right) => left.sortOrder - right.sortOrder)[0];
       isWaiting = true;
-      waitingFor = (incompleteSigners[0] as AnyRow).name ?? 'a previous signer';
+      waitingFor = priorSigner?.name ?? 'a previous signer';
     }
   }
 

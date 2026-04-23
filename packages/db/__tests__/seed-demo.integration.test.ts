@@ -69,6 +69,16 @@ describeDb('demo seed integration', () => {
     expect(sunset).toBeDefined();
     expect(palm).toBeDefined();
     expect(bay).toBeDefined();
+    expect(seededCommunities.every((row) => row.isDemo)).toBe(true);
+    expect(seededCommunities.every((row) => row.trialEndsAt instanceof Date)).toBe(true);
+    expect(seededCommunities.every((row) => row.demoExpiresAt instanceof Date)).toBe(true);
+    expect(
+      seededCommunities.every((row) =>
+        row.trialEndsAt != null
+        && row.demoExpiresAt != null
+        && row.trialEndsAt.getTime() <= row.demoExpiresAt.getTime(),
+      ),
+    ).toBe(true);
 
     const seededAnnouncements = await db
       .select()
@@ -235,6 +245,7 @@ describeDb('demo seed integration', () => {
         ),
       );
     expect(activeLeases.length).toBeGreaterThanOrEqual(15);
+    expect(activeLeases.every((lease) => lease.startDate.endsWith('-01'))).toBe(true);
 
     const maintenanceReqs = await db
       .select()
@@ -309,8 +320,8 @@ describeDb('demo seed integration', () => {
       seededCommunities.map((community) => [community.slug, community.subscriptionPlan]),
     );
     expect(planBySlug).toMatchObject({
-      'sunset-condos': 'essentials',
-      'palm-shores-hoa': 'essentials',
+      'sunset-condos': 'professional',
+      'palm-shores-hoa': 'professional',
       'sunset-ridge-apartments': 'operations_plus',
     });
     expect(seededCommunities.every((community) => community.subscriptionStatus === 'active')).toBe(true);

@@ -16,17 +16,15 @@ import {
 } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist/build/pdf.mjs';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import {
+  createPdfViewerUiError,
+  isPdfRenderCancellation,
+  loadPdfJs,
+  reportPdfViewerError,
+  type PdfJsModule,
+  type PdfViewerUiError,
+} from '@/lib/pdfjs/browser';
 import { Skeleton } from '@/components/ui/skeleton';
-
-type PdfJsModule = typeof import('pdfjs-dist/build/pdf.mjs');
-
-/** Load the browser bundle from a same-origin route to avoid Next webpack interop bugs. */
-async function loadPdfJs(): Promise<PdfJsModule> {
-  // @ts-expect-error — runtime-only import from same-origin proxy route; not a real module path
-  const pdfjs = (await import(/* webpackIgnore: true */ '/pdfjs/pdf.mjs')) as PdfJsModule;
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
-  return pdfjs;
-}
 
 interface PageDimension {
   width: number;
@@ -63,6 +61,7 @@ export function PdfViewer({
 }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const loadAttemptRef = useRef(0);
   const renderTaskRef = useRef<ReturnType<
     Awaited<ReturnType<PDFDocumentProxy['getPage']>>['render']
   > | null>(null);
@@ -70,19 +69,51 @@ export function PdfViewer({
 
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PdfViewerUiError | null>(null);
   const [canvasDimensions, setCanvasDimensions] = useState<PageDimension>({
     width: 0,
     height: 0,
   });
 
   const loadDocument = useCallback(async () => {
-    if (!pdfUrl && !pdfData) return;
+    if (!pdfUrl && !pdfData) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    setTotalPages(0);
+    setCanvasDimensions({ width: 0, height: 0 });
+
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
+
+    if (pdfDocRef.current) {
+      await pdfDocRef.current.destroy();
+      pdfDocRef.current = null;
+    }
+
+    loadAttemptRef.current += 1;
+    const loadAttemptKey = String(loadAttemptRef.current);
+
+    let pdfjs: PdfJsModule;
+    try {
+      pdfjs = await loadPdfJs(loadAttemptKey);
+    } catch (err) {
+      const nextError = createPdfViewerUiError(err, 'module_import');
+      reportPdfViewerError(err, {
+        stage: nextError.stage,
+        pdfUrl,
+        hasPdfData: Boolean(pdfData),
+      });
+      setError(nextError);
+      setLoading(false);
+      return;
+    }
 
     try {
-      const pdfjs = await loadPdfJs();
       const source = pdfData ? { data: pdfData.slice() } : pdfUrl!;
       const loadingTask = pdfjs.getDocument(source);
       const pdf = await loadingTask.promise;
@@ -99,7 +130,13 @@ export function PdfViewer({
       onDocumentLoad({ totalPages: pdf.numPages, pageDimensions: dimensions });
       setLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load PDF');
+      const nextError = createPdfViewerUiError(err, 'document_load');
+      reportPdfViewerError(err, {
+        stage: nextError.stage,
+        pdfUrl,
+        hasPdfData: Boolean(pdfData),
+      });
+      setError(nextError);
       setLoading(false);
     }
   }, [pdfUrl, pdfData, onDocumentLoad]);
@@ -112,8 +149,7 @@ export function PdfViewer({
         pdfDocRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl, pdfData]);
+  }, [loadDocument]);
 
   useEffect(() => {
     if (!pdfDocRef.current || !canvasRef.current || loading || error) return;
@@ -164,15 +200,18 @@ export function PdfViewer({
           renderTaskRef.current = null;
         }
       } catch (err) {
-        if (
-          err instanceof Error &&
-          err.message.includes('Rendering cancelled')
-        ) {
+        if (isPdfRenderCancellation(err)) {
           return;
         }
 
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to render page');
+          const nextError = createPdfViewerUiError(err, 'page_render');
+          reportPdfViewerError(err, {
+            stage: nextError.stage,
+            pdfUrl,
+            hasPdfData: Boolean(pdfData),
+          });
+          setError(nextError);
         }
       }
     }
@@ -186,14 +225,14 @@ export function PdfViewer({
         renderTaskRef.current = null;
       }
     };
-  }, [currentPage, scale, loading, error]);
+  }, [currentPage, scale, loading, error, pdfUrl, pdfData]);
 
   if (error) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-4 rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
       >
-        <p className="text-sm text-status-danger">{error}</p>
+        <p className="text-sm text-status-danger">{error.message}</p>
         <button
           type="button"
           onClick={() => void loadDocument()}

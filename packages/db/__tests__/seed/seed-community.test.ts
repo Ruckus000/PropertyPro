@@ -109,6 +109,26 @@ describe('seedCommunity config validation', () => {
     await expect(seedCommunity(invalidConfig, [])).rejects.toThrow('config.slug');
   });
 
+  it('rejects demo lifecycle configs with trial end after expiry', async () => {
+    await expect(seedCommunity(
+      {
+        name: 'Acme Demo',
+        slug: 'acme-demo',
+        communityType: 'condo_718',
+        isDemo: true,
+        trialEndsAt: new Date('2026-05-01T00:00:00.000Z'),
+        demoExpiresAt: new Date('2026-04-30T00:00:00.000Z'),
+      },
+      [
+        {
+          email: 'owner@example.com',
+          fullName: 'Owner Example',
+          role: 'owner',
+        },
+      ],
+    )).rejects.toThrow('config.trialEndsAt');
+  });
+
   it('rejects empty usersToSeed array', async () => {
     await expect(seedCommunity(
       {

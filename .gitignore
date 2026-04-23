@@ -19,6 +19,7 @@ build/
 .next/
 .turbo/
 *.tsbuildinfo
+apps/web/public/pdfjs/
 
 # Environment files
 .env

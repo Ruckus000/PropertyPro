@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import {
   assessmentLineItems,
   assessments,
+  billingGroups,
   communities,
   complianceChecklistItems,
   createAdminClient,
@@ -23,7 +24,6 @@ import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import {
   ensureSeededDocumentStorage,
   ensureNotificationPreference,
-  getDefaultPassword,
   seedCommunity,
   seedDocumentCategories,
   reconcilePublicUserIdWithAuthId,
@@ -42,6 +42,7 @@ import {
   getOrCreateBillingGroupForPm,
   recalculateVolumeTier,
 } from '../apps/web/src/lib/billing/billing-group-service';
+import { determineTier } from '../apps/web/src/lib/billing/tier-calculator';
 
 const db = createUnscopedClient();
 
@@ -140,6 +141,7 @@ const REUSABLE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>([
   'past_due',
   'unpaid',
 ]);
+const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
 
 interface DemoPortfolioCommunity {
   id: number;
@@ -160,6 +162,39 @@ function debugSeed(message: string): void {
     // eslint-disable-next-line no-console
     console.log(`[seed-demo] ${message}`);
   }
+}
+
+function isRetryableStorageSeedError(message: string): boolean {
+  return /gateway timeout|timed out|timeout|503|504|not visible in storage listing|no data returned/i.test(
+    message,
+  );
+}
+
+async function retryStorageSeedOperation<T>(
+  label: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < STORAGE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (!isRetryableStorageSeedError(message) || attempt === STORAGE_RETRY_DELAYS_MS.length - 1) {
+        throw error;
+      }
+
+      debugSeed(
+        `${label} retry ${attempt + 1}/${STORAGE_RETRY_DELAYS_MS.length - 1} after transient storage error: ${message}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, STORAGE_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Storage seed operation failed: ${label}`);
 }
 
 function getStripeClient(): Stripe | null {
@@ -307,42 +342,9 @@ async function findAuthUserByEmail(email: string): Promise<MatchedAuthUser | nul
   return null;
 }
 
-async function ensureDemoAuthUser(email: string): Promise<string | null> {
-  const demoUser = demoUsersByEmail.get(email) ?? demoUsersByEmail.get(email.toLowerCase());
-  if (!demoUser) {
-    throw new Error(`Missing demo user config for ${email}`);
-  }
-
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return null;
-  }
-
-  const existing = await findAuthUserByEmail(email);
-  const admin = createAdminClient();
-
-  if (existing) {
-    const updateResult = await admin.auth.admin.updateUserById(existing.id, {
-      password: getDefaultPassword(),
-      user_metadata: { ...existing.userMetadata, full_name: demoUser.fullName },
-    });
-    if (updateResult.error) {
-      throw updateResult.error;
-    }
-    return existing.id;
-  }
-
-  const createResult = await admin.auth.admin.createUser({
-    email: demoUser.email,
-    password: getDefaultPassword(),
-    email_confirm: true,
-    user_metadata: { full_name: demoUser.fullName },
-  });
-
-  if (createResult.error) {
-    throw createResult.error;
-  }
-
-  return createResult.data.user.id;
+function shouldSyncDemoAuthUsers(): boolean {
+  const raw = process.env.DEMO_SEED_SYNC_AUTH_USERS?.trim().toLowerCase();
+  return raw == null || raw === '' || (raw !== '0' && raw !== 'false' && raw !== 'no');
 }
 
 function isStripeCustomer(
@@ -374,6 +376,163 @@ async function resolveSeedStripePriceId(
   }
 
   return row.stripePriceId;
+}
+
+function isPlaceholderStripePriceId(priceId: string): boolean {
+  return priceId.startsWith('price_placeholder_');
+}
+
+function isRecoverableDemoBillingStripeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    typeof error === 'object' && error && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const type =
+    typeof error === 'object' && error && 'type' in error
+      ? String((error as { type?: unknown }).type ?? '')
+      : '';
+  const rawType =
+    typeof error === 'object' && error && 'rawType' in error
+      ? String((error as { rawType?: unknown }).rawType ?? '')
+      : '';
+
+  return (
+    /no such price:/i.test(message) ||
+    ((code === 'resource_missing' || rawType === 'invalid_request_error' || type === 'StripeInvalidRequestError') &&
+      /price/i.test(message))
+  );
+}
+
+function resolveExistingDemoStripeCustomerId(
+  seededCommunities: DemoPortfolioCommunity[],
+): string | null {
+  const distinctCustomerIds = [...new Set(
+    seededCommunities
+      .map((community) => community.stripeCustomerId)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+  )];
+
+  if (distinctCustomerIds.length === 1) {
+    return distinctCustomerIds[0]!;
+  }
+
+  return null;
+}
+
+function buildLocalDemoStripeCustomerId(): string {
+  return `demo_local_customer_${DEMO_PM_PORTFOLIO_KEY}`;
+}
+
+function buildLocalDemoStripeSubscriptionId(slug: DemoCommunitySlug): string {
+  return `demo_local_sub_${slug.replaceAll('-', '_')}`;
+}
+
+async function ensureLocalDemoBillingGroup(input: {
+  pmUserId: string;
+  customerId: string;
+  communityIds: number[];
+}): Promise<{ billingGroupId: number; activeCount: number; volumeTier: ReturnType<typeof determineTier> }> {
+  const [existingGroup] = await db
+    .select({
+      id: billingGroups.id,
+      stripeCustomerId: billingGroups.stripeCustomerId,
+    })
+    .from(billingGroups)
+    .where(and(eq(billingGroups.ownerUserId, input.pmUserId), isNull(billingGroups.deletedAt)))
+    .limit(1);
+
+  let billingGroupId = existingGroup?.id ?? null;
+  if (billingGroupId == null) {
+    const [created] = await db
+      .insert(billingGroups)
+      .values({
+        name: DEMO_PM_PORTFOLIO_NAME,
+        stripeCustomerId: input.customerId,
+        ownerUserId: input.pmUserId,
+      })
+      .returning({ id: billingGroups.id });
+
+    if (!created) {
+      throw new Error('Failed to create local demo billing group');
+    }
+
+    billingGroupId = created.id;
+  } else {
+    await db
+      .update(billingGroups)
+      .set({
+        name: DEMO_PM_PORTFOLIO_NAME,
+        stripeCustomerId: input.customerId,
+        updatedAt: new Date(),
+      })
+      .where(eq(billingGroups.id, billingGroupId));
+  }
+
+  await db
+    .update(communities)
+    .set({
+      billingGroupId,
+      updatedAt: new Date(),
+    })
+    .where(inArray(communities.id, input.communityIds));
+
+  const countRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(communities)
+    .where(and(eq(communities.billingGroupId, billingGroupId), isNull(communities.deletedAt)));
+  const activeCount = countRows[0]?.count ?? 0;
+  const volumeTier = determineTier(activeCount);
+
+  await db
+    .update(billingGroups)
+    .set({
+      activeCommunityCount: activeCount,
+      volumeTier,
+      couponSyncStatus: 'synced',
+      updatedAt: new Date(),
+    })
+    .where(eq(billingGroups.id, billingGroupId));
+
+  return { billingGroupId, activeCount, volumeTier };
+}
+
+async function seedLocalPmPortfolioBilling(input: {
+  userIdsByEmail: Record<string, string>;
+  seededCommunities: DemoPortfolioCommunity[];
+  reason: string;
+  preferredCustomerId?: string | null;
+}): Promise<void> {
+  const pmUserId = resolveUserId(input.userIdsByEmail, DEMO_PM_PORTFOLIO_EMAIL);
+  const customerId =
+    input.preferredCustomerId ??
+    resolveExistingDemoStripeCustomerId(input.seededCommunities) ??
+    buildLocalDemoStripeCustomerId();
+
+  for (const community of input.seededCommunities) {
+    const planId = PM_PORTFOLIO_PLAN_BY_SLUG[community.slug];
+
+    await db
+      .update(communities)
+      .set({
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: community.stripeSubscriptionId ?? buildLocalDemoStripeSubscriptionId(community.slug),
+        subscriptionPlan: planId,
+        subscriptionStatus: 'active',
+        updatedAt: new Date(),
+      })
+      .where(eq(communities.id, community.id));
+  }
+
+  const result = await ensureLocalDemoBillingGroup({
+    pmUserId,
+    customerId,
+    communityIds: input.seededCommunities.map((community) => community.id),
+  });
+
+  debugSeed(
+    `pm portfolio billing seeded with local fallback (${input.reason}): group=${result.billingGroupId}, customer=${customerId}, count=${result.activeCount}, tier=${result.volumeTier}`,
+  );
 }
 
 async function ensureDemoPortfolioCustomer(
@@ -574,11 +733,6 @@ async function seedPmPortfolioBilling(
   userIdsByEmail: Record<string, string>,
 ): Promise<void> {
   const stripe = getStripeClient();
-  if (!stripe) {
-    debugSeed('STRIPE_SECRET_KEY is not set; skipping demo PM portfolio billing seed');
-    return;
-  }
-
   const seededCommunities = await db
     .select({
       id: communities.id,
@@ -604,51 +758,94 @@ async function seedPmPortfolioBilling(
     throw new Error('Missing one or more seeded demo communities for PM portfolio billing setup');
   }
 
-  const customerId = await ensureDemoPortfolioCustomer(stripe, typedSeededCommunities);
-  const defaultPaymentMethodId = await ensureDemoPortfolioPaymentMethod(stripe, customerId);
-
-  for (const community of typedSeededCommunities) {
-    const planId = PM_PORTFOLIO_PLAN_BY_SLUG[community.slug];
-    const subscription = await ensureDemoPortfolioSubscription({
-      stripe,
-      community,
-      customerId,
-      defaultPaymentMethodId,
-      planId,
+  if (!stripe) {
+    await seedLocalPmPortfolioBilling({
+      userIdsByEmail,
+      seededCommunities: typedSeededCommunities,
+      reason: 'STRIPE_SECRET_KEY is not set',
     });
+    return;
+  }
+
+  const seededPriceIds = await Promise.all(
+    typedSeededCommunities.map(async (community) => ({
+      slug: community.slug,
+      priceId: await resolveSeedStripePriceId(
+        PM_PORTFOLIO_PLAN_BY_SLUG[community.slug],
+        community.communityType,
+      ),
+    })),
+  );
+  const placeholderPrices = seededPriceIds.filter(({ priceId }) => isPlaceholderStripePriceId(priceId));
+  if (placeholderPrices.length > 0) {
+    await seedLocalPmPortfolioBilling({
+      userIdsByEmail,
+      seededCommunities: typedSeededCommunities,
+      reason: `placeholder Stripe prices configured (${placeholderPrices.map(({ slug, priceId }) => `${slug}:${priceId}`).join(', ')})`,
+    });
+    return;
+  }
+
+  let customerId: string | null = null;
+
+  try {
+    customerId = await ensureDemoPortfolioCustomer(stripe, typedSeededCommunities);
+    const defaultPaymentMethodId = await ensureDemoPortfolioPaymentMethod(stripe, customerId);
+
+    for (const community of typedSeededCommunities) {
+      const planId = PM_PORTFOLIO_PLAN_BY_SLUG[community.slug];
+      const subscription = await ensureDemoPortfolioSubscription({
+        stripe,
+        community,
+        customerId,
+        defaultPaymentMethodId,
+        planId,
+      });
+
+      await db
+        .update(communities)
+        .set({
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscription.id,
+          subscriptionPlan: planId,
+          subscriptionStatus: subscription.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(communities.id, community.id));
+    }
+
+    const pmUserId = resolveUserId(userIdsByEmail, DEMO_PM_PORTFOLIO_EMAIL);
+    const { billingGroupId, stripeCustomerId } = await getOrCreateBillingGroupForPm(pmUserId);
+    if (stripeCustomerId !== customerId) {
+      throw new Error(
+        `PM billing group customer mismatch: expected ${customerId}, got ${stripeCustomerId}`,
+      );
+    }
 
     await db
       .update(communities)
       .set({
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscription.id,
-        subscriptionPlan: planId,
-        subscriptionStatus: subscription.status,
+        billingGroupId,
         updatedAt: new Date(),
       })
-      .where(eq(communities.id, community.id));
-  }
+      .where(inArray(communities.id, typedSeededCommunities.map((community) => community.id)));
 
-  const pmUserId = resolveUserId(userIdsByEmail, DEMO_PM_PORTFOLIO_EMAIL);
-  const { billingGroupId, stripeCustomerId } = await getOrCreateBillingGroupForPm(pmUserId);
-  if (stripeCustomerId !== customerId) {
-    throw new Error(
-      `PM billing group customer mismatch: expected ${customerId}, got ${stripeCustomerId}`,
+    const result = await recalculateVolumeTier(billingGroupId);
+    debugSeed(
+      `pm portfolio billing seeded: group=${billingGroupId}, customer=${customerId}, count=${result.activeCount}, tier=${result.newTier}`,
     );
+  } catch (error) {
+    if (!isRecoverableDemoBillingStripeError(error)) {
+      throw error;
+    }
+
+    await seedLocalPmPortfolioBilling({
+      userIdsByEmail,
+      seededCommunities: typedSeededCommunities,
+      reason: error instanceof Error ? error.message : 'recoverable Stripe billing seed error',
+      preferredCustomerId: customerId,
+    });
   }
-
-  await db
-    .update(communities)
-    .set({
-      billingGroupId,
-      updatedAt: new Date(),
-    })
-    .where(inArray(communities.id, typedSeededCommunities.map((community) => community.id)));
-
-  const result = await recalculateVolumeTier(billingGroupId);
-  debugSeed(
-    `pm portfolio billing seeded: group=${billingGroupId}, customer=${customerId}, count=${result.activeCount}, tier=${result.newTier}`,
-  );
 }
 
 function addDays(source: Date, days: number): Date {
@@ -1189,10 +1386,14 @@ async function uploadSeedEsignSourceDocument(
   const pdfBytes = await pdfDoc.save();
   const storagePath = `communities/${communityId}/esign-templates/${sanitizeStorageSegment(templateName)}.pdf`;
   const admin = createAdminClient();
-  const { error } = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
-    contentType: 'application/pdf',
-    upsert: true,
-  });
+  const { error } = await retryStorageSeedOperation(
+    `upload ${storagePath}`,
+    () =>
+      admin.storage.from('documents').upload(storagePath, pdfBytes, {
+        contentType: 'application/pdf',
+        upsert: true,
+      }),
+  );
 
   if (error) {
     throw new Error(`Failed to upload seeded e-sign source PDF: ${error.message}`);
@@ -1200,9 +1401,21 @@ async function uploadSeedEsignSourceDocument(
 
   const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
   const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
-  const { data: listing, error: listError } = await admin.storage
-    .from('documents')
-    .list(storageFolder, { limit: 100, search: storageFileName });
+  const { error: listError } = await retryStorageSeedOperation(
+    `list ${storagePath}`,
+    async () => {
+      const result = await admin.storage
+        .from('documents')
+        .list(storageFolder, { limit: 100, search: storageFileName });
+
+      const listed = (result.data ?? []).some((file) => file.name === storageFileName);
+      if (!result.error && !listed) {
+        throw new Error(`Seeded e-sign source PDF upload was not visible in storage listing for ${storagePath}`);
+      }
+
+      return result;
+    },
+  );
 
   if (listError) {
     throw new Error(
@@ -1210,16 +1423,10 @@ async function uploadSeedEsignSourceDocument(
     );
   }
 
-  const listed = (listing ?? []).some((file) => file.name === storageFileName);
-  if (!listed) {
-    throw new Error(
-      `Seeded e-sign source PDF upload was not visible in storage listing for ${storagePath}`,
-    );
-  }
-
-  const { data: downloadedFile, error: downloadError } = await admin.storage
-    .from('documents')
-    .download(storagePath);
+  const { data: downloadedFile, error: downloadError } = await retryStorageSeedOperation(
+    `download ${storagePath}`,
+    () => admin.storage.from('documents').download(storagePath),
+  );
 
   if (downloadError || !downloadedFile) {
     throw new Error(
@@ -1284,16 +1491,12 @@ const ESIGN_SEED_TEMPLATES = [
 async function seedEsignData(
   communityId: number,
   createdByEmail: string,
+  options: { userIdsByEmail: Record<string, string> },
   ownerEmail?: string,
 ): Promise<void> {
-  const createdByAuthUserId = await ensureDemoAuthUser(createdByEmail);
-  if (!createdByAuthUserId) {
-    debugSeed(`missing auth context for e-sign seed in community ${communityId}; skipping`);
-    return;
-  }
-
-  const ownerAuthUserId = ownerEmail
-    ? await ensureDemoAuthUser(ownerEmail)
+  const createdByUserId = resolveUserId(options.userIdsByEmail, createdByEmail);
+  const ownerUserId = ownerEmail
+    ? resolveUserId(options.userIdsByEmail, ownerEmail)
     : null;
 
   // Idempotent: clear dependent rows before templates to satisfy template_id FKs.
@@ -1324,7 +1527,7 @@ async function seedEsignData(
         templateType: tpl.templateType,
         fieldsSchema: tpl.fieldsSchema,
         status: 'active',
-        createdBy: createdByAuthUserId,
+        createdBy: createdByUserId,
       })
       .returning({ id: esignTemplates.id, name: esignTemplates.name });
 
@@ -1334,7 +1537,7 @@ async function seedEsignData(
   debugSeed(`seeded ${insertedTemplates.length} esign templates for community ${communityId}`);
 
   // For Sunset Condos: create a demo submission so the my-pending widget has data
-  if (ownerAuthUserId) {
+  if (ownerUserId) {
     const proxyTemplate = insertedTemplates.find((t) => t.name === 'Proxy Designation Form');
     if (!proxyTemplate) return;
 
@@ -1350,7 +1553,7 @@ async function seedEsignData(
         messageSubject: 'Annual Meeting Proxy Form',
         messageBody: 'Please designate your proxy holder for the upcoming annual meeting.',
         expiresAt: addDays(new Date(), 30),
-        createdBy: createdByAuthUserId,
+        createdBy: createdByUserId,
       })
       .returning({ id: esignSubmissions.id });
 
@@ -1360,7 +1563,7 @@ async function seedEsignData(
       communityId,
       submissionId: submission.id,
       externalId: crypto.randomUUID(),
-      userId: ownerAuthUserId,
+      userId: ownerUserId,
       email: 'owner.one@sunset.local',
       name: 'Owner One',
       role: 'owner',
@@ -1475,6 +1678,7 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     'board.president@sunset.local',
     resolveUserId(userIdsByEmail, 'board.president@sunset.local'),
   );
+  userIdsByEmail['board.president@sunset.local'] = boardPresidentId;
   for (const community of condoAndHoa) {
     if (community.communityType === 'apartment') {
       await db
@@ -1512,6 +1716,7 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     'owner.one@sunset.local',
     resolveUserId(userIdsByEmail, 'owner.one@sunset.local'),
   );
+  userIdsByEmail['owner.one@sunset.local'] = ownerUserId;
   {
     const firstUnit = await db
       .select({ id: units.id })
@@ -1549,18 +1754,33 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     'cam.one@sunset.local',
     resolveUserId(userIdsByEmail, 'cam.one@sunset.local'),
   );
+  userIdsByEmail['cam.one@sunset.local'] = camUserId;
   const tenantUserId = await ensureDemoUserRecord(
     'tenant.one@sunset.local',
     resolveUserId(userIdsByEmail, 'tenant.one@sunset.local'),
   );
+  userIdsByEmail['tenant.one@sunset.local'] = tenantUserId;
   const emergencyRecipientIds = [ownerUserId, boardPresidentId, tenantUserId];
   await seedEmergencyBroadcastData(sunsetCommunityId, camUserId, emergencyRecipientIds);
   debugSeed('emergency broadcast seed complete');
 
   // Seed e-sign templates for all communities, demo submission for Sunset only
-  await seedEsignData(sunsetCommunityId, 'board.president@sunset.local', 'owner.one@sunset.local');
-  await seedEsignData(palmCommunityId, 'board.president@sunset.local');
-  await seedEsignData(apartmentCommunityId, 'site.manager@sunsetridge.local');
+  await seedEsignData(
+    sunsetCommunityId,
+    'board.president@sunset.local',
+    { userIdsByEmail },
+    'owner.one@sunset.local',
+  );
+  await seedEsignData(
+    palmCommunityId,
+    'board.president@sunset.local',
+    { userIdsByEmail },
+  );
+  await seedEsignData(
+    apartmentCommunityId,
+    'site.manager@sunsetridge.local',
+    { userIdsByEmail },
+  );
   debugSeed('esign seed complete');
 
   // Seed assessment + line item data for Sunset Condos
@@ -1692,11 +1912,12 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
 
 async function main(): Promise<void> {
   try {
+    const syncAuthUsers = shouldSyncDemoAuthUsers();
     await runSeedSafetyChecks({
       databaseUrl: process.env.DATABASE_URL ?? '',
       db,
     });
-    await runDemoSeed();
+    await runDemoSeed({ syncAuthUsers });
     // eslint-disable-next-line no-console
     console.log('Demo seed complete.');
   } finally {

@@ -809,8 +809,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon)
-     * - Public assets (svg, png, jpg, jpeg, gif, webp, ico)
+     * - Public assets (svg, png, jpg, jpeg, gif, webp, ico, mjs)
+     * - PDF.js browser assets served from /public/pdfjs
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$).*)',
   ],
 };

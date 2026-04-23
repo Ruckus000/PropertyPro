@@ -7,6 +7,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 const {
   createScopedClientMock,
   createAdminClientMock,
+  createUnscopedClientMock,
   logAuditEventMock,
   createPresignedDownloadUrlMock,
   esignTemplatesTable,
@@ -23,10 +24,12 @@ const {
   eqMock,
   andMock,
   isNullMock,
+  ltMock,
   orMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createAdminClientMock: vi.fn(),
+  createUnscopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
   esignTemplatesTable: {
@@ -45,6 +48,11 @@ const {
     id: Symbol('signers.id'),
     communityId: Symbol('signers.communityId'),
     submissionId: Symbol('signers.submissionId'),
+    sortOrder: Symbol('signers.sortOrder'),
+    deletedAt: Symbol('signers.deletedAt'),
+    status: Symbol('signers.status'),
+    name: Symbol('signers.name'),
+    slug: Symbol('signers.slug'),
   },
   esignEventsTable: {
     submissionId: Symbol('events.submissionId'),
@@ -62,6 +70,7 @@ const {
   eqMock: vi.fn((...args: unknown[]) => ({ type: 'eq', args })),
   andMock: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
   isNullMock: vi.fn((...args: unknown[]) => ({ type: 'isNull', args })),
+  ltMock: vi.fn((...args: unknown[]) => ({ type: 'lt', args })),
   orMock: vi.fn((...args: unknown[]) => ({ type: 'or', args })),
 }));
 
@@ -77,10 +86,15 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: createUnscopedClientMock,
+}));
+
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: andMock,
   isNull: isNullMock,
+  lt: ltMock,
   or: orMock,
 }));
 
@@ -290,6 +304,76 @@ function makeCommunityAdmin() {
  * Creates a configurable admin client mock for the signing flow.
  * Allows different responses for signer, submission, template, and update lookups.
  */
+// Drizzle-shaped mock for createUnscopedClient — getSignerContext now reads
+// signer/submission/template rows via the app DB instead of the Supabase admin
+// client. The chain returns an object that is both await-able and supports
+// .limit(n), so the helper covers both `select().from().where()` (prior-signers
+// query) and `select().from().where().limit(1)` (single-row lookups).
+function snakeToCamelKeys(
+  row: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!row) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, ch: string) => ch.toUpperCase());
+    out[camelKey] = value;
+  }
+  return out;
+}
+
+function makeUnscopedSignerContextMock(config: {
+  signerRow?: Record<string, unknown> | null;
+  submissionRow?: Record<string, unknown> | null;
+  templateRow?: Record<string, unknown> | null;
+  priorSignerRows?: Record<string, unknown>[];
+}) {
+  function thenable(rows: unknown[]) {
+    const promise = Promise.resolve(rows);
+    return {
+      limit: vi.fn(() => Promise.resolve(rows)),
+      then: promise.then.bind(promise),
+      catch: promise.catch.bind(promise),
+      finally: promise.finally.bind(promise),
+    };
+  }
+
+  // Drizzle returns camelCase rows; fixtures throughout these tests use
+  // snake_case (Supabase response shape). Convert at the mock boundary so
+  // existing fixtures keep working unchanged.
+  const signerCamel = snakeToCamelKeys(config.signerRow);
+  const submissionCamel = snakeToCamelKeys(config.submissionRow);
+  const templateCamel = snakeToCamelKeys(config.templateRow);
+  const priorSignersCamel = (config.priorSignerRows ?? []).map(
+    (row) => snakeToCamelKeys(row) as Record<string, unknown>,
+  );
+
+  // Identify each query by (table, select-shape) so the mock is robust to
+  // multiple getSignerContext calls within a test (e.g. test calls
+  // getSignerContext, then declineSigning which calls it again internally).
+  return {
+    select: vi.fn((fields?: unknown) => {
+      const isPriorSignersQuery = fields !== undefined;
+      return {
+        from: vi.fn((table: unknown) => ({
+          where: vi.fn(() => {
+            if (table === esignSubmissionsTable) {
+              return thenable(submissionCamel ? [submissionCamel] : []);
+            }
+            if (table === esignTemplatesTable) {
+              return thenable(templateCamel ? [templateCamel] : []);
+            }
+            // esignSignersTable — distinguish single-signer lookup vs prior-signers
+            if (isPriorSignersQuery) {
+              return thenable(priorSignersCamel);
+            }
+            return thenable(signerCamel ? [signerCamel] : []);
+          }),
+        })),
+      };
+    }),
+  };
+}
+
 function makeAdminClientMock(config: {
   signerRow?: Record<string, unknown> | null;
   submissionRow?: Record<string, unknown> | null;
@@ -300,6 +384,17 @@ function makeAdminClientMock(config: {
   updateResult?: Record<string, unknown>[];
   guardUpdateResult?: Record<string, unknown>[];
 }) {
+  // Configure the unscoped client mock with the same row data so tests that
+  // call getSignerContext (which now reads via createUnscopedClient) pick up
+  // the same fixtures without changing the test body.
+  createUnscopedClientMock.mockReturnValue(
+    makeUnscopedSignerContextMock({
+      signerRow: config.signerRow,
+      submissionRow: config.submissionRow,
+      templateRow: config.templateRow,
+      priorSignerRows: config.priorSignerRows,
+    }),
+  );
   let fromCallCount = 0;
   const insertCalls: unknown[] = [];
   const updateCalls: { table: string; data: unknown }[] = [];

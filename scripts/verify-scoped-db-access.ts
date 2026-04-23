@@ -146,6 +146,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
   // U-06: Access request service — pre-tenant OTP verification before communityId is scoped
   resolve(repoRoot, 'apps/web/src/lib/services/access-request-service.ts'),
+  // Public e-sign links are authorized by possession of submissionExternalId + signer slug
+  // and must resolve across tenants before any community context exists.
+  resolve(repoRoot, 'apps/web/src/lib/services/esign-service.ts'),
   // Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
   resolve(repoRoot, 'apps/web/src/lib/services/account-lifecycle-service.ts'),
   // Platform admin auth guard — queries platform_admin_users (no community_id)

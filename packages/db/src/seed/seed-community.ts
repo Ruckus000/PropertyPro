@@ -39,6 +39,8 @@ export interface SeedCommunityConfig {
   addressLine1?: string;
   branding?: CommunityBranding;
   isDemo?: boolean;
+  trialEndsAt?: Date;
+  demoExpiresAt?: Date;
   seedHints?: SeedHints;
 }
 
@@ -75,6 +77,39 @@ interface DemoCategoryDefinition {
   key: DemoDocumentCategoryKey;
   name: string;
   description: string;
+}
+
+const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
+
+function isRetryableStorageSeedError(message: string): boolean {
+  return /gateway timeout|timed out|timeout|503|504|not visible in storage listing|no data returned/i.test(
+    message,
+  );
+}
+
+async function retryStorageSeedOperation<T>(
+  label: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; attempt < STORAGE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (!isRetryableStorageSeedError(message) || attempt === STORAGE_RETRY_DELAYS_MS.length - 1) {
+        throw error;
+      }
+
+      debugSeed(
+        `${label} retry ${attempt + 1}/${STORAGE_RETRY_DELAYS_MS.length - 1} after transient storage error: ${message}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, STORAGE_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+
+  // Unreachable: the loop's final iteration always returns or throws.
+  throw new Error(`retryStorageSeedOperation exited loop without resolving: ${label}`);
 }
 
 function sanitizePdfText(value: string): string {
@@ -145,10 +180,14 @@ export async function ensureSeededDocumentStorage(
   const pdfBytes = buildSeedPlaceholderPdf(title, summary, storagePath);
   const admin = createAdminClient();
 
-  const { error } = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
-    contentType: 'application/pdf',
-    upsert: true,
-  });
+  const { error } = await retryStorageSeedOperation(
+    `upload ${storagePath}`,
+    () =>
+      admin.storage.from('documents').upload(storagePath, pdfBytes, {
+        contentType: 'application/pdf',
+        upsert: true,
+      }),
+  );
 
   if (error) {
     throw new Error(`Failed to upload seeded document PDF: ${error.message}`);
@@ -156,9 +195,21 @@ export async function ensureSeededDocumentStorage(
 
   const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
   const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
-  const { data: listing, error: listError } = await admin.storage
-    .from('documents')
-    .list(storageFolder, { limit: 100, search: storageFileName });
+  const { error: listError } = await retryStorageSeedOperation(
+    `list ${storagePath}`,
+    async () => {
+      const result = await admin.storage
+        .from('documents')
+        .list(storageFolder, { limit: 100, search: storageFileName });
+
+      const listed = (result.data ?? []).some((file) => file.name === storageFileName);
+      if (!result.error && !listed) {
+        throw new Error(`Seeded document PDF upload was not visible in storage listing for ${storagePath}`);
+      }
+
+      return result;
+    },
+  );
 
   if (listError) {
     throw new Error(
@@ -166,16 +217,10 @@ export async function ensureSeededDocumentStorage(
     );
   }
 
-  const listed = (listing ?? []).some((file) => file.name === storageFileName);
-  if (!listed) {
-    throw new Error(
-      `Seeded document PDF upload was not visible in storage listing for ${storagePath}`,
-    );
-  }
-
-  const { data: downloadedFile, error: downloadError } = await admin.storage
-    .from('documents')
-    .download(storagePath);
+  const { data: downloadedFile, error: downloadError } = await retryStorageSeedOperation(
+    `download ${storagePath}`,
+    () => admin.storage.from('documents').download(storagePath),
+  );
 
   if (downloadError || !downloadedFile) {
     throw new Error(
@@ -197,6 +242,8 @@ export function getDefaultPassword(): string {
 }
 const DEBUG_DEMO_SEED = process.env.DEBUG_DEMO_SEED === '1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEMO_TRIAL_DURATION_MS = 14 * DAY_MS;
+const DEMO_GRACE_DURATION_MS = 7 * DAY_MS;
 
 interface V2RoleMapping {
   role: 'resident' | 'manager' | 'pm_admin';
@@ -299,6 +346,61 @@ function assertValidConfig(config: SeedCommunityConfig): void {
   if (!validCommunityTypes.includes(config.communityType)) {
     throw new Error(`seedCommunity received invalid communityType: ${config.communityType}`);
   }
+
+  if (config.isDemo) {
+    if (config.trialEndsAt && Number.isNaN(config.trialEndsAt.getTime())) {
+      throw new Error('seedCommunity config.trialEndsAt must be a valid Date');
+    }
+
+    if (config.demoExpiresAt && Number.isNaN(config.demoExpiresAt.getTime())) {
+      throw new Error('seedCommunity config.demoExpiresAt must be a valid Date');
+    }
+
+    if (
+      config.trialEndsAt
+      && config.demoExpiresAt
+      && config.trialEndsAt.getTime() > config.demoExpiresAt.getTime()
+    ) {
+      throw new Error('seedCommunity config.trialEndsAt must be earlier than or equal to config.demoExpiresAt');
+    }
+  }
+}
+
+function resolveDemoLifecycle(config: SeedCommunityConfig): {
+  trialEndsAt: Date | null;
+  demoExpiresAt: Date | null;
+} {
+  const isDemo = config.isDemo ?? false;
+  if (!isDemo) {
+    return { trialEndsAt: null, demoExpiresAt: null };
+  }
+
+  if (config.trialEndsAt && config.demoExpiresAt) {
+    return {
+      trialEndsAt: new Date(config.trialEndsAt),
+      demoExpiresAt: new Date(config.demoExpiresAt),
+    };
+  }
+
+  if (config.trialEndsAt) {
+    return {
+      trialEndsAt: new Date(config.trialEndsAt),
+      demoExpiresAt: new Date(config.trialEndsAt.getTime() + DEMO_GRACE_DURATION_MS),
+    };
+  }
+
+  if (config.demoExpiresAt) {
+    return {
+      trialEndsAt: new Date(config.demoExpiresAt.getTime() - DEMO_GRACE_DURATION_MS),
+      demoExpiresAt: new Date(config.demoExpiresAt),
+    };
+  }
+
+  const now = Date.now();
+  return {
+    trialEndsAt: new Date(now + DEMO_TRIAL_DURATION_MS),
+    demoExpiresAt: new Date(now + DEMO_TRIAL_DURATION_MS + DEMO_GRACE_DURATION_MS),
+  };
 }
 
 async function hasRegistryTable(): Promise<boolean> {
@@ -327,6 +429,7 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
 
   const timezone = config.timezone ?? 'America/New_York';
   const isDemo = config.isDemo ?? false;
+  const { trialEndsAt, demoExpiresAt } = resolveDemoLifecycle(config);
 
   if (existing[0]) {
     const updatePayload: Partial<typeof communities.$inferInsert> = {
@@ -338,6 +441,8 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
       state: config.state,
       zipCode: config.zipCode,
       isDemo,
+      trialEndsAt,
+      demoExpiresAt,
       updatedAt: new Date(),
     };
 
@@ -368,6 +473,8 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
       zipCode: config.zipCode,
       branding: config.branding,
       isDemo,
+      trialEndsAt,
+      demoExpiresAt,
     })
     .returning();
 
@@ -574,6 +681,11 @@ async function ensureUser(
   return userId;
 }
 
+interface ExistingAuthUser {
+  id: string;
+  userMetadata: Record<string, unknown>;
+}
+
 async function ensureAuthUser(
   email: string,
   fullName: string,
@@ -601,6 +713,53 @@ async function ensureAuthUser(
     throw createResult.error;
   }
 
+  const existingAuthUser = await findExistingAuthUserByEmail(email);
+  if (existingAuthUser) {
+    await admin.auth.admin.updateUserById(existingAuthUser.id, {
+      password,
+      user_metadata: { ...existingAuthUser.userMetadata, full_name: fullName },
+    });
+    return existingAuthUser.id;
+  }
+
+  return null;
+}
+
+async function ensureLocalAuthUserMirror(
+  userId: string,
+  email: string,
+  fullName: string,
+): Promise<void> {
+  const existing = await db.execute<{ id: string }>(sql`
+    select id
+    from auth.users
+    where id = ${userId}::uuid
+    limit 1
+  `);
+  const rows = extractRows<{ id: string }>(existing);
+  if (rows[0]) {
+    return;
+  }
+
+  await db.execute(sql`
+    insert into auth.users (id, email, raw_user_meta_data)
+    values (
+      ${userId}::uuid,
+      ${email.toLowerCase()},
+      ${JSON.stringify({ full_name: fullName })}::jsonb
+    )
+    on conflict (id) do update
+    set email = excluded.email,
+        raw_user_meta_data = excluded.raw_user_meta_data
+  `);
+}
+
+async function findExistingAuthUserByEmail(email: string): Promise<ExistingAuthUser | null> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return null;
+  }
+
+  const admin = createAdminClient();
   let page = 1;
   const perPage = 200;
   while (page <= 20) {
@@ -610,18 +769,16 @@ async function ensureAuthUser(
     }
     const matched = listed.data.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
     if (matched) {
-      await admin.auth.admin.updateUserById(matched.id, {
-        password,
-        user_metadata: { ...(matched.user_metadata ?? {}), full_name: fullName },
-      });
-      return matched.id;
+      return {
+        id: matched.id,
+        userMetadata: (matched.user_metadata ?? {}) as Record<string, unknown>,
+      };
     }
     if (listed.data.users.length < perPage) {
       break;
     }
     page += 1;
   }
-
   return null;
 }
 
@@ -1218,6 +1375,10 @@ async function seedApartmentLeases(
     return result;
   }
 
+  function startOfMonth(date: Date): Date {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  }
+
   const leaseBlueprints: Array<{
     unitNumber: string;
     rentAmount: string;
@@ -1260,7 +1421,7 @@ async function seedApartmentLeases(
     return {
       unitId,
       residentId,
-      startDate: formatDate(addDays(today, config.leaseStartDays)),
+      startDate: formatDate(startOfMonth(addDays(today, config.leaseStartDays))),
       endDate: formatDate(addDays(today, config.leaseEndDays)),
       rentAmount: config.rentAmount,
       status: 'active' as const,
@@ -1491,7 +1652,12 @@ export async function seedCommunity(
     usersToSeed.map(async (user) => {
       const authUserId = syncAuthUsers
         ? await ensureAuthUser(user.email, user.fullName, getDefaultPassword())
-        : null;
+        : (await findExistingAuthUserByEmail(user.email))?.id ?? null;
+
+      if (authUserId) {
+        await ensureLocalAuthUserMirror(authUserId, user.email, user.fullName);
+      }
+
       return {
         authUserId: authUserId ?? undefined,
         normalizedEmail: user.email.toLowerCase(),

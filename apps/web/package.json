@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node ./scripts/sync-pdfjs-assets.mjs",
     "dev": "next dev --port 3000",
+    "predev:e2e": "node ./scripts/sync-pdfjs-assets.mjs",
     "dev:e2e": "rm -rf .next && next dev --port 3000 --hostname 127.0.0.1",
+    "prebuild": "node ./scripts/sync-pdfjs-assets.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "playwright:install": "playwright install chromium",
     "test:e2e": "playwright test -c playwright.config.ts",
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
     "test:e2e:headed": "playwright test -c playwright.config.ts --headed",
     "clean": "rm -rf .next .turbo"
   },
