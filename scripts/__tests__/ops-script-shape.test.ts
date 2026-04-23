@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Guard against the bug fixed in PR #137: ops scripts that grab the unscoped
+ * Guard against the bug fixed in PR #138: ops scripts that grab the unscoped
  * Drizzle pool via `createUnscopedClient()` MUST also close it (or hand the
  * lifecycle off to `runOpsScript`). Without one of those, the postgres-js
  * pool keeps the Node event loop alive after `main()` returns and the

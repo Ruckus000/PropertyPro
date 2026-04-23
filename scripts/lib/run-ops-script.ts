@@ -16,7 +16,6 @@
  *   the per-script boilerplate and the per-script footgun.
  *
  * Usage:
- *   import { pathToFileURL } from 'node:url';
  *   import { runOpsScript } from './lib/run-ops-script';
  *
  *   async function run() { … your work … }
