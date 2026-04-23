@@ -7,6 +7,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 const {
   createScopedClientMock,
   createAdminClientMock,
+  createUnscopedClientMock,
   logAuditEventMock,
   createPresignedDownloadUrlMock,
   esignTemplatesTable,
@@ -29,6 +30,7 @@ const {
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createAdminClientMock: vi.fn(),
+  createUnscopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
   esignTemplatesTable: {
@@ -47,6 +49,11 @@ const {
     id: Symbol('signers.id'),
     communityId: Symbol('signers.communityId'),
     submissionId: Symbol('signers.submissionId'),
+    sortOrder: Symbol('signers.sortOrder'),
+    deletedAt: Symbol('signers.deletedAt'),
+    status: Symbol('signers.status'),
+    name: Symbol('signers.name'),
+    slug: Symbol('signers.slug'),
   },
   esignEventsTable: {
     submissionId: Symbol('events.submissionId'),
@@ -81,10 +88,15 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: createUnscopedClientMock,
+}));
+
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: andMock,
   isNull: isNullMock,
+  lt: ltMock,
   or: orMock,
 }));
 
@@ -1334,70 +1346,68 @@ describe('esign-service', () => {
 
   describe('submitSignature', () => {
     it('throws when atomic update returns 0 rows (double-sign race)', async () => {
-      // getSignerContext uses the admin client to find the signer by slug
+      // getSignerContext now resolves the signer via createUnscopedClient
+      // (Drizzle) rather than the Supabase admin client. Drizzle returns
+      // camelCase rows matching the TS schema fields.
       const signerRow = {
-        id: 1, community_id: 1, submission_id: 10,
-        external_id: 'ext-1', user_id: null, email: 'signer@test.com',
+        id: 1, communityId: 1, submissionId: 10,
+        externalId: 'ext-1', userId: null, email: 'signer@test.com',
         name: 'Signer', role: 'signer', slug: 'test-slug',
-        sort_order: 0, status: 'opened', opened_at: '2026-01-01',
-        completed_at: null, signed_values: null, reminder_count: 0,
-        created_at: '2026-01-01', deleted_at: null,
+        sortOrder: 0, status: 'opened', openedAt: new Date('2026-01-01'),
+        completedAt: null, signedValues: null, reminderCount: 0,
+        createdAt: new Date('2026-01-01'), deletedAt: null,
+      };
+      const submissionRow = {
+        id: 10, communityId: 1, templateId: 1, externalId: 'sub-ext',
+        status: 'pending', signingOrder: 'parallel', sendEmail: true,
+        expiresAt: null, completedAt: null, signedDocumentPath: null,
+        messageSubject: null, messageBody: null, createdBy: 'user-1',
+        createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'),
+        deletedAt: null,
+      };
+      const templateRow = {
+        id: 1, communityId: 1, externalId: 'tpl-ext', name: 'Template',
+        description: null, sourceDocumentPath: 'test.pdf',
+        templateType: 'custom', fieldsSchema: validFieldsSchema(),
+        status: 'active', createdBy: 'user-1', createdAt: new Date('2026-01-01'),
+        updatedAt: new Date('2026-01-01'), deletedAt: null,
       };
 
-      let adminFromCallCount = 0;
-      const admin = {
-        from: vi.fn(() => {
-          adminFromCallCount++;
-          const c: Record<string, unknown> = {};
+      function thenable(rows: unknown[]) {
+        const promise = Promise.resolve(rows);
+        return {
+          limit: vi.fn(() => Promise.resolve(rows)),
+          then: promise.then.bind(promise),
+          catch: promise.catch.bind(promise),
+          finally: promise.finally.bind(promise),
+        };
+      }
 
-          c.select = vi.fn(() => {
-            const sc: Record<string, unknown> = {};
-            sc.eq = vi.fn(() => sc);
-            sc.is = vi.fn(() => sc);
-            sc.lt = vi.fn(() => sc);
-            sc.limit = vi.fn(async () => {
-              if (adminFromCallCount === 1) return { data: [signerRow], error: null };
-              if (adminFromCallCount === 2) return {
-                data: [{
-                  id: 10, community_id: 1, template_id: 1, external_id: 'sub-ext',
-                  status: 'pending', signing_order: 'parallel', send_email: true,
-                  expires_at: null, completed_at: null, signed_document_path: null,
-                  message_subject: null, message_body: null, created_by: 'user-1',
-                  created_at: '2026-01-01', updated_at: '2026-01-01', deleted_at: null,
-                }],
-                error: null,
-              };
-              if (adminFromCallCount === 3) return {
-                data: [{
-                  id: 1, community_id: 1, external_id: 'tpl-ext', name: 'Template',
-                  description: null, source_document_path: 'test.pdf',
-                  template_type: 'custom', fields_schema: validFieldsSchema(),
-                  status: 'active', created_by: 'user-1', created_at: '2026-01-01',
-                  updated_at: '2026-01-01', deleted_at: null,
-                }],
-                error: null,
-              };
-              return { data: [], error: null };
-            });
-            sc.then = (resolve: (v: unknown) => void) =>
-              resolve({ data: [signerRow], error: null });
-            return sc;
-          });
+      createUnscopedClientMock.mockReturnValue({
+        select: vi.fn(() => ({
+          from: vi.fn((table: unknown) => ({
+            where: vi.fn(() => {
+              if (table === esignSubmissionsTable) return thenable([submissionRow]);
+              if (table === esignTemplatesTable) return thenable([templateRow]);
+              return thenable([signerRow]);
+            }),
+          })),
+        })),
+      });
 
-          c.update = vi.fn(() => {
-            const uc: Record<string, unknown> = {};
-            uc.eq = vi.fn(() => uc);
-            uc.in = vi.fn(() => uc);
-            uc.select = vi.fn(async () => ({ data: [{ id: 1 }], error: null }));
-            return uc;
-          });
-
-          c.insert = vi.fn(async () => ({ data: [{ id: 1 }], error: null }));
-
-          return c;
-        }),
-      };
-      createAdminClientMock.mockReturnValue(admin);
+      // Admin client still handles non-signer-context lookups; keep a minimal
+      // stub so any stray .from() call doesn't explode.
+      createAdminClientMock.mockReturnValue({
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              is: vi.fn(() => ({
+                limit: vi.fn(async () => ({ data: [], error: null })),
+              })),
+            })),
+          })),
+        })),
+      });
 
       // submitSignature now uses the scoped client for mutations.
       // The scoped client's .update() returns empty => atomic guard triggers double-sign error.
