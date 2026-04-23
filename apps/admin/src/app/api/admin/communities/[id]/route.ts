@@ -6,6 +6,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { PLAN_IDS } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
@@ -18,7 +19,7 @@ const patchSchema = z.object({
   state: z.string().max(2).nullable().optional(),
   zip_code: z.string().max(10).nullable().optional(),
   timezone: z.string().min(1).max(100).optional(),
-  subscription_plan: z.string().max(100).nullable().optional(),
+  subscription_plan: z.enum(PLAN_IDS).nullable().optional(),
   subscription_status: z.enum(['active', 'trialing', 'past_due', 'canceled']).nullable().optional(),
   transparency_enabled: z.boolean().optional(),
   community_settings: z.object({
