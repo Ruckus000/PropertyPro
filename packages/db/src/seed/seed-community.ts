@@ -1788,7 +1788,8 @@ export async function seedCommunity(
         { seedKeySuffix: 'extra-5', titleSuffix: 'Budget Review Meeting', meetingType: 'board', startsInDays: 90 },
       ],
     };
-    for (const blueprint of extraMeetingsByDensity[meetingDensity]) {
+    const extraMeetingBlueprints = extraMeetingsByDensity[meetingDensity] ?? [];
+    for (const blueprint of extraMeetingBlueprints) {
       await seedRegistryMeeting(
         communityId,
         `${config.slug}-meeting-${blueprint.seedKeySuffix}`,
@@ -1901,7 +1902,7 @@ export async function seedCommunity(
         body: `URGENT: Residents of ${config.name} must respond by the deadline indicated. Failure to act may result in additional fees or loss of access. Please contact management immediately with any questions.`,
       },
     };
-    const toneContent = toneAnnouncements[announcementTone];
+    const toneContent = toneAnnouncements[announcementTone] ?? toneAnnouncements.friendly;
     await seedRegistryAnnouncement(
       communityId,
       `${config.slug}-announcement-hints-tone`,

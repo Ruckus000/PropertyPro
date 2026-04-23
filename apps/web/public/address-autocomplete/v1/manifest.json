@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "builtAt": "2026-04-21T00:00:00.000Z",
+  "dataset": {
+    "name": "USDOT National Address Database",
+    "url": "https://data.transportation.gov/download/fc2s-wawr/application/x-zip-compressed",
+    "sizeBytes": 8452531826
+  },
+  "shardPrefixLength": 4,
+  "minStreetTokenLength": 4,
+  "maxShardRecords": 5000,
+  "prefixes": {},
+  "totalRecords": 0
+}

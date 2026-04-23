@@ -38,6 +38,7 @@ import { createCommunityForPm } from '@/lib/pm/create-community';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import { getComplianceTemplate } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
+import { resolvePendingSignupAddress } from './provisioning-address';
 
 // ---------------------------------------------------------------------------
 // State machine constants — must match PHASE2_EXECUTION_PLAN.md exactly
@@ -116,6 +117,10 @@ type PendingSignupRow = {
   communityName: string;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   address: string;
+  addressLine1: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
   candidateSlug: string;
   payload: Record<string, unknown>;
 };
@@ -129,6 +134,7 @@ type JobContext = {
 
 async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   const db = createUnscopedClient();
+  const normalizedAddress = resolvePendingSignupAddress(ctx.signup);
 
   // Extract Stripe billing IDs from the provisioning payload (set by webhook handler).
   const stripeCustomerId = (ctx.signup.payload as Record<string, unknown>)?.stripeCustomerId as string | null ?? null;
@@ -142,7 +148,10 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       name: ctx.signup.communityName,
       slug: ctx.signup.candidateSlug,
       communityType: ctx.signup.communityType,
-      addressLine1: ctx.signup.address,
+      addressLine1: normalizedAddress.addressLine1,
+      city: normalizedAddress.city,
+      state: normalizedAddress.state,
+      zipCode: normalizedAddress.zipCode,
       timezone: 'America/New_York',
       stripeCustomerId,
       stripeSubscriptionId,
@@ -417,6 +426,10 @@ export async function runProvisioning(jobId: number): Promise<void> {
       communityName: pendingSignups.communityName,
       communityType: pendingSignups.communityType,
       address: pendingSignups.address,
+      addressLine1: pendingSignups.addressLine1,
+      city: pendingSignups.city,
+      state: pendingSignups.state,
+      zipCode: pendingSignups.zipCode,
       candidateSlug: pendingSignups.candidateSlug,
       payload: pendingSignups.payload,
     })
@@ -678,3 +691,7 @@ export async function runAddToGroupProvisioning(input: AddToGroupInput): Promise
   // 5. Recalculate volume tier — may upgrade the whole group's Stripe discount.
   await recalculateVolumeTier(input.billingGroupId);
 }
+
+export const _testInternals = {
+  resolvePendingSignupAddress,
+} as const;
