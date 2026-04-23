@@ -30,6 +30,7 @@ const {
   retrieveCheckoutSessionMock,
   retrieveSubscriptionMock,
   retrieveInvoiceMock,
+  resolvePlanIdFromStripePriceIdMock,
   sendPaymentFailedEmailMock,
   sendSubscriptionCanceledEmailMock,
   captureExceptionMock,
@@ -70,6 +71,7 @@ const {
     retrieveCheckoutSessionMock: vi.fn(),
     retrieveSubscriptionMock: vi.fn(),
     retrieveInvoiceMock: vi.fn(),
+    resolvePlanIdFromStripePriceIdMock: vi.fn(),
     sendPaymentFailedEmailMock: vi.fn().mockResolvedValue(undefined),
     sendSubscriptionCanceledEmailMock: vi.fn().mockResolvedValue(undefined),
     captureExceptionMock: vi.fn(),
@@ -145,6 +147,7 @@ vi.mock('@/lib/services/stripe-service', () => ({
   retrieveCheckoutSession: retrieveCheckoutSessionMock,
   retrieveSubscription: retrieveSubscriptionMock,
   retrieveInvoice: retrieveInvoiceMock,
+  resolvePlanIdFromStripePriceId: resolvePlanIdFromStripePriceIdMock,
 }));
 
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({
@@ -724,9 +727,12 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const freshSub = {
         id: sub.id,
         status: 'active',
+        // Legacy-alias lookup_key is not a canonical PlanId, so the webhook falls through
+        // to resolvePlanIdFromStripePriceId to map price_001 → canonical PlanId.
         items: { data: [{ price: { lookup_key: 'compliance_basic', id: 'price_001' } }] },
       };
       retrieveSubscriptionMock.mockResolvedValue(freshSub);
+      resolvePlanIdFromStripePriceIdMock.mockResolvedValue('essentials');
 
       // Sequence: [idempotency=empty], [community select=found]
       const communityRow = {
@@ -980,6 +986,191 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const res = await POST(makeRequest());
       expect(res.status).toBe(200);
       expect(sendSubscriptionCanceledEmailMock).not.toHaveBeenCalled();
+    });
+
+    // ---------------------------------------------------------------------
+    // Plan-gate correctness (PR: claude/plan-gate-writer-fix)
+    //
+    // The webhook writes communities.subscription_plan, which downstream
+    // plan-gate logic uses. It must ALWAYS be a canonical PlanId or null —
+    // never a raw Stripe price.id.
+    // ---------------------------------------------------------------------
+
+    it('writes canonical PlanId when price.lookup_key is a valid PlanId', async () => {
+      // Regression baseline: lookup_key IS a canonical PlanId ('essentials').
+      // The webhook should use it directly, NOT call resolvePlanIdFromStripePriceId.
+      const event = makeEvent('customer.subscription.updated', sub, 'evt_upd_plan_lookup');
+      constructEventMock.mockReturnValue(event);
+
+      const freshSub = {
+        id: sub.id,
+        status: 'active',
+        items: { data: [{ price: { lookup_key: 'essentials', id: 'price_1TEST' } }] },
+      };
+      retrieveSubscriptionMock.mockResolvedValue(freshSub);
+
+      const communityRow = {
+        id: 42,
+        name: 'Palm Gardens',
+        communityType: 'condo_718',
+      };
+      let callIdx = 0;
+      const selectSequence: unknown[][] = [[], [communityRow]];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(selectSequence[callIdx++] ?? [])),
+          })),
+        })),
+      }));
+
+      const capturedSets: Record<string, unknown>[] = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((vals: Record<string, unknown>) => {
+        capturedSets.push(vals);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+
+      const communitySet = capturedSets.find((s) => s.subscriptionStatus === 'active');
+      expect(communitySet).toBeDefined();
+      expect(communitySet?.subscriptionPlan).toBe('essentials');
+      // Primary path hit — the DB fallback must not fire.
+      expect(resolvePlanIdFromStripePriceIdMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to resolvePlanIdFromStripePriceId when lookup_key is null and price is in stripe_prices', async () => {
+      // Current Stripe test-mode state: all 5 prices have lookup_key: null.
+      // The webhook must recover by looking up the price_id in our stripe_prices table.
+      const event = makeEvent('customer.subscription.updated', sub, 'evt_upd_plan_fallback');
+      constructEventMock.mockReturnValue(event);
+
+      const freshSub = {
+        id: sub.id,
+        status: 'active',
+        items: { data: [{ price: { lookup_key: null, id: 'price_1TEST' } }] },
+      };
+      retrieveSubscriptionMock.mockResolvedValue(freshSub);
+      resolvePlanIdFromStripePriceIdMock.mockResolvedValue('essentials');
+
+      const communityRow = {
+        id: 42,
+        name: 'Palm Gardens',
+        communityType: 'condo_718',
+      };
+      let callIdx = 0;
+      const selectSequence: unknown[][] = [[], [communityRow]];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(selectSequence[callIdx++] ?? [])),
+          })),
+        })),
+      }));
+
+      const capturedSets: Record<string, unknown>[] = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((vals: Record<string, unknown>) => {
+        capturedSets.push(vals);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+
+      expect(resolvePlanIdFromStripePriceIdMock).toHaveBeenCalledWith('price_1TEST');
+      const communitySet = capturedSets.find((s) => s.subscriptionStatus === 'active');
+      expect(communitySet).toBeDefined();
+      expect(communitySet?.subscriptionPlan).toBe('essentials');
+    });
+
+    it('returns 500 and writes NOTHING when lookup_key is null AND price is not in stripe_prices', async () => {
+      // Unknown Stripe price — we don't know the plan. Rather than write garbage,
+      // the webhook must let the error bubble so Stripe retries.
+      const event = makeEvent('customer.subscription.updated', sub, 'evt_upd_plan_unknown');
+      constructEventMock.mockReturnValue(event);
+
+      const freshSub = {
+        id: sub.id,
+        status: 'active',
+        items: { data: [{ price: { lookup_key: null, id: 'price_unknown_999' } }] },
+      };
+      retrieveSubscriptionMock.mockResolvedValue(freshSub);
+      // Import the real AppError class so the thrown error carries .code.
+      const { AppError } = await import('../../src/lib/api/errors/AppError');
+      resolvePlanIdFromStripePriceIdMock.mockRejectedValue(
+        new AppError(
+          'No Stripe price configured for priceId=price_unknown_999',
+          500,
+          'STRIPE_PRICE_CONFIG_MISSING',
+        ),
+      );
+
+      const communityRow = {
+        id: 42,
+        name: 'Palm Gardens',
+        communityType: 'condo_718',
+      };
+      let callIdx = 0;
+      const selectSequence: unknown[][] = [[], [communityRow]];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(selectSequence[callIdx++] ?? [])),
+          })),
+        })),
+      }));
+
+      const capturedSets: Record<string, unknown>[] = [];
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn((vals: Record<string, unknown>) => {
+        capturedSets.push(vals);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(500);
+
+      // CRITICAL: the communities table must NOT have been updated with a subscription plan.
+      // If the webhook ever writes a raw price_… string, plan gates fail open silently.
+      const communitySetWithPlan = capturedSets.find(
+        (s) => 'subscriptionPlan' in s || s.subscriptionStatus !== undefined,
+      );
+      expect(communitySetWithPlan).toBeUndefined();
+
+      expect(resolvePlanIdFromStripePriceIdMock).toHaveBeenCalledWith('price_unknown_999');
     });
   });
 

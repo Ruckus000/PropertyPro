@@ -23,9 +23,11 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   getStripeClient,
+  resolvePlanIdFromStripePriceId,
   retrieveCheckoutSession,
   retrieveSubscription,
 } from '@/lib/services/stripe-service';
+import { PLAN_IDS, type PlanId } from '@propertypro/shared';
 import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
@@ -311,10 +313,29 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
 
   if (fresh.status !== 'canceled') {
     // Non-canceled path: plain UPDATE by community.id, no atomic guard needed.
+    // Resolve the canonical PlanId before writing. We must NEVER write a raw
+    // price.id into subscription_plan — downstream resolvePlanId() returns null
+    // for price IDs, causing plan gates to fail open silently.
+    //
+    // Primary: price.lookup_key if it's a canonical PlanId.
+    // Fallback: resolvePlanIdFromStripePriceId looks up our stripe_prices table.
+    // If neither works, the AppError bubbles → 500 to Stripe, triggering a retry.
+    const priceItem = fresh.items.data[0]?.price;
+    const lookupKey = priceItem?.lookup_key ?? null;
+    const priceId = priceItem?.id ?? null;
+
+    let resolvedPlan: PlanId | null;
+    if (lookupKey && PLAN_IDS.includes(lookupKey as PlanId)) {
+      resolvedPlan = lookupKey as PlanId;
+    } else if (priceId) {
+      resolvedPlan = await resolvePlanIdFromStripePriceId(priceId);
+    } else {
+      resolvedPlan = null;
+    }
+
     const updates: Record<string, unknown> = {
       subscriptionStatus: fresh.status,
-      subscriptionPlan:
-        fresh.items.data[0]?.price.lookup_key ?? fresh.items.data[0]?.price.id ?? null,
+      subscriptionPlan: resolvedPlan,
       updatedAt: now,
     };
     if (fresh.status === 'past_due') {
