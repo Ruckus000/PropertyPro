@@ -985,22 +985,33 @@ export async function listPaymentHistoryForCommunity(
   });
 }
 
+export interface StatementLineItem {
+  id: number;
+  assessmentId: number | null;
+  unitId: number;
+  dueDate: string;
+  status: PayableStatus;
+  amountCents: number;
+  lateFeeCents: number;
+  paidAt: Date | null;
+  paymentIntentId: string | null;
+}
+
+export interface UnitStatement {
+  unitId: number;
+  balanceCents: number;
+  ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
+  lineItems: StatementLineItem[];
+}
+
+const STATEMENT_LINE_ITEM_LIMIT = 200;
+
 export async function buildUnitStatement(
   communityId: number,
   unitId: number,
   startDate?: string,
   endDate?: string,
-): Promise<{
-  unitId: number;
-  balanceCents: number;
-  ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
-  lineItems: Array<{
-    dueDate: string;
-    status: PayableStatus;
-    amountCents: number;
-    lateFeeCents: number;
-  }>;
-}> {
+): Promise<UnitStatement> {
   const scoped = createScopedClient(communityId);
   const lineItemFilters = [eq(assessmentLineItems.unitId, unitId)];
 
@@ -1014,7 +1025,8 @@ export async function buildUnitStatement(
   const lineItemsWhere = lineItemFilters.length === 1 ? lineItemFilters[0] : and(...lineItemFilters);
   const assessmentRows = await scoped
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, lineItemsWhere)
-    .orderBy(asc(assessmentLineItems.dueDate), asc(assessmentLineItems.id));
+    .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
+    .limit(STATEMENT_LINE_ITEM_LIMIT);
 
   const rentFilters = [eq(rentObligations.unitId, unitId)];
   if (startDate !== undefined) {
@@ -1028,7 +1040,8 @@ export async function buildUnitStatement(
   try {
     rentRows = await scoped
       .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
-      .orderBy(asc(rentObligations.dueDate), asc(rentObligations.id));
+      .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
+      .limit(STATEMENT_LINE_ITEM_LIMIT);
   } catch (err) {
     if (!isMissingRelationError(err)) {
       throw err;
@@ -1043,24 +1056,38 @@ export async function buildUnitStatement(
   });
   const balanceCents = await getUnitLedgerBalance(scoped, unitId);
 
+  const combined: StatementLineItem[] = [
+    ...assessmentRows.map<StatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: row.assessmentId,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: assertLineItemStatus(row.status),
+      amountCents: row.amountCents,
+      lateFeeCents: row.lateFeeCents,
+      paidAt: row.paidAt,
+      paymentIntentId: row.paymentIntentId,
+    })),
+    ...rentRows.map<StatementLineItem>((row) => ({
+      id: row.id,
+      assessmentId: null,
+      unitId: row.unitId,
+      dueDate: row.dueDate,
+      status: row.status,
+      amountCents: row.amountCents,
+      lateFeeCents: 0,
+      paidAt: null,
+      paymentIntentId: null,
+    })),
+  ]
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+
   return {
     unitId,
     balanceCents,
     ledgerEntries: ledgerEntriesForUnit,
-    lineItems: [
-      ...assessmentRows.map((row) => ({
-        dueDate: row.dueDate,
-        status: assertLineItemStatus(row.status),
-        amountCents: row.amountCents,
-        lateFeeCents: row.lateFeeCents,
-      })),
-      ...rentRows.map((row) => ({
-        dueDate: row.dueDate,
-        status: row.status,
-        amountCents: row.amountCents,
-        lateFeeCents: 0,
-      })),
-    ].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    lineItems: combined,
   };
 }
 
