@@ -289,7 +289,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const packagesDenied = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityA.id,
-        unitId: unitAId,
+        unitNumber: unitALabel,
         recipientName: 'Tenant A',
         carrier: 'UPS',
       }),
@@ -410,7 +410,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const packageCreate = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityA.id,
-        unitId: unitAId,
+        unitNumber: unitALabel,
         recipientName: `Tenant A ${kit.runSuffix}`,
         carrier: 'FedEx',
       }),
@@ -531,7 +531,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const hoaPackages = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityB.id,
-        unitId: unitAId,
+        unitNumber: unitALabel,
         recipientName: 'HOA Recipient',
         carrier: 'UPS',
       }),
@@ -680,7 +680,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         'POST',
         {
           communityId: communityA.id,
-          unitId: unitAId,
+          unitNumber: unitALabel,
           recipientName: `Audit Resident ${kit.runSuffix}`,
           carrier: 'USPS',
         },
