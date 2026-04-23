@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import {
   communities,
   complianceChecklistItems,
@@ -14,6 +13,7 @@ import {
   getComplianceTemplate,
   type CommunityType,
 } from '@propertypro/shared';
+import { runOpsScript } from './lib/run-ops-script';
 
 const db = createUnscopedClient();
 
@@ -159,18 +159,4 @@ export async function runBackfill(): Promise<void> {
   );
 }
 
-async function main(): Promise<void> {
-  await runBackfill();
-}
-
-const isEntrypoint = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false;
-
-if (isEntrypoint) {
-  main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[backfill] failed:', error);
-    process.exitCode = 1;
-  });
-}
+void runOpsScript({ name: 'backfill-compliance-templates', url: import.meta.url, run: runBackfill });

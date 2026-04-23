@@ -21,10 +21,10 @@
  *   scripts/with-env-local.sh pnpm tsx scripts/backfill-subscription-plan.ts
  *   scripts/with-env-local.sh pnpm tsx scripts/backfill-subscription-plan.ts --apply
  */
-import { pathToFileURL } from 'node:url';
 import { and, eq, like } from '@propertypro/db/filters';
 import { communities, stripePrices } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { runOpsScript } from './lib/run-ops-script';
 
 interface CommunityRow {
   id: number;
@@ -48,7 +48,7 @@ interface Outcome {
   errorMessage?: string;
 }
 
-async function main(): Promise<void> {
+async function run(): Promise<void> {
   const apply = process.argv.slice(2).includes('--apply');
 
   const db = createUnscopedClient();
@@ -177,18 +177,10 @@ async function main(): Promise<void> {
   }
 
   if (errors > 0 || unresolved > 0) {
-    process.exitCode = 1;
+    throw new Error(
+      `${errors} error(s) and ${unresolved} unresolved row(s) encountered during backfill.`,
+    );
   }
 }
 
-const isEntrypoint = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false;
-
-if (isEntrypoint) {
-  main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[backfill-subscription-plan] failed:', error);
-    process.exitCode = 1;
-  });
-}
+void runOpsScript({ name: 'backfill-subscription-plan', url: import.meta.url, run });

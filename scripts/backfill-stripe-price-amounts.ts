@@ -5,18 +5,16 @@
  *
  * Usage: scripts/with-env-local.sh pnpm tsx scripts/backfill-stripe-price-amounts.ts
  */
-import { pathToFileURL } from 'node:url';
 import Stripe from 'stripe';
 import { eq, isNull } from '@propertypro/db/filters';
 import { stripePrices } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { runOpsScript } from './lib/run-ops-script';
 
-async function main(): Promise<void> {
+async function run(): Promise<void> {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
-    // eslint-disable-next-line no-console
-    console.error('STRIPE_SECRET_KEY not set');
-    process.exit(1);
+    throw new Error('STRIPE_SECRET_KEY not set');
   }
   const stripe = new Stripe(secretKey);
   const db = createUnscopedClient();
@@ -55,17 +53,9 @@ async function main(): Promise<void> {
   }
   // eslint-disable-next-line no-console
   console.log(`Done. OK=${ok} FAILED=${failed}`);
-  process.exit(failed > 0 ? 1 : 0);
+  if (failed > 0) {
+    throw new Error(`${failed} row(s) failed during backfill.`);
+  }
 }
 
-const isEntrypoint = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false;
-
-if (isEntrypoint) {
-  main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[backfill] failed:', error);
-    process.exitCode = 1;
-  });
-}
+void runOpsScript({ name: 'backfill-stripe-price-amounts', url: import.meta.url, run });

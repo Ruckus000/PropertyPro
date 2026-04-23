@@ -17,10 +17,10 @@
  *   scripts/with-env-local.sh pnpm tsx scripts/sync-stripe-lookup-keys.ts
  *   scripts/with-env-local.sh pnpm tsx scripts/sync-stripe-lookup-keys.ts --apply
  */
-import { pathToFileURL } from 'node:url';
 import Stripe from 'stripe';
 import { stripePrices } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { runOpsScript } from './lib/run-ops-script';
 
 interface Row {
   id: number;
@@ -49,12 +49,10 @@ function canonicalLookupKey(row: Pick<Row, 'planId' | 'communityType' | 'billing
   return `${row.planId}_${row.communityType}_${intervalSuffix}`;
 }
 
-async function main(): Promise<void> {
+async function run(): Promise<void> {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
-    // eslint-disable-next-line no-console
-    console.error('STRIPE_SECRET_KEY is not set. Aborting.');
-    process.exit(1);
+    throw new Error('STRIPE_SECRET_KEY is not set. Aborting.');
   }
   const apply = process.argv.slice(2).includes('--apply');
 
@@ -187,18 +185,8 @@ async function main(): Promise<void> {
   }
 
   if (errors.length > 0) {
-    process.exitCode = 1;
+    throw new Error(`${errors.length} error(s) encountered while syncing lookup keys.`);
   }
 }
 
-const isEntrypoint = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false;
-
-if (isEntrypoint) {
-  main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[sync-stripe-lookup-keys] failed:', error);
-    process.exitCode = 1;
-  });
-}
+void runOpsScript({ name: 'sync-stripe-lookup-keys', url: import.meta.url, run });
