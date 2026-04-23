@@ -55,6 +55,25 @@ describe('signup schema validation', () => {
     expect(errors.address?.length).toBeGreaterThan(0);
   });
 
+  it('routes the missing-address error to addressLine1 when the structured form submits blank strings', () => {
+    // The signup form always passes addressLine1/city/state/zipCode as strings
+    // (initialized to ''). An empty submission would route to `addressLine1`
+    // so the inline error under the Street Address field renders.
+    const result = signupSchema.safeParse({
+      ...validPayload,
+      addressLine1: '',
+      city: '',
+      state: '',
+      zipCode: '',
+    });
+    expect(result.success).toBe(false);
+
+    if (result.success) return;
+    const errors = result.error.flatten().fieldErrors;
+    expect(errors.addressLine1?.length).toBeGreaterThan(0);
+    expect(errors.address).toBeUndefined();
+  });
+
   it('requires Terms acceptance', () => {
     const result = signupSchema.safeParse({
       ...validPayload,

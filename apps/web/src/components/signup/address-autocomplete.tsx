@@ -220,7 +220,7 @@ export function SignupAddressAutocomplete({
 
           {!isLoading && !hasFetchError && !parsedQuery && value.trim() ? (
             <div className="px-3 py-3 text-sm text-content-secondary">
-              Type at least 4 letters of the street name to search the offline address index.
+              Type at least 3 letters of the street name to search the offline address index.
             </div>
           ) : null}
 

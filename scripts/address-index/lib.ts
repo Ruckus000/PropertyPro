@@ -17,7 +17,7 @@ export interface ShardPlan {
   shardFiles: Record<string, CompactAddressRecord[]>;
 }
 
-const DEFAULT_PREFIX_LENGTH = 4;
+const DEFAULT_PREFIX_LENGTH = 3;
 const DEFAULT_HOUSE_DIGIT_BUCKET = 'x';
 
 export function parseCsvLine(line: string): string[] {
