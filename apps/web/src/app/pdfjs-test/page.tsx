@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { PdfJsTestClient } from './pdfjs-test-client';
 
 export const metadata: Metadata = {
@@ -14,6 +15,12 @@ export default async function PdfJsTestPage({
 }: {
   searchParams: Promise<{ variant?: string }>;
 }) {
+  // Test harness page — served only when CI opts in. Vercel production leaves
+  // the flag unset so this returns 404 and the page stays out of production.
+  if (process.env.PDFJS_TEST_ENABLED !== '1') {
+    notFound();
+  }
+
   const { variant } = await searchParams;
 
   return (

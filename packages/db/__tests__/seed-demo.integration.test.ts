@@ -321,7 +321,7 @@ describeDb('demo seed integration', () => {
     );
     expect(planBySlug).toMatchObject({
       'sunset-condos': 'professional',
-      'palm-shores-hoa': 'essentials',
+      'palm-shores-hoa': 'professional',
       'sunset-ridge-apartments': 'operations_plus',
     });
     expect(seededCommunities.every((community) => community.subscriptionStatus === 'active')).toBe(true);

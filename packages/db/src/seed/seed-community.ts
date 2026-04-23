@@ -91,13 +91,10 @@ async function retryStorageSeedOperation<T>(
   label: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  let lastError: unknown;
-
   for (let attempt = 0; attempt < STORAGE_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
       return await operation();
     } catch (error) {
-      lastError = error;
       const message = error instanceof Error ? error.message : String(error);
 
       if (!isRetryableStorageSeedError(message) || attempt === STORAGE_RETRY_DELAYS_MS.length - 1) {
@@ -111,7 +108,8 @@ async function retryStorageSeedOperation<T>(
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error(`Storage seed operation failed: ${label}`);
+  // Unreachable: the loop's final iteration always returns or throws.
+  throw new Error(`retryStorageSeedOperation exited loop without resolving: ${label}`);
 }
 
 function sanitizePdfText(value: string): string {

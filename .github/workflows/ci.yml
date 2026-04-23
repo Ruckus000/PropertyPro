@@ -211,6 +211,8 @@ jobs:
         run: pnpm build
 
       - name: Run PDF.js production smoke test
+        env:
+          PDFJS_TEST_ENABLED: '1'
         run: pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 
       - name: Run performance budget check
