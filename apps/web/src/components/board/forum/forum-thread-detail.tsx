@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -32,6 +32,7 @@ import {
 interface ForumThreadDetailProps {
   communityId: number;
   threadId: number;
+  currentUserId: string;
   isAdmin: boolean;
   canModerateReplies: boolean;
 }
@@ -39,6 +40,7 @@ interface ForumThreadDetailProps {
 export function ForumThreadDetail({
   communityId,
   threadId,
+  currentUserId,
   isAdmin,
   canModerateReplies,
 }: ForumThreadDetailProps) {
@@ -160,10 +162,10 @@ export function ForumThreadDetail({
                   {reply.deletedAt ? (
                     <div className="rounded-lg border border-dashed border-edge bg-surface-subtle p-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status="closed" label="Reply removed" subtle />
+                        <StatusBadge status="closed" label="Reply deleted" subtle />
                       </div>
                       <p className="mt-2 text-sm text-content-secondary">
-                        This reply was removed by a moderator. The conversation order has been preserved.
+                        The content has been hidden; conversation order is preserved.
                       </p>
                     </div>
                   ) : (
@@ -171,18 +173,21 @@ export function ForumThreadDetail({
                   )}
                 </div>
 
-                {canModerateReplies && !reply.deletedAt ? (
+                {(canModerateReplies || reply.authorUserId === currentUserId) && !reply.deletedAt ? (
                   <Button
                     type="button"
-                    variant="outline"
-                    className="h-11 shrink-0 md:h-9"
+                    variant="ghost"
+                    className="h-11 shrink-0 px-3 text-content-secondary hover:bg-status-danger-bg hover:text-status-danger md:h-9"
                     disabled={deleteReply.isPending}
+                    title="Delete reply"
                     onClick={() => setReplyPendingRemoval(reply.id)}
                   >
                     {deleteReply.isPending && replyPendingRemoval === reply.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    Remove Reply
+                    ) : (
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    Delete reply
                   </Button>
                 ) : null}
               </div>
@@ -197,7 +202,7 @@ export function ForumThreadDetail({
           <AlertBanner
             status="danger"
             variant="subtle"
-            title="We couldn't remove this reply."
+            title="We couldn't delete this reply."
             description={deleteReply.error instanceof Error ? deleteReply.error.message : 'Please try again.'}
           />
         ) : null}
@@ -257,22 +262,23 @@ export function ForumThreadDetail({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove reply?</AlertDialogTitle>
+            <AlertDialogTitle>Delete reply?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will hide the reply content and leave a visible tombstone in the thread so the discussion chronology stays intact.
+              This hides the reply for everyone and leaves a placeholder so the conversation still makes sense.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {deleteReply.error && replyPendingRemoval !== null ? (
             <AlertBanner
               status="danger"
               variant="subtle"
-              title="We couldn't remove this reply."
+              title="We couldn't delete this reply."
               description={deleteReply.error instanceof Error ? deleteReply.error.message : 'Please try again.'}
             />
           ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteReply.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
               disabled={deleteReply.isPending || replyPendingRemoval === null}
               onClick={(event) => {
                 event.preventDefault();
@@ -285,7 +291,7 @@ export function ForumThreadDetail({
               }}
             >
               {deleteReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              Remove Reply
+              Delete reply
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

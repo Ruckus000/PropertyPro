@@ -179,6 +179,19 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
     const replyJson = await parseJson<{ data: Record<string, unknown> }>(replyResponse);
     const replyId = readNumberField(replyJson.data, 'id');
 
+    setActor(kit, 'tenantA');
+    const ownReplyResponse = await routeModules.forumReply.POST(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'POST', {
+        communityId: communityA.id,
+        body: 'I started this thread and want to add one more note.',
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(ownReplyResponse.status).toBe(201);
+    const ownReplyJson = await parseJson<{ data: Record<string, unknown> }>(ownReplyResponse);
+    const ownReplyId = readNumberField(ownReplyJson.data, 'id');
+
+    setActor(kit, 'actorA');
     const lockResponse = await routeModules.forumThread.PATCH(
       jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}`), 'PATCH', {
         communityId: communityA.id,
@@ -207,6 +220,33 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       { params: Promise.resolve({ id: String(threadId) }) },
     );
     expect(unauthorizedReplyModeration.status).toBe(403);
+
+    const lockedReplyResponse = await routeModules.forumReply.POST(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'POST', {
+        communityId: communityA.id,
+        body: 'This should be blocked because the thread is locked.',
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(lockedReplyResponse.status).toBe(403);
+
+    const authorDeleteResponse = await routeModules.forumReply.DELETE(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'DELETE', {
+        communityId: communityA.id,
+        replyId: ownReplyId,
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(authorDeleteResponse.status).toBe(200);
+
+    const repeatAuthorDeleteResponse = await routeModules.forumReply.DELETE(
+      jsonRequest(apiUrl(`/api/v1/forum/threads/${threadId}/reply`), 'DELETE', {
+        communityId: communityA.id,
+        replyId: ownReplyId,
+      }),
+      { params: Promise.resolve({ id: String(threadId) }) },
+    );
+    expect(repeatAuthorDeleteResponse.status).toBe(404);
 
     setActor(kit, 'actorA');
     const deleteReplyResponse = await routeModules.forumReply.DELETE(
@@ -237,6 +277,10 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
     expect(moderatedReply).toBeDefined();
     expect(moderatedReply?.deletedAt).not.toBeNull();
     expect(moderatedReply?.body).toBe('');
+    const authorDeletedReply = moderatedJson.data.replies.find((reply) => reply.id === ownReplyId);
+    expect(authorDeletedReply).toBeDefined();
+    expect(authorDeletedReply?.deletedAt).not.toBeNull();
+    expect(authorDeletedReply?.body).toBe('');
 
     setActor(kit, 'actorB');
     const crossTenantRead = await routeModules.forumThread.GET(

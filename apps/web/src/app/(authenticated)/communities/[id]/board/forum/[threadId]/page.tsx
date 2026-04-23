@@ -33,6 +33,7 @@ export default async function ForumThreadPage({ params }: PageProps) {
     <ForumThreadDetail
       communityId={communityId}
       threadId={parsedThreadId}
+      currentUserId={userId}
       isAdmin={membership.isAdmin}
       canModerateReplies={canModerateReplies}
     />

@@ -120,19 +120,22 @@ describe('forum reply moderation route', () => {
       7,
       99,
       'moderator-1',
+      true,
       'req-forum-delete',
       undefined,
     );
     expect(json.data).toEqual({ id: 99, deleted: true });
   });
 
-  it('rejects residents attempting to moderate replies', async () => {
+  it('passes resident delete attempts to the service as non-moderator deletes', async () => {
+    requireAuthenticatedUserIdMock.mockResolvedValueOnce('author-1');
     requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
 
     const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7/reply', {
       method: 'DELETE',
       headers: {
         'content-type': 'application/json',
+        'x-request-id': 'req-author-delete',
       },
       body: JSON.stringify({
         communityId: 42,
@@ -141,11 +144,20 @@ describe('forum reply moderation route', () => {
     });
 
     const res = await DELETE(req, { params: Promise.resolve({ id: '7' }) });
-    const json = (await res.json()) as { error: { message: string; code: string } };
+    const json = (await res.json()) as { data: { id: number; deleted: boolean } };
 
-    expect(res.status).toBe(403);
-    expect(deleteForumReplyForCommunityMock).not.toHaveBeenCalled();
-    expect(json.error.code).toBe('FORBIDDEN');
+    expect(res.status).toBe(200);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'author-1');
+    expect(deleteForumReplyForCommunityMock).toHaveBeenCalledWith(
+      42,
+      7,
+      99,
+      'author-1',
+      false,
+      'req-author-delete',
+      undefined,
+    );
+    expect(json.data).toEqual({ id: 99, deleted: true });
   });
 
   it('rejects managers without polls write permission', async () => {
@@ -168,5 +180,25 @@ describe('forum reply moderation route', () => {
     expect(res.status).toBe(403);
     expect(deleteForumReplyForCommunityMock).not.toHaveBeenCalled();
     expect(json.error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects invalid reply ids before calling the service', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7/reply', {
+      method: 'DELETE',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 42,
+        replyId: 0,
+      }),
+    });
+
+    const res = await DELETE(req, { params: Promise.resolve({ id: '7' }) });
+    const json = (await res.json()) as { error: { message: string; code: string } };
+
+    expect(res.status).toBe(400);
+    expect(deleteForumReplyForCommunityMock).not.toHaveBeenCalled();
+    expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 });

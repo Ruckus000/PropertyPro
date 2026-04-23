@@ -556,6 +556,7 @@ export async function deleteForumReplyForCommunity(
   threadId: number,
   replyId: number,
   actorUserId: string,
+  canModerateReplies: boolean,
   requestId?: string | null,
   moderationReason?: string | null,
 ): Promise<void> {
@@ -569,6 +570,11 @@ export async function deleteForumReplyForCommunity(
 
   if (!existing) {
     throw new NotFoundError('Forum reply not found');
+  }
+
+  const isAuthorDelete = existing.authorUserId === actorUserId;
+  if (!isAuthorDelete && !canModerateReplies) {
+    throw new ForbiddenError('You can only delete your own reply');
   }
 
   await scoped.softDelete(
@@ -586,7 +592,8 @@ export async function deleteForumReplyForCommunity(
     metadata: {
       requestId: requestId ?? null,
       threadId,
-      moderationReason: moderationReason ?? null,
+      removalType: isAuthorDelete ? 'author_self_delete' : 'moderator_removal',
+      moderationReason: canModerateReplies ? moderationReason ?? null : null,
     },
   });
 }
