@@ -45,7 +45,11 @@ function createWrapper() {
   };
 }
 
-function mockBothFetches(statementData: Record<string, unknown> | null, error = false) {
+function mockBothFetches(
+  statementData: Record<string, unknown> | null,
+  options: { error?: boolean; mode?: 'unit' | 'community' } = {},
+) {
+  const { error = false, mode } = options;
   if (error) {
     mockFetch.mockResolvedValue({
       ok: false,
@@ -68,9 +72,12 @@ function mockBothFetches(statementData: Record<string, unknown> | null, error = 
           json: () => Promise.resolve({}),
         });
       }
+      const body = mode
+        ? { mode, data: statementData }
+        : { data: statementData };
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ data: statementData }),
+        json: () => Promise.resolve(body),
       });
     });
   }
@@ -331,5 +338,212 @@ describe('PaymentPortal', () => {
       '/api/v1/finance/export/statement?communityId=42&unitId=202',
       '_blank',
     );
+  });
+
+  describe('community mode (staff)', () => {
+    it('renders a Unit column in upcoming + history tables', async () => {
+      mockBothFetches(
+        {
+          balanceCents: 90000,
+          ledgerEntries: [],
+          lineItems: [
+            {
+              id: 501,
+              assessmentId: 11,
+              unitId: 101,
+              unitNumber: '101',
+              amountCents: 40000,
+              lateFeeCents: 0,
+              status: 'pending',
+              dueDate: '2026-05-01',
+              paidAt: null,
+              paymentIntentId: null,
+            },
+            {
+              id: 502,
+              assessmentId: 12,
+              unitId: 202,
+              unitNumber: '202',
+              amountCents: 50000,
+              lateFeeCents: 0,
+              status: 'overdue',
+              dueDate: '2026-04-01',
+              paidAt: null,
+              paymentIntentId: null,
+            },
+          ],
+        },
+        { mode: 'community' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+        </Wrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('columnheader', { name: /unit/i })).toBeInTheDocument();
+      });
+      expect(screen.getByText('Unit 101')).toBeInTheDocument();
+      expect(screen.getByText('Unit 202')).toBeInTheDocument();
+    });
+
+    it('hides the Pay Now action in community mode', async () => {
+      mockBothFetches(
+        {
+          balanceCents: 40000,
+          ledgerEntries: [],
+          lineItems: [
+            {
+              id: 701,
+              assessmentId: 21,
+              unitId: 303,
+              unitNumber: '303',
+              amountCents: 40000,
+              lateFeeCents: 0,
+              status: 'pending',
+              dueDate: '2026-05-01',
+              paidAt: null,
+              paymentIntentId: null,
+            },
+          ],
+        },
+        { mode: 'community' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="cam" mode="community" />
+        </Wrapper>,
+      );
+
+      // Wait for the community balance to render so we know the data is mounted.
+      await waitFor(() => {
+        expect(screen.getByText(/community balance/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
+    });
+
+    it('renders empty-state card when the community has no activity', async () => {
+      mockBothFetches(
+        {
+          balanceCents: 0,
+          ledgerEntries: [],
+          lineItems: [],
+        },
+        { mode: 'community' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+        </Wrapper>,
+      );
+
+      // The payload has no line items but is non-null — empty line items render
+      // the "All caught up" tab-content fallback; confirm it is not the
+      // literal `null` blank-page that used to happen for `!data`.
+      await waitFor(() => {
+        const bodyText = document.body.textContent || '';
+        expect(bodyText.length).toBeGreaterThan(0);
+      });
+      // Explicit empty line-item copy still shows — we are NOT returning null.
+      expect(screen.queryByText(/all caught up/i)).toBeInTheDocument();
+    });
+
+    it('renders empty-state card (not blank page) when data is null', async () => {
+      // Backwards-compat: server returns `{ data: null }` — old behaviour was
+      // `return null` which produced a blank page. New behaviour: empty-state.
+      mockFetch.mockImplementation((url: string) => {
+        if (url.includes('fee-policy')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ data: { feePolicy: 'owner_pays' } }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ mode: 'community', data: null }),
+        });
+      });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+        </Wrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/no payment activity yet for this community/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('unit mode — regressions', () => {
+    it('keeps the multi-unit resident picker behaviour', async () => {
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="resident"
+            mode="unit"
+            actorUnits={[
+              { id: 101, label: 'Unit 101' },
+              { id: 202, label: 'Unit 202' },
+            ]}
+            requiresExplicitUnitSelection={true}
+          />
+        </Wrapper>,
+      );
+
+      expect(screen.getByText(/select a unit to continue/i)).toBeInTheDocument();
+      // The fetch should be suppressed while the picker is shown.
+      expect(mockFetch).not.toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/payments/statement?'),
+      );
+    });
+
+    it('parses new `{ mode: "unit", data }` envelope transparently', async () => {
+      mockBothFetches(
+        {
+          unitId: 303,
+          balanceCents: 35000,
+          ledgerEntries: [],
+          lineItems: [],
+        },
+        { mode: 'unit' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="resident" mode="unit" unitId={303} />
+        </Wrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/current balance/i)).toBeInTheDocument();
+      });
+      // No Unit column in unit mode.
+      expect(screen.queryByRole('columnheader', { name: /unit/i })).not.toBeInTheDocument();
+    });
   });
 });
