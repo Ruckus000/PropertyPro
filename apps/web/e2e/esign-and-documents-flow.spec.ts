@@ -17,7 +17,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +36,60 @@ async function assertPdfJsAssetsReachable(page: Page) {
   expect(workerResponse.status()).toBe(200);
 }
 
+async function expectPdfPreviewCanvas(page: Page, timeout = 30_000) {
+  const canvas = page.locator('canvas').first();
+  const previewUnavailable = page.getByText(/preview unavailable/i).first();
+
+  await expect
+    .poll(
+      async () => {
+        if (await previewUnavailable.count()) {
+          return 'preview_unavailable';
+        }
+
+        if (await canvas.count()) {
+          return (await canvas.isVisible()) ? 'canvas' : 'pending';
+        }
+
+        return 'pending';
+      },
+      { timeout, message: 'Expected the PDF preview to render a canvas or surface a stable unavailable state.' },
+    )
+    .toBe('canvas');
+}
+
+async function gotoEsignOrSkipForSeedMismatch(
+  page: Page,
+  communityId: number,
+  testInfo: TestInfo,
+) {
+  const esignPath = `/esign?communityId=${communityId}`;
+  const response = await page.request.get(esignPath, { maxRedirects: 0 });
+  const redirectLocation = response.headers()['location'] ?? null;
+  const responseText = await response.text();
+
+  if (
+    redirectLocation?.includes('/dashboard?reason=feature-not-available') ||
+    responseText.includes('/dashboard?reason=feature-not-available')
+  ) {
+    testInfo.skip(
+      true,
+      'Sunset Condos is not on a hasEsign-enabled plan in this database. Run: DEMO_SEED_SYNC_AUTH_USERS=0 scripts/with-env-local-demo-db.sh pnpm seed:demo',
+    );
+    return false;
+  }
+
+  await page.goto(esignPath, { waitUntil: 'networkidle' });
+
+  const currentUrl = new URL(page.url());
+  expect(
+    currentUrl.pathname,
+    `Expected /esign after CAM login, but landed on ${page.url()} (initial /esign response: ${response.status()}${redirectLocation ? ` -> ${redirectLocation}` : ''})`,
+  ).toBe('/esign');
+
+  return true;
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('E-Sign send flow (CAM)', () => {
@@ -48,7 +102,9 @@ test.describe('E-Sign send flow (CAM)', () => {
       communitySlug: SUNSET_CONDOS_SLUG,
     });
 
-    await page.goto(`/esign?communityId=${communityId}`, { waitUntil: 'networkidle' });
+    if (!(await gotoEsignOrSkipForSeedMismatch(page, communityId, testInfo))) {
+      return;
+    }
 
     await page.getByRole('link', { name: /Send Document/i }).click();
     await expect(page.getByRole('heading', { name: /Send Document for Signing/i })).toBeVisible();
@@ -60,13 +116,15 @@ test.describe('E-Sign send flow (CAM)', () => {
       timeout: 30_000,
     });
     await page.getByPlaceholder('Search templates...').fill('Violation');
-    const violationOption = page.getByRole('button', { name: 'Violation Acknowledgment' });
+    const violationOption = page.locator('[cmdk-item]').filter({
+      has: page.getByText('Violation Acknowledgment', { exact: true }),
+    });
     try {
       await expect(violationOption).toBeVisible({ timeout: 60_000 });
     } catch {
       testInfo.skip(
         true,
-        'No Violation Acknowledgment template in UI. Run: scripts/with-env-local.sh pnpm seed:demo',
+        'No Violation Acknowledgment template in UI. Run: DEMO_SEED_SYNC_AUTH_USERS=0 scripts/with-env-local-demo-db.sh pnpm seed:demo',
       );
       return;
     }
@@ -107,7 +165,7 @@ test.describe('E-Sign send flow (CAM)', () => {
     await assertPdfJsAssetsReachable(page);
     await expect(page.getByText(/Signing as:/i)).toBeVisible();
     await expect(page.getByText(/tenant\.one@sunset\.local/i)).toBeVisible();
-    await expect(page.locator('canvas').first()).toBeVisible();
+    await expectPdfPreviewCanvas(page);
     await expect(page.getByText('PDF Document Preview')).toHaveCount(0);
 
     await page.getByPlaceholder('Owner Name').fill('Tenant One');
@@ -120,8 +178,7 @@ test.describe('E-Sign send flow (CAM)', () => {
     await page.getByRole('button', { name: /I agree to take corrective action/i }).click();
 
     await page.getByRole('button', { name: /Owner Signature/i }).click();
-    // SignatureCapture uses <button> for Draw | Type | Upload, not role="tab"
-    await page.getByRole('button', { name: 'Type' }).click();
+    await page.getByRole('tab', { name: 'Type' }).click();
     await page.getByPlaceholder(/Type your full name/i).fill('Tenant One');
     await page.getByRole('button', { name: 'Confirm' }).click();
 
@@ -137,7 +194,7 @@ test.describe('E-Sign send flow (CAM)', () => {
       waitUntil: 'networkidle',
     });
 
-    await expect(page.locator('canvas').first()).toBeVisible();
+    await expectPdfPreviewCanvas(page);
     await expect(page.getByText('PDF preview unavailable')).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: /Download Signed Document/i }),
@@ -173,10 +230,10 @@ test.describe('Library documents (board admin → tenant)', () => {
     await expect(seededDoc).toBeVisible();
     await seededDoc.click();
     await assertPdfJsAssetsReachable(page);
-    await expect(page.locator('canvas').first()).toBeVisible();
+    await expectPdfPreviewCanvas(page);
     await expect(page.locator('iframe')).toHaveCount(0);
 
-    await page.getByRole('button', { name: /Upload Document/i }).first().click();
+    await page.getByRole('button', { name: /Open upload panel/i }).click();
 
     await page.setInputFiles('input[type="file"][accept]', FIXTURE_PDF);
 
@@ -197,7 +254,7 @@ test.describe('Library documents (board admin → tenant)', () => {
     await expect(page.getByText('Uploading...')).toBeHidden({ timeout: 120_000 });
     await expect(page.getByText(uniqueTitle)).toBeVisible();
     await page.getByText(uniqueTitle).click();
-    await expect(page.locator('canvas').first()).toBeVisible();
+    await expectPdfPreviewCanvas(page);
     await expect(page.locator('iframe')).toHaveCount(0);
 
     await loginAs(page, 'tenant', { communitySlug: SUNSET_CONDOS_SLUG });
