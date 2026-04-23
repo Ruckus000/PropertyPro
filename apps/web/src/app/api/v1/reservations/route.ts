@@ -36,8 +36,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     const total = all.length;
     const offset = (page - 1) * limit;
     return NextResponse.json({
-      data: all.slice(offset, offset + limit),
-      meta: { page, limit, total },
+      data: {
+        data: all.slice(offset, offset + limit),
+        meta: { page, limit, total },
+      },
     });
   }
 
@@ -47,5 +49,5 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     limit,
   });
 
-  return NextResponse.json({ data, meta: { page, limit, total } });
+  return NextResponse.json({ data: { data, meta: { page, limit, total } } });
 });

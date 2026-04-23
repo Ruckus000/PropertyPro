@@ -9,6 +9,8 @@ import {
   useCreateMaintenanceRequest,
   useCreateWorkOrder,
   useCreateReservation,
+  useWorkOrders,
+  useReservations,
 } from '../use-operations';
 
 function wrapper(qc: QueryClient) {
@@ -89,5 +91,58 @@ describe('useCreateReservation', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/amenities/9/reserve');
+  });
+});
+
+describe('useWorkOrders — response roundtrip', () => {
+  it('reads { data, meta } from the double-wrapped envelope', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            data: [{
+              id: 1, title: 'Fix pump', description: null, unitId: null, vendorId: null,
+              priority: 'medium', status: 'created', slaResponseHours: null, slaCompletionHours: null,
+              assignedAt: null, startedAt: null, completedAt: null, closedAt: null,
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            }],
+            meta: { page: 1, limit: 20, total: 42 },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useWorkOrders(42), { wrapper: wrapper(qc) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // If envelope were flat, result.current.data would be an array and data.data would be undefined.
+    expect(result.current.data?.data).toHaveLength(1);
+    expect(result.current.data?.meta.total).toBe(42);
+    expect(result.current.data?.meta.page).toBe(1);
+  });
+});
+
+describe('useReservations — response roundtrip', () => {
+  it('reads { data, meta } from the double-wrapped envelope', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            data: [{
+              id: 7, amenityId: 1, unitId: null, status: 'confirmed',
+              startTime: '2026-05-01T14:00:00-04:00', endTime: '2026-05-01T15:00:00-04:00',
+              notes: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            }],
+            meta: { page: 1, limit: 20, total: 33 },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useReservations(42), { wrapper: wrapper(qc) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.data).toHaveLength(1);
+    expect(result.current.data?.meta.total).toBe(33);
   });
 });

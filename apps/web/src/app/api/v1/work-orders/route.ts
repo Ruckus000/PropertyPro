@@ -88,7 +88,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     limit,
   });
 
-  return NextResponse.json({ data, meta: { page, limit, total } });
+  return NextResponse.json({ data: { data, meta: { page, limit, total } } });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
