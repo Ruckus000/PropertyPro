@@ -311,6 +311,12 @@ export function createScopedClient(
       return rows[0] ?? null;
     },
 
+    async queryWhere(table, additionalWhere) {
+      const filters = buildScopeFilters(table, ctx.communityId);
+      if (additionalWhere) filters.push(additionalWhere);
+      return execSelect(database, table, combineFilters(filters));
+    },
+
     selectFrom<T extends ScopedRow>(
       table: PgTable<TableConfig>,
       columns: Record<string, unknown>,

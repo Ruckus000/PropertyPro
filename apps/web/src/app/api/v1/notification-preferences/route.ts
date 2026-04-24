@@ -138,9 +138,12 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(communityId);
 
-  const existing = (await scoped.query(notificationPreferences)).find(
-    (r) => r['userId'] === userId,
-  );
+  const existing = (
+    await scoped.queryWhere(
+      notificationPreferences,
+      eq(notificationPreferences.userId, userId),
+    )
+  )[0];
 
   const updateValues: Record<string, unknown> = {};
   if (emailFrequency !== undefined) updateValues['emailFrequency'] = emailFrequency;

@@ -55,6 +55,18 @@ export interface ScopedClient {
   ) => Promise<ScopedRow | null>;
 
   /**
+   * SELECT rows matching a caller-supplied WHERE clause, with tenant +
+   * soft-delete scoping applied on top. Prefer `queryById` when matching on
+   * the primary key; use `queryWhere` for lookups keyed on non-id columns
+   * (e.g. `userId`, composite filters) so the predicate runs in SQL instead
+   * of a full-table scan + in-memory `.find`.
+   */
+  queryWhere: (
+    table: ScopedTable,
+    additionalWhere: SQL | undefined,
+  ) => Promise<ScopedRow[]>;
+
+  /**
    * SELECT with custom column map, tenant + soft-delete scoping applied.
    * Returns a dynamic query builder that supports .orderBy(), .limit() chaining.
    *

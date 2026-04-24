@@ -89,8 +89,16 @@ describe('announcement email delivery', () => {
 
     const update = vi.fn().mockResolvedValue([]);
 
+    const queryWhere = vi.fn().mockImplementation(async (table: unknown) => {
+      if (table === tables.announcementDeliveryLog) {
+        return deliveryRows.length > 0 ? [deliveryRows[0]] : [];
+      }
+      return [];
+    });
+
     createScopedClientMock.mockReturnValue({
       query,
+      queryWhere,
       insert,
       update,
     });
@@ -173,6 +181,7 @@ describe('announcement email delivery', () => {
 
     createScopedClientMock.mockReturnValue({
       query,
+      queryWhere: vi.fn().mockResolvedValue([]),
       insert,
       update: vi.fn().mockResolvedValue([]),
     });

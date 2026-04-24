@@ -177,9 +177,15 @@ async function markStatus(
   },
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
-  const existing = (await scoped.query(announcementDeliveryLog)).find(
-    (row) => row['announcementId'] === announcementId && row['userId'] === userId,
-  );
+  const existing = (
+    await scoped.queryWhere(
+      announcementDeliveryLog,
+      and(
+        eq(announcementDeliveryLog.announcementId, announcementId),
+        eq(announcementDeliveryLog.userId, userId),
+      ),
+    )
+  )[0];
 
   if (!existing) return;
 
