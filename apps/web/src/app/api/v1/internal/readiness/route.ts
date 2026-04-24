@@ -21,6 +21,19 @@ interface CheckResult {
   error?: string;
 }
 
+const REQUIRED_PENDING_SIGNUP_COLUMNS = [
+  'address_line_1',
+  'city',
+  'state',
+  'zip_code',
+] as const;
+
+function extractRows<T>(raw: unknown): T[] {
+  return Array.isArray(raw)
+    ? raw as T[]
+    : (raw as { rows?: T[] }).rows ?? [];
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     requireCronSecret(req, process.env.READINESS_CHECK_SECRET);
@@ -77,7 +90,40 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
   }
 
-  // 3. Supabase auth check
+  // 3. Runtime schema compatibility check
+  try {
+    const db = createUnscopedClient();
+    const rows = extractRows<{ column_name: string }>(await db.execute(sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'pending_signups'
+        AND column_name IN ('address_line_1', 'city', 'state', 'zip_code')
+    `));
+    const found = new Set(rows.map((row) => row.column_name));
+    const missing = REQUIRED_PENDING_SIGNUP_COLUMNS
+      .filter((column) => !found.has(column))
+      .map((column) => `pending_signups.${column}`);
+
+    if (missing.length > 0) {
+      console.error(JSON.stringify({
+        event: 'readiness.schema_compatibility_failed',
+        missing,
+        requiredMigration: '0145_pending_signups_structured_address',
+      }));
+    }
+
+    checks.schema_compatibility = missing.length === 0
+      ? { status: 'pass' }
+      : { status: 'fail', missing };
+  } catch (err) {
+    checks.schema_compatibility = {
+      status: 'fail',
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+
+  // 4. Supabase auth check
   try {
     const admin = createAdminClient();
     await admin.auth.admin.listUsers({ perPage: 1 });
@@ -93,11 +139,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const dbOk = checks.database?.status === 'pass';
   const authOk = checks.supabase_auth?.status === 'pass';
   const pricesOk = checks.stripe_prices?.status === 'pass';
+  const schemaOk = checks.schema_compatibility?.status === 'pass';
 
   let status: 'healthy' | 'degraded' | 'unhealthy';
-  if (dbOk && authOk && pricesOk) {
+  if (dbOk && authOk && schemaOk && pricesOk) {
     status = 'healthy';
-  } else if (dbOk && authOk) {
+  } else if (dbOk && authOk && schemaOk) {
     status = 'degraded';
   } else {
     status = 'unhealthy';

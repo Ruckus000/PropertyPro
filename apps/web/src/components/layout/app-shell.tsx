@@ -173,7 +173,7 @@ function ShellInner({ children, user, community, role, features, resourceAccess,
             aria-hidden="true"
           />
           {/* Drawer */}
-          <div className="relative z-10 h-full overflow-y-auto">
+          <div className="relative z-10 h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <AppSidebar
               expandedOverride={true}
               showCollapseToggle={false}
