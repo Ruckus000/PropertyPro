@@ -42,6 +42,19 @@ export interface ScopedClient {
   queryIncludingDeleted: (table: ScopedTable) => Promise<ScopedRow[]>;
 
   /**
+   * SELECT a single row by its `id` primary key, with tenant scoping applied.
+   * Returns `null` when no row matches. Pass `{ includeSoftDeleted: true }`
+   * to match soft-deleted rows as well (requires caller auth gating).
+   *
+   * Throws if the table does not have an `id` column.
+   */
+  queryById: (
+    table: ScopedTable,
+    id: number,
+    options?: { includeSoftDeleted?: boolean },
+  ) => Promise<ScopedRow | null>;
+
+  /**
    * SELECT with custom column map, tenant + soft-delete scoping applied.
    * Returns a dynamic query builder that supports .orderBy(), .limit() chaining.
    *

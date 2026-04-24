@@ -297,6 +297,20 @@ export function createScopedClient(
       return execSelect(database, table, combineFilters(filters));
     },
 
+    async queryById(table, id, options = {}) {
+      const columns = getTableColumns(table) as ColumnRecord;
+      if (!hasIdColumn(columns)) {
+        const tableName = getTableName(table as unknown as Table);
+        throw new Error(
+          `Table "${tableName}" has no id column; queryById is not supported.`,
+        );
+      }
+      const filters = buildScopeFilters(table, ctx.communityId, options);
+      filters.push(eq(columns.id, id));
+      const rows = await execSelect(database, table, combineFilters(filters));
+      return rows[0] ?? null;
+    },
+
     selectFrom<T extends ScopedRow>(
       table: PgTable<TableConfig>,
       columns: Record<string, unknown>,
