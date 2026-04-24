@@ -57,9 +57,24 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   );
   const query =
     typeof resolvedSearchParams['q'] === 'string' ? resolvedSearchParams['q'] : undefined;
+  const showDeleted =
+    membership.isAdmin && resolvedSearchParams['includeDeleted'] === 'true';
   const { rows: items } = await listVisibleAnnouncements(context.communityId, membership, {
     query,
+    includeDeleted: showDeleted,
   });
+
+  const serializedItems = items.map((item) => ({
+    id: item.id,
+    communityId: item.communityId,
+    title: item.title,
+    body: item.body,
+    audience: item.audience,
+    isPinned: item.isPinned,
+    publishedAt: item.publishedAt.toISOString(),
+    publishedBy: item.publishedBy,
+    deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -78,9 +93,12 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
       />
 
       <AnnouncementList
-        items={items}
+        items={serializedItems}
         communityId={context.communityId}
+        currentUserId={userId}
+        isAdmin={membership.isAdmin}
         canWriteAnnouncements={canWriteAnnouncements}
+        showDeleted={showDeleted}
       />
     </div>
   );

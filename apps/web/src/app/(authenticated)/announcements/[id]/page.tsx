@@ -7,11 +7,13 @@ import {
   formatAnnouncementAudienceLabel,
   getVisibleAnnouncementById,
 } from '@/lib/announcements/read-visibility';
-import { requirePermission } from '@/lib/db/access-control';
+import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
+import { StatusBadge } from '@/components/shared/status-badge';
+import { AnnouncementDetailActions } from '@/components/announcements/announcement-detail-actions';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -55,11 +57,26 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
     communityId,
     membership,
     announcementId,
+    { includeDeleted: membership.isAdmin },
   );
 
   if (!announcement) {
     notFound();
   }
+
+  const isAuthor = announcement.publishedBy === userId;
+  const canWriteAnnouncements = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'announcements',
+    'write',
+    {
+      isUnitOwner: membership.isUnitOwner,
+      permissions: membership.permissions,
+    },
+  );
+  const canManage = isAuthor || (membership.isAdmin && canWriteAnnouncements);
+  const isDeleted = announcement.deletedAt != null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -71,8 +88,19 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
             currentLabel={announcement.title}
           />
         }
+        actions={
+          canManage ? (
+            <AnnouncementDetailActions
+              communityId={communityId}
+              announcementId={announcement.id}
+              isDeleted={isDeleted}
+              canEdit={!isDeleted}
+            />
+          ) : undefined
+        }
       >
         <div className="flex flex-wrap items-center gap-2">
+          {isDeleted && <StatusBadge status="closed" label="Deleted" subtle />}
           {announcement.isPinned && (
             <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2.5 py-1 text-xs font-semibold text-interactive">
               <Pin size={12} aria-hidden="true" />
@@ -96,7 +124,11 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
         </p>
       </PageHeader>
 
-      <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
+      <article
+        className={`rounded-2xl border border-edge bg-surface-card p-6 shadow-sm ${
+          isDeleted ? 'opacity-60' : ''
+        }`}
+      >
         <div
           className="prose prose-neutral max-w-none text-content-secondary"
           dangerouslySetInnerHTML={{ __html: announcement.body }}

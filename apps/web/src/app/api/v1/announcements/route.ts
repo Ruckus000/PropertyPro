@@ -34,7 +34,8 @@ import {
 import { createNotificationsForEvent } from '@/lib/services/notification-service';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { requirePermission } from '@/lib/db/access-control';
+import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
+import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
@@ -70,6 +71,16 @@ const archiveActionSchema = z.object({
   id: z.number().int().positive('Announcement ID must be a positive integer'),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
   archive: z.boolean(),
+});
+
+const restoreActionSchema = z.object({
+  id: z.number().int().positive('Announcement ID must be a positive integer'),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
+});
+
+const deleteAnnouncementSchema = z.object({
+  id: z.number().int().positive('Announcement ID must be a positive integer'),
+  communityId: z.number().int().positive('Community ID must be a positive integer'),
 });
 
 const parsedBodyCache = new WeakMap<NextRequest, Promise<Record<string, unknown>>>();
@@ -161,9 +172,86 @@ export const POST = withErrorHandler(
       if (action === 'archive') {
         return handleArchive(normalizedBody, audit);
       }
+      if (action === 'restore') {
+        return handleRestore(normalizedBody, audit);
+      }
 
       // Default: create
       return handleCreate(normalizedBody, audit);
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// DELETE — Soft-delete an announcement (author or admin)
+// ---------------------------------------------------------------------------
+
+export const DELETE = withErrorHandler(
+  withAuditLog(
+    async (req: NextRequest) => {
+      const body = await getParsedBody(req);
+      const rawCommunityId = body['communityId'];
+      const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+      if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
+        throw new ValidationError('communityId must be a positive integer');
+      }
+      const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+      await assertNotDemoGrace(communityId);
+
+      const userId = await requireAuthenticatedUserId();
+      await requireCommunityMembership(communityId, userId);
+      await requireActiveSubscriptionForMutation(communityId);
+
+      return { userId, communityId };
+    },
+    async (req, _ctx, audit) => {
+      const body = await getParsedBody(req);
+      const result = deleteAnnouncementSchema.safeParse({
+        ...body,
+        communityId: audit.communityId,
+      });
+      if (!result.success) {
+        throw new ValidationError('Invalid delete data', {
+          fields: formatZodErrors(result.error),
+        });
+      }
+
+      const { id, communityId } = result.data;
+      const scoped = createScopedClient(communityId);
+
+      const existing = (await scoped.query(announcements)).find(
+        (r) => (r as Announcement).id === id,
+      ) as Announcement | undefined;
+
+      if (!existing || existing.deletedAt != null) {
+        throw new NotFoundError('Announcement not found');
+      }
+
+      const membership = await requireCommunityMembership(communityId, audit.userId);
+      const isAuthor = existing.publishedBy === audit.userId;
+      const canModerate =
+        membership.isAdmin &&
+        checkPermissionV2(membership.role, membership.communityType, 'announcements', 'write', {
+          isUnitOwner: membership.isUnitOwner,
+          permissions: membership.permissions,
+        });
+      if (!isAuthor && !canModerate) {
+        throw new ForbiddenError('You can only delete your own announcements');
+      }
+
+      await scoped.softDelete(announcements, eq(announcements.id, id));
+
+      await audit.log({
+        action: 'delete',
+        resourceType: 'announcement',
+        resourceId: String(id),
+        oldValues: { title: existing.title, audience: existing.audience },
+        metadata: {
+          removalType: isAuthor ? 'author_self_delete' : 'admin_removal',
+        },
+      });
+
+      return NextResponse.json({ data: { id, deleted: true } });
     },
   ),
 );
@@ -360,6 +448,39 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
   });
 
   return NextResponse.json({ data: updated[0] });
+}
+
+async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+  const result = restoreActionSchema.safeParse(body);
+  if (!result.success) {
+    throw new ValidationError('Invalid restore action data', {
+      fields: formatZodErrors(result.error),
+    });
+  }
+
+  const { id, communityId } = result.data;
+  const scoped = createScopedClient(communityId);
+
+  const existing = (await scoped.queryIncludingDeleted(announcements)).find(
+    (r) => (r as Announcement).id === id,
+  ) as Announcement | undefined;
+
+  if (!existing) {
+    throw new NotFoundError('Announcement not found');
+  }
+
+  const updated = await scoped.restoreSoftDelete(announcements, eq(announcements.id, id));
+
+  await audit.log({
+    action: 'update',
+    resourceType: 'announcement',
+    resourceId: String(id),
+    oldValues: { deletedAt: existing.deletedAt },
+    newValues: { deletedAt: null },
+    metadata: { subAction: 'restore' },
+  });
+
+  return NextResponse.json({ data: updated[0] ?? existing });
 }
 
 async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {

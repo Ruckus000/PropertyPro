@@ -19,6 +19,7 @@ type AnnouncementCommunityContext = Pick<
 
 export interface VisibleAnnouncementsOptions {
   includeArchived?: boolean;
+  includeDeleted?: boolean;
   query?: string;
   limit?: number;
 }
@@ -145,10 +146,15 @@ export async function filterVisibleAnnouncements(
   }
 
   const includeArchived = options.includeArchived === true;
+  const includeDeleted = options.includeDeleted === true && membership.isAdmin;
   const normalizedQuery = normalizeQuery(options.query);
 
   const demoFiltered = await applyDemoAnnouncementProvenancePolicy(community, rows);
   const visible = demoFiltered.filter((announcement) => {
+    if (!includeDeleted && announcement.deletedAt != null) {
+      return false;
+    }
+
     if (!includeArchived && announcement.archivedAt != null) {
       return false;
     }
@@ -175,8 +181,11 @@ export async function listVisibleAnnouncements(
   options: VisibleAnnouncementsOptions = {},
 ): Promise<VisibleAnnouncementsResult<Announcement>> {
   const scoped = createScopedClient(communityId);
+  const includeDeletedAtQuery = options.includeDeleted === true && membership.isAdmin;
   const [announcementRows, communityRows] = await Promise.all([
-    scoped.query(announcements),
+    includeDeletedAtQuery
+      ? scoped.queryIncludingDeleted(announcements)
+      : scoped.query(announcements),
     scoped.selectFrom(
       communities,
       {
@@ -211,10 +220,11 @@ export async function getVisibleAnnouncementById(
   communityId: number,
   membership: CommunityMembership,
   announcementId: number,
-  options: { includeArchived?: boolean } = {},
+  options: { includeArchived?: boolean; includeDeleted?: boolean } = {},
 ): Promise<Announcement | null> {
   const { rows } = await listVisibleAnnouncements(communityId, membership, {
     includeArchived: options.includeArchived,
+    includeDeleted: options.includeDeleted,
   });
 
   return rows.find((row) => row.id === announcementId) ?? null;
