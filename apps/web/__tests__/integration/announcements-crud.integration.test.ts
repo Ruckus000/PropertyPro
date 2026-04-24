@@ -110,7 +110,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     if (!communityA || !communityC) throw new Error('Required community fixtures not found');
     await seedCommunities(state, [communityA, communityC]);
 
-    const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA', 'actorC'];
+    const neededUsers: MultiTenantUserKey[] = ['actorA', 'residentA', 'tenantA', 'actorC'];
     const userFixtures = MULTI_TENANT_USERS.filter((u) => neededUsers.includes(u.key));
     await seedUsers(state, userFixtures);
 
@@ -529,5 +529,122 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
       }),
     );
     expect(deleteResponse.status).toBe(403);
+  });
+
+  it('admin can delete an announcement authored by another admin (admin_removal path)', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    // residentA (board_member) authors the announcement
+    setActor(kit, 'residentA');
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Authored by member ${kit.runSuffix}`,
+        body: 'member post',
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    expect(createResponse.status).toBe(201);
+    const { data } = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const id = readNumberField(data, 'id');
+
+    // actorA (board_president) deletes someone else's announcement
+    setActor(kit, 'actorA');
+    const deleteResponse = await route.DELETE(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'DELETE', {
+        communityId: communityA.id,
+        id,
+      }),
+    );
+    expect(deleteResponse.status).toBe(200);
+    const deleted = await parseJson<{ data: { id: number; deleted: boolean } }>(deleteResponse);
+    expect(deleted.data).toEqual({ id, deleted: true });
+
+    // Row is hidden from the default list
+    const listDefault = await route.GET(
+      new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
+    );
+    const listDefaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+      listDefault,
+    );
+    expect(listDefaultJson.data.find((a) => a['id'] === id)).toBeUndefined();
+  });
+
+  it('non-admin cannot restore a soft-deleted announcement (403)', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    // actorA creates + soft-deletes their own announcement
+    setActor(kit, 'actorA');
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Non-admin restore denied ${kit.runSuffix}`,
+        body: 'denied',
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    const { data } = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const id = readNumberField(data, 'id');
+
+    const deleteResponse = await route.DELETE(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'DELETE', {
+        communityId: communityA.id,
+        id,
+      }),
+    );
+    expect(deleteResponse.status).toBe(200);
+
+    // tenantA lacks announcements:write — outer requirePermission rejects the restore action
+    setActor(kit, 'tenantA');
+    const restoreResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'restore',
+        communityId: communityA.id,
+        id,
+      }),
+    );
+    expect(restoreResponse.status).toBe(403);
+  });
+
+  it('restore of a non-deleted announcement is idempotent (200, deletedAt stays null)', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    setActor(kit, 'actorA');
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Idempotent restore ${kit.runSuffix}`,
+        body: 'live row',
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    const { data } = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const id = readNumberField(data, 'id');
+
+    const restoreResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'restore',
+        communityId: communityA.id,
+        id,
+      }),
+    );
+    expect(restoreResponse.status).toBe(200);
+
+    const listAfter = await route.GET(
+      new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
+    );
+    const listAfterJson = await parseJson<{ data: Array<Record<string, unknown>> }>(listAfter);
+    const row = listAfterJson.data.find((a) => a['id'] === id);
+    expect(row).toBeDefined();
+    expect(row?.['deletedAt']).toBeNull();
   });
 });
