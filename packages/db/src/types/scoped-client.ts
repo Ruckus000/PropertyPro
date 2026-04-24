@@ -35,6 +35,13 @@ export interface ScopedClient {
   query: (table: ScopedTable) => Promise<ScopedRow[]>;
 
   /**
+   * SELECT with tenant scoping but WITHOUT the soft-delete filter.
+   * Returns rows regardless of `deletedAt` state. Intended for admin-only
+   * "recycle bin" / recovery views. Callers are responsible for auth gating.
+   */
+  queryIncludingDeleted: (table: ScopedTable) => Promise<ScopedRow[]>;
+
+  /**
    * SELECT with custom column map, tenant + soft-delete scoping applied.
    * Returns a dynamic query builder that supports .orderBy(), .limit() chaining.
    *
@@ -65,6 +72,16 @@ export interface ScopedClient {
 
   /** Soft delete helper (sets deletedAt). */
   softDelete: (
+    table: ScopedTable,
+    additionalWhere?: SQL,
+  ) => Promise<ScopedRow[]>;
+
+  /**
+   * Restore a soft-deleted row (clears deletedAt).
+   * Bypasses the default `deletedAt IS NULL` scope filter so currently-deleted
+   * rows can be updated. Tenant scoping is still enforced.
+   */
+  restoreSoftDelete: (
     table: ScopedTable,
     additionalWhere?: SQL,
   ) => Promise<ScopedRow[]>;

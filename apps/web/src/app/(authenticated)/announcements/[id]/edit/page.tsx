@@ -8,6 +8,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { requirePermission } from '@/lib/db/access-control';
 import { getVisibleAnnouncementById } from '@/lib/announcements/read-visibility';
 import { AnnouncementAuthoringForm } from '@/components/announcements/announcement-authoring-form';
+import { AnnouncementDetailActions } from '@/components/announcements/announcement-detail-actions';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { Button } from '@/components/ui/button';
@@ -71,11 +72,19 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
           />
         }
         actions={
-          <Button asChild variant="outline">
-            <Link href={`/announcements/${announcementId}?communityId=${context.communityId}`}>
-              Cancel
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/announcements/${announcementId}?communityId=${context.communityId}`}>
+                Cancel
+              </Link>
+            </Button>
+            <AnnouncementDetailActions
+              communityId={context.communityId}
+              announcementId={announcementId}
+              isDeleted={announcement.deletedAt != null}
+              canEdit={false}
+            />
+          </div>
         }
       />
 

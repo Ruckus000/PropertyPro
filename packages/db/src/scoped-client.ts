@@ -198,6 +198,7 @@ async function execDelete(
 function buildScopeFilters(
   table: PgTable<TableConfig>,
   communityId: number,
+  options: { includeSoftDeleted?: boolean } = {},
 ): SQL[] {
   const columns = getTableColumns(table) as ColumnRecord;
   const tableName = getTableName(table as unknown as Table);
@@ -214,7 +215,8 @@ function buildScopeFilters(
 
   if (
     hasDeletedAtColumn(columns) &&
-    !SOFT_DELETE_EXEMPT_TABLES.has(tableName)
+    !SOFT_DELETE_EXEMPT_TABLES.has(tableName) &&
+    !options.includeSoftDeleted
   ) {
     filters.push(isNull(columns.deletedAt));
   }
@@ -285,6 +287,13 @@ export function createScopedClient(
 
     async query(table) {
       const filters = buildScopeFilters(table, ctx.communityId);
+      return execSelect(database, table, combineFilters(filters));
+    },
+
+    async queryIncludingDeleted(table) {
+      const filters = buildScopeFilters(table, ctx.communityId, {
+        includeSoftDeleted: true,
+      });
       return execSelect(database, table, combineFilters(filters));
     },
 
@@ -423,6 +432,41 @@ export function createScopedClient(
       // never reads app.current_community_id, so set_config overhead is unnecessary.
       // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
       return execUpdate(database, table, setData, whereClause);
+    },
+
+    async restoreSoftDelete(table, additionalWhere?) {
+      const columns = getTableColumns(table) as ColumnRecord;
+      const tableName = getTableName(table as unknown as Table);
+
+      if (!hasTenantIsolation(table) && !additionalWhere) {
+        throw new UnscopedMutationError('restoreSoftDelete', tableName);
+      }
+      if (!hasDeletedAtColumn(columns)) {
+        throw new Error(
+          `Table "${tableName}" does not support soft delete (no deleted_at column).`,
+        );
+      }
+
+      // Tenant scoping only — skip the isNull(deletedAt) filter so we can
+      // target rows currently marked deleted.
+      const filters: SQL[] = [];
+      if (tableName === COMMUNITIES_TABLE_NAME) {
+        if (hasIdColumn(columns)) {
+          filters.push(eq(columns.id, ctx.communityId));
+        }
+      } else if (hasCommunityIdColumn(columns)) {
+        filters.push(eq(columns.communityId, ctx.communityId));
+      }
+      if (additionalWhere) {
+        filters.push(additionalWhere);
+      }
+
+      const setData: Record<string, unknown> = { deletedAt: null };
+      if (hasUpdatedAtColumn(columns)) {
+        setData['updatedAt'] = new Date();
+      }
+
+      return execUpdate(database, table, setData, combineFilters(filters));
     },
 
     async hardDelete(table, additionalWhere?) {

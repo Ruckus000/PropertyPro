@@ -429,4 +429,105 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
 
     expect(response.status).toBe(403);
   });
+
+  // =========================================================================
+  // 9. Soft-delete + restore
+  // =========================================================================
+
+  it('author can soft-delete, admin sees it with includeDeleted, restore round-trips', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    setActor(kit, 'actorA');
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Delete me ${kit.runSuffix}`,
+        body: 'Gone soon',
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    expect(createResponse.status).toBe(201);
+    const created = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const toDeleteId = readNumberField(created.data, 'id');
+
+    const deleteResponse = await route.DELETE(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'DELETE', {
+        communityId: communityA.id,
+        id: toDeleteId,
+      }),
+    );
+    expect(deleteResponse.status).toBe(200);
+    const deleted = await parseJson<{ data: { id: number; deleted: boolean } }>(deleteResponse);
+    expect(deleted.data).toEqual({ id: toDeleteId, deleted: true });
+
+    // Default list excludes it
+    const listDefault = await route.GET(
+      new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
+    );
+    const listDefaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+      listDefault,
+    );
+    expect(listDefaultJson.data.find((a) => a['id'] === toDeleteId)).toBeUndefined();
+
+    // Deleting again returns 404 (already soft-deleted)
+    const repeatDelete = await route.DELETE(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'DELETE', {
+        communityId: communityA.id,
+        id: toDeleteId,
+      }),
+    );
+    expect(repeatDelete.status).toBe(404);
+
+    // Restore brings it back
+    const restoreResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        action: 'restore',
+        communityId: communityA.id,
+        id: toDeleteId,
+      }),
+    );
+    expect(restoreResponse.status).toBe(200);
+
+    const listAfterRestore = await route.GET(
+      new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
+    );
+    const listAfterRestoreJson = await parseJson<{
+      data: Array<Record<string, unknown>>;
+    }>(listAfterRestore);
+    const restored = listAfterRestoreJson.data.find((a) => a['id'] === toDeleteId);
+    expect(restored).toBeDefined();
+    expect(restored?.['deletedAt']).toBeNull();
+  });
+
+  it('tenant cannot delete an announcement they did not author (403)', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    // actorA creates
+    setActor(kit, 'actorA');
+    const createResponse = await route.POST(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+        communityId: communityA.id,
+        title: `Tenant cannot delete ${kit.runSuffix}`,
+        body: 'protected',
+        audience: 'all',
+        isPinned: false,
+      }),
+    );
+    const { data } = await parseJson<{ data: Record<string, unknown> }>(createResponse);
+    const id = readNumberField(data, 'id');
+
+    setActor(kit, 'tenantA');
+    const deleteResponse = await route.DELETE(
+      jsonRequest(apiUrl('/api/v1/announcements'), 'DELETE', {
+        communityId: communityA.id,
+        id,
+      }),
+    );
+    expect(deleteResponse.status).toBe(403);
+  });
 });
