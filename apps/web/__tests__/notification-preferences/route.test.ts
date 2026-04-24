@@ -90,7 +90,11 @@ describe('p1-26 notification-preferences route', () => {
         return [stored[idx]];
       });
 
-    createScopedClientMock.mockReturnValue({ query, insert, update });
+    const queryWhere = vi
+      .fn()
+      .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
+
+    createScopedClientMock.mockReturnValue({ query, queryWhere, insert, update });
 
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
@@ -145,7 +149,11 @@ describe('p1-26 notification-preferences route', () => {
         return [stored[stored.length - 1]];
       });
 
-    createScopedClientMock.mockReturnValue({ query, insert, update: vi.fn() });
+    const queryWhere = vi
+      .fn()
+      .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
+
+    createScopedClientMock.mockReturnValue({ query, queryWhere, insert, update: vi.fn() });
 
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',

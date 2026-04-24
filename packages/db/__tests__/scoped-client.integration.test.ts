@@ -38,6 +38,8 @@ describeDb('scoped-client (integration)', () => {
     await db.delete(units).where(eq(units.unitNumber, '__test_b1__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_qid_a__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_restore_a__'));
+    await db.delete(units).where(eq(units.unitNumber, '__test_qbid_cross__'));
+    await db.delete(units).where(eq(units.unitNumber, '__test_qwhere_cross__'));
     await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
     await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
     await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
@@ -273,6 +275,70 @@ describeDb('scoped-client (integration)', () => {
     );
 
     // Clean up
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
+  });
+
+  it('queryById returns the row for the owning tenant and null across tenants', async () => {
+    const clientA = createScopedClient(communityAId, db);
+    const clientB = createScopedClient(communityBId, db);
+    const unitNumber = '__test_qbid_cross__';
+
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
+    const [inserted] = await db
+      .insert(units)
+      .values({ communityId: communityAId, unitNumber })
+      .returning();
+    const unitId = (inserted as { id: number }).id;
+
+    const sameTenant = (await clientA.queryById(units, unitId)) as Record<string, unknown> | null;
+    expect(sameTenant).not.toBeNull();
+    expect(sameTenant?.['unitNumber']).toBe(unitNumber);
+
+    // Cross-tenant read by primary key must be silent — null, not a thrown row from community A
+    const crossTenant = await clientB.queryById(units, unitId);
+    expect(crossTenant).toBeNull();
+
+    // Default queryById excludes soft-deleted rows
+    await clientA.softDelete(units, eq(units.unitNumber, unitNumber));
+    const afterSoftDelete = await clientA.queryById(units, unitId);
+    expect(afterSoftDelete).toBeNull();
+
+    // includeSoftDeleted: true surfaces them for the owning tenant only
+    const withDeleted = (await clientA.queryById(units, unitId, {
+      includeSoftDeleted: true,
+    })) as Record<string, unknown> | null;
+    expect(withDeleted).not.toBeNull();
+    expect(withDeleted?.['deletedAt']).not.toBeNull();
+
+    // And cross-tenant is still null even with includeSoftDeleted
+    const crossWithDeleted = await clientB.queryById(units, unitId, { includeSoftDeleted: true });
+    expect(crossWithDeleted).toBeNull();
+
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
+  });
+
+  it('queryWhere applies tenant + soft-delete scoping on top of a caller filter', async () => {
+    const clientA = createScopedClient(communityAId, db);
+    const clientB = createScopedClient(communityBId, db);
+    const unitNumber = '__test_qwhere_cross__';
+
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
+    await db.insert(units).values({ communityId: communityAId, unitNumber });
+
+    // Owning tenant sees the row via a non-id filter
+    const rowsA = await clientA.queryWhere(units, eq(units.unitNumber, unitNumber));
+    expect(rowsA).toHaveLength(1);
+    expect((rowsA[0] as Record<string, unknown>)['unitNumber']).toBe(unitNumber);
+
+    // Cross-tenant reads nothing with the same filter
+    const rowsB = await clientB.queryWhere(units, eq(units.unitNumber, unitNumber));
+    expect(rowsB).toHaveLength(0);
+
+    // queryWhere hides soft-deleted rows by default (matches query())
+    await clientA.softDelete(units, eq(units.unitNumber, unitNumber));
+    const afterSoftDelete = await clientA.queryWhere(units, eq(units.unitNumber, unitNumber));
+    expect(afterSoftDelete).toHaveLength(0);
+
     await db.delete(units).where(eq(units.unitNumber, unitNumber));
   });
 });

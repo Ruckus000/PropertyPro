@@ -219,11 +219,9 @@ export const DELETE = withErrorHandler(
       const { id, communityId } = result.data;
       const scoped = createScopedClient(communityId);
 
-      const existing = (await scoped.query(announcements)).find(
-        (r) => (r as Announcement).id === id,
-      ) as Announcement | undefined;
+      const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
 
-      if (!existing || existing.deletedAt != null) {
+      if (!existing) {
         throw new NotFoundError('Announcement not found');
       }
 
@@ -375,9 +373,7 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
   const scoped = createScopedClient(communityId);
 
   // Fetch existing to capture old values for audit
-  const existing = (await scoped.query(announcements)).find(
-    (r) => (r as Announcement).id === id,
-  ) as Announcement | undefined;
+  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
@@ -424,9 +420,7 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
   const { id, communityId, isPinned } = result.data;
   const scoped = createScopedClient(communityId);
 
-  const existing = (await scoped.query(announcements)).find(
-    (r) => (r as Announcement).id === id,
-  ) as Announcement | undefined;
+  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
@@ -461,9 +455,9 @@ async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Pr
   const { id, communityId } = result.data;
   const scoped = createScopedClient(communityId);
 
-  const existing = (await scoped.queryIncludingDeleted(announcements)).find(
-    (r) => (r as Announcement).id === id,
-  ) as Announcement | undefined;
+  const existing = (await scoped.queryById(announcements, id, {
+    includeSoftDeleted: true,
+  })) as Announcement | null;
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
@@ -494,9 +488,7 @@ async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Pr
   const { id, communityId, archive } = result.data;
   const scoped = createScopedClient(communityId);
 
-  const existing = (await scoped.query(announcements)).find(
-    (r) => (r as Announcement).id === id,
-  ) as Announcement | undefined;
+  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
