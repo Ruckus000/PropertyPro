@@ -536,7 +536,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const route = requireRoute();
     const communityA = requireCommunity(kit, 'communityA');
 
-    // residentA (board_member) authors the announcement
+    // residentA (role=manager, presetKey=board_member → announcements.write=true) authors the announcement
     setActor(kit, 'residentA');
     const createResponse = await route.POST(
       jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
