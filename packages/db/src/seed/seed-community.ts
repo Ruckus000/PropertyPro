@@ -82,7 +82,7 @@ interface DemoCategoryDefinition {
 const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
 
 function isRetryableStorageSeedError(message: string): boolean {
-  return /gateway timeout|timed out|timeout|503|504|not visible in storage listing|no data returned/i.test(
+  return /bad gateway|gateway timeout|fetch failed|timed out|timeout|503|504|not visible in storage listing|no data returned|\{\}/i.test(
     message,
   );
 }
@@ -180,22 +180,23 @@ export async function ensureSeededDocumentStorage(
   const pdfBytes = buildSeedPlaceholderPdf(title, summary, storagePath);
   const admin = createAdminClient();
 
-  const { error } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `upload ${storagePath}`,
-    () =>
-      admin.storage.from('documents').upload(storagePath, pdfBytes, {
+    async () => {
+      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
-      }),
+      });
+      if (result.error) {
+        throw new Error(`Failed to upload seeded document PDF: ${result.error.message}`);
+      }
+      return result;
+    },
   );
-
-  if (error) {
-    throw new Error(`Failed to upload seeded document PDF: ${error.message}`);
-  }
 
   const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
   const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
-  const { error: listError } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
       const result = await admin.storage
@@ -206,27 +207,26 @@ export async function ensureSeededDocumentStorage(
       if (!result.error && !listed) {
         throw new Error(`Seeded document PDF upload was not visible in storage listing for ${storagePath}`);
       }
+      if (result.error) {
+        throw new Error(`Failed to verify seeded document PDF listing: ${result.error.message}`);
+      }
 
       return result;
     },
   );
 
-  if (listError) {
-    throw new Error(
-      `Failed to verify seeded document PDF listing: ${listError.message}`,
-    );
-  }
-
-  const { data: downloadedFile, error: downloadError } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `download ${storagePath}`,
-    () => admin.storage.from('documents').download(storagePath),
+    async () => {
+      const result = await admin.storage.from('documents').download(storagePath);
+      if (result.error || !result.data) {
+        throw new Error(
+          `Failed to verify seeded document PDF download: ${result.error?.message ?? 'No data returned'}`,
+        );
+      }
+      return result;
+    },
   );
-
-  if (downloadError || !downloadedFile) {
-    throw new Error(
-      `Failed to verify seeded document PDF download: ${downloadError?.message ?? 'No data returned'}`,
-    );
-  }
 
   return pdfBytes.byteLength;
 }

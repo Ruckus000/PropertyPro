@@ -220,7 +220,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     const rowB = rows.find((row) => row.communityId === communityBId);
 
     expect(rowA).toBeDefined();
-    expect(rowA!.residentCount).toBeGreaterThanOrEqual(2);
+    expect(rowA!.residentCount).toBe(1);
     expect(rowA!.totalUnits).toBe(2);
     expect(rowA!.openMaintenanceRequests).toBe(2);
     expect(rowA!.unsatisfiedComplianceItems).toBe(1);
@@ -386,13 +386,15 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
 
     const [u1, u2] = insertedUnits;
 
-    // Two active leases on the same unit (edge case — renewal overlap)
+    // Two active lease rows on the same unit. Date ranges do not overlap because
+    // leases_no_overlap_per_unit now rejects overlapping non-deleted leases.
     await db.insert(leases).values([
       {
         communityId: communityBId,
         unitId: u1!.id,
         residentId: submittedByUserId,
         startDate: '2025-01-01',
+        endDate: '2025-05-31',
         status: 'active',
       },
       {

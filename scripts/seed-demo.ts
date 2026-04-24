@@ -165,7 +165,7 @@ function debugSeed(message: string): void {
 }
 
 function isRetryableStorageSeedError(message: string): boolean {
-  return /gateway timeout|timed out|timeout|503|504|not visible in storage listing|no data returned/i.test(
+  return /bad gateway|gateway timeout|fetch failed|timed out|timeout|503|504|not visible in storage listing|no data returned|\{\}/i.test(
     message,
   );
 }
@@ -1386,22 +1386,23 @@ async function uploadSeedEsignSourceDocument(
   const pdfBytes = await pdfDoc.save();
   const storagePath = `communities/${communityId}/esign-templates/${sanitizeStorageSegment(templateName)}.pdf`;
   const admin = createAdminClient();
-  const { error } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `upload ${storagePath}`,
-    () =>
-      admin.storage.from('documents').upload(storagePath, pdfBytes, {
+    async () => {
+      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
-      }),
+      });
+      if (result.error) {
+        throw new Error(`Failed to upload seeded e-sign source PDF: ${result.error.message}`);
+      }
+      return result;
+    },
   );
-
-  if (error) {
-    throw new Error(`Failed to upload seeded e-sign source PDF: ${error.message}`);
-  }
 
   const storageFolder = storagePath.slice(0, Math.max(storagePath.lastIndexOf('/'), 0));
   const storageFileName = storagePath.slice(storagePath.lastIndexOf('/') + 1);
-  const { error: listError } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
       const result = await admin.storage
@@ -1412,27 +1413,26 @@ async function uploadSeedEsignSourceDocument(
       if (!result.error && !listed) {
         throw new Error(`Seeded e-sign source PDF upload was not visible in storage listing for ${storagePath}`);
       }
+      if (result.error) {
+        throw new Error(`Failed to verify seeded e-sign source PDF listing: ${result.error.message}`);
+      }
 
       return result;
     },
   );
 
-  if (listError) {
-    throw new Error(
-      `Failed to verify seeded e-sign source PDF listing: ${listError.message}`,
-    );
-  }
-
-  const { data: downloadedFile, error: downloadError } = await retryStorageSeedOperation(
+  await retryStorageSeedOperation(
     `download ${storagePath}`,
-    () => admin.storage.from('documents').download(storagePath),
+    async () => {
+      const result = await admin.storage.from('documents').download(storagePath);
+      if (result.error || !result.data) {
+        throw new Error(
+          `Failed to verify seeded e-sign source PDF download: ${result.error?.message ?? 'No data returned'}`,
+        );
+      }
+      return result;
+    },
   );
-
-  if (downloadError || !downloadedFile) {
-    throw new Error(
-      `Failed to verify seeded e-sign source PDF download: ${downloadError?.message ?? 'No data returned'}`,
-    );
-  }
 
   return storagePath;
 }

@@ -78,6 +78,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
     await sqlClient`select set_config('request.jwt.claim.role', 'service_role', false)`;
   }
 
+  async function nextSequenceValue(sequenceName: string): Promise<number> {
+    const rows = await adminSql<{ id: string }[]>`
+      select nextval(${sequenceName}::regclass)::text as id
+    `;
+    const id = Number(rows[0]?.id);
+    if (!Number.isSafeInteger(id)) {
+      throw new Error(`Failed to allocate test id from ${sequenceName}`);
+    }
+    return id;
+  }
+
   beforeAll(async () => {
     adminSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     authSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
@@ -491,8 +502,10 @@ describeDb('P4-55 RLS policies (integration)', () => {
     await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
 
     const forgedFileName = `${seed.filePrefix}forged-${randomUUID().slice(0, 8)}.pdf`;
+    const forgedDocumentId = await nextSequenceValue('public.documents_id_seq');
     const inserted = await authSql<{ id: number; community_id: number; file_name: string }[]>`
       insert into public.documents (
+        id,
         community_id,
         title,
         file_path,
@@ -500,6 +513,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         file_size,
         mime_type
       ) values (
+        ${forgedDocumentId},
         ${seed.communityBId},
         ${`Forged ${seed.runTag}`},
         ${`communities/${seed.communityBId}/documents/${forgedFileName}`},
@@ -543,7 +557,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     try {
       await authSql`
         insert into public.user_roles (user_id, community_id, role)
-        values (${seed.tenantAUserId}, ${seed.communityAId}, 'board_president')
+        values (${seed.tenantAUserId}, ${seed.communityAId}, 'manager')
       `;
       expect.fail('Tenant INSERT on user_roles should be blocked by pp_user_roles_insert');
     } catch (error: unknown) {
@@ -558,7 +572,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     try {
       await authSql`
         update public.user_roles
-        set role = 'board_president'
+        set role = 'manager'
         where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
       `;
     } catch (error: unknown) {
@@ -571,7 +585,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       select role from public.user_roles
       where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
     `;
-    expect(check[0]?.role, 'Tenant role must not have been escalated').toBe('tenant');
+    expect(check[0]?.role, 'Tenant role must not have been escalated').toBe('resident');
   });
 
   it('blocks authenticated actor from inserting directly into compliance_audit_log', async () => {
@@ -654,8 +668,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
       `;
 
       expect(rows.every((row) => row.submitted_by_id === seed.tenantAUserId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantAMaintenanceRequestId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantBSameCommAMaintenanceRequestId)).toBe(false);
+      expect(rows.some((row) => Number(row.id) === seed.tenantAMaintenanceRequestId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommAMaintenanceRequestId)).toBe(false);
     });
 
     it('allows admin-tier actor to SELECT all maintenance_requests in community', async () => {
@@ -672,8 +686,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
         order by id
       `;
 
-      expect(rows.some((row) => row.id === seed.tenantAMaintenanceRequestId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantBSameCommAMaintenanceRequestId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantAMaintenanceRequestId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommAMaintenanceRequestId)).toBe(true);
     });
 
     it('restricts notification_preferences SELECT to own row for any actor', async () => {
@@ -688,8 +702,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
       `;
 
       expect(rows.every((row) => row.user_id === seed.tenantAUserId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantANotifPrefId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantBSameCommANotifPrefId)).toBe(false);
+      expect(rows.some((row) => Number(row.id) === seed.tenantANotifPrefId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommANotifPrefId)).toBe(false);
     });
 
     it('blocks actor from UPDATing another user notification_preferences', async () => {
@@ -724,8 +738,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
         order by id
       `;
 
-      expect(rows.some((row) => row.id === seed.tenantANotifPrefId)).toBe(true);
-      expect(rows.some((row) => row.id === seed.tenantBSameCommANotifPrefId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantANotifPrefId)).toBe(true);
+      expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommANotifPrefId)).toBe(true);
     });
 
     it('allows admin-tier actor to UPDATE another user notification_preferences', async () => {
@@ -754,9 +768,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // Community A has default settings ({}), so member writes are permitted.
       await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
 
+      const announcementId = await nextSequenceValue('public.announcements_id_seq');
       const inserted = await authSql<{ id: number }[]>`
-        insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
+        insert into public.announcements (id, community_id, title, body, audience, is_pinned, published_by)
         values (
+          ${announcementId},
           ${seed.communityAId},
           ${`RLS Configurable Test ${seed.runTag}`},
           'Member write test',
@@ -827,9 +843,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
       let insertedId: number | undefined;
       try {
+        const announcementId = await nextSequenceValue('public.announcements_id_seq');
         const inserted = await authSql<{ id: number }[]>`
-          insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
+          insert into public.announcements (id, community_id, title, body, audience, is_pinned, published_by)
           values (
+            ${announcementId},
             ${seed.communityAId},
             ${`RLS Admin Write Test ${seed.runTag}`},
             'Admin write should succeed',
@@ -1052,11 +1070,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('user can INSERT their own notification_preferences row', async () => {
+      await adminSql`
+        delete from public.notification_preferences
+        where id = ${seed.tenantBSameCommANotifPrefId}
+      `;
+
       await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
 
+      const notificationPreferenceId = await nextSequenceValue('public.notification_preferences_id_seq');
       const inserted = await authSql<{ id: number }[]>`
-        insert into public.notification_preferences (user_id, community_id, email_frequency)
-        values (${seed.tenantBSameCommAUserId}, ${seed.communityAId}, 'weekly')
+        insert into public.notification_preferences (id, user_id, community_id, email_frequency)
+        values (${notificationPreferenceId}, ${seed.tenantBSameCommAUserId}, ${seed.communityAId}, 'weekly')
         returning id
       `;
       expect(inserted).toHaveLength(1);
@@ -1169,9 +1193,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
     it('request owner can INSERT a comment on their own request', async () => {
       await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
 
+      const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
       const inserted = await authSql<{ id: number }[]>`
-        insert into public.maintenance_comments (community_id, request_id, user_id, text)
+        insert into public.maintenance_comments (id, community_id, request_id, user_id, text)
         values (
+          ${commentId},
           ${seed.communityAId},
           ${seed.tenantAMaintenanceRequestId},
           ${seed.tenantAUserId},
@@ -1190,9 +1216,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
     it('admin-tier can INSERT a comment on any request in the community', async () => {
       await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
 
+      const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
       const inserted = await authSql<{ id: number }[]>`
-        insert into public.maintenance_comments (community_id, request_id, user_id, text)
+        insert into public.maintenance_comments (id, community_id, request_id, user_id, text)
         values (
+          ${commentId},
           ${seed.communityAId},
           ${seed.tenantAMaintenanceRequestId},
           ${seed.adminAUserId},
@@ -1217,7 +1245,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         where id = ${seed.communityAId}
       `;
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.id).toBe(seed.communityAId);
+      expect(Number(rows[0]!.id)).toBe(seed.communityAId);
     });
 
     it('community member cannot SELECT another community row', async () => {
@@ -1238,8 +1266,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
         select id from public.communities
         where id in (${seed.communityAId}, ${seed.communityBId})
       `;
-      expect(rows.every((r) => r.id === seed.communityAId)).toBe(true);
-      expect(rows.some((r) => r.id === seed.communityBId)).toBe(false);
+      expect(rows.every((r) => Number(r.id) === seed.communityAId)).toBe(true);
+      expect(rows.some((r) => Number(r.id) === seed.communityBId)).toBe(false);
     });
 
     it('authenticated user cannot INSERT a community directly', async () => {
@@ -1326,6 +1354,24 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   it('verifies policy presence in pg_policies for every tenant table and family', async () => {
+    const expectedPolicyOverrides: Record<string, string[]> = {
+      finance_stripe_webhook_events: ['pp_finance_webhook_insert', 'pp_finance_webhook_select'],
+      election_ballot_submissions: [
+        'pp_election_ballot_submissions_insert',
+        'pp_tenant_delete',
+        'pp_tenant_select',
+        'pp_tenant_update',
+      ],
+      poll_votes: ['pp_poll_votes_insert', 'pp_poll_votes_select'],
+      esign_templates: ['pp_esign_admin_delete', 'pp_esign_admin_insert', 'pp_esign_admin_update', 'pp_tenant_select'],
+      esign_submissions: ['pp_esign_admin_delete', 'pp_esign_admin_insert', 'pp_esign_admin_update', 'pp_tenant_select'],
+      esign_signers: ['pp_esign_admin_delete', 'pp_esign_admin_insert', 'pp_esign_admin_update', 'pp_tenant_select'],
+      esign_events: ['pp_esign_events_admin_insert', 'pp_tenant_select'],
+      esign_consent: ['pp_esign_consent_admin_delete', 'pp_esign_consent_insert', 'pp_esign_consent_update', 'pp_tenant_select'],
+      support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
+      support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
+    };
+
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
       select schemaname, tablename, policyname
       from pg_policies
@@ -1342,7 +1388,15 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
     for (const entry of RLS_TENANT_TABLES) {
       const actualPolicies = (policyMap.get(entry.tableName) ?? []).sort();
-      let expectedPolicies: string[];
+      let expectedPolicies = expectedPolicyOverrides[entry.tableName]?.toSorted();
+
+      if (expectedPolicies) {
+        expect(
+          actualPolicies,
+          `${entry.tableName} (${entry.policyFamily}) should have policies: ${expectedPolicies.join(', ')}`,
+        ).toEqual(expectedPolicies);
+        continue;
+      }
 
       switch (entry.policyFamily) {
         case 'tenant_crud':
