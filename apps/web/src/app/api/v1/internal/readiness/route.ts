@@ -12,6 +12,10 @@ import { stripePrices } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { requireCronSecret } from '@/lib/api/cron-auth';
+import {
+  PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMN_NAMES_IN_SQL,
+  REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS,
+} from '@/lib/auth/pending-signups-schema';
 import { SIGNUP_PLAN_OPTIONS } from '@/lib/auth/signup-schema';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -20,13 +24,6 @@ interface CheckResult {
   missing?: string[];
   error?: string;
 }
-
-const REQUIRED_PENDING_SIGNUP_COLUMNS = [
-  'address_line_1',
-  'city',
-  'state',
-  'zip_code',
-] as const;
 
 function extractRows<T>(raw: unknown): T[] {
   return Array.isArray(raw)
@@ -98,10 +95,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'pending_signups'
-        AND column_name IN ('address_line_1', 'city', 'state', 'zip_code')
+        AND column_name IN (${sql.raw(PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMN_NAMES_IN_SQL)})
     `));
     const found = new Set(rows.map((row) => row.column_name));
-    const missing = REQUIRED_PENDING_SIGNUP_COLUMNS
+    const missing = [...REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS]
       .filter((column) => !found.has(column))
       .map((column) => `pending_signups.${column}`);
 

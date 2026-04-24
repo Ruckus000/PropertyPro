@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubdomainAvailability } from '../../src/components/signup/subdomain-checker';
 
@@ -109,25 +109,31 @@ function fillRequiredSignupFields(): void {
   fireEvent.change(screen.getByLabelText('Email'), {
     target: { value: 'jordan@example.com' },
   });
-  fireEvent.change(screen.getByLabelText('Community Name'), {
-    target: { value: 'Ocean Breeze HOA' },
-  });
-  fireEvent.change(screen.getByLabelText('Street Address'), {
+  const communitySection = screen.getByRole('heading', { name: 'Community Setup' }).closest('section');
+  if (!communitySection) {
+    throw new Error('Community Setup section not found');
+  }
+  const withinCommunity = within(communitySection);
+  fireEvent.change(
+    withinCommunity.getByLabelText('Community Name', { exact: false }),
+    { target: { value: 'Ocean Breeze HOA' } },
+  );
+  fireEvent.change(withinCommunity.getByPlaceholderText('123 Main St'), {
     target: { value: '123 Palm Ave' },
   });
-  fireEvent.change(screen.getByLabelText('City'), {
+  fireEvent.change(withinCommunity.getByRole('textbox', { name: 'City' }), {
     target: { value: 'West Palm Beach' },
   });
-  fireEvent.change(screen.getByLabelText('State'), {
+  fireEvent.change(withinCommunity.getByRole('textbox', { name: 'State' }), {
     target: { value: 'FL' },
   });
-  fireEvent.change(screen.getByLabelText('ZIP Code'), {
+  fireEvent.change(withinCommunity.getByRole('textbox', { name: 'ZIP Code' }), {
     target: { value: '33401' },
   });
-  fireEvent.change(screen.getByLabelText('County'), {
+  fireEvent.change(withinCommunity.getByRole('textbox', { name: 'County' }), {
     target: { value: 'Palm Beach' },
   });
-  fireEvent.change(screen.getByLabelText('Unit Count'), {
+  fireEvent.change(withinCommunity.getByLabelText('Unit Count', { exact: false }), {
     target: { value: '120' },
   });
   fireEvent.change(screen.getByLabelText('Password', { selector: 'input' }), {
@@ -142,15 +148,15 @@ describe('SignupForm submit gating', () => {
     vi.clearAllMocks();
   });
 
-  it('disables submit when normalized slug is empty', () => {
+  it('does not disable submit from subdomain length alone (server validates on submit)', () => {
     render(<SignupForm />);
-    expect(submitButton().disabled).toBe(true);
+    expect(submitButton().disabled).toBe(false);
   });
 
-  it('disables submit when slug is shorter than 3 chars', () => {
+  it('does not disable submit when slug is shorter than 3 chars (client shows schema error on submit)', () => {
     render(<SignupForm />);
     setSlug('ab');
-    expect(submitButton().disabled).toBe(true);
+    expect(submitButton().disabled).toBe(false);
   });
 
   it("enables submit when local syntax is valid and server reason is 'taken'", () => {

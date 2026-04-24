@@ -21,6 +21,8 @@ interface SignupAddressAutocompleteProps {
   onSelectedSuggestionChange: (key: string | null) => void;
   disabled?: boolean;
   invalid?: boolean;
+  /** Merged with default input styles (e.g. clean wizard). */
+  inputClassName?: string;
 }
 
 export function SignupAddressAutocomplete({
@@ -32,6 +34,7 @@ export function SignupAddressAutocomplete({
   onSelectedSuggestionChange,
   disabled = false,
   invalid = false,
+  inputClassName,
 }: SignupAddressAutocompleteProps) {
   const listboxId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -137,7 +140,10 @@ export function SignupAddressAutocomplete({
         aria-invalid={invalid}
         disabled={disabled}
         placeholder="123 Main St"
-        className={cn(invalid ? 'border-status-danger' : 'border-edge-strong')}
+        className={cn(
+          invalid ? 'border-status-danger' : 'border-edge-strong',
+          inputClassName,
+        )}
         onFocus={() => {
           if (suggestions.length > 0 || isLoading || hasFetchError || value.trim()) {
             setOpen(true);

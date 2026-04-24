@@ -39,11 +39,17 @@ vi.mock('@propertypro/db', () => ({
   },
 }));
 
-vi.mock('@propertypro/db/filters', () => ({
-  and: vi.fn(),
-  eq: vi.fn(),
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
-}));
+vi.mock('@propertypro/db/filters', async () => {
+  const { sql: drizzleSql } = await import('drizzle-orm');
+  return {
+    and: vi.fn(),
+    eq: vi.fn(),
+    sql: Object.assign(
+      (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
+      { join: drizzleSql.join, raw: drizzleSql.raw },
+    ),
+  };
+});
 
 vi.mock('@/lib/auth/signup-schema', () => ({
   SIGNUP_PLAN_OPTIONS: {
@@ -51,15 +57,10 @@ vi.mock('@/lib/auth/signup-schema', () => ({
   },
 }));
 
+import { REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS } from '../../src/lib/auth/pending-signups-schema';
 import { GET } from '../../src/app/api/v1/internal/readiness/route';
 
 const URL = 'http://localhost:3000/api/v1/internal/readiness';
-const REQUIRED_COLUMNS = [
-  'address_line_1',
-  'city',
-  'state',
-  'zip_code',
-];
 
 function request(): NextRequest {
   return new NextRequest(URL, {
@@ -78,7 +79,11 @@ describe('readiness route', () => {
   it('passes schema compatibility when pending_signups structured-address columns exist', async () => {
     executeMock
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+      .mockResolvedValueOnce(
+        [...REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS].map((column_name) => ({
+          column_name,
+        })),
+      );
 
     const res = await GET(request());
     const body = await res.json() as {

@@ -8,6 +8,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  type PendingSignupStructuredAddressColumn,
+  REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS,
+} from '@/lib/auth/pending-signups-schema';
+import {
   type TestKitState,
   getDescribeDb,
   initTestKit,
@@ -103,13 +107,16 @@ describeDb('signup structured address persistence', () => {
         returning address_line_1, city, state, zip_code, status
       `;
 
-      expect(inserted).toEqual({
+      const expectedStructured: Record<PendingSignupStructuredAddressColumn, string> = {
         address_line_1: '123 W Park Ave',
         city: 'West Palm Beach',
         state: 'FL',
         zip_code: '33409',
-        status: 'pending_verification',
-      });
+      };
+      for (const col of REQUIRED_PENDING_SIGNUP_STRUCTURED_ADDRESS_COLUMNS) {
+        expect(inserted).toHaveProperty(col, expectedStructured[col]);
+      }
+      expect(inserted).toMatchObject({ status: 'pending_verification' });
     } finally {
       await s.sqlClient`
         delete from pending_signups

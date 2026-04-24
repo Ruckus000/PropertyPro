@@ -38,7 +38,7 @@ export function CommunityTypeSelector({
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-medium text-content-secondary">Community Type</legend>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
         {COMMUNITY_TYPE_OPTIONS.map((option) => {
           const isSelected = option.value === value;
           return (
@@ -47,7 +47,7 @@ export function CommunityTypeSelector({
               type="button"
               disabled={disabled}
               onClick={() => onChange(option.value)}
-              className={`rounded-md border px-3 py-3 text-left transition-colors ${
+              className={`min-h-20 rounded-md border px-3 py-3 text-left transition-colors md:min-h-0 ${
                 isSelected
                   ? 'border-interactive bg-interactive/10'
                   : 'border-edge-strong bg-surface-card hover:border-edge-strong'

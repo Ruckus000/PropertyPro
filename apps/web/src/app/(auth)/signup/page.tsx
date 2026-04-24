@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
-import { SignupForm } from '@/components/signup/signup-form';
+import { CleanSignupWizard } from '@/components/signup/clean-wizard/clean-signup-wizard';
+import '@/components/signup/clean-wizard/clean-wizard.css';
 
 interface SignupPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -53,27 +53,21 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   }
 
   return (
-    <main id="main-content" className="min-h-screen bg-surface-page px-4 py-12">
-      <div className="mx-auto w-full max-w-3xl space-y-5">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold text-content">Start Your PropertyPro Signup</h1>
-          <p className="mt-2 text-sm text-content-secondary">
-            Capture your community details now. Billing checkout opens after email verification.
-          </p>
+    <main
+      id="main-content"
+      className="clean-signup-root min-h-screen w-full max-w-full overflow-x-hidden"
+    >
+      <div
+        className="mx-auto flex w-full min-w-0 max-w-6xl flex-col"
+        style={{ minHeight: '100vh' }}
+      >
+        <div className="w-full min-w-0 flex-1 px-4 py-0 md:px-6">
+          <CleanSignupWizard
+            initialCommunityType={parseCommunityType(requestedType)}
+            initialSignupRequestId={signupRequestId}
+            verificationReturn={verified}
+          />
         </div>
-
-        <SignupForm
-          initialCommunityType={parseCommunityType(requestedType)}
-          initialSignupRequestId={signupRequestId}
-          verificationReturn={verified}
-        />
-
-        <p className="text-center text-sm text-content-secondary">
-          Already have an account?{' '}
-          <Link href="/auth/login" className="text-content-link hover:text-interactive">
-            Sign in
-          </Link>
-        </p>
       </div>
     </main>
   );

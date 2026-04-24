@@ -1,0 +1,39 @@
+/* Scoped from PropertyPro Signup _standalone_ template :root + page background; see _reference/reference-root.css */
+.clean-signup-root {
+  --ink: oklch(0.22 0.012 250);
+  --ink-soft: oklch(0.42 0.012 250);
+  --ink-faint: oklch(0.62 0.010 250);
+  --line: oklch(0.9 0.006 250);
+  --line-soft: oklch(0.94 0.005 250);
+  --paper: oklch(0.99 0.004 95);
+  --paper-warm: oklch(0.975 0.01 85);
+  --accent: oklch(0.54 0.09 220);
+  --accent-ink: oklch(0.3 0.07 220);
+  --accent-wash: oklch(0.96 0.025 220);
+  --warm-bg: oklch(0.97 0.018 75);
+  --warm-card: oklch(0.995 0.008 85);
+  --warm-accent: oklch(0.52 0.08 45);
+  --warm-accent-wash: oklch(0.95 0.03 60);
+  --editorial-bg: oklch(0.985 0.006 95);
+  --editorial-ink: oklch(0.18 0.015 250);
+
+  box-sizing: border-box;
+  min-height: 100%;
+  background: #f0eee9;
+  color: var(--ink);
+  /* Geist: apply via `className` from next/font in parent */
+  font-family: var(--font-geist-sans, "Geist"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.clean-signup-root *,
+.clean-signup-root *::before,
+.clean-signup-root *::after {
+  box-sizing: border-box;
+}
+
+.clean-signup-root input,
+.clean-signup-root select,
+.clean-signup-root textarea,
+.clean-signup-root button {
+  font-family: inherit;
+}

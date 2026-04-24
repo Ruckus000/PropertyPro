@@ -9,6 +9,10 @@ import { SignupVerificationEmail } from '@propertypro/email';
 import { SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
 import { isReservedSubdomain } from '@/lib/tenant/reserved-subdomains';
 import {
+  PENDING_SIGNUP_STRUCTURED_ADDRESS_DB_COLUMN_SET,
+  type PendingSignupStructuredAddressColumn,
+} from './pending-signups-schema';
+import {
   normalizeSignupSubdomain,
   signupSchema,
   type SignupInput,
@@ -19,13 +23,6 @@ const SIGNUP_SUCCESS_MESSAGE =
 const MIN_SIGNUP_RESPONSE_MS = 250;
 const SIGNUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
-const STRUCTURED_ADDRESS_DB_COLUMNS = new Set([
-  'address_line_1',
-  'city',
-  'state',
-  'zip_code',
-]);
-
 export interface SubdomainAvailabilityResult {
   normalizedSubdomain: string;
   available: boolean;
@@ -438,7 +435,12 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
     }
 
     const missingColumn = getUndefinedColumnName(error);
-    if (missingColumn && STRUCTURED_ADDRESS_DB_COLUMNS.has(missingColumn)) {
+    if (
+      missingColumn
+      && PENDING_SIGNUP_STRUCTURED_ADDRESS_DB_COLUMN_SET.has(
+        missingColumn as PendingSignupStructuredAddressColumn,
+      )
+    ) {
       console.error(JSON.stringify({
         event: 'signup.schema_drift_detected',
         signupRequestId: input.signupRequestId,
@@ -459,6 +461,7 @@ async function createOrLinkAuthAccount(
   const admin = createAdminClient();
   const metadata = {
     full_name: input.primaryContactName,
+    admin_type: input.adminType,
     signup_request_id: input.signupRequestId,
     community_name: input.communityName,
     community_type: input.communityType,
@@ -535,6 +538,7 @@ function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string
   return {
     signupRequestId: input.signupRequestId,
     primaryContactName: input.primaryContactName,
+    adminType: input.adminType,
     email: input.email,
     communityName: input.communityName,
     address: input.address,

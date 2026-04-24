@@ -112,6 +112,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/access-requests/verify', method: 'POST' },
   // Public community discovery search (rate-limited, returns minimal metadata only)
   { path: '/api/v1/public/communities/search', method: 'GET' },
+  // Signup address autocomplete fallback (public, rate-limited by middleware IP logic)
+  { path: '/api/v1/address/autocomplete', method: 'GET' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

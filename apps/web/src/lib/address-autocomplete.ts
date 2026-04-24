@@ -222,8 +222,8 @@ export async function loadAddressAutocompleteSuggestions(
   limit = 8,
 ): Promise<AddressAutocompleteSuggestion[]> {
   const manifest = await loadAddressAutocompleteManifest();
-  if (!manifest) {
-    return [];
+  if (!manifest || Object.keys(manifest.prefixes ?? {}).length === 0) {
+    return loadAddressAutocompleteNetworkFallback(query, limit);
   }
 
   const parsedQuery = parseAddressAutocompleteQuery(query, manifest.minStreetTokenLength);
@@ -238,7 +238,31 @@ export async function loadAddressAutocompleteSuggestions(
 
   const shardResults = await Promise.all(shardIds.map((shardId) => loadAddressAutocompleteShard(shardId)));
   const records = shardResults.flatMap((shard) => shard ?? []);
-  return searchAddressAutocompleteRecords(records, parsedQuery, limit);
+  const localSuggestions = searchAddressAutocompleteRecords(records, parsedQuery, limit);
+  if (localSuggestions.length > 0) {
+    return localSuggestions;
+  }
+
+  return loadAddressAutocompleteNetworkFallback(query, limit);
+}
+
+async function loadAddressAutocompleteNetworkFallback(
+  query: string,
+  limit: number,
+): Promise<AddressAutocompleteSuggestion[]> {
+  const normalizedQuery = normalizeAddressAutocompleteText(query);
+  if (normalizedQuery.length < 3) {
+    return [];
+  }
+
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const response = await fetch(`/api/v1/address/autocomplete?${params.toString()}`);
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as { data?: AddressAutocompleteSuggestion[] };
+  return payload.data ?? [];
 }
 
 export function resetAddressAutocompleteCaches(): void {

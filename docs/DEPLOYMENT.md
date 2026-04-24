@@ -258,7 +258,7 @@ For database rollbacks, Supabase provides point-in-time recovery (PITR) on Pro p
 |----------|--------|----------|
 | `/` | GET | 200 (marketing page) |
 | `/api/v1/compliance` | GET (authed) | 200/401 |
-| `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | `healthy`/`degraded`; `schema_compatibility` must pass |
+| `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | **200** with `status: "healthy"` (all checks pass) or `status: "degraded"` (only `stripe_prices` fails while `database`, `supabase_auth`, and `schema_compatibility` pass). **503** with `status: "unhealthy"` if `database`, `supabase_auth`, or `schema_compatibility` fails. For **healthy** or **degraded**, `schema_compatibility` must be `"pass"`. |
 
 ## 9. Troubleshooting
 

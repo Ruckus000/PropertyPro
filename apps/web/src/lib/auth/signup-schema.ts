@@ -13,6 +13,16 @@ export interface SignupPlanOption {
   description: string;
 }
 
+export const SIGNUP_ADMIN_TYPES = [
+  'board_president',
+  'board_member',
+  'cam',
+  'property_manager_admin',
+  'site_manager',
+] as const;
+
+export type SignupAdminType = (typeof SIGNUP_ADMIN_TYPES)[number];
+
 /**
  * @deprecated Use PLAN_IDS from @propertypro/shared instead.
  * Kept for backward compatibility with existing signup form references.
@@ -139,6 +149,9 @@ export const signupSchema = z
       .trim()
       .min(2, 'Primary contact name is required')
       .max(120, 'Primary contact name must be at most 120 characters'),
+    adminType: z.enum(SIGNUP_ADMIN_TYPES, {
+      message: 'Select your admin role',
+    }),
     email: z
       .string()
       .trim()

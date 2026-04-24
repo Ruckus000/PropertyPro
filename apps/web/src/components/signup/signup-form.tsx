@@ -8,11 +8,21 @@ import {
   getSignupPlansForCommunityType,
   isPlanAvailableForCommunityType,
   normalizeSignupSubdomain,
+  SIGNUP_ADMIN_TYPES,
   signupSchema,
+  type SignupAdminType,
   suggestSubdomainFromCommunityName,
   type SignupPlanId,
 } from '@/lib/auth/signup-schema';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   CommunityTypeSelector,
 } from './community-type-selector';
@@ -44,6 +54,7 @@ interface SignupApiSuccess {
 
 type SignupField =
   | 'primaryContactName'
+  | 'adminType'
   | 'email'
   | 'password'
   | 'communityName'
@@ -78,7 +89,7 @@ export function SignupForm({
     initialSignupRequestId,
   );
   const [subdomainDirty, setSubdomainDirty] = useState(false);
-  const [subdomainAvailability, setSubdomainAvailability] =
+  const [, setSubdomainAvailability] =
     useState<SubdomainAvailability | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -87,6 +98,7 @@ export function SignupForm({
   );
 
   const [primaryContactName, setPrimaryContactName] = useState('');
+  const [adminType, setAdminType] = useState<SignupAdminType>('board_president');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [communityName, setCommunityName] = useState('');
@@ -99,6 +111,8 @@ export function SignupForm({
   const [candidateSlug, setCandidateSlug] = useState('');
   const [selectedAddressSuggestionKey, setSelectedAddressSuggestionKey] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
   const [errorField, setErrorField] = useState<SignupField | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -184,11 +198,6 @@ export function SignupForm({
     setCandidateSlug(value);
   }
 
-  // Advisory-only: only local syntax blocks submit. Server's POST-time re-check
-  // is still authoritative for 'taken' / 'reserved', and transient preflight
-  // failures (reason='unknown') never block conversion.
-  const isSubdomainBlocked = !normalizedCandidateSlug || normalizedCandidateSlug.length < 3;
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setErrorMessage(null);
@@ -200,6 +209,7 @@ export function SignupForm({
       const requestBody = {
         signupRequestId,
         primaryContactName,
+        adminType,
         email,
         password,
         communityName,
@@ -333,8 +343,18 @@ export function SignupForm({
     );
   }
 
+  const controlClassName = (hasError?: string) => `h-12 w-full rounded-md border bg-surface-card px-3.5 text-sm text-content transition-colors outline-none focus-visible:border-interactive focus-visible:ring-2 focus-visible:ring-interactive/30 ${
+    hasError ? 'border-status-danger focus-visible:ring-status-danger/20' : 'border-edge-strong'
+  }`;
+
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 rounded-md border border-edge bg-surface-card p-6 shadow-e0">
+    <form ref={formRef} onSubmit={handleSubmit} className="mx-auto w-full max-w-5xl space-y-8 rounded-2xl border border-edge bg-surface-card p-6 shadow-e1 md:space-y-10 md:p-10">
+      <div className="space-y-4 border-b border-edge pb-6 md:pb-8">
+        <h2 className="text-2xl font-semibold tracking-tight text-content md:text-[1.75rem]">Community Administrator Signup</h2>
+        <p className="max-w-3xl text-sm leading-6 text-content-secondary">
+          Set up your community profile. Address autocomplete fills city, state, ZIP, and county when suggestions are available.
+        </p>
+      </div>
 
       {errorMessage ? (
         <div className="rounded-md border border-status-danger bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert">
@@ -342,236 +362,286 @@ export function SignupForm({
         </div>
       ) : null}
 
+      <section className="space-y-6 rounded-xl border border-edge bg-surface-page/50 p-4 md:p-6">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-content md:text-xl">Account Details</h3>
+          <p className="text-sm leading-6 text-content-secondary">Tell us who is creating this account for your community.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-content-secondary">Primary Contact Name</span>
+            <input
+              type="text"
+              value={primaryContactName}
+              onChange={(event) => {
+                clearFieldFeedback('primaryContactName');
+                setPrimaryContactName(event.target.value);
+              }}
+              className={controlClassName(fieldErrors.primaryContactName)}
+              required
+              minLength={2}
+              maxLength={120}
+            />
+            {fieldErrors.primaryContactName ? (
+              <span className="mt-1 block text-xs text-status-danger">{fieldErrors.primaryContactName}</span>
+            ) : null}
+          </label>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Primary Contact Name</span>
-          <input
-            type="text"
-            value={primaryContactName}
-            onChange={(event) => {
-              clearFieldFeedback('primaryContactName');
-              setPrimaryContactName(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.primaryContactName ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            minLength={2}
-            maxLength={120}
-          />
-          {fieldErrors.primaryContactName ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.primaryContactName}</span>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-content-secondary">I am signing up as</span>
+            <select
+              value={adminType}
+              onChange={(event) => {
+                clearFieldFeedback('adminType');
+                setAdminType(event.target.value as SignupAdminType);
+              }}
+              className={controlClassName(fieldErrors.adminType)}
+              required
+            >
+              {SIGNUP_ADMIN_TYPES.map((role) => {
+                const label = role === 'board_president'
+                  ? 'Board President'
+                  : role === 'board_member'
+                    ? 'Board Member'
+                    : role === 'cam'
+                      ? 'Community Association Manager (CAM)'
+                      : role === 'property_manager_admin'
+                        ? 'Property Manager Admin'
+                        : 'Site Manager';
+                return (
+                  <option key={role} value={role}>{label}</option>
+                );
+              })}
+            </select>
+            {fieldErrors.adminType ? (
+              <span className="mt-1 block text-xs text-status-danger">{fieldErrors.adminType}</span>
+            ) : null}
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-content-secondary">Email</span>
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => {
+                clearFieldFeedback('email');
+                setEmail(event.target.value);
+              }}
+              className={controlClassName(fieldErrors.email)}
+              required
+            />
+            {fieldErrors.email ? (
+              <span className="mt-1 block text-xs text-status-danger">{fieldErrors.email}</span>
+            ) : null}
+          </label>
+        </div>
+
+        <div className="block">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-content-secondary">Password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => {
+                clearFieldFeedback('password');
+                setPassword(event.target.value);
+              }}
+              className={controlClassName(fieldErrors.password)}
+              required
+              minLength={8}
+              maxLength={72}
+              aria-describedby="signup-password-strength"
+            />
+          </label>
+          {fieldErrors.password ? (
+            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.password}</span>
           ) : null}
-        </label>
+          <PasswordStrengthIndicator password={password} id="signup-password-strength" hideOnEmpty />
+        </div>
+      </section>
 
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Email</span>
-          <input
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => {
-              clearFieldFeedback('email');
-              setEmail(event.target.value);
+      <section className="space-y-6 rounded-xl border border-edge bg-surface-page/50 p-4 md:p-6">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-content md:text-xl">Community Setup</h3>
+          <p className="text-sm leading-6 text-content-secondary">
+            Choose your community type first, then enter profile details exactly as they should appear in your onboarding records.
+          </p>
+        </div>
+        <div className="rounded-xl border border-edge bg-surface-card p-4">
+          <CommunityTypeSelector
+            value={communityType}
+            onChange={(value) => {
+              clearFieldFeedback('communityType');
+              setCommunityType(value);
             }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.email ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-          />
-          {fieldErrors.email ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.email}</span>
-          ) : null}
-        </label>
-      </div>
-
-      <div className="block">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Password</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(event) => {
-              clearFieldFeedback('password');
-              setPassword(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.password ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            minLength={8}
-            maxLength={72}
-            aria-describedby="signup-password-strength"
-          />
-        </label>
-        {fieldErrors.password ? (
-          <span className="mt-1 block text-xs text-status-danger">{fieldErrors.password}</span>
-        ) : null}
-        <PasswordStrengthIndicator
-          password={password}
-          id="signup-password-strength"
-          hideOnEmpty
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Community Name</span>
-          <input
-            type="text"
-            value={communityName}
-            onChange={(event) => handleCommunityNameChange(event.target.value)}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.communityName ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            minLength={2}
-            maxLength={160}
-          />
-          {fieldErrors.communityName ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.communityName}</span>
-          ) : null}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Street Address</span>
-          <SignupAddressAutocomplete
-            inputId="signup-address-line-1"
-            value={addressLine1}
-            selectedSuggestionKey={selectedAddressSuggestionKey}
-            onValueChange={(nextValue) => {
-              clearFieldFeedback('addressLine1');
-              setAddressLine1(nextValue);
-            }}
-            onSuggestionSelect={(suggestion) => {
-              clearFieldFeedback('addressLine1');
-              clearFieldFeedback('city');
-              clearFieldFeedback('state');
-              clearFieldFeedback('zipCode');
-              clearFieldFeedback('county');
-              setAddressLine1(suggestion.addressLine1);
-              setCity(suggestion.city);
-              setState(suggestion.state);
-              setZipCode(suggestion.zipCode);
-              setCounty(suggestion.county);
-            }}
-            onSelectedSuggestionChange={setSelectedAddressSuggestionKey}
             disabled={isSubmitting}
-            invalid={Boolean(fieldErrors.addressLine1)}
           />
-          {fieldErrors.addressLine1 ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.addressLine1}</span>
-          ) : null}
-        </label>
-      </div>
+        </div>
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">Community Name</span>
+              <input
+                type="text"
+                value={communityName}
+                onChange={(event) => handleCommunityNameChange(event.target.value)}
+                className={controlClassName(fieldErrors.communityName)}
+                required
+                minLength={2}
+                maxLength={160}
+              />
+              <span className="mt-1.5 block text-xs text-content-tertiary">Used for billing, legal profile, and communications.</span>
+              {fieldErrors.communityName ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.communityName}</span>
+              ) : null}
+            </label>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">City</span>
-          <input
-            type="text"
-            value={city}
-            onChange={(event) => {
-              clearFieldFeedback('city');
-              setSelectedAddressSuggestionKey(null);
-              setCity(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.city ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            maxLength={100}
-          />
-          {fieldErrors.city ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.city}</span>
-          ) : null}
-        </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">Street Address</span>
+              <SignupAddressAutocomplete
+                inputId="signup-address-line-1"
+                value={addressLine1}
+                selectedSuggestionKey={selectedAddressSuggestionKey}
+                onValueChange={(nextValue) => {
+                  clearFieldFeedback('addressLine1');
+                  setAddressLine1(nextValue);
+                }}
+                onSuggestionSelect={(suggestion) => {
+                  clearFieldFeedback('addressLine1');
+                  clearFieldFeedback('city');
+                  clearFieldFeedback('state');
+                  clearFieldFeedback('zipCode');
+                  clearFieldFeedback('county');
+                  setAddressLine1(suggestion.addressLine1);
+                  setCity(suggestion.city);
+                  setState(suggestion.state);
+                  setZipCode(suggestion.zipCode);
+                  setCounty(suggestion.county);
+                }}
+                onSelectedSuggestionChange={setSelectedAddressSuggestionKey}
+                disabled={isSubmitting}
+                invalid={Boolean(fieldErrors.addressLine1)}
+              />
+              {fieldErrors.addressLine1 ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.addressLine1}</span>
+              ) : (
+                <span className="mt-1 block text-xs text-content-tertiary">Select a suggestion to auto-fill city, state, ZIP, and county.</span>
+              )}
+            </label>
+          </div>
 
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">State</span>
-          <input
-            type="text"
-            value={state}
-            onChange={(event) => {
-              clearFieldFeedback('state');
-              setSelectedAddressSuggestionKey(null);
-              setState(event.target.value.toUpperCase());
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.state ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            maxLength={2}
-          />
-          {fieldErrors.state ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.state}</span>
-          ) : null}
-        </label>
-      </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">City</span>
+              <input
+                type="text"
+                value={city}
+                onChange={(event) => {
+                  clearFieldFeedback('city');
+                  setSelectedAddressSuggestionKey(null);
+                  setCity(event.target.value);
+                }}
+                className={controlClassName(fieldErrors.city)}
+                required
+                maxLength={100}
+              />
+              {fieldErrors.city ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.city}</span>
+              ) : null}
+            </label>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">ZIP Code</span>
-          <input
-            type="text"
-            value={zipCode}
-            onChange={(event) => {
-              clearFieldFeedback('zipCode');
-              setSelectedAddressSuggestionKey(null);
-              setZipCode(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.zipCode ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            maxLength={10}
-            inputMode="numeric"
-          />
-          {fieldErrors.zipCode ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.zipCode}</span>
-          ) : null}
-        </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">State</span>
+              <input
+                type="text"
+                value={state}
+                onChange={(event) => {
+                  clearFieldFeedback('state');
+                  setSelectedAddressSuggestionKey(null);
+                  setState(event.target.value.toUpperCase());
+                }}
+                className={controlClassName(fieldErrors.state)}
+                required
+                maxLength={2}
+              />
+              {fieldErrors.state ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.state}</span>
+              ) : null}
+            </label>
+          </div>
 
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">County</span>
-          <input
-            type="text"
-            value={county}
-            onChange={(event) => {
-              clearFieldFeedback('county');
-              setSelectedAddressSuggestionKey(null);
-              setCounty(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.county ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-            minLength={2}
-            maxLength={120}
-          />
-          {fieldErrors.county ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.county}</span>
-          ) : null}
-        </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">ZIP Code</span>
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(event) => {
+                  clearFieldFeedback('zipCode');
+                  setSelectedAddressSuggestionKey(null);
+                  setZipCode(event.target.value);
+                }}
+                className={controlClassName(fieldErrors.zipCode)}
+                required
+                maxLength={10}
+                inputMode="numeric"
+              />
+              {fieldErrors.zipCode ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.zipCode}</span>
+              ) : null}
+            </label>
 
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-content-secondary">Unit Count</span>
-          <input
-            type="number"
-            min={1}
-            max={20000}
-            step={1}
-            value={unitCount}
-            onChange={(event) => {
-              clearFieldFeedback('unitCount');
-              setUnitCount(event.target.value);
-            }}
-            className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.unitCount ? 'border-status-danger' : 'border-edge-strong'}`}
-            required
-          />
-          {fieldErrors.unitCount ? (
-            <span className="mt-1 block text-xs text-status-danger">{fieldErrors.unitCount}</span>
-          ) : null}
-        </label>
-      </div>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-content-secondary">County</span>
+              <input
+                type="text"
+                value={county}
+                onChange={(event) => {
+                  clearFieldFeedback('county');
+                  setSelectedAddressSuggestionKey(null);
+                  setCounty(event.target.value);
+                }}
+                className={controlClassName(fieldErrors.county)}
+                required
+                minLength={2}
+                maxLength={120}
+              />
+              {fieldErrors.county ? (
+                <span className="mt-1 block text-xs text-status-danger">{fieldErrors.county}</span>
+              ) : null}
+            </label>
+          </div>
 
-      <CommunityTypeSelector
-        value={communityType}
-        onChange={(value) => {
-          clearFieldFeedback('communityType');
-          setCommunityType(value);
-        }}
-        disabled={isSubmitting}
-      />
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-content-secondary">Unit Count</span>
+            <input
+              type="number"
+              min={1}
+              max={20000}
+              step={1}
+              value={unitCount}
+              onChange={(event) => {
+                clearFieldFeedback('unitCount');
+                setUnitCount(event.target.value);
+              }}
+              className={controlClassName(fieldErrors.unitCount)}
+              required
+            />
+            {fieldErrors.unitCount ? (
+              <span className="mt-1 block text-xs text-status-danger">{fieldErrors.unitCount}</span>
+            ) : null}
+          </label>
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-content-secondary">Plan Selection</h2>
+        </div>
+      </section>
+
+      <section className="space-y-6 rounded-xl border border-edge bg-surface-page/50 p-4 md:p-6">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-content md:text-xl">Plan & Domain</h3>
+          <p className="text-sm leading-6 text-content-secondary">Pick a plan and reserve your community URL before checkout.</p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Plan selection">
           {plans.map((plan) => {
             const selected = plan.id === planKey;
@@ -585,60 +655,118 @@ export function SignupForm({
                   setPlanKey(plan.id);
                 }}
                 disabled={isSubmitting}
-                className={`rounded-md border p-3 text-left transition-colors ${
+                className={`min-h-28 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive/30 ${
                   selected
-                    ? 'border-interactive bg-interactive/10'
-                    : 'border-edge-strong bg-surface-card hover:border-edge-strong'
+                    ? 'border-interactive bg-interactive/10 shadow-e0'
+                    : 'border-edge-strong bg-surface-card hover:border-interactive/60'
                 }`}
               >
-                <span className="block text-sm font-semibold text-content">{plan.label}</span>
-                <span className="mt-1 block text-sm text-content-secondary">${plan.monthlyPriceUsd}/month</span>
-                <span className="mt-1 block text-xs text-content-secondary">{plan.description}</span>
+                <span className="block text-base font-semibold text-content">{plan.label}</span>
+                <span className={`mt-1 block text-sm ${selected ? 'text-content' : 'text-content-secondary'}`}>${plan.monthlyPriceUsd}/month</span>
+                <span className="mt-2 block text-xs leading-5 text-content-secondary">{plan.description}</span>
               </button>
             );
           })}
         </div>
+        <SubdomainChecker
+          value={candidateSlug}
+          signupRequestId={signupRequestId}
+          onChange={handleSubdomainChange}
+          onAvailabilityChange={setSubdomainAvailability}
+          disabled={isSubmitting}
+        />
+      </section>
+
+      <section className="space-y-4 rounded-xl border border-edge bg-surface-page/50 p-4 md:p-6">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-content md:text-xl">Consent</h3>
+          <p className="text-sm leading-6 text-content-secondary">Review legal terms without leaving this form. Your entries stay in place.</p>
+        </div>
+        <label className="flex items-start gap-3 text-sm text-content-secondary">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => {
+              clearFieldFeedback('termsAccepted');
+              setTermsAccepted(event.target.checked);
+            }}
+            className="mt-0.5 h-4 w-4 rounded border-edge-strong"
+            required
+          />
+          <span>
+            I agree to the{' '}
+            <button type="button" onClick={() => setTermsModalOpen(true)} className="font-semibold text-content-link underline-offset-2 hover:underline">
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button type="button" onClick={() => setPrivacyModalOpen(true)} className="font-semibold text-content-link underline-offset-2 hover:underline">
+              Privacy Policy
+            </button>
+            .
+          </span>
+        </label>
+        <p className="text-xs leading-5 text-content-tertiary">
+          After you create your account, we email a verification link before checkout starts.
+        </p>
+      </section>
+
+      <div className="border-t border-edge pt-6">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="h-12 w-full rounded-md bg-interactive px-4 text-sm font-semibold text-content-inverse transition-colors hover:bg-interactive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive/30 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? 'Submitting...' : 'Create Account'}
+        </button>
       </div>
 
-      <SubdomainChecker
-        value={candidateSlug}
-        signupRequestId={signupRequestId}
-        onChange={handleSubdomainChange}
-        onAvailabilityChange={setSubdomainAvailability}
-        disabled={isSubmitting}
-      />
+      <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Terms of Service</DialogTitle>
+            <DialogDescription>Review key terms without leaving signup.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-3 overflow-y-auto rounded-md border border-edge bg-surface-page p-4 text-sm text-content-secondary">
+            <p><strong className="text-content">Effective Date:</strong> February 14, 2026</p>
+            <p>PropertyPro provides compliance and community administration tools. Using the platform does not constitute legal advice.</p>
+            <p>You are responsible for accurate account details, authorized usage, and community compliance obligations under applicable law.</p>
+            <p>Subscription billing, cancellation, and retention terms apply as documented in the full policy.</p>
+            <p>
+              Need full legal text?{' '}
+              <Link href="/legal/terms" target="_blank" className="font-semibold text-content-link">
+                Open full Terms in a new tab
+              </Link>.
+            </p>
+          </div>
+          <DialogFooter>
+            <button type="button" className="rounded-md border border-edge px-4 py-2 text-sm" onClick={() => setTermsModalOpen(false)}>Close</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <label className="flex items-start gap-2 text-sm text-content-secondary">
-        <input
-          type="checkbox"
-          checked={termsAccepted}
-          onChange={(event) => {
-            clearFieldFeedback('termsAccepted');
-            setTermsAccepted(event.target.checked);
-          }}
-          className="mt-0.5 h-4 w-4 rounded border-edge-strong"
-          required
-        />
-        <span>
-          I agree to the{' '}
-          <Link href="/legal/terms" className="text-content-link hover:text-content-link">
-            Terms of Service
-          </Link>
-          {' '}and{' '}
-          <Link href="/legal/privacy" className="text-content-link hover:text-content-link">
-            Privacy Policy
-          </Link>
-          .
-        </span>
-      </label>
-
-      <button
-        type="submit"
-        disabled={isSubmitting || isSubdomainBlocked}
-        className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-semibold text-content-inverse hover:bg-interactive/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isSubmitting ? 'Submitting...' : 'Create Account'}
-      </button>
+      <Dialog open={privacyModalOpen} onOpenChange={setPrivacyModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Privacy Policy</DialogTitle>
+            <DialogDescription>Understand data handling without losing form progress.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-3 overflow-y-auto rounded-md border border-edge bg-surface-page p-4 text-sm text-content-secondary">
+            <p><strong className="text-content">Effective Date:</strong> February 14, 2026</p>
+            <p>We collect account and community information needed to deliver the platform and support compliance workflows.</p>
+            <p>PropertyPro does not sell personal data. Service providers are limited to operational functions such as hosting, payments, email, and SMS delivery.</p>
+            <p>You can request access, correction, or deletion of personal data subject to legal retention requirements.</p>
+            <p>
+              Need full legal text?{' '}
+              <Link href="/legal/privacy" target="_blank" className="font-semibold text-content-link">
+                Open full Privacy Policy in a new tab
+              </Link>.
+            </p>
+          </div>
+          <DialogFooter>
+            <button type="button" className="rounded-md border border-edge px-4 py-2 text-sm" onClick={() => setPrivacyModalOpen(false)}>Close</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

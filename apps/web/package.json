@@ -53,6 +53,7 @@
     "date-fns": "^4.1.0",
     "file-type": "^20.5.0",
     "framer-motion": "^12.38.0",
+    "geist": "^1.7.0",
     "gray-matter": "^4.0.3",
     "isomorphic-dompurify": "^3.0.0",
     "jose": "^6.2.2",
