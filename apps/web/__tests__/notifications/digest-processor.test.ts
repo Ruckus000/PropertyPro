@@ -19,6 +19,9 @@ const {
   updateQueuedDigestAnnouncementStatusMock: vi.fn().mockResolvedValue(undefined),
   tables: {
     announcements: Symbol('announcements'),
+    meetings: Symbol('meetings'),
+    maintenanceRequests: Symbol('maintenance_requests'),
+    documents: Symbol('documents'),
     communities: Symbol('communities'),
     users: Symbol('users'),
     notificationPreferences: Symbol('notification_preferences'),
@@ -35,6 +38,9 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   announcements: tables.announcements,
+  meetings: tables.meetings,
+  maintenanceRequests: tables.maintenanceRequests,
+  documents: tables.documents,
   communities: tables.communities,
   users: tables.users,
   notificationPreferences: tables.notificationPreferences,
@@ -94,6 +100,7 @@ describe('notification digest processor', () => {
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
+      queryIncludingDeleted: vi.fn(async () => []),
       update: updateMock,
     }));
   });
@@ -237,6 +244,7 @@ describe('notification digest processor', () => {
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
+      queryIncludingDeleted: vi.fn(async () => []),
       update: updateMock,
     }));
 
@@ -343,6 +351,139 @@ describe('notification digest processor', () => {
       | { react: { props: { items: Array<{ title: string }> } } }
       | undefined;
     expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Still live']);
+  });
+
+  it('drops digest rows whose source meeting/maintenance/document was soft-deleted', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    hasMoreDigestRowsMock.mockResolvedValue(false);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+      preferences: [
+        {
+          userId: 'u-1',
+          emailFrequency: 'daily_digest',
+          emailAnnouncements: true,
+          emailMeetings: true,
+          emailDocuments: true,
+          inAppEnabled: true,
+        },
+      ],
+    });
+
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 10,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'meeting',
+        sourceId: '500',
+        eventType: 'meeting_notice',
+        eventTitle: 'Cancelled meeting',
+        eventSummary: 'Was cancelled',
+        actionUrl: 'https://app.local/meetings/500',
+        attemptCount: 0,
+      },
+      {
+        id: 11,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'maintenance',
+        sourceId: '600',
+        eventType: 'maintenance_update',
+        eventTitle: 'Withdrawn request',
+        eventSummary: 'No longer applies',
+        actionUrl: 'https://app.local/maintenance/600',
+        attemptCount: 0,
+      },
+      {
+        id: 12,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'document',
+        sourceId: '700',
+        eventType: 'document_posted',
+        eventTitle: 'Retracted doc',
+        eventSummary: 'Removed by author',
+        actionUrl: 'https://app.local/documents/700',
+        attemptCount: 0,
+      },
+      {
+        id: 13,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'meeting',
+        sourceId: '501',
+        eventType: 'meeting_notice',
+        eventTitle: 'Live meeting',
+        eventSummary: 'Should send',
+        actionUrl: 'https://app.local/meetings/501',
+        attemptCount: 0,
+      },
+    ]);
+
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.users) return state.users;
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      queryIncludingDeleted: vi.fn(async (table: unknown) => {
+        if (table === tables.meetings) {
+          return [
+            { id: 500, deletedAt: new Date('2026-02-18T12:00:00.000Z') },
+            { id: 501, deletedAt: null },
+          ];
+        }
+        if (table === tables.maintenanceRequests) {
+          return [{ id: 600, deletedAt: new Date('2026-02-18T12:00:00.000Z') }];
+        }
+        if (table === tables.documents) {
+          return [{ id: 700, deletedAt: new Date('2026-02-18T12:00:00.000Z') }];
+        }
+        if (table === tables.announcements) return [];
+        return [];
+      }),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({
+      now: new Date('2026-02-18T13:30:00.000Z'),
+    });
+
+    expect(summary.rowsDiscarded).toBe(3);
+    expect(summary.rowsSent).toBe(1);
+    expect(summary.emailsSent).toBe(1);
+
+    const discardReasons = updateMock.mock.calls
+      .filter(
+        (call) => (call[1] as Record<string, unknown>)['status'] === 'discarded',
+      )
+      .map((call) => (call[1] as Record<string, unknown>)['errorMessage']);
+    expect(discardReasons).toEqual(
+      expect.arrayContaining([
+        'Source meeting was deleted',
+        'Source maintenance request was deleted',
+        'Source document was deleted',
+      ]),
+    );
+
+    // Only the live meeting survives to the email
+    const sendCall = sendEmailMock.mock.calls[0]?.[0] as
+      | { react: { props: { items: Array<{ title: string }> } } }
+      | undefined;
+    expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Live meeting']);
+
+    // Non-announcement discards must NOT call the announcement-status side effect
+    expect(updateQueuedDigestAnnouncementStatusMock).not.toHaveBeenCalled();
   });
 
   it('respects per-tick email cap and reports hasMore', async () => {
