@@ -1,8 +1,12 @@
 import { createElement } from 'react';
 import { eq } from '@propertypro/db/filters';
 import {
+  announcements,
   communities,
   createScopedClient,
+  documents,
+  maintenanceRequests,
+  meetings,
   notificationDigestQueue,
   notificationPreferences,
   users,
@@ -31,6 +35,30 @@ const DEFAULT_EMAILS_PER_TICK = 500;
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_PROCESSING_TIMEOUT_MINUTES = 20;
 const DEFAULT_TIMEZONE = 'America/New_York';
+
+const SOFT_DELETE_SOURCE_TABLES = {
+  announcement: announcements,
+  meeting: meetings,
+  maintenance: maintenanceRequests,
+  document: documents,
+} as const;
+
+type SoftDeleteSourceType = keyof typeof SOFT_DELETE_SOURCE_TABLES;
+
+const SOFT_DELETE_SOURCE_ENTRIES = Object.entries(SOFT_DELETE_SOURCE_TABLES) as Array<
+  [SoftDeleteSourceType, (typeof SOFT_DELETE_SOURCE_TABLES)[SoftDeleteSourceType]]
+>;
+
+const SOURCE_DELETED_REASON: Record<SoftDeleteSourceType, string> = {
+  announcement: 'Source announcement was deleted',
+  meeting: 'Source meeting was deleted',
+  maintenance: 'Source maintenance request was deleted',
+  document: 'Source document was deleted',
+};
+
+function isSoftDeleteSourceType(value: string): value is SoftDeleteSourceType {
+  return value in SOFT_DELETE_SOURCE_TABLES;
+}
 
 export interface DigestProcessorOptions {
   now?: Date;
@@ -360,6 +388,48 @@ export async function processNotificationDigests(
 
     summary.communitiesProcessed += 1;
 
+    // Drop rows whose source record was soft-deleted after enqueue — sending
+    // them would surface content residents can no longer view. The `compliance`
+    // sourceType is polymorphic (maps to multiple tables by alert kind) and is
+    // intentionally excluded here; other sourceTypes without a `deletedAt`
+    // column (none today) would be no-ops.
+    const deletedIdsByType = new Map<SoftDeleteSourceType, Set<number>>();
+    for (const [sourceType, table] of SOFT_DELETE_SOURCE_ENTRIES) {
+      const claimedIds = new Set<number>();
+      for (const row of claimedRows) {
+        if (row.sourceType !== sourceType) continue;
+        const id = Number(row.sourceId);
+        if (Number.isInteger(id)) claimedIds.add(id);
+      }
+      if (claimedIds.size === 0) continue;
+
+      const allRows = await scoped.queryIncludingDeleted(table);
+      const deletedIds = new Set<number>();
+      for (const record of allRows) {
+        const rid = record['id'];
+        if (typeof rid === 'number' && claimedIds.has(rid) && record['deletedAt'] != null) {
+          deletedIds.add(rid);
+        }
+      }
+      if (deletedIds.size > 0) deletedIdsByType.set(sourceType, deletedIds);
+    }
+
+    const activeRows: ClaimedRow[] = [];
+    for (const row of claimedRows) {
+      if (isSoftDeleteSourceType(row.sourceType)) {
+        const deletedIds = deletedIdsByType.get(row.sourceType);
+        const rid = Number(row.sourceId);
+        if (deletedIds && Number.isInteger(rid) && deletedIds.has(rid)) {
+          await markRowDiscarded(row, SOURCE_DELETED_REASON[row.sourceType], now);
+          summary.rowsDiscarded += 1;
+          continue;
+        }
+      }
+      activeRows.push(row);
+    }
+
+    if (activeRows.length === 0) continue;
+
     const userRows = await scoped.query(users);
     const preferenceRows = await scoped.query(notificationPreferences);
     const usersById = new Map<string, Record<string, unknown>>();
@@ -381,7 +451,7 @@ export async function processNotificationDigests(
     const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
     const portalUrl = `${baseUrl}/dashboard?communityId=${communityId}`;
 
-    const groups = groupRowsByRecipientAndFrequency(claimedRows);
+    const groups = groupRowsByRecipientAndFrequency(activeRows);
     await runWithConcurrency(groups, concurrency, async (groupRows) => {
       if (emailBudgetRemaining <= 0) {
         await Promise.all(groupRows.map((row) => releaseRowForNextTick(row, now)));
