@@ -47,11 +47,17 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
     context.communityId,
     membership,
     announcementId,
-    { includeArchived: true },
+    { includeArchived: true, includeDeleted: membership.isAdmin },
   );
 
   if (!announcement) {
     notFound();
+  }
+
+  // Deleted announcements don't have an editable state — the detail page is
+  // where admins can see the deleted badge and restore the row.
+  if (announcement.deletedAt != null) {
+    redirect(`/announcements/${announcementId}?communityId=${context.communityId}`);
   }
 
   return (

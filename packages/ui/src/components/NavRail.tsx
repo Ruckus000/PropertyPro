@@ -398,7 +398,10 @@ export function NavRail({
     >
       {header}
 
-      <div role="list" className="flex-1 overflow-y-auto p-2">
+      <div
+        role="list"
+        className="flex-1 overflow-y-auto p-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
         <div className="flex flex-col gap-1">
           {(() => {
             let focusIndex = 0;

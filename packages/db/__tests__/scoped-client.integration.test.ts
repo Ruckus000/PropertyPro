@@ -36,6 +36,8 @@ describeDb('scoped-client (integration)', () => {
     await db.delete(units).where(eq(units.unitNumber, '__test_a1__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_a2__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_b1__'));
+    await db.delete(units).where(eq(units.unitNumber, '__test_qid_a__'));
+    await db.delete(units).where(eq(units.unitNumber, '__test_restore_a__'));
     await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
     await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
     await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
@@ -82,6 +84,8 @@ describeDb('scoped-client (integration)', () => {
       await db.delete(units).where(eq(units.unitNumber, '__test_a1__'));
       await db.delete(units).where(eq(units.unitNumber, '__test_a2__'));
       await db.delete(units).where(eq(units.unitNumber, '__test_b1__'));
+      await db.delete(units).where(eq(units.unitNumber, '__test_qid_a__'));
+      await db.delete(units).where(eq(units.unitNumber, '__test_restore_a__'));
       await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
       await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
       await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
@@ -202,5 +206,73 @@ describeDb('scoped-client (integration)', () => {
 
     // Clean up
     await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
+  });
+
+  it('queryIncludingDeleted returns soft-deleted rows while still respecting tenant scope', async () => {
+    const clientA = createScopedClient(communityAId, db);
+    const clientB = createScopedClient(communityBId, db);
+    const unitNumber = '__test_qid_a__';
+
+    await db.insert(units).values({ communityId: communityAId, unitNumber });
+    await clientA.softDelete(units, eq(units.unitNumber, unitNumber));
+
+    // Default query hides soft-deleted rows
+    const liveRows = await clientA.query(units);
+    expect(liveRows.find((u) => (u as Record<string, unknown>)['unitNumber'] === unitNumber)).toBeUndefined();
+
+    // queryIncludingDeleted surfaces them
+    const allRows = await clientA.queryIncludingDeleted(units);
+    const deletedRow = allRows.find(
+      (u) => (u as Record<string, unknown>)['unitNumber'] === unitNumber,
+    ) as Record<string, unknown> | undefined;
+    expect(deletedRow).toBeDefined();
+    expect(deletedRow?.['deletedAt']).not.toBeNull();
+
+    // Tenant scope still applies — community B sees nothing
+    const crossTenantRows = await clientB.queryIncludingDeleted(units);
+    expect(
+      crossTenantRows.find((u) => (u as Record<string, unknown>)['unitNumber'] === unitNumber),
+    ).toBeUndefined();
+
+    // Clean up
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
+  });
+
+  it('restoreSoftDelete clears deletedAt, bumps updatedAt, and stays tenant-scoped', async () => {
+    const clientA = createScopedClient(communityAId, db);
+    const clientB = createScopedClient(communityBId, db);
+    const unitNumber = '__test_restore_a__';
+
+    await db.insert(units).values({ communityId: communityAId, unitNumber });
+    await clientA.softDelete(units, eq(units.unitNumber, unitNumber));
+
+    const deletedRow = (await clientA.queryIncludingDeleted(units)).find(
+      (u) => (u as Record<string, unknown>)['unitNumber'] === unitNumber,
+    ) as Record<string, unknown>;
+    const preRestoreUpdatedAt = deletedRow['updatedAt'] as Date;
+
+    // Cross-tenant restore is a no-op (community B's scope doesn't see community A rows)
+    const crossTenantRestore = await clientB.restoreSoftDelete(
+      units,
+      eq(units.unitNumber, unitNumber),
+    );
+    expect(crossTenantRestore).toHaveLength(0);
+
+    // Same-tenant restore clears deletedAt
+    const restored = await clientA.restoreSoftDelete(units, eq(units.unitNumber, unitNumber));
+    expect(restored).toHaveLength(1);
+
+    const afterRestore = (await clientA.query(units)).find(
+      (u) => (u as Record<string, unknown>)['unitNumber'] === unitNumber,
+    ) as Record<string, unknown>;
+    expect(afterRestore).toBeDefined();
+    expect(afterRestore['deletedAt']).toBeNull();
+    const postRestoreUpdatedAt = afterRestore['updatedAt'] as Date;
+    expect(new Date(postRestoreUpdatedAt).getTime()).toBeGreaterThanOrEqual(
+      new Date(preRestoreUpdatedAt).getTime(),
+    );
+
+    // Clean up
+    await db.delete(units).where(eq(units.unitNumber, unitNumber));
   });
 });

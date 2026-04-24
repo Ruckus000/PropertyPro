@@ -19,6 +19,12 @@ const SIGNUP_SUCCESS_MESSAGE =
 const MIN_SIGNUP_RESPONSE_MS = 250;
 const SIGNUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
+const STRUCTURED_ADDRESS_DB_COLUMNS = new Set([
+  'address_line_1',
+  'city',
+  'state',
+  'zip_code',
+]);
 
 export interface SubdomainAvailabilityResult {
   normalizedSubdomain: string;
@@ -431,6 +437,17 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
       throw new ValidationError('Unable to process signup request.');
     }
 
+    const missingColumn = getUndefinedColumnName(error);
+    if (missingColumn && STRUCTURED_ADDRESS_DB_COLUMNS.has(missingColumn)) {
+      console.error(JSON.stringify({
+        event: 'signup.schema_drift_detected',
+        signupRequestId: input.signupRequestId,
+        candidateSlug: input.candidateSlug,
+        missingColumn,
+        requiredMigration: '0145_pending_signups_structured_address',
+      }));
+    }
+
     throw error;
   }
 }
@@ -577,6 +594,29 @@ function isUniqueConstraintError(error: unknown, constraintName: string): boolea
     candidate.constraint === constraintName
     || candidate.constraint_name === constraintName
   );
+}
+
+function getUndefinedColumnName(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const candidate = error as {
+    code?: string;
+    column?: string;
+    message?: string;
+  };
+
+  if (candidate.code !== '42703') {
+    return null;
+  }
+
+  if (candidate.column) {
+    return candidate.column;
+  }
+
+  const match = candidate.message?.match(/column "([^"]+)"/);
+  return match?.[1] ?? null;
 }
 
 async function enforceMinSignupResponseTime(startMs: number): Promise<void> {

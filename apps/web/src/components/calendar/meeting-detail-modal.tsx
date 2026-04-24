@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { Badge, Button, Card } from '@propertypro/ui';
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
 
@@ -67,28 +69,49 @@ export function MeetingDetailModal({
   const endsAt = meeting && startsAt ? resolveEndsAt(startsAt, meeting.endsAt) : null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !deleteMutation.isPending) {
+    <Dialog.Root
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !deleteMutation.isPending) {
           onClose();
         }
       }}
     >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 px-4 py-6 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          className={cn(
+            'fixed inset-0 z-50 flex items-center justify-center px-4 py-6 outline-none focus:outline-none',
+            'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          )}
+          onPointerDownOutside={(event) => {
+            if (deleteMutation.isPending) {
+              event.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(event) => {
+            if (deleteMutation.isPending) {
+              event.preventDefault();
+            }
+          }}
+        >
       <Card className="w-full max-w-2xl overflow-hidden bg-[var(--surface-card)] shadow-[var(--elevation-e3)]" noPadding>
         <Card.Header bordered>
           <div className="flex w-full items-start justify-between gap-4">
             <div className="space-y-2">
               {meetingToken ? <Badge variant={meetingToken.badgeVariant}>{meetingToken.label}</Badge> : null}
-              <Card.Title>{meeting?.title ?? 'Loading meeting…'}</Card.Title>
+              <Dialog.Title asChild>
+                <Card.Title>{meeting?.title ?? 'Loading meeting…'}</Card.Title>
+              </Dialog.Title>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[var(--radius-sm)] p-2 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)]"
-            >
-              <X size={18} />
-            </button>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="rounded-[var(--radius-sm)] p-2 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)]"
+              >
+                <X size={18} />
+              </button>
+            </Dialog.Close>
           </div>
         </Card.Header>
         <Card.Body className="space-y-4">
@@ -201,6 +224,8 @@ export function MeetingDetailModal({
           </Card.Footer>
         ) : null}
       </Card>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
