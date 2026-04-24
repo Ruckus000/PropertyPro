@@ -8,8 +8,8 @@ export const primitiveFonts = {
     mono: "var(--font-mono, 'JetBrains Mono', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace)",
   },
   size: {
-    xs: "var(--font-size-xs, 0.6875rem)",
-    sm: "var(--font-size-sm, 0.8125rem)",
+    xs: "var(--font-size-xs, 0.75rem)",
+    sm: "var(--font-size-sm, 0.875rem)",
     base: "var(--font-size-base, 1rem)",
     lg: "var(--font-size-lg, 1.125rem)",
     xl: "var(--font-size-xl, 1.25rem)",
@@ -17,7 +17,7 @@ export const primitiveFonts = {
     "3xl": "var(--font-size-3xl, 1.875rem)",
   },
   lineHeight: {
-    tight: 1.2,
+    tight: 1.25,
     snug: 1.35,
     normal: 1.5,
     relaxed: 1.625,

@@ -47,6 +47,7 @@ function LockedIcon({ Icon }: { Icon: React.ComponentType<{ size?: number }> }) 
     <span className="relative opacity-50">
       <Icon size={20} />
       <Lock size={10} className="absolute -bottom-0.5 -right-0.5 text-white/70" aria-hidden="true" />
+      <span className="sr-only"> (locked — upgrade required)</span>
     </span>
   );
 }
@@ -151,9 +152,9 @@ export function AppSidebar({
       <div
         className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
       >
-        <span className="text-[15px] font-semibold text-white">PropertyPro</span>
+        <span className="text-base font-semibold text-white">PropertyPro</span>
         {communityName && (
-          <span className="truncate text-xs text-white/70">{communityName}</span>
+          <span className="truncate text-sm text-white/75">{communityName}</span>
         )}
       </div>
     </div>
@@ -169,9 +170,9 @@ export function AppSidebar({
         <div
           className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
         >
-          <span className="truncate text-xs font-medium text-white">{userName}</span>
+          <span className="truncate text-sm font-medium text-white">{userName}</span>
           {role && (
-            <span className="truncate text-xs text-white/65">
+            <span className="truncate text-xs text-white/70">
               {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </span>
           )}

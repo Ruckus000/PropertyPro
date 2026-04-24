@@ -57,9 +57,9 @@ function cn(...values: Array<string | null | undefined | false>): string {
 }
 
 const sizeClasses: Record<BadgeSize, string> = {
-  sm: "h-5 px-2 text-[11px] gap-1",
-  md: "h-6 px-3 text-[11px] gap-1",
-  lg: "h-7 px-3 text-[11px] gap-1",
+  sm: "h-5 px-2 text-xs gap-1",
+  md: "h-6 px-3 text-xs gap-1",
+  lg: "h-7 px-3 text-xs gap-1",
 };
 
 const iconSizeClasses: Record<BadgeSize, string> = {
