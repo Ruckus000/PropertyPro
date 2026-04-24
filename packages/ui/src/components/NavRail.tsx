@@ -555,7 +555,7 @@ export function NavRail({
             {expanded ? (
               <>
                 <PanelLeftCloseIcon size={16} />
-                <span className="text-[13px]">Collapse</span>
+                <span className="text-sm">Collapse</span>
               </>
             ) : (
               <PanelLeftIcon size={16} />

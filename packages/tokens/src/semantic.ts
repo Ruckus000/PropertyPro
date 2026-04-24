@@ -57,7 +57,7 @@ export const tokenDefinitions = {
   text: {
     primary:     prim('gray', 900),
     secondary:   prim('gray', 600),
-    tertiary:    prim('gray', 600),
+    tertiary:    prim('gray', 500),
     disabled:    prim('gray', 400),
     placeholder: prim('gray', 400),
     inverse:     prim('gray', 0),
