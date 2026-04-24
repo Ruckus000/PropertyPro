@@ -18,6 +18,7 @@ const {
   sendEmailMock: vi.fn(),
   updateQueuedDigestAnnouncementStatusMock: vi.fn().mockResolvedValue(undefined),
   tables: {
+    announcements: Symbol('announcements'),
     communities: Symbol('communities'),
     users: Symbol('users'),
     notificationPreferences: Symbol('notification_preferences'),
@@ -33,6 +34,7 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
+  announcements: tables.announcements,
   communities: tables.communities,
   users: tables.users,
   notificationPreferences: tables.notificationPreferences,
@@ -251,6 +253,96 @@ describe('notification digest processor', () => {
       }),
       expect.anything(),
     );
+  });
+
+  it('drops digest rows whose source announcement was soft-deleted and marks them discarded', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    hasMoreDigestRowsMock.mockResolvedValue(false);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+      preferences: [
+        {
+          userId: 'u-1',
+          emailFrequency: 'daily_digest',
+          emailAnnouncements: true,
+          emailMeetings: true,
+          inAppEnabled: true,
+        },
+      ],
+    });
+
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 1,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'announcement',
+        sourceId: '77',
+        eventType: 'announcement',
+        eventTitle: 'Withdrawn notice',
+        eventSummary: 'Hidden after publish',
+        actionUrl: 'https://app.local/announcements/77',
+        attemptCount: 0,
+      },
+      {
+        id: 2,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'announcement',
+        sourceId: '88',
+        eventType: 'announcement',
+        eventTitle: 'Still live',
+        eventSummary: 'Should send',
+        actionUrl: 'https://app.local/announcements/88',
+        attemptCount: 0,
+      },
+    ]);
+
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.users) return state.users;
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      queryIncludingDeleted: vi.fn(async (table: unknown) => {
+        if (table !== tables.announcements) return [];
+        return [
+          { id: 77, deletedAt: new Date('2026-02-18T12:00:00.000Z') },
+          { id: 88, deletedAt: null },
+        ];
+      }),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({
+      now: new Date('2026-02-18T13:30:00.000Z'),
+    });
+
+    expect(summary.rowsDiscarded).toBe(1);
+    expect(summary.rowsSent).toBe(1);
+    expect(summary.emailsSent).toBe(1);
+
+    expect(updateQueuedDigestAnnouncementStatusMock).toHaveBeenCalledWith(
+      101,
+      77,
+      'u-1',
+      expect.objectContaining({
+        status: 'discarded',
+        errorMessage: 'Source announcement was deleted',
+      }),
+    );
+
+    const sendCall = sendEmailMock.mock.calls[0]?.[0] as
+      | { react: { props: { items: Array<{ title: string }> } } }
+      | undefined;
+    expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Still live']);
   });
 
   it('respects per-tick email cap and reports hasMore', async () => {

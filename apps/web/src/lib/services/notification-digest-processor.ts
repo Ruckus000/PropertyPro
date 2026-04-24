@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { eq } from '@propertypro/db/filters';
 import {
+  announcements,
   communities,
   createScopedClient,
   notificationDigestQueue,
@@ -360,6 +361,41 @@ export async function processNotificationDigests(
 
     summary.communitiesProcessed += 1;
 
+    // Drop rows whose source announcement was soft-deleted after enqueue —
+    // sending them would surface content residents can no longer view.
+    const announcementSourceIds = new Set<number>();
+    for (const row of claimedRows) {
+      if (row.sourceType !== 'announcement') continue;
+      const id = Number(row.sourceId);
+      if (Number.isInteger(id)) announcementSourceIds.add(id);
+    }
+
+    const deletedAnnouncementIds = new Set<number>();
+    if (announcementSourceIds.size > 0) {
+      const allAnnouncements = await scoped.queryIncludingDeleted(announcements);
+      for (const record of allAnnouncements) {
+        const aid = record['id'];
+        if (typeof aid === 'number' && announcementSourceIds.has(aid) && record['deletedAt'] != null) {
+          deletedAnnouncementIds.add(aid);
+        }
+      }
+    }
+
+    const activeRows: ClaimedRow[] = [];
+    for (const row of claimedRows) {
+      if (row.sourceType === 'announcement') {
+        const aid = Number(row.sourceId);
+        if (Number.isInteger(aid) && deletedAnnouncementIds.has(aid)) {
+          await markRowDiscarded(row, 'Source announcement was deleted', now);
+          summary.rowsDiscarded += 1;
+          continue;
+        }
+      }
+      activeRows.push(row);
+    }
+
+    if (activeRows.length === 0) continue;
+
     const userRows = await scoped.query(users);
     const preferenceRows = await scoped.query(notificationPreferences);
     const usersById = new Map<string, Record<string, unknown>>();
@@ -381,7 +417,7 @@ export async function processNotificationDigests(
     const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
     const portalUrl = `${baseUrl}/dashboard?communityId=${communityId}`;
 
-    const groups = groupRowsByRecipientAndFrequency(claimedRows);
+    const groups = groupRowsByRecipientAndFrequency(activeRows);
     await runWithConcurrency(groups, concurrency, async (groupRows) => {
       if (emailBudgetRemaining <= 0) {
         await Promise.all(groupRows.map((row) => releaseRowForNextTick(row, now)));
