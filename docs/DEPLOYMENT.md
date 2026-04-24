@@ -88,6 +88,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `ADMIN_ORIGIN` | Web | Optional; CSP framing for admin→web previews, e.g. `https://admin.getpropertypro.com` |
 | `NODE_ENV` | All | `production` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
+| `READINESS_CHECK_SECRET` | Server only | Shared bearer secret for deployment readiness checks |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
 | `COUPON_SYNC_RETRY_CRON_SECRET` | Server only | Shared bearer secret |
 | `PROVISIONING_RETRY_SECRET` | Server only | Shared bearer secret |
@@ -185,11 +186,15 @@ Production deploys happen automatically when a PR is merged to `main`:
 
 1. PR passes CI checks (lint, typecheck, test, build)
 2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
-3. PR is merged to `main`
-4. `deploy.yml` triggers after CI succeeds on `main`: builds via Vercel CLI and deploys to production
-5. Smoke test verifies HTTP 200 at the deployment URL
+3. If the PR includes migrations, run `pnpm --filter @propertypro/db db:migrate` against production with `DIRECT_URL`
+4. Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
+5. PR is merged to `main`
+6. `deploy.yml` triggers after CI succeeds on `main`: builds via Vercel CLI and deploys to production
+7. Smoke test verifies HTTP 200 at the deployment URL
 
-No manual steps required.
+Do not merge migration-backed app code until the target database has applied
+the migration and readiness has passed. This keeps app code from running ahead
+of the database schema.
 
 ### 7.2 Hotfix Deploy
 
@@ -203,7 +208,8 @@ For urgent production fixes:
 
 ### 7.3 Database Migration Deploy
 
-Migrations are NOT run automatically in CI/CD. Run them manually before or after deployment:
+Migrations are not run automatically by `deploy.yml`. Run them before promoting
+app traffic for production, staging, local, or one-off recovery paths:
 
 ```bash
 # Via scripts/with-env-local.sh (local verification)
@@ -215,7 +221,16 @@ DATABASE_URL=<pooled_url> DIRECT_URL=<direct_url> pnpm --filter @propertypro/db 
 
 **Important:** Always run migrations against the direct connection (port 5432), not the pooled connection (port 6543). The `DIRECT_URL` env var is used by Drizzle for migrations automatically.
 
-> **Note — manual migration risk:** Running migrations as a manual step is intentional (avoids surprise schema changes during automated deploys) but requires discipline. If you miss running a migration after deploying, the app may crash or behave incorrectly due to schema/code mismatch. To automate, you can add a migration step to `deploy.yml` that runs `pnpm --filter @propertypro/db db:migrate` with `DATABASE_URL` and `DIRECT_URL` injected from GitHub Secrets immediately before the Vercel deployment step.
+After any migration-backed release, verify runtime schema compatibility before
+declaring the deploy healthy:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer $READINESS_CHECK_SECRET" \
+  "$NEXT_PUBLIC_APP_URL/api/v1/internal/readiness"
+```
+
+The readiness payload must report `schema_compatibility.status = "pass"`.
 
 ### 7.4 Rollback
 
@@ -243,6 +258,7 @@ For database rollbacks, Supabase provides point-in-time recovery (PITR) on Pro p
 |----------|--------|----------|
 | `/` | GET | 200 (marketing page) |
 | `/api/v1/compliance` | GET (authed) | 200/401 |
+| `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | `healthy`/`degraded`; `schema_compatibility` must pass |
 
 ## 9. Troubleshooting
 
