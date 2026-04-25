@@ -71,6 +71,7 @@ describe('readiness route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.READINESS_CHECK_SECRET = 'test-secret';
+    process.env.REAUTH_JWT_SECRET = 'test-reauth-secret-min-32-chars-xyzabc';
     limitMock.mockResolvedValue([{ id: 1 }]);
     listUsersMock.mockResolvedValue({ data: { users: [] }, error: null });
   });

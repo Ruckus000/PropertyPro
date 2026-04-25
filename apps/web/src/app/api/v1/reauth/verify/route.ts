@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { UnauthorizedError, BadRequestError } from '@/lib/api/errors';
+import { AppError, UnauthorizedError, BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { mintReauthCookie } from '@/lib/api/reauth-guard';
 
@@ -58,8 +58,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new UnauthorizedError('Incorrect password');
   }
 
-  // 4. Mint the pp-reauth cookie and return it in the response
-  const { name, value, ...options } = await mintReauthCookie(user.id);
+  // 4. Mint the pp-reauth cookie and return it in the response.
+  //    A failure here means the password was correct but the server is
+  //    misconfigured (REAUTH_JWT_SECRET unset/short in production). We surface
+  //    that as a structured 500 so the client can show a real message instead
+  //    of the generic "An unexpected error occurred" — which previously read
+  //    to users as "your password is wrong."
+  let cookieParams: Awaited<ReturnType<typeof mintReauthCookie>>;
+  try {
+    cookieParams = await mintReauthCookie(user.id);
+  } catch (err) {
+    console.error('[reauth] mintReauthCookie failed:', err);
+    throw new AppError(
+      'Re-authentication is misconfigured on the server. Please contact support.',
+      500,
+      'REAUTH_MISCONFIGURED',
+    );
+  }
+  const { name, value, ...options } = cookieParams;
   const response = NextResponse.json({ ok: true });
   response.cookies.set(name, value, options);
   return response;
