@@ -569,6 +569,40 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         isPreviewRequest,
       );
     }
+
+    // Missing-tenant redirect: an authenticated user landed on a protected
+    // page without any community context (e.g. www.getpropertypro.com/settings,
+    // or apex/dashboard with no ?communityId=). Without a forwarded
+    // x-community-id header, the app shell renders with community=null and
+    // every sidebar tab is unclickable. Bounce to /select-community, which
+    // auto-redirects single-community users back to their dashboard.
+    //
+    // Carve-outs:
+    //   - /select-community itself (loop prevention)
+    //   - /pm/* — the PM portfolio is a cross-community view that doesn't
+    //     need a single tenant in scope
+    //   - API routes — clients shouldn't follow redirects; existing handlers
+    //     already throw ValidationError("communityId query parameter is required")
+    if (
+      user &&
+      !isApiPath(pathname) &&
+      !forwardedHeaders.has(COMMUNITY_ID_HEADER) &&
+      pathname !== '/select-community' &&
+      !pathname.startsWith('/pm/')
+    ) {
+      const selectUrl = request.nextUrl.clone();
+      selectUrl.pathname = '/select-community';
+      selectUrl.search = '';
+      selectUrl.searchParams.set('returnTo', buildReturnTo(request));
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        NextResponse.redirect(selectUrl),
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+    }
   }
 
   // --- Public site auth-split [Wave 5 / Task 3.3] ---

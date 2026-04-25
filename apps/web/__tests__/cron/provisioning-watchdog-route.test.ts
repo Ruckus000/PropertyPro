@@ -40,6 +40,7 @@ describe('provisioning watchdog cron route', () => {
       completed: 1,
       failed: 0,
       failures: [],
+      orphans: [],
     });
   });
 
@@ -64,6 +65,7 @@ describe('provisioning watchdog cron route', () => {
         completed: 1,
         failed: 0,
         failures: [],
+        orphans: [],
       },
     });
     expect(recoverStuckProvisioningJobsMock).toHaveBeenCalledOnce();
@@ -109,6 +111,7 @@ describe('provisioning watchdog cron route', () => {
           errorMessage: 'Email provider unavailable',
         },
       ],
+      orphans: [],
     });
 
     const req = new NextRequest(URL, {
@@ -128,6 +131,44 @@ describe('provisioning watchdog cron route', () => {
           component: 'provisioning-watchdog',
           jobId: 10,
           signupRequestId: 'req-stuck',
+        }),
+      }),
+    );
+  });
+
+  it('alerts on orphan communities surfaced by the sweep', async () => {
+    recoverStuckProvisioningJobsMock.mockResolvedValue({
+      scanned: 0,
+      attempted: 0,
+      completed: 0,
+      failed: 0,
+      failures: [],
+      orphans: [
+        {
+          communityId: 281,
+          slug: 'ruckus-browser-test-association',
+          subscriptionStatus: 'active',
+          stripeCustomerId: 'cus_UGQ9azrdMidRey',
+        },
+      ],
+    });
+
+    const req = new NextRequest(URL, {
+      method: 'GET',
+      headers: { authorization: 'Bearer test-secret' },
+    });
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    expect(captureMessageMock).toHaveBeenCalledWith(
+      'provisioning_watchdog_orphan_communities',
+      expect.objectContaining({
+        level: 'error',
+        extra: expect.objectContaining({
+          count: 1,
+          orphans: expect.arrayContaining([
+            expect.objectContaining({ communityId: 281 }),
+          ]),
         }),
       }),
     );

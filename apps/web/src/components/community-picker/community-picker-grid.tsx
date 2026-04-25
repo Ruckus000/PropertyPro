@@ -1,5 +1,6 @@
 import type { UserCommunityRow } from '@/lib/api/user-communities';
 import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
+import { applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
 
 const COMMUNITY_TYPE_COLORS: Record<string, string> = {
   condo_718: 'bg-interactive-muted text-content-link',
@@ -33,15 +34,27 @@ function getRoleLabel(community: UserCommunityRow): string {
 
 interface CommunityPickerGridProps {
   communities: UserCommunityRow[];
+  /**
+   * Path the user originally requested (set by middleware via `?returnTo=`).
+   * When provided, picker cards land back on that path with the picked
+   * community's `?communityId=` injected, instead of always going to
+   * `/dashboard`. Already validated by `resolveSafeReturnTo`.
+   */
+  returnTo?: string | null;
 }
 
-export function CommunityPickerGrid({ communities }: CommunityPickerGridProps) {
+export function CommunityPickerGrid({ communities, returnTo = null }: CommunityPickerGridProps) {
+  const buildHref = (communityId: number): string =>
+    returnTo
+      ? applyCommunityIdToReturnTo(returnTo, communityId)
+      : `/dashboard?communityId=${communityId}`;
+
   return (
     <ul role="list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {communities.map((community) => (
         <li key={community.communityId}>
           <a
-            href={`/dashboard?communityId=${community.communityId}`}
+            href={buildHref(community.communityId)}
             className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             aria-label={`Open ${community.communityName}`}
           >

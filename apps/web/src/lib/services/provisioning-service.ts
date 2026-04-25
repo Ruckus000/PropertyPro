@@ -355,6 +355,29 @@ async function stepEmailSent(ctx: JobContext): Promise<void> {
 
 async function stepCompleted(ctx: JobContext): Promise<void> {
   const db = createUnscopedClient();
+
+  // Guard: never mark a signup terminal without an admin role wired up. A
+  // surprising number of orphans surfaced (communities 281/474, recovered
+  // 2026-04-24) had active Stripe subs but no user_roles row — the user_linked
+  // step had silently no-op'd or its insert had been wiped. Failing loudly here
+  // keeps the job recoverable instead of masking the gap with status='completed'.
+  if (!ctx.communityId) {
+    throw new Error('[provisioning] completed: communityId not set — refusing to mark signup terminal');
+  }
+
+  const [adminRole] = await db
+    .select({ userId: userRoles.userId })
+    .from(userRoles)
+    .where(and(eq(userRoles.communityId, ctx.communityId), eq(userRoles.role, 'pm_admin')))
+    .limit(1);
+
+  if (!adminRole) {
+    throw new Error(
+      `[provisioning] completed: no pm_admin user_role found for community ${ctx.communityId} — `
+        + 'refusing to mark signup terminal (would leave an orphaned community)',
+    );
+  }
+
   const now = new Date();
 
   await db
@@ -520,6 +543,18 @@ export interface ProvisioningWatchdogSummary {
     signupRequestId: string | null;
     errorMessage: string;
   }>;
+  /**
+   * Communities with live Stripe subscriptions but no `user_roles` rows.
+   * The watchdog cannot auto-repair these (we don't know who the rightful
+   * owner should be), so it surfaces them for manual triage. Empty in the
+   * happy case.
+   */
+  orphans: Array<{
+    communityId: number;
+    slug: string;
+    subscriptionStatus: string | null;
+    stripeCustomerId: string | null;
+  }>;
 }
 
 /**
@@ -585,6 +620,7 @@ export async function recoverStuckProvisioningJobs(
     completed: 0,
     failed: 0,
     failures: [],
+    orphans: [],
   };
 
   for (const row of rows) {
@@ -602,7 +638,64 @@ export async function recoverStuckProvisioningJobs(
     }
   }
 
+  // Surface true orphans — communities with active billing but no admin role,
+  // outside the provisioning_jobs/pending_signups path entirely. These are
+  // historical or otherwise off-machine (community 281 was created via an old
+  // signup flow with no audit trail; community 474 was a slug-collision retry
+  // detritus — both recovered 2026-04-24). The watchdog can't safely guess an
+  // owner, so it just lists them for the cron handler to log and alert.
+  summary.orphans = await findOrphanCommunities();
+
   return summary;
+}
+
+const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+
+/**
+ * Live communities with billing but no admin user_role. Excludes:
+ *   - demos and soft-deleted rows
+ *   - communities younger than ORPHAN_GRACE_MS (still in the provisioning race
+ *     window — the Stripe webhook can stamp `subscription_status='active'`
+ *     between `stepCommunityCreated` and `stepUserLinked`, so a freshly-paid
+ *     signup briefly looks like an orphan)
+ *   - communities with an in-flight provisioning_jobs row (will be retried
+ *     through the normal recovery loop)
+ * Used by the watchdog to surface manual-triage candidates only.
+ */
+export async function findOrphanCommunities(
+  options: { now?: Date; graceMs?: number } = {},
+): Promise<ProvisioningWatchdogSummary['orphans']> {
+  const db = createUnscopedClient();
+  const now = options.now ?? new Date();
+  const graceMs = options.graceMs ?? ORPHAN_GRACE_MS;
+  const cutoff = new Date(now.getTime() - graceMs);
+
+  const rows = await db
+    .select({
+      id: communities.id,
+      slug: communities.slug,
+      subscriptionStatus: communities.subscriptionStatus,
+      stripeCustomerId: communities.stripeCustomerId,
+    })
+    .from(communities)
+    .where(
+      and(
+        isNull(communities.deletedAt),
+        eq(communities.isDemo, false),
+        inArray(communities.subscriptionStatus, ['active', 'past_due', 'trialing']),
+        lt(communities.createdAt, cutoff),
+        sql`NOT EXISTS (SELECT 1 FROM ${userRoles} WHERE ${userRoles.communityId} = ${communities.id})`,
+        sql`NOT EXISTS (SELECT 1 FROM ${provisioningJobs} WHERE ${provisioningJobs.communityId} = ${communities.id} AND ${provisioningJobs.status} NOT IN ('completed', 'failed'))`,
+      ),
+    )
+    .limit(50);
+
+  return rows.map((r) => ({
+    communityId: r.id,
+    slug: r.slug,
+    subscriptionStatus: r.subscriptionStatus,
+    stripeCustomerId: r.stripeCustomerId,
+  }));
 }
 
 // ---------------------------------------------------------------------------

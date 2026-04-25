@@ -2,10 +2,15 @@ import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { CommunityPickerGrid } from '@/components/community-picker/community-picker-grid';
+import { resolveSafeReturnTo, applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
 
 export const metadata = {
   title: 'Select Community | PropertyPro',
 };
+
+interface SelectCommunityPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
 /**
  * Community picker page.
@@ -13,14 +18,22 @@ export const metadata = {
  * Tenants belong to exactly one community and are always auto-redirected —
  * they never see the picker. Users with management roles (owner, board member,
  * CAM, PM, etc.) who belong to multiple communities see the picker grid.
+ *
+ * If the URL carries a `?returnTo=…` (set by middleware when redirecting an
+ * authenticated user with no tenant context), the auto-redirect honors it
+ * and the picker cards forward it. Unsafe values are silently dropped.
  */
-export default async function SelectCommunityPage() {
+export default async function SelectCommunityPage({ searchParams }: SelectCommunityPageProps) {
   const userId = await requireAuthenticatedUserId();
+  const params = await searchParams;
+  const rawReturnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
+  const safeReturnTo = resolveSafeReturnTo(rawReturnTo);
+
   const communities = await listCommunitiesForUser(userId);
 
   // Single community — auto-redirect regardless of role.
   if (communities.length === 1) {
-    redirect(`/dashboard?communityId=${communities[0]!.communityId}`);
+    redirect(applyCommunityIdToReturnTo(safeReturnTo ?? '/dashboard', communities[0]!.communityId));
   }
 
   // Tenants belong to exactly one community. If a tenant somehow has
@@ -28,7 +41,7 @@ export default async function SelectCommunityPage() {
   // rather than showing the picker.
   const allTenant = communities.length > 0 && communities.every((c) => c.role === 'resident' && !c.isUnitOwner);
   if (allTenant) {
-    redirect(`/dashboard?communityId=${communities[0]!.communityId}`);
+    redirect(applyCommunityIdToReturnTo(safeReturnTo ?? '/dashboard', communities[0]!.communityId));
   }
 
   return (
@@ -50,7 +63,7 @@ export default async function SelectCommunityPage() {
           </p>
         </div>
       ) : (
-        <CommunityPickerGrid communities={communities} />
+        <CommunityPickerGrid communities={communities} returnTo={safeReturnTo} />
       )}
     </main>
   );
