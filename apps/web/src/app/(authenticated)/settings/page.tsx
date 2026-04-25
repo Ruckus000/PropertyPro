@@ -1,6 +1,7 @@
 import React from 'react';
 import { headers } from 'next/headers';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
@@ -35,12 +36,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   });
 
   if (!context.communityId) {
-    return (
-      <>
-        <PageHeader title="Settings" />
-        <p className="text-sm text-content-secondary">Provide a communityId to edit preferences.</p>
-      </>
-    );
+    // Defense in depth — middleware should already have redirected an
+    // authenticated user with no tenant context to /select-community. If we
+    // somehow reach this branch (e.g. middleware bypass on a static export),
+    // bounce to the picker rather than rendering a broken placeholder.
+    redirect('/select-community?returnTo=/settings');
   }
 
   const userId = await requireAuthenticatedUserId();

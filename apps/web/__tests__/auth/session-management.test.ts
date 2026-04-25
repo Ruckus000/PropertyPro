@@ -223,7 +223,12 @@ describe('p1-22 session middleware', () => {
       },
     });
 
-    const response = await middleware(request('http://localhost:3000/dashboard'));
+    // Include ?communityId= so middleware can resolve a tenant context.
+    // Without it, the missing-tenant guard correctly redirects authenticated
+    // users to /select-community — covered separately in
+    // middleware-no-tenant-redirect.test.ts. This test only asserts that the
+    // auth/email-verification gate doesn't block a verified user.
+    const response = await middleware(request('http://localhost:3000/dashboard?communityId=1'));
 
     expect(response.status).toBe(200);
   });

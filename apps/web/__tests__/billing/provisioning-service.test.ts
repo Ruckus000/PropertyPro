@@ -287,6 +287,7 @@ describe('runProvisioning', () => {
         [CONDO_SIGNUP],                      // load pending signup
         // community_created uses .returning() on insert, not a select
         [{ userId: 'auth-uuid-001' }],       // preferences_set: lookup user_role by communityId + role
+        [{ userId: 'auth-uuid-001' }],       // completed: assert pm_admin user_role exists before terminal
       ],
     });
 
@@ -306,6 +307,7 @@ describe('runProvisioning', () => {
         [APT_SIGNUP],
         // community_created uses .returning() on insert, not a select
         [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role by communityId + role
+        [{ userId: 'auth-uuid-001' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -337,6 +339,7 @@ describe('runProvisioning', () => {
         [job],
         [CONDO_SIGNUP],
         [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role
+        [{ userId: 'auth-uuid-001' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -414,6 +417,7 @@ describe('runProvisioning', () => {
         [CONDO_SIGNUP],
         // community_created uses .returning() on insert, not a select
         [{ userId: 'auth-uuid-001' }], // preferences_set: lookup user_role by communityId + role
+        [{ userId: 'auth-uuid-001' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -454,6 +458,7 @@ describe('runProvisioning', () => {
         [job],
         [{ ...CONDO_SIGNUP, authUserId: 'existing-uuid' }],
         [{ userId: 'existing-uuid' }], // preferences_set
+        [{ userId: 'existing-uuid' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -483,6 +488,7 @@ describe('runProvisioning', () => {
         [job],
         [{ ...CONDO_SIGNUP, authUserId: null }],
         [{ userId: 'new-supabase-uuid' }], // preferences_set
+        [{ userId: 'new-supabase-uuid' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -549,6 +555,7 @@ describe('runProvisioning', () => {
       selectSequence: [
         [job],
         [CONDO_SIGNUP],
+        [{ userId: 'auth-uuid-001' }], // completed: pm_admin user_role assertion
       ],
     });
 
@@ -573,6 +580,8 @@ describe('runProvisioning', () => {
         [job],                               // runProvisioning: load job
         [CONDO_SIGNUP],                      // runProvisioning: load pending signup
         [{ userId: 'auth-uuid-001' }],       // preferences_set lookup
+        [{ userId: 'auth-uuid-001' }],       // completed: pm_admin user_role assertion
+        [],                                  // findOrphanCommunities sweep — no orphans
       ],
     });
 
@@ -587,7 +596,30 @@ describe('runProvisioning', () => {
       completed: 1,
       failed: 0,
       failures: [],
+      orphans: [],
     });
     expect(sendEmailMock).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to mark signup completed when no pm_admin user_role exists', async () => {
+    // Regression guard: stepCompleted must throw if user_linked silently no-op'd,
+    // so the job stays in a recoverable state instead of going terminal as an orphan.
+    const job = makeJob({
+      status: 'failed',
+      lastSuccessfulStatus: 'email_sent',
+      communityId: 10,
+    });
+
+    buildDb({
+      selectSequence: [
+        [job],
+        [CONDO_SIGNUP],
+        [], // completed assertion: NO pm_admin role row → must throw
+      ],
+    });
+
+    await expect(runProvisioning(1)).rejects.toThrow(
+      /no pm_admin user_role found for community 10/,
+    );
   });
 });

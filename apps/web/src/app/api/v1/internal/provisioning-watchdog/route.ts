@@ -37,6 +37,16 @@ async function handleWatchdog(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // Live communities with billing but no admin role — the watchdog can't repair
+  // them automatically (owner is ambiguous), so escalate for human triage. See
+  // the resolved 281/474 case in `provisioning-service.ts:findOrphanCommunities`.
+  if (summary.orphans.length > 0) {
+    captureMessage('provisioning_watchdog_orphan_communities', {
+      level: 'error',
+      extra: { orphans: summary.orphans, count: summary.orphans.length },
+    });
+  }
+
   return NextResponse.json({ data: summary });
 }
 

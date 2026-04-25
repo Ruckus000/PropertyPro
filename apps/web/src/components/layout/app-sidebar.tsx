@@ -92,13 +92,23 @@ export function AppSidebar({
     }
   }
 
+  // Fall back to /select-community when communityId is null. Without this,
+  // every nav item would render with href={undefined} and silently fail to
+  // navigate, which masked the www-subdomain bug for some time. The middleware
+  // now redirects authenticated users without tenant context, so this branch
+  // should rarely be reached — but if it is, send the user somewhere useful
+  // instead of producing a dead nav.
   const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => ({
     id: item.id,
     label: item.planLocked ? `${item.label} (Upgrade)` : item.label,
     icon: item.planLocked
       ? (props: { size?: number }) => <LockedIcon Icon={item.icon} />
       : item.icon,
-    href: item.planLocked ? undefined : (communityId ? item.href(communityId) : undefined),
+    href: item.planLocked
+      ? undefined
+      : communityId
+        ? item.href(communityId)
+        : '/select-community',
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
   });
 
