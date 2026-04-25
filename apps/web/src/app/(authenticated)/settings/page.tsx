@@ -40,7 +40,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     // authenticated user with no tenant context to /select-community. If we
     // somehow reach this branch (e.g. middleware bypass on a static export),
     // bounce to the picker rather than rendering a broken placeholder.
-    redirect('/select-community?returnTo=/settings');
+    // Preserve the incoming query string so the picker can hand the user back
+    // to e.g. /settings?tab=notifications instead of bare /settings.
+    const incomingSearch = toUrlSearchParams(resolvedSearchParams).toString();
+    const returnTo = incomingSearch ? `/settings?${incomingSearch}` : '/settings';
+    redirect(`/select-community?returnTo=${encodeURIComponent(returnTo)}`);
   }
 
   const userId = await requireAuthenticatedUserId();

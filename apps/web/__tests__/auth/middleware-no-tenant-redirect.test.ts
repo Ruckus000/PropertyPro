@@ -163,4 +163,26 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
     const target = new URL(response.headers.get('location')!);
     expect(target.pathname).toBe('/auth/login');
   });
+
+  it('redirects email-unverified users to /auth/verify-email first (ordering guard)', async () => {
+    // The verify-email guard sits above the new missing-tenant redirect in the
+    // ladder. An authenticated-but-unverified user hitting a protected path on
+    // www. must land on /auth/verify-email, NOT /select-community — otherwise
+    // the picker would render an unverified session.
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'unverified-user',
+          email: 'unverified@example.com',
+          email_confirmed_at: null,
+        },
+      },
+    });
+
+    const response = await middleware(makeRequest('www.getpropertypro.com', '/settings'));
+
+    expect(response.status).toBe(307);
+    const target = new URL(response.headers.get('location')!);
+    expect(target.pathname).toBe('/auth/verify-email');
+  });
 });

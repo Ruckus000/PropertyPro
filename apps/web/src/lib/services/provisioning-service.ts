@@ -649,14 +649,27 @@ export async function recoverStuckProvisioningJobs(
   return summary;
 }
 
+const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+
 /**
- * Live communities with billing but no admin user_role. Excludes demos and
- * soft-deleted rows. Used by the watchdog to surface manual-triage candidates.
+ * Live communities with billing but no admin user_role. Excludes:
+ *   - demos and soft-deleted rows
+ *   - communities younger than ORPHAN_GRACE_MS (still in the provisioning race
+ *     window — the Stripe webhook can stamp `subscription_status='active'`
+ *     between `stepCommunityCreated` and `stepUserLinked`, so a freshly-paid
+ *     signup briefly looks like an orphan)
+ *   - communities with an in-flight provisioning_jobs row (will be retried
+ *     through the normal recovery loop)
+ * Used by the watchdog to surface manual-triage candidates only.
  */
-export async function findOrphanCommunities(): Promise<
-  ProvisioningWatchdogSummary['orphans']
-> {
+export async function findOrphanCommunities(
+  options: { now?: Date; graceMs?: number } = {},
+): Promise<ProvisioningWatchdogSummary['orphans']> {
   const db = createUnscopedClient();
+  const now = options.now ?? new Date();
+  const graceMs = options.graceMs ?? ORPHAN_GRACE_MS;
+  const cutoff = new Date(now.getTime() - graceMs);
+
   const rows = await db
     .select({
       id: communities.id,
@@ -670,7 +683,9 @@ export async function findOrphanCommunities(): Promise<
         isNull(communities.deletedAt),
         eq(communities.isDemo, false),
         inArray(communities.subscriptionStatus, ['active', 'past_due', 'trialing']),
+        lt(communities.createdAt, cutoff),
         sql`NOT EXISTS (SELECT 1 FROM ${userRoles} WHERE ${userRoles.communityId} = ${communities.id})`,
+        sql`NOT EXISTS (SELECT 1 FROM ${provisioningJobs} WHERE ${provisioningJobs.communityId} = ${communities.id} AND ${provisioningJobs.status} NOT IN ('completed', 'failed'))`,
       ),
     )
     .limit(50);
