@@ -51,8 +51,26 @@ export function useReauth(): UseReauthReturn {
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
-      throw new Error(body?.error?.message ?? 'Incorrect password');
+      // The API returns two error shapes: structured AppError responses
+      // ({ error: { code, message } }) and middleware-level rejections
+      // ({ error: "<string>" }). Handle both, and only blame the password
+      // for an actual 401 — other statuses (500 misconfig, 429 rate limit,
+      // 403 CSRF) deserve their own message so users aren't told their
+      // password is wrong when the server is the problem.
+      const body = await res.json().catch(() => ({})) as {
+        error?: string | { message?: string };
+      };
+      let message: string;
+      if (typeof body.error === 'string') {
+        message = body.error;
+      } else if (body.error?.message) {
+        message = body.error.message;
+      } else if (res.status === 401) {
+        message = 'Incorrect password';
+      } else {
+        message = `Verification failed (${res.status})`;
+      }
+      throw new Error(message);
     }
     onSuccess();
   }, [onSuccess]);

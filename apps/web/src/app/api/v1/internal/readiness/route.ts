@@ -135,16 +135,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
   }
 
+  // 5. REAUTH_JWT_SECRET check — required for billing portal, account
+  // deletion, and any other reauth-gated route. A missing/short secret in
+  // production silently 500s those flows from the user's perspective.
+  {
+    const secret = process.env.REAUTH_JWT_SECRET;
+    if (!secret) {
+      checks.reauth_jwt_secret = {
+        status: 'fail',
+        error: 'REAUTH_JWT_SECRET is not set',
+      };
+    } else if (secret.length < 32) {
+      checks.reauth_jwt_secret = {
+        status: 'fail',
+        error: `REAUTH_JWT_SECRET is too short (${secret.length} chars; min 32)`,
+      };
+    } else {
+      checks.reauth_jwt_secret = { status: 'pass' };
+    }
+  }
+
   // Determine overall status
   const dbOk = checks.database?.status === 'pass';
   const authOk = checks.supabase_auth?.status === 'pass';
   const pricesOk = checks.stripe_prices?.status === 'pass';
   const schemaOk = checks.schema_compatibility?.status === 'pass';
+  const reauthOk = checks.reauth_jwt_secret?.status === 'pass';
 
   let status: 'healthy' | 'degraded' | 'unhealthy';
-  if (dbOk && authOk && schemaOk && pricesOk) {
+  if (dbOk && authOk && schemaOk && pricesOk && reauthOk) {
     status = 'healthy';
-  } else if (dbOk && authOk && schemaOk) {
+  } else if (dbOk && authOk && schemaOk && reauthOk) {
     status = 'degraded';
   } else {
     status = 'unhealthy';
