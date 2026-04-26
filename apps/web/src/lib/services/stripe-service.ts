@@ -40,7 +40,7 @@ export interface EmbeddedCheckoutResult {
 export async function resolveStripePrice(
   planId: PlanId,
   communityType: CommunityType,
-  interval: 'month' = 'month',
+  interval: 'month' | 'year' = 'month',
 ): Promise<string> {
   const db = createUnscopedClient();
   const [row] = await db
@@ -175,6 +175,59 @@ export async function createBillingPortalSession(
     customer: customerId,
     return_url: returnUrl,
   });
+}
+
+/**
+ * Read the active billing interval ('month' | 'year') for a subscription's
+ * primary item. Returns null if the subscription has no items or the interval
+ * isn't one we support. Used by the billing UI to display "billed monthly"
+ * vs "billed annually" without storing it on `communities`.
+ */
+export async function getActiveSubscriptionInterval(
+  subscriptionId: string,
+): Promise<'month' | 'year' | null> {
+  const sub = await getStripe().subscriptions.retrieve(subscriptionId);
+  const item = sub.items.data[0];
+  const interval = item?.price.recurring?.interval;
+  return interval === 'month' || interval === 'year' ? interval : null;
+}
+
+/**
+ * Switch an existing subscription to a new price.
+ *
+ * Updates the first subscription item (PropertyPro subscriptions have one
+ * item) and triggers immediate proration via `always_invoice`, so the
+ * customer sees the prorated charge or credit on the next invoice now
+ * rather than at the end of the period.
+ *
+ * Sends an idempotency key keyed to `(subscriptionId, newPriceId)` so a
+ * concurrent double-submit (e.g. user double-clicks before the form
+ * disables) doesn't generate two proration invoices for the same change.
+ */
+export async function changeSubscriptionPlan(
+  subscriptionId: string,
+  newPriceId: string,
+): Promise<Stripe.Subscription> {
+  const stripe = getStripe();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  const itemId = sub.items.data[0]?.id;
+  if (!itemId) {
+    throw new AppError(
+      `Subscription ${subscriptionId} has no items to update`,
+      500,
+      'STRIPE_SUBSCRIPTION_NO_ITEMS',
+    );
+  }
+  return stripe.subscriptions.update(
+    subscriptionId,
+    {
+      items: [{ id: itemId, price: newPriceId }],
+      proration_behavior: 'always_invoice',
+    },
+    {
+      idempotencyKey: `change-plan:${subscriptionId}:${newPriceId}`,
+    },
+  );
 }
 
 /** Expose the raw Stripe client for webhook signature verification. */

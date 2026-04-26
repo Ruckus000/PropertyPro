@@ -6,6 +6,7 @@ import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context'
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { getActiveSubscriptionInterval } from '@/lib/services/stripe-service';
 import { BillingPageClient } from '@/components/settings/billing-page-client';
 
 /**
@@ -53,11 +54,19 @@ export default async function BillingPage({
   );
   const community = rows[0] as Record<string, unknown> | undefined;
 
+  const stripeSubscriptionId = (community?.['stripeSubscriptionId'] as string) ?? null;
+  // Live-fetch the billing interval (month vs year) from Stripe — communities
+  // doesn't store it. Best-effort: a Stripe outage shouldn't blank the page.
+  const subscriptionInterval = stripeSubscriptionId
+    ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
+    : null;
+
   const billingData = {
     communityId: context.communityId,
     communityName: membership.communityName,
     subscriptionPlan: (community?.['subscriptionPlan'] as string) ?? null,
     subscriptionStatus: (community?.['subscriptionStatus'] as string) ?? null,
+    subscriptionInterval,
     stripeCustomerId: (community?.['stripeCustomerId'] as string) ?? null,
     paymentFailedAt: community?.['paymentFailedAt']
       ? new Date(community['paymentFailedAt'] as string).toISOString()
