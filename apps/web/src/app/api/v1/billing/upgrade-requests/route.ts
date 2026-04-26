@@ -109,7 +109,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
     category: 'system',
     title: `${requesterName} requested a plan upgrade`,
     body: `${requesterName} is asking to unlock ${featureLabel}. Available on ${planLabel}.`,
-    actionUrl: `/settings/billing/upgrade?communityId=${communityId}`,
+    actionUrl: `/settings/billing/change-plan?communityId=${communityId}`,
     sourceType: 'plan_upgrade_request',
     sourceId,
     priority: 'normal',

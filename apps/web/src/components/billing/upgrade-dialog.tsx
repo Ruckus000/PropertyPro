@@ -9,7 +9,8 @@
  * for free.
  *
  * Three role-aware footers:
- *   - upgrade  → "Upgrade now" → POST /api/v1/subscribe → Stripe checkout
+ *   - upgrade  → "Upgrade now" → navigates to /settings/billing/change-plan
+ *                (which owns the Stripe handoff via /api/v1/subscribe[/change-plan])
  *   - request  → "Notify your board" → POST /api/v1/billing/upgrade-requests
  *   - hidden   → never opens for tenants in normal flow; renders a no-CTA
  *                fallback if it ever does.

@@ -85,6 +85,8 @@ interface BillingPageClientProps {
   communityName: string;
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
+  /** Live billing interval read from the active Stripe subscription. */
+  subscriptionInterval: 'month' | 'year' | null;
   stripeCustomerId: string | null;
   paymentFailedAt: string | null;
   isAdmin: boolean;
@@ -97,6 +99,7 @@ export function BillingPageClient({
   communityName,
   subscriptionPlan,
   subscriptionStatus,
+  subscriptionInterval,
   stripeCustomerId,
   paymentFailedAt,
   isAdmin,
@@ -107,7 +110,14 @@ export function BillingPageClient({
   const variantClasses = VARIANT_CLASSES[status.variant] ?? NEUTRAL_CLASSES;
 
   const portalUrl = `/billing/portal?communityId=${communityId}`;
+  const changePlanUrl = `/settings/billing/change-plan?communityId=${communityId}`;
   const hasStripe = !!stripeCustomerId;
+  const intervalLabel =
+    subscriptionInterval === 'year'
+      ? 'billed annually'
+      : subscriptionInterval === 'month'
+        ? 'billed monthly'
+        : null;
 
   const [portalPending, setPortalPending] = useState(false);
   const router = useRouter();
@@ -183,7 +193,10 @@ export function BillingPageClient({
             <div className="flex items-baseline justify-between">
               <div>
                 <p className="text-lg font-semibold">{plan.name}</p>
-                <p className="text-sm text-content-secondary">{plan.price}</p>
+                <p className="text-sm text-content-secondary">
+                  {plan.price}
+                  {intervalLabel ? ` · ${intervalLabel}` : ''}
+                </p>
               </div>
               <span
                 className={cn(
@@ -201,7 +214,7 @@ export function BillingPageClient({
             {isAdmin && (
               <div className="flex flex-wrap gap-2">
                 <Link
-                  href={`/settings/billing/upgrade?communityId=${communityId}`}
+                  href={changePlanUrl}
                   className="inline-flex items-center gap-1.5 rounded-[10px] bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-opacity hover:opacity-90"
                 >
                   Change plan
