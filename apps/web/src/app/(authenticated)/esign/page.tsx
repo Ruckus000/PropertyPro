@@ -12,9 +12,9 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
 import { EsignPageShell } from '@/components/esign/esign-page-shell';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -39,8 +39,10 @@ export default async function EsignPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasEsign) {
+  // Type-gate first (community type doesn't support e-sign at all → redirect).
+  // Plan-gate is delegated to <FeatureGate> for the marketing surface.
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasEsign) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
@@ -48,5 +50,9 @@ export default async function EsignPage({ searchParams }: PageProps) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  return <EsignPageShell communityId={communityId} />;
+  return (
+    <FeatureGate feature="hasEsign" communityId={communityId}>
+      <EsignPageShell communityId={communityId} />
+    </FeatureGate>
+  );
 }

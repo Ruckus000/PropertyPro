@@ -5,14 +5,22 @@
  *
  * Renders the dark collapsible sidebar matching the PropertyProRedesign.jsx mockup.
  * Navigation items are filtered by role and community features.
- * Plan-locked items are shown with a lock indicator and upgrade prompt.
+ * Plan-locked items are shown with a "Pro" pill (via NavRail.trailingBadge) and
+ * open an UpgradeDialog when clicked.
  */
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building, Lock } from 'lucide-react';
-import { NavRail, type NavRailItem, type NavRailSection } from '@propertypro/ui';
-import { toInitials, resolvePlanId, type AnyCommunityRole, type CommunityFeatures, type CommunityType } from '@propertypro/shared';
+import { Building } from 'lucide-react';
+import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
+import {
+  inferCanonicalRoleFromMembership,
+  toInitials,
+  resolvePlanId,
+  type AnyCommunityRole,
+  type CommunityFeatures,
+  type CommunityType,
+} from '@propertypro/shared';
 import {
   NAV_ITEMS,
   NAV_SECTIONS,
@@ -23,13 +31,17 @@ import {
   type NavItemWithGateStatus,
 } from './nav-config';
 import { useSidebar } from './sidebar-context';
-import { UpgradePrompt } from '../shared/upgrade-prompt';
+import { UpgradeDialog } from '../billing/upgrade-dialog';
 
 interface AppSidebarProps {
   communityId: number | null;
   communityName: string | null;
   communityType: CommunityType | null;
   role: AnyCommunityRole | null;
+  /** True when the current user is a unit owner — used to distinguish owner vs tenant within `resident`. */
+  isUnitOwner?: boolean;
+  /** Manager preset (e.g. 'board_president', 'cam'); null/undefined for non-managers. */
+  presetKey?: string | null;
   features: CommunityFeatures | null;
   userName: string | null;
   plan: string | null;
@@ -41,22 +53,13 @@ interface AppSidebarProps {
   onNavigate?: () => void;
 }
 
-/** Wraps an icon component with a small lock badge overlay for plan-locked items. */
-function LockedIcon({ Icon }: { Icon: React.ComponentType<{ size?: number }> }) {
-  return (
-    <span className="relative opacity-50">
-      <Icon size={20} />
-      <Lock size={10} className="absolute -bottom-0.5 -right-0.5 text-white/70" aria-hidden="true" />
-      <span className="sr-only"> (locked — upgrade required)</span>
-    </span>
-  );
-}
-
 export function AppSidebar({
   communityId,
   communityName,
   communityType,
   role,
+  isUnitOwner = false,
+  presetKey = null,
   features,
   userName,
   plan,
@@ -67,16 +70,29 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { expanded, toggleExpanded } = useSidebar();
-  const [upgradePrompt, setUpgradePrompt] = useState<{ planName: string } | null>(null);
+  const [upgradeFor, setUpgradeFor] = useState<{
+    featureKey: keyof CommunityFeatures | null;
+  } | null>(null);
   const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
+  // The runtime role is on the new 4-role model (resident | manager | pm_admin).
+  // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
+  // so we resolve once here using isUnitOwner + presetKey.
+  const canonicalRole: AnyCommunityRole | null = role
+    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, presetKey: presetKey ?? null })
+    : null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext
-    ? PM_NAV_ITEMS.map((i) => ({ ...i, planLocked: false, upgradePlanName: null }))
-    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId);
+    ? PM_NAV_ITEMS.map((i) => ({
+        ...i,
+        planLocked: false,
+        upgradePlanName: null,
+        upgradeFeatureKey: null,
+      }))
+    : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
   const baseSections: readonly NavSection[] = isPmContext
@@ -100,16 +116,15 @@ export function AppSidebar({
   // instead of producing a dead nav.
   const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => ({
     id: item.id,
-    label: item.planLocked ? `${item.label} (Upgrade)` : item.label,
-    icon: item.planLocked
-      ? (props: { size?: number }) => <LockedIcon Icon={item.icon} />
-      : item.icon,
+    label: item.label,
+    icon: item.icon,
     href: item.planLocked
       ? undefined
       : communityId
         ? item.href(communityId)
         : '/select-community',
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
+    trailingBadge: item.planLocked ? <PlanBadge variant="pro" tone="dark" /> : undefined,
   });
 
   const navRailSections: NavRailSection[] = baseSections
@@ -198,8 +213,8 @@ export function AppSidebar({
         activeView={activeId}
         onViewChange={(id) => {
           const clickedItem = visibleById.get(id);
-          if (clickedItem?.planLocked && clickedItem.upgradePlanName) {
-            setUpgradePrompt({ planName: clickedItem.upgradePlanName });
+          if (clickedItem?.planLocked) {
+            setUpgradeFor({ featureKey: clickedItem.upgradeFeatureKey });
             onNavigate?.();
           }
         }}
@@ -222,16 +237,17 @@ export function AppSidebar({
           </Link>
         )}
       />
-      {upgradePrompt && (
-        <div className="fixed inset-0 z-50" onClick={() => setUpgradePrompt(null)}>
-          <div
-            className="absolute left-[var(--sidebar-width,64px)] top-1/3 ml-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <UpgradePrompt planName={upgradePrompt.planName} />
-          </div>
-        </div>
-      )}
+      <UpgradeDialog
+        open={upgradeFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setUpgradeFor(null);
+        }}
+        featureKey={upgradeFor?.featureKey ?? null}
+        currentPlanId={resolvedPlanId}
+        currentPlanRaw={plan}
+        role={canonicalRole}
+        communityId={communityId}
+      />
     </>
   );
 }

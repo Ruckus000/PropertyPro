@@ -16,3 +16,5 @@ export {
   comparePlanTiers,
   isUpgrade,
 } from './plan-features';
+export type { PlanFeatureCopy } from './plan-feature-copy';
+export { PLAN_FEATURE_COPY, DEFAULT_PLAN_FEATURE_COPY, getPlanFeatureCopy } from './plan-feature-copy';
