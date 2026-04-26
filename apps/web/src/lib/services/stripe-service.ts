@@ -199,6 +199,10 @@ export async function getActiveSubscriptionInterval(
  * item) and triggers immediate proration via `always_invoice`, so the
  * customer sees the prorated charge or credit on the next invoice now
  * rather than at the end of the period.
+ *
+ * Sends an idempotency key keyed to `(subscriptionId, newPriceId)` so a
+ * concurrent double-submit (e.g. user double-clicks before the form
+ * disables) doesn't generate two proration invoices for the same change.
  */
 export async function changeSubscriptionPlan(
   subscriptionId: string,
@@ -214,10 +218,16 @@ export async function changeSubscriptionPlan(
       'STRIPE_SUBSCRIPTION_NO_ITEMS',
     );
   }
-  return stripe.subscriptions.update(subscriptionId, {
-    items: [{ id: itemId, price: newPriceId }],
-    proration_behavior: 'always_invoice',
-  });
+  return stripe.subscriptions.update(
+    subscriptionId,
+    {
+      items: [{ id: itemId, price: newPriceId }],
+      proration_behavior: 'always_invoice',
+    },
+    {
+      idempotencyKey: `change-plan:${subscriptionId}:${newPriceId}`,
+    },
+  );
 }
 
 /** Expose the raw Stripe client for webhook signature verification. */

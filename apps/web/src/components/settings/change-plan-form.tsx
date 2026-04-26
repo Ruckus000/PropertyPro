@@ -52,6 +52,10 @@ export function ChangePlanForm({
 
   // A plan card is offered when the change is either a tier upgrade
   // (compareTiers < 0) OR the same tier with a different interval.
+  // If `currentInterval` is null (Stripe lookup failed server-side), we
+  // optimistically show the annual same-tier card — the API enforces the
+  // no-op rule, so a wrongly-shown card surfaces a clean 400 instead of
+  // silently hiding the upsell during a Stripe blip.
   const offeredPlans = useMemo(() => {
     if (!currentPlan) return plans;
     return plans.filter((p) => {
@@ -59,8 +63,9 @@ export function ChangePlanForm({
       if (cmp === null) return false;
       if (cmp < 0) return true; // higher tier
       if (cmp === 0) {
-        // Same tier — only valid if switching to a different interval than current.
-        return currentInterval !== null && currentInterval !== interval;
+        // Same tier — only valid as an interval change. Never show when the
+        // toggle matches the known current interval (would be a no-op).
+        return currentInterval !== interval;
       }
       return false; // lower tier
     });

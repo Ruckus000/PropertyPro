@@ -15,6 +15,7 @@ const {
   resolveEffectiveCommunityIdMock,
   resolveStripePriceMock,
   changeSubscriptionPlanMock,
+  getActiveSubscriptionIntervalMock,
   emitConversionEventMock,
   selectCommunityMock,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   resolveEffectiveCommunityIdMock: vi.fn(),
   resolveStripePriceMock: vi.fn(),
   changeSubscriptionPlanMock: vi.fn(),
+  getActiveSubscriptionIntervalMock: vi.fn(),
   emitConversionEventMock: vi.fn(),
   selectCommunityMock: vi.fn(),
 }));
@@ -47,6 +49,7 @@ vi.mock('@/lib/api/reauth-guard', () => ({
 vi.mock('@/lib/services/stripe-service', () => ({
   resolveStripePrice: resolveStripePriceMock,
   changeSubscriptionPlan: changeSubscriptionPlanMock,
+  getActiveSubscriptionInterval: getActiveSubscriptionIntervalMock,
 }));
 vi.mock('@/lib/services/conversion-events', () => ({
   emitConversionEvent: emitConversionEventMock,
@@ -118,6 +121,7 @@ describe('POST /api/v1/subscribe/change-plan', () => {
     }]);
     resolveStripePriceMock.mockResolvedValue('price_new');
     changeSubscriptionPlanMock.mockResolvedValue({ id: 'sub_abc' });
+    getActiveSubscriptionIntervalMock.mockResolvedValue('month');
     emitConversionEventMock.mockResolvedValue(undefined);
   });
 
@@ -137,9 +141,25 @@ describe('POST /api/v1/subscribe/change-plan', () => {
   });
 
   it('allows same-plan annual switch (interval upgrade)', async () => {
+    getActiveSubscriptionIntervalMock.mockResolvedValue('month');
     const res = await POST(buildRequest({ planId: 'essentials', billingInterval: 'year' }));
     expect(res.status).toBe(200);
     expect(resolveStripePriceMock).toHaveBeenCalledWith('essentials', 'condo_718', 'year');
+    expect(changeSubscriptionPlanMock).toHaveBeenCalled();
+  });
+
+  it('rejects no-op when plan and interval are unchanged', async () => {
+    getActiveSubscriptionIntervalMock.mockResolvedValue('month');
+    await expect(
+      POST(buildRequest({ planId: 'essentials', billingInterval: 'month' })),
+    ).rejects.toMatchObject({ code: 'NO_OP_PLAN_CHANGE', statusCode: 400 });
+    expect(changeSubscriptionPlanMock).not.toHaveBeenCalled();
+  });
+
+  it('allows same-plan switch when current interval lookup fails (server is the authority)', async () => {
+    getActiveSubscriptionIntervalMock.mockRejectedValue(new Error('Stripe down'));
+    const res = await POST(buildRequest({ planId: 'essentials', billingInterval: 'year' }));
+    expect(res.status).toBe(200);
     expect(changeSubscriptionPlanMock).toHaveBeenCalled();
   });
 

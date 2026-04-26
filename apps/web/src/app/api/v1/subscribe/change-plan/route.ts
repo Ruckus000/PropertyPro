@@ -22,7 +22,11 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { AppError, ValidationError } from '@/lib/api/errors';
-import { resolveStripePrice, changeSubscriptionPlan } from '@/lib/services/stripe-service';
+import {
+  resolveStripePrice,
+  changeSubscriptionPlan,
+  getActiveSubscriptionInterval,
+} from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 
@@ -90,6 +94,21 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
         'DOWNGRADE_NOT_SUPPORTED',
       );
     }
+    // Same plan: only valid if the billing interval is actually changing —
+    // otherwise we'd issue a Stripe update with an identical price and
+    // trigger an empty proration invoice for the customer.
+    if (cmp === 0) {
+      const currentInterval = await getActiveSubscriptionInterval(
+        community.stripeSubscriptionId,
+      ).catch(() => null);
+      if (currentInterval === billingInterval) {
+        throw new AppError(
+          'You are already on this plan and billing interval.',
+          400,
+          'NO_OP_PLAN_CHANGE',
+        );
+      }
+    }
   }
 
   const priceId = await resolveStripePrice(planId, community.communityType, billingInterval);
@@ -110,7 +129,10 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
     communityId,
     eventType: 'self_service_plan_changed',
     source: 'web_app',
-    dedupeKey: `community:${communityId}:plan-change:${Date.now()}`,
+    // Stable dedupe within a 1-minute window: if the same user double-submits
+    // identical plan+interval, we only record one funnel event. Bucketing by
+    // minute keeps a legitimate change-then-revert from being swallowed.
+    dedupeKey: `community:${communityId}:plan-change:${planId}:${billingInterval}:${Math.floor(Date.now() / 60_000)}`,
     userId,
     metadata: {
       fromPlan: currentPlan ?? 'unknown',
