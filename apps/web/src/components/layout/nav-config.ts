@@ -33,6 +33,7 @@ import {
   getFeaturesForCommunity,
   PLAN_FEATURES,
   findCheapestPlanForFeature,
+  getLockedFeatureBehavior,
   type AnyCommunityRole,
   type CommunityRole,
   type CommunityFeatures,
@@ -352,6 +353,13 @@ export function getVisibleItems(
 export interface NavItemWithGateStatus extends NavItemConfig {
   planLocked: boolean;
   upgradePlanName: string | null;
+  /**
+   * The CommunityFeatures key that triggered the lock — used by the upgrade
+   * dialog and locked-feature screen to render feature-specific copy.
+   * Null when the lock was triggered by an `featureKeys` (any-of) gate and
+   * we don't have a single canonical key to point at.
+   */
+  upgradeFeatureKey: keyof CommunityFeatures | null;
 }
 
 /**
@@ -370,6 +378,9 @@ export function getVisibleItemsWithPlanGate(
 ): NavItemWithGateStatus[] {
   // Raw type-level features (before plan intersection)
   const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
+  // Tenants don't see plan-gated marketing surfaces — for them, plan-locked
+  // items behave like type-gated ones: filtered out completely.
+  const hideLockedEntirely = getLockedFeatureBehavior(role) === 'hidden';
 
   return items
     .filter((item) => {
@@ -392,6 +403,7 @@ export function getVisibleItemsWithPlanGate(
     .map((item) => {
       let planLocked = false;
       let upgradePlanName: string | null = null;
+      let upgradeFeatureKey: keyof CommunityFeatures | null = null;
 
       // Plan gate: type allows but composed features don't → plan-locked
       if (item.featureKey && features && !features[item.featureKey] && planId) {
@@ -399,8 +411,9 @@ export function getVisibleItemsWithPlanGate(
         if (planConfig && !planConfig.features[item.featureKey]) {
           planLocked = true;
           // Find cheapest plan that includes this feature
-          const upgrade = findCheapestPlanForFeature(item.featureKey!);
+          const upgrade = findCheapestPlanForFeature(item.featureKey);
           upgradePlanName = upgrade?.displayName ?? null;
+          upgradeFeatureKey = item.featureKey;
         }
       }
 
@@ -418,12 +431,17 @@ export function getVisibleItemsWithPlanGate(
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             const cheapest = candidates.sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
             upgradePlanName = cheapest?.displayName ?? null;
+            // For any-of gates we can't point at a single canonical feature
+            // for marketing copy — leave it null and let the dialog fall back.
+            upgradeFeatureKey = null;
           }
         }
       }
 
-      return { ...item, planLocked, upgradePlanName };
-    });
+      return { ...item, planLocked, upgradePlanName, upgradeFeatureKey };
+    })
+    // Tenants: drop plan-locked items so they never see a "Pro" pill or upgrade prompt.
+    .filter((item) => !(hideLockedEntirely && item.planLocked));
 }
 
 /**

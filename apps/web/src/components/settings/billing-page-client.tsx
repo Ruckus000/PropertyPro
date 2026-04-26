@@ -10,9 +10,10 @@ import {
   Clock,
   XCircle,
   Info,
+  ArrowUpRight,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useReauth } from '@/hooks/use-reauth';
 import { ReauthModal } from '@/components/auth/reauth-modal';
@@ -210,23 +211,26 @@ export function BillingPageClient({
               </span>
             </div>
 
-            {hasStripe && isAdmin && (
-              <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && (
+              <div className="flex flex-wrap gap-2">
                 <Link
                   href={changePlanUrl}
-                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--interactive-primary)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90"
+                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-opacity hover:opacity-90"
                 >
                   Change plan
+                  <ArrowUpRight size={14} aria-hidden="true" />
                 </Link>
-                <button
-                  type="button"
-                  onClick={openPortal}
-                  disabled={portalPending}
-                  className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Manage Subscription
-                  <ExternalLink size={14} aria-hidden="true" />
-                </button>
+                {hasStripe && (
+                  <button
+                    type="button"
+                    onClick={openPortal}
+                    disabled={portalPending}
+                    className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Manage Subscription
+                    <ExternalLink size={14} aria-hidden="true" />
+                  </button>
+                )}
               </div>
             )}
           </div>

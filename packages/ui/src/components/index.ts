@@ -10,5 +10,8 @@ export type { BadgeProps, BadgeVariant, BadgeSize, StatusBadgeProps } from "./Ba
 export { NavRail } from "./NavRail";
 export type { NavRailProps, NavRailItem, NavRailSection, NavRailSubItem } from "./NavRail";
 
+export { PlanBadge } from "./PlanBadge";
+export type { PlanBadgeProps, PlanBadgeVariant, PlanBadgeTone } from "./PlanBadge";
+
 export { PhoneFrame } from "./PhoneFrame";
 export type { PhoneFrameProps } from "./PhoneFrame";

@@ -28,6 +28,11 @@ export type NavRailItem = {
   children?: NavRailSubItem[];
   /** Optional popup semantics for button items that open another surface instead of navigating. */
   ariaHasPopup?: 'dialog';
+  /**
+   * Optional trailing badge rendered after the label when the rail is expanded.
+   * Used for plan-gating ("Pro"/"Plus") signals. Hidden in collapsed state.
+   */
+  trailingBadge?: React.ReactNode;
 };
 
 export type NavRailSection = {
@@ -292,6 +297,9 @@ export function NavRail({
             >
               {badge}
             </span>
+          )}
+          {navItem.trailingBadge && (
+            <span className="ml-2 flex shrink-0 items-center">{navItem.trailingBadge}</span>
           )}
         </div>
       </>
