@@ -750,6 +750,20 @@
       "when": 1775660000000,
       "tag": "0145_pending_signups_structured_address",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1775670000000,
+      "tag": "0146_harden_finance_rls_and_platform_admin_acl",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1775680000000,
+      "tag": "0147_repair_esign_rls_policy_drift",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,8 @@ const EXPECTED_ESIGN_TEMPLATE_COUNTS = {
   'sunset-ridge-apartments': 2,
 } as const satisfies Record<(typeof DEMO_SLUGS)[number], number>;
 
+const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
+
 interface CategoryCountRow {
   slug: string;
   community_type: 'condo_718' | 'hoa_720' | 'apartment';
@@ -76,6 +78,31 @@ function summarizeError(error: unknown): string {
   return String(error);
 }
 
+function isRetryableStorageError(message: string): boolean {
+  return /bad gateway|gateway timeout|fetch failed|timed out|timeout|503|504|no data returned|\{\}/i.test(
+    message,
+  );
+}
+
+async function retryStorageVerification<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; attempt < STORAGE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const message = summarizeError(error);
+      if (!isRetryableStorageError(message) || attempt === STORAGE_RETRY_DELAYS_MS.length - 1) {
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, STORAGE_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+
+  throw new Error('Storage verification retry loop exited without resolving.');
+}
+
 async function verifyStorageObject(
   admin: ReturnType<typeof createAdminClient>,
   slug: string,
@@ -98,17 +125,26 @@ async function verifyStorageObject(
   );
   const fileName = sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
 
-  const { data: listing, error: listError } = await admin.storage
-    .from('documents')
-    .list(folder, { limit: 100, search: fileName });
+  let listing;
+  try {
+    listing = await retryStorageVerification(async () => {
+      const result = await admin.storage
+        .from('documents')
+        .list(folder, { limit: 100, search: fileName });
 
-  if (listError) {
+      if (result.error) {
+        throw new Error(`List failed: ${result.error.message}`);
+      }
+
+      return result.data;
+    });
+  } catch (error) {
     return {
       slug,
       itemName,
       sourcePath,
       storageStatus: 'FAIL',
-      storageMessage: `List failed: ${listError.message}`,
+      storageMessage: summarizeError(error),
     };
   }
 
@@ -123,17 +159,25 @@ async function verifyStorageObject(
     };
   }
 
-  const { data: fileData, error: downloadError } = await admin.storage
-    .from('documents')
-    .download(sourcePath);
+  try {
+    await retryStorageVerification(async () => {
+      const result = await admin.storage
+        .from('documents')
+        .download(sourcePath);
 
-  if (downloadError || !fileData) {
+      if (result.error || !result.data) {
+        throw new Error(`Download failed: ${result.error?.message ?? 'No data returned'}`);
+      }
+
+      return result.data;
+    });
+  } catch (error) {
     return {
       slug,
       itemName,
       sourcePath,
       storageStatus: 'FAIL',
-      storageMessage: `Download failed: ${downloadError?.message ?? 'No data returned'}`,
+      storageMessage: summarizeError(error),
     };
   }
 
