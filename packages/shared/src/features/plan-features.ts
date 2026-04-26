@@ -142,3 +142,44 @@ export function resolvePlanId(raw: string | null): PlanId | null {
   if (PLAN_IDS.includes(raw as PlanId)) return raw as PlanId;
   return LEGACY_PLAN_ALIASES[raw] ?? null;
 }
+
+/**
+ * Plan tier ranking — used to gate self-service upgrades.
+ *
+ * Higher rank = higher tier. Plans on different community-type ladders
+ * (e.g. essentials/professional vs operations_plus) are not directly
+ * comparable and `comparePlanTiers` will return null.
+ *
+ * Apartment's operations_plus is treated as its own ladder; condo/HOA
+ * use essentials → professional.
+ */
+const PLAN_RANK: Record<PlanId, number> = {
+  essentials: 1,
+  professional: 2,
+  operations_plus: 1,
+};
+
+/**
+ * Compare two plans by tier within the same community-type ladder.
+ * Returns:
+ *   - negative if `a` is lower than `b`
+ *   - 0 if equal
+ *   - positive if `a` is higher than `b`
+ *   - null if the plans are on different ladders (no meaningful comparison)
+ */
+export function comparePlanTiers(a: PlanId, b: PlanId): number | null {
+  const apartmentLadder: PlanId[] = ['operations_plus'];
+  const condoHoaLadder: PlanId[] = ['essentials', 'professional'];
+
+  const sameApartment = apartmentLadder.includes(a) && apartmentLadder.includes(b);
+  const sameCondoHoa = condoHoaLadder.includes(a) && condoHoaLadder.includes(b);
+
+  if (!sameApartment && !sameCondoHoa) return null;
+  return PLAN_RANK[a] - PLAN_RANK[b];
+}
+
+/** True if `target` is a strict upgrade from `current` on the same ladder. */
+export function isUpgrade(current: PlanId, target: PlanId): boolean {
+  const cmp = comparePlanTiers(current, target);
+  return cmp !== null && cmp < 0;
+}

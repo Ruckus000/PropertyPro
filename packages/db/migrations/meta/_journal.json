@@ -764,6 +764,13 @@
       "when": 1775680000000,
       "tag": "0147_repair_esign_rls_policy_drift",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1775690000000,
+      "tag": "0148_stripe_prices_allow_year",
+      "breakpoints": true
     }
   ]
 }

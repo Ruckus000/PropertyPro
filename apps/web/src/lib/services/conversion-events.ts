@@ -17,7 +17,8 @@ export type ConversionEventType =
   | 'founding_user_created'
   | 'grace_started'
   | 'demo_soft_deleted'
-  | 'self_service_upgrade_started';
+  | 'self_service_upgrade_started'
+  | 'self_service_plan_changed';
 
 export type ConversionEventSource = 'admin_app' | 'web_app' | 'stripe_webhook' | 'cron';
 
