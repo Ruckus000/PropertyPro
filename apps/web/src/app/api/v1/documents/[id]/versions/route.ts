@@ -15,12 +15,30 @@ const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
 });
 
+interface DocRow {
+  id: number;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  categoryId: number | null;
+  createdAt: string;
+  uploadedBy: string | null;
+  parentDocumentId: number | null;
+}
+
 /**
  * GET /api/v1/documents/[id]/versions
  *
- * Returns documents with the same title AND category as the specified document.
- * Note: This is name-based grouping, not an explicit revision chain.
- * Documents are ordered by creation date (newest first).
+ * Returns the document version chain — every document linked to the
+ * reference doc via documents.parent_document_id, in either direction.
+ * Walks the chain in-memory off the user's accessible-documents view so
+ * RLS / access rules naturally remove docs the caller cannot see. Falls
+ * back to the legacy name+category match if the reference doc has no
+ * parent and no children pointing to it (transitional behavior for rows
+ * that may have been created before the 0149 backfill ran).
+ *
+ * Response shape preserved exactly from the prior name-matching impl.
  */
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
   const userId = await requireAuthenticatedUserId();
@@ -58,46 +76,81 @@ export const GET = withErrorHandler(async (req: NextRequest, context) => {
     permissions: membership.permissions,
   };
 
-  // First, find the reference document (with access check)
   const referenceDoc = await getDocumentWithAccessCheck(accessContext, documentId);
-
   if (!referenceDoc) {
     throw new NotFoundError('Document not found');
   }
 
-  // Get all accessible documents for version grouping
-  const allDocs = await getAccessibleDocuments(accessContext);
+  const allDocsRaw = await getAccessibleDocuments(accessContext);
+  const allDocs = allDocsRaw as unknown as DocRow[];
 
-  const referenceTitle = referenceDoc['title'] as string;
-  const referenceCategoryId = referenceDoc['categoryId'] as number | null;
+  const byId = new Map<number, DocRow>();
+  for (const d of allDocs) byId.set(d.id, d);
 
-  // Find all documents with the same title AND category
-  // Version grouping is based on title + category match (not explicit revision chain)
-  const versions = allDocs
-    .filter((doc) => {
-      const title = doc['title'] as string;
-      const categoryId = doc['categoryId'] as number | null;
+  // Walk up to root: follow parent_document_id from the reference.
+  const visited = new Set<number>();
+  const queue: number[] = [documentId];
+  let walkedAnyParent = false;
 
-      // Must match both title AND category
-      const titleMatch = title === referenceTitle;
-      const categoryMatch = categoryId === referenceCategoryId;
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const doc = byId.get(id);
+    if (!doc) continue;
+    if (doc.parentDocumentId != null && byId.has(doc.parentDocumentId)) {
+      walkedAnyParent = true;
+      queue.push(doc.parentDocumentId);
+    }
+  }
 
-      return titleMatch && categoryMatch;
-    })
-    .sort((a, b) => {
-      // Sort by creation date descending (newest first)
-      const dateA = new Date(a['createdAt'] as string).getTime();
-      const dateB = new Date(b['createdAt'] as string).getTime();
-      return dateB - dateA;
-    })
+  // Walk down: find children of any visited node.
+  const childrenMap = new Map<number, number[]>();
+  for (const d of allDocs) {
+    if (d.parentDocumentId == null) continue;
+    if (!childrenMap.has(d.parentDocumentId)) childrenMap.set(d.parentDocumentId, []);
+    childrenMap.get(d.parentDocumentId)!.push(d.id);
+  }
+  const downQueue: number[] = [...visited];
+  while (downQueue.length > 0) {
+    const id = downQueue.shift()!;
+    const children = childrenMap.get(id) ?? [];
+    for (const c of children) {
+      if (visited.has(c)) continue;
+      visited.add(c);
+      downQueue.push(c);
+    }
+  }
+
+  // Transitional fallback: the reference doc has no parent and no children
+  // pointing to it. Apply the legacy name+category match so callers don't
+  // see an empty result for rows that pre-date the backfill.
+  let chainIds: Set<number> = visited;
+  const refHasAnyChainEdge = walkedAnyParent || (childrenMap.get(documentId)?.length ?? 0) > 0;
+  if (!refHasAnyChainEdge) {
+    const refTitle = (referenceDoc as Record<string, unknown>)['title'];
+    const refCategoryId = (referenceDoc as Record<string, unknown>)['categoryId'] ?? null;
+    chainIds = new Set<number>();
+    for (const d of allDocs) {
+      if (d.title === refTitle && (d.categoryId ?? null) === refCategoryId) {
+        chainIds.add(d.id);
+      }
+    }
+    if (chainIds.size === 0) chainIds.add(documentId);
+  }
+
+  const versions = [...chainIds]
+    .map((id) => byId.get(id))
+    .filter((d): d is DocRow => d != null)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .map((doc) => ({
-      id: doc['id'] as number,
-      title: doc['title'] as string,
-      fileName: doc['fileName'] as string,
-      fileSize: doc['fileSize'] as number,
-      mimeType: doc['mimeType'] as string,
-      createdAt: doc['createdAt'] as string,
-      uploadedBy: doc['uploadedBy'] as string | null,
+      id: doc.id,
+      title: doc.title,
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      mimeType: doc.mimeType,
+      createdAt: doc.createdAt,
+      uploadedBy: doc.uploadedBy,
     }));
 
   return NextResponse.json({ data: versions });
