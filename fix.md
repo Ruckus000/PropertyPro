@@ -93,8 +93,18 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 - [ ] Manual repro confirmed in the preview browser
 - [ ] No files outside the listed scope were modified
 - [ ] No new dependencies were added without explicit approval
-- [ ] PR description includes: problem statement, change summary, manual test plan, screenshots if UI changed
+- [ ] PR description uses the **PR draft** at the bottom of the phase verbatim
 - [ ] Reviewer-ready: diff is minimal and focused
+
+### Using the per-phase PR drafts
+
+Every actionable phase below ends with a `### PR draft` subsection containing a ready-to-use title and body. Rules:
+
+1. **Use the draft verbatim.** Don't paraphrase the Summary — future readers grep these PRs and the wording is the audit's diagnosis in compressed form.
+2. **`Files changed`** must match `git diff --stat origin/main...HEAD --name-only` exactly. If the actual diff includes a file not listed in the draft, **stop** — that's out-of-scope work; do not just edit the draft to match.
+3. **Test-plan checkboxes** stay `[ ]` until the command actually passed locally. Each `[x]` is a claim a reviewer can rely on.
+4. **`--base main`** when running `gh pr create`. Each phase branches off main; do not chain phases unless the phase's "Depends on" column says so.
+5. **Don't expand `Risk / rollback`** beyond what the draft says. If you discover real risk during implementation, that's a signal to stop and discuss, not to edit the draft.
 
 ---
 
@@ -187,6 +197,37 @@ pnpm test --filter @propertypro/web -- nav-operations-gate upgrade-dialog
 
 ---
 
+### PR draft
+
+**Title:** `fix(billing): populate Operations upgrade dialog plan name`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 1 of fix.md. The Operations sidebar entry uses an any-of feature gate (`hasMaintenanceRequests`, `hasWorkOrders`, `hasAmenities`). When all three are plan-excluded, `nav-config.ts` already resolved the cheapest covering plan into `upgradePlanName`, but `app-sidebar.tsx` only threaded `featureKey` into `<UpgradeDialog>`. With `featureKey=null`, the dialog's internal `findCheapestPlanForFeature(null)` returned null and the tagline rendered as "…available on the higher plan."
+
+This PR threads `upgradePlanId` from `nav-config.ts` → `app-sidebar.tsx` → `<UpgradeDialog>` so any-of gates render the correct plan name.
+
+## Files changed
+- apps/web/src/components/layout/nav-config.ts
+- apps/web/src/components/layout/app-sidebar.tsx
+- apps/web/src/components/billing/upgrade-dialog.tsx
+- apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts (+1 test)
+- apps/web/src/components/billing/upgrade-dialog.test.tsx (new)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- nav-operations-gate upgrade-dialog` green
+- [ ] Manual: login as `cam` on a community with all 3 Operations features plan-excluded; click Operations; confirm dialog body names a real plan and the word "higher" is absent
+
+## Risk / rollback
+Low risk. Pure UI/copy fix. Rollback = revert this PR; no schema or migration.
+````
+
+---
+
 ## Phase 2 — Remove "E-Signatures Coming Soon" banner from Doc Center
 
 **Status:** ☐ Not started · **PR:** _TBD_
@@ -246,6 +287,33 @@ grep -rn "showEsignBanner\|Coming Soon" apps/web/src/components/documents/  # sh
 
 ---
 
+### PR draft
+
+**Title:** `fix(documents): remove stale E-Sign coming-soon banner from doc center`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 2 of fix.md. E-Sign is fully shipped (`/esign/templates`, `/esign/submissions`, signing routes), but the document library still rendered an unconditional "E-Signatures Coming Soon" banner on E-Sign button click. This PR replaces the banner toggle with navigation to the existing `/esign` page, gated by the `hasEsign` community feature; when the feature is disabled, the button does not render at all.
+
+## Files changed
+- apps/web/src/components/documents/document-library.tsx
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- document-library` green
+- [ ] `grep -rn "showEsignBanner\|Coming Soon" apps/web/src/components/documents/` returns empty
+- [ ] Manual: login as `cam` (Sunset Condos has `hasEsign: true`); click E-Sign in doc center; confirm navigation to `/esign?communityId=…`
+- [ ] Manual: on a community with `hasEsign: false`, confirm the E-Sign button is hidden
+
+## Risk / rollback
+Low risk. Removes dead code; no new dependencies. Rollback = revert.
+````
+
+---
+
 ## Phase 3a — Activity History: convert side Sheet to centered Dialog
 
 **Status:** ☐ Not started · **PR:** _TBD_
@@ -299,6 +367,35 @@ pnpm test --filter @propertypro/web -- activity-history compliance
 ### Trade-offs / Why this approach
 - Renaming the file is a one-time churn cost; it pays back by making the file's purpose match its content. SRP.
 - Keeping width at `lg` (not `xl`) is YAGNI — start small, expand only if users say it's cramped.
+
+---
+
+### PR draft
+
+**Title:** `refactor(compliance): convert Activity History side-Sheet to centered Dialog`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 3a of fix.md. The compliance Activity History rendered as a right-side Sheet via `<SheetPrimitive.Root>`. This PR converts it to a centered `Dialog` (sm:max-w-[720px]) using the shared `Dialog` primitive — same one used by `<UpgradeDialog>`. The component file is renamed from `compliance-activity-history-sheet.tsx` to `compliance-activity-history-modal.tsx` and all imports updated.
+
+Pure presentation refactor; no behavior changes to the underlying audit-trail viewer.
+
+## Files changed
+- apps/web/src/components/compliance/compliance-activity-history-sheet.tsx → renamed to `…-modal.tsx`
+- All import sites updated (run `grep -rln "compliance-activity-history-sheet"` first)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- activity-history compliance` green
+- [ ] `grep -rn "compliance-activity-history-sheet\|Sheet.*ActivityHistory" apps/` returns empty
+- [ ] Manual: as `cam`, navigate to `/communities/2/compliance`; open Activity History; confirm centered modal (not slide-in panel); ESC closes; focus returns to trigger
+
+## Risk / rollback
+Low risk. Pure UI refactor. Rollback = revert (single-file rename + import updates).
+````
 
 ---
 
@@ -374,6 +471,36 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 ### Trade-offs / Why this approach
 - **New endpoint over extending residents:** keeps SRP clean. The residents endpoint stays correct for residents-only consumers (visitor registration, lease creation, etc.). The audit trail gets its own purpose-fit endpoint.
 - **Bundle/dup cost:** ~80 LOC of new combobox is acceptable duplication. Premature abstraction (a generic `<EntitySearchCombobox<T>>`) would over-DRY. Revisit only if a third use case emerges.
+
+---
+
+### PR draft
+
+**Title:** `feat(audit): replace User ID textbox with searchable user picker`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 3b of fix.md. The compliance Activity History filter required users to manually type a UUID into a raw `<input type="text">`. This PR adds a new `<UserSearchCombobox>` (and supporting `/api/v1/search/users` endpoint + `searchUsersByTrigram` query) that mirrors the existing residents search but returns ALL community members (residents + staff). Audit-trail actions are emitted by any actor (CAM, board member, owner, tenant), so a residents-only picker would be incomplete; the existing `<ResidentSearchCombobox>` and `/api/v1/search/residents` are intentionally left untouched (residents-only is correct for visitor registration, lease creation, etc.).
+
+## Files changed
+- packages/db/src/queries/search-users.ts (new)
+- apps/web/src/app/api/v1/search/users/route.ts (new)
+- apps/web/src/components/shared/UserSearchCombobox.tsx (new)
+- apps/web/src/components/audit/AuditFilters.tsx
+- apps/web/src/components/audit/AuditTrailViewer.tsx (filter wiring if needed)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green (`guard:db-access` passes)
+- [ ] `pnpm test --filter @propertypro/web -- AuditFilters UserSearchCombobox` green
+- [ ] Integration: `scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts -- search/users` green
+- [ ] Manual: as `cam`, open Activity History; type "cam" → CAM appears; type "ow" → "Olivia Owner" appears; pick → filter applies; clear → filter resets
+
+## Risk / rollback
+Medium. New API endpoint + DB query. No schema migration. Rollback = revert PR; existing residents endpoint and other consumers unaffected.
+````
 
 ---
 
@@ -498,6 +625,41 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 
 ---
 
+### PR draft
+
+**Title:** `refactor(payments): unify Payments routes into single screen with role-aware tabs`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 4 of fix.md. Payments was three separate routes reachable via a sidebar dropdown (`/payments`, `/assessments`, `/finance`). This PR consolidates them into a single `/communities/[id]/payments` route with a role gate: residents see the existing `<PaymentPortal>`; admins see two tabs (Overview → `<FinanceDashboard>`, Assessments → `<AssessmentManager>`). Tab state syncs to `?tab=` via the existing project pattern (`operations-hub.tsx`). Old routes redirect via `next/navigation`'s `redirect()`. Conditional render per active tab avoids eager-loading both dashboards.
+
+## Files changed
+- apps/web/src/app/(authenticated)/communities/[id]/payments/page.tsx (role gate + tabs orchestration)
+- apps/web/src/app/(authenticated)/communities/[id]/payments/_components/AdminPaymentsTabs.tsx (new)
+- apps/web/src/app/(authenticated)/communities/[id]/assessments/page.tsx (replaced with `redirect()`)
+- apps/web/src/app/(authenticated)/communities/[id]/finance/page.tsx (replaced with `redirect()`)
+- apps/web/src/components/layout/nav-config.ts (Payments entry: drop `children`)
+- All internal links to `/assessments` or `/finance` (audit via grep — pay attention to help MDX, email templates, dashboard widgets, command palette)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green (`guard:breadcrumbs` passes)
+- [ ] `pnpm test --filter @propertypro/web -- payments finance assessment` green
+- [ ] `grep -rn "/assessments\b\|/finance\b" apps/web/src/ | grep -v node_modules | grep -v "/payments?tab="` returns no unexpected hits
+- [ ] Manual (as `owner`): navigate to Payments → see PaymentPortal only, no tabs
+- [ ] Manual (as `cam`): navigate to Payments → see Overview + Assessments tabs; default tab is Overview; tab switching updates URL
+- [ ] Manual: visit `/communities/2/assessments` → 307 redirect to `/payments?tab=assessments`
+- [ ] Manual: visit `/communities/2/finance` → 307 redirect to `/payments?tab=overview`
+- [ ] Manual (as `owner`): visit `/payments?tab=finance` → resident view renders, tab query is silently ignored
+
+## Risk / rollback
+Medium. Touches routing + sidebar + multiple link sites. No DB or migration changes. Rollback = revert PR; no data migration needed.
+````
+
+---
+
 ## Phase 5a — Violations: flatten route, drop tabs, rename label
 
 **Status:** ☐ Not started · **PR:** _TBD_ · **Independent of 5b and 5c**
@@ -572,6 +734,44 @@ grep -rn "/violations/inbox\|Violations Inbox\|ViolationsInboxTabs" apps/web/src
 
 ---
 
+### PR draft
+
+**Title:** `refactor(violations): flatten /violations route, drop sub-tabs, rename label`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 5a of fix.md. The `/violations` page redirected to `/violations/inbox`, the inbox carried a `<ViolationsInboxTabs>` sub-tab strip (Violations / ARC Requests), and the page label read "Violations Inbox." This PR inlines the inbox content at `/violations`, deletes the redirect-only page, deletes the tab strip, and renames the label to "Violations." Updates all five internal link sites including user-facing help MDX.
+
+ARC Requests becomes temporarily unreachable until Phase 5c lands a standalone `/arc-requests` page. Coordinate ordering: ship 5a + 5c together OR ship 5c first.
+
+## Files changed
+- apps/web/src/app/(authenticated)/violations/page.tsx (inline inbox content; preserve `?communityId=` validation)
+- apps/web/src/app/(authenticated)/violations/inbox/page.tsx (deleted)
+- apps/web/src/components/violations/ViolationsInboxTabs.tsx (deleted)
+- apps/web/src/components/violations/ViolationsAdminInbox.tsx (PageHeader title)
+- apps/web/src/components/layout/nav-config.ts (label, href, matchPrefixes)
+- apps/web/src/components/dashboard/dashboard-violations.tsx (link)
+- apps/web/src/components/command-palette/command-palette-paths.ts (link)
+- apps/web/src/components/violations/ViolationDetailView.tsx (back-link)
+- apps/web/src/content/help/violations/reporting-and-managing-violations.mdx (link)
+- .claude/rules/design.md (breadcrumb canonical mapping)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green (`guard:breadcrumbs` passes)
+- [ ] `pnpm test --filter @propertypro/web -- violations` green
+- [ ] `grep -rn "/violations/inbox\|Violations Inbox\|ViolationsInboxTabs" apps/web/src/ apps/web/src/content/ | grep -v node_modules` returns empty
+- [ ] Manual: as `cam`, click Violations in sidebar → URL is `/violations`, title is "Violations", no tab strip; visit `/violations/inbox` directly → 404
+- [ ] Manual: ARC unreachable confirmed (acceptable until 5c ships)
+
+## Risk / rollback
+Medium. Routing + nav + link updates across multiple files. No data changes. Rollback = revert; coordinate with 5c so ARC is reachable post-revert.
+````
+
+---
+
 ## Phase 5b — Violations: surface "New violation" CTA on the inbox
 
 **Status:** ☐ Not started · **PR:** _TBD_ · **Independent of 5a; can ship before or after**
@@ -633,6 +833,31 @@ pnpm test --filter @propertypro/web -- ViolationsAdminInbox
 - **Reuse over rebuild (DRY/YAGNI):** the existing `/violations/report` route + forms are battle-tested with file uploads, validation, and the two-mode resident/staff split. Building a parallel "/violations/new" wastes effort and creates two routes that drift over time.
 - **Keep the route name `/violations/report`:** users picking through Cursor diffs would scope-creep into a rename that touches breadcrumbs, help docs, and analytics. The route name is fine — the heading on that page already reads "Report a Violation," which is clearer than "New violation" anyway.
 - **If the user actually wants a different form (statute citation field, hearing scheduler, etc.):** those are feature requests on the existing form, NOT a new route. File separately.
+
+---
+
+### PR draft
+
+**Title:** `feat(violations): surface "New violation" CTA on the inbox`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 5b of fix.md. The violations inbox lacked a discoverable create CTA. The form already exists at `/violations/report` (with both resident and staff variants — `<ViolationReportForm>` / `<StaffViolationReportForm>`), so this PR adds a primary "New violation" button to the inbox `<PageHeader>` actions slot linking to the existing route. One-file change. No new form, no new API, no rename.
+
+## Files changed
+- apps/web/src/components/violations/ViolationsAdminInbox.tsx
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- ViolationsAdminInbox` green
+- [ ] Manual: as `cam`, navigate to `/violations`; confirm "New violation" button visible in PageHeader actions; click → routes to `/violations/report?communityId=2`; existing form renders; submit → row appears in inbox
+
+## Risk / rollback
+Very low. Single-file CTA wire-up; reuses existing route. Rollback = revert.
+````
 
 ---
 
@@ -702,6 +927,36 @@ pnpm test --filter @propertypro/web -- arc-requests
 ### Trade-offs / Why this approach
 - **Mount the existing component without modifying it (DRY/SRP):** the tab component already has list, filters, detail panel. Re-mounting on a new page is a 5-line file. Building a "new" page would duplicate everything.
 - **Keep the component name `<ArcSubmissionsTab>`:** semantically a misnomer once it's a page, but renaming touches every import. YAGNI — rename later if it bothers anyone.
+
+---
+
+### PR draft
+
+**Title:** `feat(arc): extract ARC submissions tab as standalone /arc-requests page`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 5c of fix.md. The existing `<ArcSubmissionsTab>` component (full DataTable + filters + slide-over) was previously rendered as a sub-tab inside the violations inbox via `<ViolationsInboxTabs>`. This PR mounts it as a standalone `/arc-requests` page, gates on the existing `hasARC` feature flag (NOT `hasViolations` — separate gates per `community-features.ts`), adds a sidebar entry, and updates the breadcrumb canonical mapping. The component itself is unchanged.
+
+Coordinate with Phase 5a so ARC stays reachable.
+
+## Files changed
+- apps/web/src/app/(authenticated)/arc-requests/page.tsx (new — mounts existing component)
+- apps/web/src/components/layout/nav-config.ts (sidebar entry)
+- .claude/rules/design.md (breadcrumb mapping)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green (`guard:breadcrumbs` passes)
+- [ ] `pnpm test --filter @propertypro/web -- arc-requests` green
+- [ ] Manual: as `cam` on Sunset Condos (`hasARC: true`), confirm "ARC Requests" sidebar entry; click → table renders; status filters and slide-over work
+- [ ] Manual: on a community with `hasARC: false`, confirm sidebar entry hidden; direct URL hits feature-gate redirect
+
+## Risk / rollback
+Low. Net-new page mounts existing tested component; no data-layer changes. Rollback = revert + coordinate with 5a.
+````
 
 ---
 
@@ -792,6 +1047,38 @@ pnpm test --filter @propertypro/web -- DocumentViewerModal compliance-item-actio
 
 ---
 
+### PR draft
+
+**Title:** `feat(documents): add shared DocumentViewerModal with iframe + iOS fallback`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 6a of fix.md. Compliance "View Document" surfaced a tiny inline `text-xs` error chip when the download endpoint returned 404, and the modal viewer never opened — making the click feel broken. This PR adds a shared `<DocumentViewerModal>` (under `apps/web/src/components/documents/`) that always opens immediately with a loading state, fetches the signed URL via TanStack Query, renders an `<iframe sandbox="allow-same-origin">` on desktop, and falls back to an `"Open document"` link on iOS Safari (including iPadOS 13+ which reports as Macintosh by default — detected via `navigator.maxTouchPoints > 0 && /Macintosh/`). Errors render in-modal with a Try again / Close affordance instead of an inline chip. Replaces the inline modal + chip flow in `compliance-item-actions.tsx`.
+
+CSP: pre-implementation step audited `buildCspHeader` in middleware to confirm `frame-src` allows the Supabase storage origin. (Update only if the audit revealed it didn't.)
+
+## Files changed
+- apps/web/src/components/documents/DocumentViewerModal.tsx (new)
+- apps/web/src/components/compliance/compliance-item-actions.tsx (use shared modal; remove inline error chip)
+- apps/web/src/middleware.ts (only if CSP audit required adding the Supabase origin to `frame-src`)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- DocumentViewerModal compliance-item-actions` green
+- [ ] Manual (desktop): as `cam`, navigate to `/communities/2/compliance`; click "View Document" on a satisfied row; confirm modal opens immediately, iframe renders the doc
+- [ ] Manual (404 path): force a 404 (e.g., the known-failing doc id 3004 or simulate via DevTools) → in-modal error with Try again + Close; no inline chip
+- [ ] Manual (iOS UA): DevTools device mode iPad UA (Macintosh + touch) → `"Open document"` link renders instead of iframe
+- [ ] Manual: ESC closes modal; focus returns to "View Document" button
+
+## Risk / rollback
+Medium. Touches CSP if `frame-src` needs adjusting; otherwise UI-only. New shared component is additive. Rollback = revert.
+````
+
+---
+
 ## Phase 6b — Document viewer: full controls (DEFERRED)
 
 **Status:** ⛔ Deferred — open only after 6a ships and a real user request emerges · **PR:** _Do not open speculatively_
@@ -821,6 +1108,33 @@ Other surfaces that view documents (announcements with attachments, residents wi
 - `grep -rn "createPresignedDownloadUrl\|/download.*documentId" apps/web/src/components/`
 - For each call site that currently navigates or opens a tab: replace with `<DocumentViewerModal>` open state.
 - One PR per surface to keep blast radius small.
+
+---
+
+### PR draft template (one PR per surface)
+
+Phase 6c is a follow-up that opens **one PR per doc-viewing surface** (announcements, residents, leases, etc.). Use this template per surface, swapping in the surface name.
+
+**Title:** `refactor(<surface>): use shared DocumentViewerModal for inline doc preview`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC, swapping `<surface>` and the file path:
+
+````markdown
+## Summary
+Phase 6c follow-up to Phase 6a. Migrates the `<surface>` doc-viewing flow to the shared `<DocumentViewerModal>` (introduced in Phase 6a). Removes the per-component inline doc-view logic and any associated error chips. No behavior change beyond unification — the modal is the same UX users already see in compliance.
+
+## Files changed
+- apps/web/src/components/<surface>/<file>.tsx
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm test --filter @propertypro/web -- <surface>` green
+- [ ] Manual: open a `<surface>` document → confirm shared modal renders; 404 path shows in-modal error
+
+## Risk / rollback
+Low. Single-surface migration of an already-shipped shared component. Rollback = revert.
+````
 
 ---
 
@@ -858,6 +1172,30 @@ Determine whether the codebase has any implicit numeric-only assumption about un
 ls docs/audits/letter-units-2026-04.md
 # Reviewer reads the report
 ```
+
+---
+
+### PR draft
+
+**Title:** `docs(audit): letter-suffixed units investigation report`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 7a of fix.md. Investigation-only PR — no code changes. Audits the `units` schema, the search query path used by `<UnitSearchCombobox>`, and every surface that displays or accepts unit labels (residents, work orders, packages, leases, move checklists). Produces a report at `docs/audits/letter-units-2026-04.md` enumerating findings and recommending concrete scope for Phase 7b.
+
+## Files changed
+- docs/audits/letter-units-2026-04.md (new)
+
+## Test plan
+- [ ] Markdown renders correctly on GitHub
+- [ ] Reviewer reads the report end-to-end
+- [ ] Report's "Recommended scope for 7b" section has concrete bullets a developer can act on
+
+## Risk / rollback
+Zero — docs only.
+````
 
 ---
 
@@ -913,6 +1251,35 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 ### Trade-offs / Why this approach
 - Investigation-first (7a) is KISS. We don't write code we don't need. The report defines real scope.
 - Adding letter-suffixed seeds catches the regression in dev-time UX; the integration test catches future regressions.
+
+---
+
+### PR draft
+
+**Title:** `feat(units): full letter-suffixed unit support across visitor flow`
+
+**Body** — paste verbatim into the `gh pr create --body` HEREDOC:
+
+````markdown
+## Summary
+Phase 7b of fix.md. Implements the recommendations from the Phase 7a investigation report (`docs/audits/letter-units-2026-04.md`). Adds letter-suffixed units to the Sunset Ridge Apartments seed (e.g., "101A", "101B", "PH-1", "PH-2") so the visitor unit-search combobox surfaces them in dev/demo. Adds an integration test covering the visitor registration flow with a letter-suffixed unit. Applies any code refinements 7a flagged.
+
+## Files changed
+- scripts/seed-demo.ts (or wherever apartment unit seed lives, per 7a report)
+- Any code path 7a recommended for change
+- apps/web/src/app/api/v1/visitors/__tests__/letter-units.integration.test.ts (new)
+
+## Test plan
+- [ ] `pnpm typecheck` green
+- [ ] `pnpm lint` green
+- [ ] `pnpm seed:demo` runs idempotently and adds letter units
+- [ ] `pnpm seed:verify` passes
+- [ ] `scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts -- letter-units` green
+- [ ] Manual: as `site_manager`, open Register Visitor → type "A" or "PH" in host unit → letter-suffixed units appear; pick one → submit → visitor appears in list with the letter-suffixed host label intact
+
+## Risk / rollback
+Low. Seed-only change for dev/demo communities. No production schema or data changes. Rollback = revert.
+````
 
 ---
 
