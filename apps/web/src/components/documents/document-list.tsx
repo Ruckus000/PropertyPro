@@ -17,6 +17,9 @@ export interface DocumentListItem {
   createdAt: string;
   uploadedBy: string | null;
   extractionStatus?: ExtractionStatus | null;
+  /** 'library' for uploaded files, 'violation_evidence' for violation attachments,
+   *  'authored' for in-app authored documents (Edit re-opens the editor). */
+  sourceType?: 'library' | 'violation_evidence' | 'authored' | null;
 }
 
 interface DocumentListResponse {
