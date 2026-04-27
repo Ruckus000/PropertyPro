@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { AssessmentManager } from '@/components/finance/assessment-manager';
 
 interface PageProps {
@@ -30,16 +31,18 @@ export default async function AssessmentsPage({ params }: PageProps) {
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasFinance) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasFinance) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
   return (
-    <AssessmentManager
-      communityId={communityId}
-      userId={userId}
-      userRole={membership.role}
-    />
+    <FeatureGate feature="hasFinance" communityId={communityId}>
+      <AssessmentManager
+        communityId={communityId}
+        userId={userId}
+        userRole={membership.role}
+      />
+    </FeatureGate>
   );
 }

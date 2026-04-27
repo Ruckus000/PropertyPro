@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createScopedClient, units } from '@propertypro/db';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { PaymentPortal } from '@/components/finance/payment-portal';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 
@@ -34,8 +35,8 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasFinance) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasFinance) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
@@ -50,11 +51,13 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   // unit-picker flow entirely — PaymentPortal fetches aggregated data.
   if (membership.role !== 'resident') {
     return (
-      <PaymentPortal
-        communityId={communityId}
-        userRole={membership.role}
-        mode="community"
-      />
+      <FeatureGate feature="hasFinance" communityId={communityId}>
+        <PaymentPortal
+          communityId={communityId}
+          userRole={membership.role}
+          mode="community"
+        />
+      </FeatureGate>
     );
   }
 
@@ -85,13 +88,15 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   }
 
   return (
-    <PaymentPortal
-      communityId={communityId}
-      userRole={membership.role}
-      mode="unit"
-      unitId={unitId}
-      actorUnits={actorUnits}
-      requiresExplicitUnitSelection={requiresExplicitUnitSelection}
-    />
+    <FeatureGate feature="hasFinance" communityId={communityId}>
+      <PaymentPortal
+        communityId={communityId}
+        userRole={membership.role}
+        mode="unit"
+        unitId={unitId}
+        actorUnits={actorUnits}
+        requiresExplicitUnitSelection={requiresExplicitUnitSelection}
+      />
+    </FeatureGate>
   );
 }

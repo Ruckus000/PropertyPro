@@ -12,10 +12,10 @@ import { communities, createScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
 
@@ -42,8 +42,8 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasVisitorLogging) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasVisitorLogging) {
     redirect('/dashboard?reason=feature-unavailable');
   }
 
@@ -62,7 +62,7 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
   }
 
   return (
-    <>
+    <FeatureGate feature="hasVisitorLogging" communityId={communityId}>
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">
           {isStaff ? 'Visitor Management' : 'My Visitors'}
@@ -84,6 +84,6 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
           currentUserId={userId}
         />
       )}
-    </>
+    </FeatureGate>
   );
 }

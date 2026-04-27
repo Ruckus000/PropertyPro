@@ -8,9 +8,9 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { SubmissionList } from '@/components/esign/submission-list';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -35,8 +35,8 @@ export default async function EsignSubmissionsPage({ searchParams }: PageProps) 
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasEsign) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasEsign) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
@@ -45,11 +45,13 @@ export default async function EsignSubmissionsPage({ searchParams }: PageProps) 
   }
 
   return (
+    <FeatureGate feature="hasEsign" communityId={communityId}>
     <div>
       <h1 className="mb-6 text-2xl font-semibold text-[var(--text-primary)]">
         E-Sign Submissions
       </h1>
       <SubmissionList communityId={communityId} />
     </div>
+    </FeatureGate>
   );
 }

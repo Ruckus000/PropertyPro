@@ -4,6 +4,7 @@ import { ForbiddenError } from '@/lib/api/errors';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
+import { FeatureGateAnyOf } from '@/components/billing/feature-gate-any-of';
 
 function canReadResource(
   membership: Awaited<ReturnType<typeof requirePageCommunityMembership>>,
@@ -52,8 +53,14 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   const reservationsEnabled = features.hasAmenities && canReadResource(membership, 'amenities');
   const requestScope = membership.role === 'resident' ? 'mine' : 'community';
 
-  if (!requestsEnabled && !workOrdersEnabled && !reservationsEnabled) {
-    throw new ForbiddenError('Operations are not enabled for this community or role');
+  // RBAC fail (role can't read any of the three resources, regardless of plan):
+  // 403 — same behavior as before. Plan-gate is delegated to FeatureGateAnyOf.
+  const anyResourceReadable =
+    canReadResource(membership, 'maintenance')
+    || canReadResource(membership, 'work_orders')
+    || canReadResource(membership, 'amenities');
+  if (!anyResourceReadable) {
+    throw new ForbiddenError('Operations are not enabled for this role');
   }
 
   const legacyNotice = from === 'maintenance'
@@ -66,18 +73,23 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   const communityTimezone = membership.timezone;
 
   return (
-    <OperationsHub
+    <FeatureGateAnyOf
+      features={['hasMaintenanceRequests', 'hasWorkOrders', 'hasAmenities']}
       communityId={communityId}
-      legacyNotice={legacyNotice}
-      requestsEnabled={requestsEnabled}
-      workOrdersEnabled={workOrdersEnabled}
-      reservationsEnabled={reservationsEnabled}
-      requestScope={requestScope}
-      isAdmin={membership.isAdmin}
-      userId={userId}
-      communityTimezone={communityTimezone}
-      initialTab={tab}
-      initialFilters={{ status, priority, unitId, q, cursor, page, create }}
-    />
+    >
+      <OperationsHub
+        communityId={communityId}
+        legacyNotice={legacyNotice}
+        requestsEnabled={requestsEnabled}
+        workOrdersEnabled={workOrdersEnabled}
+        reservationsEnabled={reservationsEnabled}
+        requestScope={requestScope}
+        isAdmin={membership.isAdmin}
+        userId={userId}
+        communityTimezone={communityTimezone}
+        initialTab={tab}
+        initialFilters={{ status, priority, unitId, q, cursor, page, create }}
+      />
+    </FeatureGateAnyOf>
   );
 }

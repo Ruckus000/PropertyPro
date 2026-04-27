@@ -10,11 +10,12 @@ import { redirect, notFound } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
 import { isResidentRole, getActorUnitIds } from '@/lib/violations/common';
 import { getViolationForCommunity } from '@/lib/services/violations-service';
 import { ViolationDetailView } from '@/components/violations/ViolationDetailView';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -47,8 +48,8 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasViolations) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasViolations) {
     redirect('/dashboard?reason=feature-unavailable');
   }
 
@@ -66,6 +67,7 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
   }
 
   return (
+    <FeatureGate feature="hasViolations" communityId={communityId}>
     <div className="mx-auto max-w-3xl">
       <ViolationDetailView
         violation={violation}
@@ -74,5 +76,6 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
         isAdmin={membership.isAdmin}
       />
     </div>
+    </FeatureGate>
   );
 }
