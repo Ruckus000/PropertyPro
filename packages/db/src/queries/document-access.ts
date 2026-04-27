@@ -17,8 +17,21 @@ import { createScopedClient } from '../scoped-client';
 import { documentCategories } from '../schema/document-categories';
 import { documents } from '../schema/documents';
 
-function buildLibrarySourceFilter(): SQL {
-  return eq(documents.sourceType, 'library');
+/**
+ * The source types a community user can access through normal document
+ * surfaces (listing, detail, download, picker). `violation_evidence` is
+ * deliberately excluded — those rows back violation photos, never the
+ * documents UI.
+ */
+const USER_VISIBLE_SOURCE_TYPES = ['library', 'authored'] as const;
+
+function buildSourceTypeFilter(
+  sourceTypes: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]> = USER_VISIBLE_SOURCE_TYPES,
+): SQL {
+  if (sourceTypes.length === 1) {
+    return eq(documents.sourceType, sourceTypes[0]!);
+  }
+  return inArray(documents.sourceType, [...sourceTypes]);
 }
 
 export interface DocumentAccessContext {
@@ -78,12 +91,13 @@ export async function buildDocumentAccessFilter(
 export async function getAccessibleDocuments(
   context: DocumentAccessContext,
   additionalFilter?: SQL,
+  sourceTypes?: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]>,
 ): Promise<Record<string, unknown>[]> {
   const scoped = createScopedClient(context.communityId);
   const accessFilter = await buildDocumentAccessFilter(context);
-  const libraryFilter = buildLibrarySourceFilter();
+  const sourceFilter = buildSourceTypeFilter(sourceTypes);
 
-  const combinedFilter = [libraryFilter, accessFilter, additionalFilter].filter(
+  const combinedFilter = [sourceFilter, accessFilter, additionalFilter].filter(
     (filter): filter is SQL => filter !== undefined,
   );
 
@@ -98,10 +112,11 @@ export async function getAccessibleDocuments(
 export async function getDocumentWithAccessCheck(
   context: DocumentAccessContext,
   documentId: number,
+  sourceTypes?: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]>,
 ): Promise<Record<string, unknown> | null> {
   const scoped = createScopedClient(context.communityId);
   const accessFilter = await buildDocumentAccessFilter(context);
-  const combinedFilter = [eq(documents.id, documentId), buildLibrarySourceFilter(), accessFilter].filter(
+  const combinedFilter = [eq(documents.id, documentId), buildSourceTypeFilter(sourceTypes), accessFilter].filter(
     (filter): filter is SQL => filter !== undefined,
   );
 
