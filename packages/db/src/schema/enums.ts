@@ -84,6 +84,7 @@ export const extractionStatusEnum = pgEnum('extraction_status', [
 export const documentSourceTypeEnum = pgEnum('document_source_type', [
   'library',
   'violation_evidence',
+  'authored',
 ]);
 
 /**

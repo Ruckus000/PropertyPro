@@ -10,6 +10,7 @@ export * from './user-roles';
 export * from './units';
 export * from './document-categories';
 export * from './documents';
+export * from './document-drafts';
 export * from './announcements';
 export * from './announcement-delivery-log';
 export * from './calendar-event-reminder-log';
