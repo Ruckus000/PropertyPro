@@ -70,7 +70,7 @@ const ALLOWED_ATTRS = [
 
 const ALLOWED_URI_SCHEMES_RE = /^(?:https?|mailto|tel):/i;
 
-function getSupabaseHost(): string | null {
+const SUPABASE_HOST = (() => {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   if (!url) return null;
   try {
@@ -78,13 +78,13 @@ function getSupabaseHost(): string | null {
   } catch {
     return null;
   }
-}
+})();
 
 /**
  * Image src allowlist:
  *  - relative paths under /storage/ (Supabase proxy)
  *  - absolute URLs whose host matches SUPABASE_URL host
- * Everything else (including data:) is rejected.
+ * Everything else (including data: and protocol-relative //evil.com) is rejected.
  */
 function isAllowedImageSrc(src: string): boolean {
   if (!src) return false;
@@ -92,9 +92,8 @@ function isAllowedImageSrc(src: string): boolean {
   if (trimmed.startsWith('/storage/')) return true;
   try {
     const u = new URL(trimmed);
-    const host = getSupabaseHost();
-    if (!host) return false;
-    return u.host === host && (u.protocol === 'https:' || u.protocol === 'http:');
+    if (!SUPABASE_HOST) return false;
+    return u.host === SUPABASE_HOST && (u.protocol === 'https:' || u.protocol === 'http:');
   } catch {
     return false;
   }
@@ -129,113 +128,115 @@ function clampNumeric(value: string | null | undefined, max: number): string | n
   return String(n);
 }
 
+// Hooks register once at module load. Per-call add/remove would race under
+// concurrent server-side sanitizations (DOMPurify is a global singleton)
+// and removeHook(entry) drops every hook on that entry — including any
+// other module's hooks. The hooks short-circuit cleanly on tags/attrs they
+// don't care about, so registering globally is safe even if other server
+// code calls DOMPurify.sanitize without authored-mode expectations.
+DOMPurify.addHook('uponSanitizeAttribute', (node, hookEvent) => {
+  const tagName = node.nodeName.toLowerCase();
+  const attrName = hookEvent.attrName.toLowerCase();
+  const attrValue = String(hookEvent.attrValue ?? '');
+
+  // <a> URI scheme guard
+  if (tagName === 'a' && attrName === 'href') {
+    if (!ALLOWED_URI_SCHEMES_RE.test(attrValue)) {
+      hookEvent.keepAttr = false;
+      return;
+    }
+  }
+
+  // <img src> allowlist
+  if (tagName === 'img' && attrName === 'src') {
+    if (!isAllowedImageSrc(attrValue)) {
+      hookEvent.keepAttr = false;
+      return;
+    }
+  }
+
+  // data-text-align value guard
+  if (attrName === 'data-text-align') {
+    if (!ALLOWED_ALIGN.has(attrValue)) {
+      hookEvent.keepAttr = false;
+      return;
+    }
+  }
+
+  // class attribute: keep only known editor classes
+  if (attrName === 'class') {
+    const filtered = attrValue
+      .split(/\s+/)
+      .filter((c) => ALLOWED_CLASSES.has(c))
+      .join(' ');
+    if (!filtered) {
+      hookEvent.keepAttr = false;
+    } else {
+      hookEvent.attrValue = filtered;
+    }
+    return;
+  }
+
+  // Numeric clamps
+  if (attrName === 'width' || attrName === 'height') {
+    const clamped = clampNumeric(attrValue, 4096);
+    if (clamped === null) {
+      hookEvent.keepAttr = false;
+    } else {
+      hookEvent.attrValue = clamped;
+    }
+    return;
+  }
+  if (attrName === 'colspan' || attrName === 'rowspan') {
+    const clamped = clampNumeric(attrValue, 64);
+    if (clamped === null) {
+      hookEvent.keepAttr = false;
+    } else {
+      hookEvent.attrValue = clamped;
+    }
+    return;
+  }
+
+  // <a target> normalization
+  if (tagName === 'a' && attrName === 'target') {
+    if (attrValue !== '_blank') {
+      hookEvent.keepAttr = false;
+    }
+    return;
+  }
+});
+
+// Force any <a target="_blank"> to also carry rel="noopener noreferrer"
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.nodeName === 'A') {
+    const el = node as Element;
+    if (el.getAttribute('target') === '_blank') {
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+  }
+});
+
 /**
  * Sanitize editor-produced HTML for storage in document_drafts.body_html and
  * for the published HTML artifact archived alongside the PDF.
+ *
+ * URI filtering: relies on DOMPurify's default IS_ALLOWED_URI (rejects
+ * javascript:/vbscript:, permits http(s)/mailto/tel/relative paths). The
+ * uponSanitizeAttribute hook above adds the strict per-tag allowlist:
+ * <a href> must match http/https/mailto/tel; <img src> must be /storage/
+ * or the configured Supabase host. Setting ALLOWED_URI_REGEXP to a
+ * scheme-only regex here would strip relative /storage/ paths *before* the
+ * hook runs, so we don't.
  */
 export function sanitizeAuthoredHtml(dirty: string): string {
-  // The hooks below run inside DOMPurify's traversal; they must be additive
-  // (we use removeAttribute for stripping) and must not throw.
-  DOMPurify.addHook('uponSanitizeAttribute', (node, hookEvent) => {
-    const tagName = node.nodeName.toLowerCase();
-    const attrName = hookEvent.attrName.toLowerCase();
-    const attrValue = String(hookEvent.attrValue ?? '');
-
-    // <a> URI scheme guard (DOMPurify also enforces, but we double-check)
-    if (tagName === 'a' && attrName === 'href') {
-      if (!ALLOWED_URI_SCHEMES_RE.test(attrValue)) {
-        hookEvent.keepAttr = false;
-        return;
-      }
-    }
-
-    // <img src> allowlist
-    if (tagName === 'img' && attrName === 'src') {
-      if (!isAllowedImageSrc(attrValue)) {
-        hookEvent.keepAttr = false;
-        return;
-      }
-    }
-
-    // data-text-align value guard
-    if (attrName === 'data-text-align') {
-      if (!ALLOWED_ALIGN.has(attrValue)) {
-        hookEvent.keepAttr = false;
-        return;
-      }
-    }
-
-    // class attribute: keep only known editor classes
-    if (attrName === 'class') {
-      const filtered = attrValue
-        .split(/\s+/)
-        .filter((c) => ALLOWED_CLASSES.has(c))
-        .join(' ');
-      if (!filtered) {
-        hookEvent.keepAttr = false;
-      } else {
-        hookEvent.attrValue = filtered;
-      }
-      return;
-    }
-
-    // Numeric clamps
-    if (attrName === 'width' || attrName === 'height') {
-      const clamped = clampNumeric(attrValue, 4096);
-      if (clamped === null) {
-        hookEvent.keepAttr = false;
-      } else {
-        hookEvent.attrValue = clamped;
-      }
-      return;
-    }
-    if (attrName === 'colspan' || attrName === 'rowspan') {
-      const clamped = clampNumeric(attrValue, 64);
-      if (clamped === null) {
-        hookEvent.keepAttr = false;
-      } else {
-        hookEvent.attrValue = clamped;
-      }
-      return;
-    }
-
-    // <a target> and <a rel> normalization for external links
-    if (tagName === 'a' && attrName === 'target') {
-      // only allow _blank; everything else is dropped
-      if (attrValue !== '_blank') {
-        hookEvent.keepAttr = false;
-      }
-      return;
-    }
-  });
-
-  // Force any <a target="_blank"> to also carry rel="noopener noreferrer"
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.nodeName === 'A') {
-      const el = node as Element;
-      if (el.getAttribute('target') === '_blank') {
-        el.setAttribute('rel', 'noopener noreferrer');
-      }
-    }
-  });
-
-  let clean: string;
-  try {
-    clean = DOMPurify.sanitize(dirty, {
-      ALLOWED_TAGS,
-      ALLOWED_ATTR: ALLOWED_ATTRS,
-      ALLOW_DATA_ATTR: false,
-      FORBID_ATTR: ['style', 'on*'],
-      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'style', 'link', 'meta'],
-      ALLOWED_URI_REGEXP: ALLOWED_URI_SCHEMES_RE,
-      KEEP_CONTENT: true,
-      RETURN_DOM: false,
-      RETURN_DOM_FRAGMENT: false,
-    }) as string;
-  } finally {
-    DOMPurify.removeHook('uponSanitizeAttribute');
-    DOMPurify.removeHook('afterSanitizeAttributes');
-  }
-
-  return clean;
+  return DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR: ALLOWED_ATTRS,
+    ALLOW_DATA_ATTR: false,
+    FORBID_ATTR: ['style', 'on*'],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'style', 'link', 'meta'],
+    KEEP_CONTENT: true,
+    RETURN_DOM: false,
+    RETURN_DOM_FRAGMENT: false,
+  }) as string;
 }
