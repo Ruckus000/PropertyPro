@@ -24,14 +24,15 @@ Audit baseline: 2026-04-27, branch `claude/brave-mcnulty-65adf7`. Six issues con
 ### One-time setup (do once when first picking up the repo)
 
 ```bash
-# From the worktree root
-ln -s /Users/jphilistin/Documents/Coding/PropertyPro/.env.local .env.local 2>/dev/null || true
-ln -s ../../.env.local apps/web/.env.local 2>/dev/null || true
+# From the repo root — the canonical setup script per CLAUDE.md
+./scripts/setup.sh                             # creates the apps/web/.env.local symlink
 nvm use                                        # Node 20 per .nvmrc
 pnpm install --prefer-offline
 pnpm --filter @propertypro/db db:migrate       # only if migrations are pending
 pnpm seed:demo                                 # if running locally
 ```
+
+If you don't yet have a root `.env.local`, copy `.env.example` to `.env.local` and populate the values before running `setup.sh`.
 
 ### Project-wide guardrails (apply to every phase)
 
@@ -143,10 +144,10 @@ setUpgradeFor({ featureKey: clickedItem.upgradeFeatureKey });  // ← only featu
 So `upgradePlanName` is computed and discarded. **The fix is to thread `upgradePlanId` (or equivalent) from `nav-config.ts` → `app-sidebar.tsx` → `<UpgradeDialog>` so the dialog can render the correct plan even when `featureKey` is null.**
 
 ### Acceptance criteria (binary)
-- [ ] `nav-config.ts` `getVisibleItems()` already computes `upgradePlanName`. Add `upgradePlanId: PlanId | null` to the same returned shape (resolve via `Object.entries(PLAN_FEATURES).find(...)` against the cheapest plan, mirroring the dialog's existing lookup).
+- [ ] `nav-config.ts` exports two helpers: `getVisibleItems` (visibility only, used by tests + command palette) and `getVisibleItemsWithPlanGate` (visibility + plan-lock metadata, used by `app-sidebar.tsx`). Plan-lock data lives ONLY in `getVisibleItemsWithPlanGate` — that's the function to extend. Add `upgradePlanId: PlanId | null` to its returned shape alongside the existing `upgradePlanName` (resolve via `Object.entries(PLAN_FEATURES).find(...)` against the cheapest plan, mirroring the dialog's existing lookup). Do NOT add plan-lock fields to `getVisibleItems` — keeping the simpler helper free of plan concerns is part of the design.
 - [ ] `app-sidebar.tsx`'s `setUpgradeFor({...})` payload extends from `{ featureKey }` to `{ featureKey, upgradePlanId }`. The `<UpgradeDialog>` `open` props extend correspondingly.
 - [ ] `<UpgradeDialog>` uses an explicit `upgradePlanId` prop (when provided) to look up the plan, falling back to its existing `findCheapestPlanForFeature(featureKey)` only when `upgradePlanId` is null. The tagline now reads `"This feature is available on the Operations Plus plan."` (or the relevant cheapest plan), never `"...on the higher plan."`
-- [ ] Existing test [apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts](apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts) gains ONE new test: when ALL 3 Operations features are plan-excluded (`hasMaintenanceRequests=false, hasWorkOrders=false, hasAmenities=false`) but type-allowed, `getVisibleItems()` returns the entry with `planLocked: true`, a non-null `upgradePlanName`, AND a non-null `upgradePlanId`. **Read the file before adding** — there are 8 tests already; add only the missing case.
+- [ ] Existing test [apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts](apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts) gains ONE new test that calls `getVisibleItemsWithPlanGate(...)` (NOT `getVisibleItems`, which doesn't return plan info). Scenario: all 3 Operations features are plan-excluded (`hasMaintenanceRequests=false, hasWorkOrders=false, hasAmenities=false`) but type-allowed. Assert the entry comes back with `planLocked: true`, a non-null `upgradePlanName`, AND a non-null `upgradePlanId`. **Read the file before adding** — there are 8 existing tests using `getVisibleItems`; add the new one without touching them and import `getVisibleItemsWithPlanGate` alongside the existing import.
 - [ ] One new test covers `<UpgradeDialog>` rendering the correct plan name when `featureKey={null}` AND `upgradePlanId="operations_plus"`. Place the test next to existing component tests (colocated `.test.tsx` siblings, NOT a new `__tests__/` directory).
 - [ ] DOM assertion: `expect(within(dialog).queryByText(/higher plan/i)).not.toBeInTheDocument()` — guards against the literal "higher" fallback regression.
 
@@ -731,7 +732,14 @@ The original "full viewer with controls" scope adds `react-pdf` (~1MB+ bundle) a
 - [ ] New shared component: `apps/web/src/components/documents/DocumentViewerModal.tsx`. Props: `{ open, onOpenChange, documentId, communityId, fileName?: string }`.
 - [ ] Modal opens immediately on click — no "fetch first, open second" sequence.
 - [ ] Inside the modal: TanStack Query (`enabled: open`) fetches `/api/v1/documents/{documentId}/download?communityId=...`. While loading, render a skeleton. On success, render the document. On failure, render an in-modal error state with the API message + "Try again" + "Close" buttons.
-- [ ] **iOS detection:** when `/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream`, render `<a href={signedUrl} target="_blank" rel="noopener">Open document</a>` instead of an iframe. Comment this with WHY (Safari PDF iframe behavior).
+- [ ] **iOS detection (must catch modern iPads, which report as Macintosh):**
+  ```ts
+  const isIOS =
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 0 && /Macintosh/.test(navigator.userAgent))) &&
+    !(window as { MSStream?: unknown }).MSStream;
+  ```
+  When `isIOS`, render `<a href={signedUrl} target="_blank" rel="noopener">Open document</a>` instead of an iframe. Comment this with WHY (Safari PDF iframe limitation + iPadOS 13+ desktop-mode UA). Do NOT skip the Macintosh + maxTouchPoints branch — modern iPads default to a Macintosh UA and would otherwise fall through to the iframe path and silently fail.
 - [ ] Non-iOS: render `<iframe src={signedUrl} sandbox="allow-same-origin">`. Comment the sandbox choice — `allow-same-origin` is required for the browser to render the doc; we omit `allow-scripts/forms/popups` because we're displaying a static doc, not running an app.
 - [ ] Modal width: `sm:max-w-[960px]`. Modal height: `h-[80vh]`.
 - [ ] Focus trap, ESC-to-close, focus return on close (handled by Dialog primitive).
@@ -771,7 +779,10 @@ pnpm test --filter @propertypro/web -- DocumentViewerModal compliance-item-actio
 2. Click "View Document" on any satisfied row → modal opens immediately, loading skeleton, then iframe with the doc.
 3. On the known-failing doc 3004 (or simulate a 404 via DevTools): modal shows in-modal error with the API message + Try again + Close.
 4. ESC closes; focus returns to the "View Document" button.
-5. **Test on iPad/iPhone Safari** (or simulate via DevTools device mode with iPad UA): modal opens, but instead of iframe, an "Open document" link renders. Click → opens in a new tab.
+5. **Test on iPad/iPhone Safari** (or simulate via DevTools device mode):
+   - iPhone UA → fallback link renders.
+   - iPad UA in DevTools — note that DevTools' default iPad UA reports as Macintosh because of iPadOS 13+ desktop mode. The detection branch covering `maxTouchPoints > 0 && /Macintosh/` must trigger here. If the iframe renders instead of the link, the `maxTouchPoints` branch is broken.
+   - Desktop Safari/Chrome on macOS → iframe renders (no `maxTouchPoints` on a real Mac).
 
 ### Trade-offs / Why this approach
 - **iframe vs. react-pdf:** iframe is zero-bundle, browser-native, handles PDFs/images/many types out of the box. react-pdf is ~1MB+ for features users haven't asked for (YAGNI).
