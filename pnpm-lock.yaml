@@ -478,6 +478,9 @@ importers:
       '@propertypro/tokens':
         specifier: workspace:*
         version: link:../tokens
+      '@tiptap/core':
+        specifier: ^2.10.4
+        version: 2.27.2(@tiptap/pm@2.27.2)
       '@tiptap/extension-image':
         specifier: ^2.10.4
         version: 2.27.2(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))
