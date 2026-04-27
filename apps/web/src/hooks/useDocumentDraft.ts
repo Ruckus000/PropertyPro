@@ -207,6 +207,12 @@ export function useAutosave(
   const save = useSaveDocumentDraft(communityId, draftId);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = React.useRef<PatchDraftInput | null>(null);
+  // Tracks the in-flight mutation so flush() can await any save that is
+  // already running before deciding whether to start another. Without
+  // this, clicking "Publish" the moment after typing would fire publish
+  // alongside an in-flight autosave, and the published doc could miss
+  // the latest edits.
+  const inflight = React.useRef<Promise<unknown> | null>(null);
 
   React.useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -217,10 +223,30 @@ export function useAutosave(
       clearTimeout(timer.current);
       timer.current = null;
     }
+    // Wait for any in-flight save to finish first.
+    if (inflight.current) {
+      try {
+        await inflight.current;
+      } catch {
+        // The error is already surfaced via `save.error`; we just need to
+        // stop blocking flush.
+      }
+    }
     if (!pending.current) return null;
     const input = pending.current;
     pending.current = null;
-    return save.mutateAsync(input);
+    const promise = save.mutateAsync(input);
+    inflight.current = promise;
+    try {
+      return await promise;
+    } catch (err) {
+      // Roll back: re-merge the failed input back into pending so a later
+      // schedule() / flush() picks it up instead of dropping it on the floor.
+      pending.current = { ...input, ...(pending.current ?? {}) };
+      throw err;
+    } finally {
+      if (inflight.current === promise) inflight.current = null;
+    }
   }, [save]);
 
   const schedule = React.useCallback(
