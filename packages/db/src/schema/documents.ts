@@ -37,6 +37,8 @@ export const documents = pgTable(
     fileSize: bigint('file_size', { mode: 'number' }).notNull(),
     mimeType: text('mime_type').notNull(),
     sourceType: documentSourceTypeEnum('source_type').notNull().default('library'),
+    /** Self-FK forming the document version chain. NULL = root version. */
+    parentDocumentId: bigint('parent_document_id', { mode: 'number' }),
     uploadedBy: uuid('uploaded_by').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -54,5 +56,8 @@ export const documents = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (table) => [index('idx_documents_search_vector').using('gin', table.searchVector)],
+  (table) => [
+    index('idx_documents_search_vector').using('gin', table.searchVector),
+    index('idx_documents_parent_document_id').on(table.parentDocumentId),
+  ],
 );

@@ -771,6 +771,13 @@
       "when": 1775690000000,
       "tag": "0148_stripe_prices_allow_year",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1775700000000,
+      "tag": "0149_documents_authoring",
+      "breakpoints": true
     }
   ]
 }
