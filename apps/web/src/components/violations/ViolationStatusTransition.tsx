@@ -5,8 +5,41 @@
  * Adapts fields based on the target action: notice, hearing, fine, resolve, dismiss.
  */
 import { useCallback, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { format, addDays } from 'date-fns';
 import type { ViolationItem } from '@/lib/api/violations';
+
+// Editor lazy-loaded so TipTap only ships when this transition form is in
+// view. mode='narrow' produces output inside the existing sanitizeHtml
+// allowlist exactly.
+const Editor = dynamic(
+  () => import('@propertypro/ui/editor').then((m) => ({ default: m.Editor })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-md border border-edge bg-surface px-3 py-3 text-sm text-content-secondary">
+        Loading…
+      </div>
+    ),
+  },
+);
+
+interface NotesEditorProps {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+}
+
+function NotesEditor({ value, onChange, placeholder }: NotesEditorProps) {
+  return (
+    <Editor
+      mode="narrow"
+      initialHtml={value}
+      onChange={onChange}
+      ariaLabel={placeholder ?? 'Notes'}
+    />
+  );
+}
 import { updateViolation, imposeFine, resolveViolation, dismissViolation } from '@/lib/api/violations';
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss';
@@ -220,14 +253,10 @@ export function ViolationStatusTransition({
         <label htmlFor="transition-notes" className="mb-1 block text-sm font-medium text-content-secondary">
           {config.notesLabel}
         </label>
-        <textarea
-          id="transition-notes"
+        <NotesEditor
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          maxLength={4000}
+          onChange={setNotes}
           placeholder={config.notesRequired ? 'Required — provide a reason for this action.' : 'Optional notes for the audit trail.'}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         />
       </div>
 
