@@ -14,6 +14,7 @@ import {
   requireViolationsWritePermission,
 } from '@/lib/violations/common';
 import { resolveViolationForCommunity } from '@/lib/services/violations-service';
+import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 const resolveSchema = z.object({
   communityId: z.number().int().positive(),
@@ -42,11 +43,15 @@ export const POST = withErrorHandler(
     requireViolationAdminWrite(membership);
 
     const requestId = req.headers.get('x-request-id');
+    const sanitizedNotes =
+      parseResult.data.resolutionNotes != null
+        ? sanitizeHtml(parseResult.data.resolutionNotes)
+        : null;
     const data = await resolveViolationForCommunity(
       communityId,
       id,
       actorUserId,
-      parseResult.data.resolutionNotes ?? null,
+      sanitizedNotes,
       requestId,
     );
     return NextResponse.json({ data });

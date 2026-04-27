@@ -6,6 +6,7 @@
  * Shows all fields, status timeline, and admin actions.
  */
 import { useState } from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 import type { ViolationRecord } from '@/lib/services/violations-service';
 import { ViolationStatusTransition } from './ViolationStatusTransition';
 import { FinesSummary } from './FinesSummary';
@@ -187,13 +188,16 @@ export function ViolationDetailView({
         </div>
       </section>
 
-      {/* Resolution notes */}
+      {/* Resolution notes — sanitized once on write (PR 7); sanitized again on render. */}
       {violation.resolutionNotes && (
         <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
           <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-content-tertiary">
             {violation.status === 'dismissed' ? 'Dismissal Reason' : 'Resolution Notes'}
           </h2>
-          <p className="whitespace-pre-wrap text-sm text-content-secondary">{violation.resolutionNotes}</p>
+          <div
+            className="text-sm text-content-secondary [&_p]:my-1 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_a]:underline"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(violation.resolutionNotes) }}
+          />
         </section>
       )}
 

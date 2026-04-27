@@ -5,6 +5,7 @@
  * Shows full details and context-dependent status transition action buttons.
  */
 import { useState } from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 import type { AnyCommunityRole } from '@propertypro/shared';
 import type { ViolationItem } from '@/lib/api/violations';
 import { ViolationStatusTransition } from './ViolationStatusTransition';
@@ -104,7 +105,10 @@ export function ViolationDetailPanel({
         {violation.resolutionNotes && (
           <div className="col-span-2 sm:col-span-4">
             <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Resolution Notes</span>
-            <p className="whitespace-pre-wrap text-content-secondary">{violation.resolutionNotes}</p>
+            <div
+              className="text-content-secondary [&_p]:my-1 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(violation.resolutionNotes) }}
+            />
           </div>
         )}
       </div>

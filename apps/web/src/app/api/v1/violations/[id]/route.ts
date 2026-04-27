@@ -17,6 +17,7 @@ import {
   requireViolationsWritePermission,
 } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
+import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 const updateViolationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -85,7 +86,10 @@ export const PATCH = withErrorHandler(
         evidenceDocumentIds: parseResult.data.evidenceDocumentIds,
         noticeDate: parseResult.data.noticeDate,
         hearingDate: parseResult.data.hearingDate,
-        resolutionNotes: parseResult.data.resolutionNotes,
+        resolutionNotes:
+          parseResult.data.resolutionNotes != null
+            ? sanitizeHtml(parseResult.data.resolutionNotes)
+            : parseResult.data.resolutionNotes,
       },
       requestId,
     );
