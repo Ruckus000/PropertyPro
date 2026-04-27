@@ -353,6 +353,7 @@ export function getVisibleItems(
 export interface NavItemWithGateStatus extends NavItemConfig {
   planLocked: boolean;
   upgradePlanName: string | null;
+  upgradePlanId: PlanId | null;
   /**
    * The CommunityFeatures key that triggered the lock — used by the upgrade
    * dialog and locked-feature screen to render feature-specific copy.
@@ -403,6 +404,7 @@ export function getVisibleItemsWithPlanGate(
     .map((item) => {
       let planLocked = false;
       let upgradePlanName: string | null = null;
+      let upgradePlanId: PlanId | null = null;
       let upgradeFeatureKey: keyof CommunityFeatures | null = null;
 
       // Plan gate: type allows but composed features don't → plan-locked
@@ -413,6 +415,9 @@ export function getVisibleItemsWithPlanGate(
           // Find cheapest plan that includes this feature
           const upgrade = findCheapestPlanForFeature(item.featureKey);
           upgradePlanName = upgrade?.displayName ?? null;
+          upgradePlanId = upgrade
+            ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === upgrade)?.[0] as PlanId | undefined) ?? null)
+            : null;
           upgradeFeatureKey = item.featureKey;
         }
       }
@@ -431,6 +436,10 @@ export function getVisibleItemsWithPlanGate(
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             const cheapest = candidates.sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
             upgradePlanName = cheapest?.displayName ?? null;
+            upgradePlanId = cheapest
+              ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === cheapest)?.[0] as PlanId | undefined) ??
+                null)
+              : null;
             // For any-of gates we can't point at a single canonical feature
             // for marketing copy — leave it null and let the dialog fall back.
             upgradeFeatureKey = null;
@@ -438,7 +447,7 @@ export function getVisibleItemsWithPlanGate(
         }
       }
 
-      return { ...item, planLocked, upgradePlanName, upgradeFeatureKey };
+      return { ...item, planLocked, upgradePlanName, upgradePlanId, upgradeFeatureKey };
     })
     // Tenants: drop plan-locked items so they never see a "Pro" pill or upgrade prompt.
     .filter((item) => !(hideLockedEntirely && item.planLocked));

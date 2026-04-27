@@ -20,6 +20,7 @@ import {
   type AnyCommunityRole,
   type CommunityFeatures,
   type CommunityType,
+  type PlanId,
 } from '@propertypro/shared';
 import {
   NAV_ITEMS,
@@ -72,6 +73,7 @@ export function AppSidebar({
   const { expanded, toggleExpanded } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
+    upgradePlanId: PlanId | null;
   } | null>(null);
   const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
@@ -90,6 +92,7 @@ export function AppSidebar({
         ...i,
         planLocked: false,
         upgradePlanName: null,
+        upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
     : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
@@ -214,7 +217,10 @@ export function AppSidebar({
         onViewChange={(id) => {
           const clickedItem = visibleById.get(id);
           if (clickedItem?.planLocked) {
-            setUpgradeFor({ featureKey: clickedItem.upgradeFeatureKey });
+            setUpgradeFor({
+              featureKey: clickedItem.upgradeFeatureKey,
+              upgradePlanId: clickedItem.upgradePlanId,
+            });
             onNavigate?.();
           }
         }}
@@ -243,6 +249,7 @@ export function AppSidebar({
           if (!open) setUpgradeFor(null);
         }}
         featureKey={upgradeFor?.featureKey ?? null}
+        upgradePlanId={upgradeFor?.upgradePlanId ?? null}
         currentPlanId={resolvedPlanId}
         currentPlanRaw={plan}
         role={canonicalRole}
