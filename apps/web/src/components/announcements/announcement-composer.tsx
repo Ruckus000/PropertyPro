@@ -7,6 +7,7 @@
 'use client';
 
 import { useCallback, useState, type FormEvent } from 'react';
+import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+
+// Editor lazy-loaded so TipTap only ships on routes that actually compose
+// announcements. Mode 'narrow' restricts output to the existing
+// sanitizeHtml allowlist exactly — no schema or sanitizer changes needed.
+const Editor = dynamic(
+  () => import('@propertypro/ui/editor').then((m) => ({ default: m.Editor })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-md border border-edge bg-surface px-3 py-3 text-sm text-content-secondary">
+        Loading editor…
+      </div>
+    ),
+  },
+);
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
@@ -123,13 +138,11 @@ export function AnnouncementComposer({
 
       <div className="space-y-2">
         <Label htmlFor="announcement-body">Message</Label>
-        <Textarea
-          id="announcement-body"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          placeholder="Share the update residents should see."
-          rows={10}
-          className="min-h-40"
+        <Editor
+          mode="narrow"
+          initialHtml={body}
+          onChange={(html) => setBody(html)}
+          ariaLabel="Announcement message"
         />
       </div>
 
