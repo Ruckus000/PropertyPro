@@ -14,6 +14,6 @@
 export { Editor } from './Editor';
 export type { EditorProps } from './Editor';
 export type { EditorMode } from './extensions';
-export { buildExtensions } from './extensions';
+export { buildExtensions, isAllowedLinkHref, ALLOWED_LINK_PROTOCOLS } from './extensions';
 export { DocumentLinkNode } from './DocumentLinkNode';
 export type { DocumentLinkAttrs } from './DocumentLinkNode';

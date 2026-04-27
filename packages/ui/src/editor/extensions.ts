@@ -27,7 +27,23 @@ import { DocumentLinkNode } from './DocumentLinkNode';
 
 export type EditorMode = 'authored' | 'narrow';
 
-const ALLOWED_LINK_PROTOCOLS = ['http', 'https', 'mailto', 'tel'];
+export const ALLOWED_LINK_PROTOCOLS = ['http', 'https', 'mailto', 'tel'] as const;
+
+/**
+ * Strict scheme allowlist for the Link extension.
+ *
+ * Plain `startsWith('/')` would let in protocol-relative `//evil.com`, which
+ * the sanitizer also rejects but the editor primitive should not even
+ * produce. Document-link chips (internal references) go through
+ * DocumentLinkNode, not Link, so we don't need a relative branch here.
+ *
+ * Exported for unit tests.
+ */
+export function isAllowedLinkHref(href: unknown): boolean {
+  if (typeof href !== 'string' || href.length === 0) return false;
+  const trimmed = href.trim().toLowerCase();
+  return ALLOWED_LINK_PROTOCOLS.some((p) => trimmed.startsWith(`${p}:`));
+}
 
 function buildLinkExtension() {
   return Link.configure({
@@ -39,15 +55,8 @@ function buildLinkExtension() {
       rel: 'noopener noreferrer',
       target: '_blank',
     },
-    protocols: ALLOWED_LINK_PROTOCOLS,
-    validate: (href) => {
-      if (!href) return false;
-      const trimmed = href.trim();
-      // Reject javascript: and data: by checking for an allowed protocol prefix.
-      return ALLOWED_LINK_PROTOCOLS.some((p) =>
-        trimmed.toLowerCase().startsWith(`${p}:`),
-      ) || trimmed.startsWith('/');
-    },
+    protocols: [...ALLOWED_LINK_PROTOCOLS],
+    validate: isAllowedLinkHref,
   });
 }
 
