@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@propertypro/tokens": "workspace:*",
+    "@tiptap/core": "^2.10.4",
     "@tiptap/extension-image": "^2.10.4",
     "@tiptap/extension-link": "^2.10.4",
     "@tiptap/extension-table": "^2.10.4",
