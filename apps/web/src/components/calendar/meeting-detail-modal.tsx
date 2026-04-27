@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Badge, Button, Card } from '@propertypro/ui';
-import { X } from 'lucide-react';
+import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
@@ -218,6 +219,13 @@ export function MeetingDetailModal({
             <Button variant="danger" onClick={handleDelete} loading={deleteMutation.isPending}>
               Delete
             </Button>
+            <Link
+              href={`/communities/${communityId}/meetings/${meetingId}/minutes/author`}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)]"
+            >
+              <FilePlus2 size={16} aria-hidden="true" />
+              Author Minutes
+            </Link>
             <Button variant="secondary" onClick={() => onEdit(meetingId)}>
               Edit
             </Button>

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -20,6 +21,9 @@ interface DocumentViewerProps {
   document: DocumentListItem | null;
   onClose?: () => void;
   onViewVersions?: (document: DocumentListItem) => void;
+  /** When true, an "Edit" CTA appears for authored documents that re-opens
+   *  the in-app editor seeded from the published HTML. */
+  canEditAuthored?: boolean;
 }
 
 type PreviewModalSize = 'standard' | 'large' | 'full';
@@ -64,7 +68,13 @@ export function DocumentViewer({
   document,
   onClose,
   onViewVersions,
+  canEditAuthored,
 }: DocumentViewerProps) {
+  const isAuthored = document?.sourceType === 'authored';
+  const showEditAction = Boolean(canEditAuthored && isAuthored);
+  const editHref = document
+    ? `/communities/${communityId}/documents/author/new?source=${document.id}`
+    : '#';
   const [preview, setPreview] = useState<DocumentPreviewResult>({ state: 'idle' });
   const [currentPage, setCurrentPage] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
@@ -300,6 +310,15 @@ export function DocumentViewer({
             <p className="text-sm text-content-tertiary">{document.fileName}</p>
           </div>
           <div className="ml-4 flex flex-wrap items-center justify-end gap-2">
+            {showEditAction && (
+              <Link
+                href={editHref}
+                className="inline-flex items-center gap-1.5 rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <Pencil size={14} aria-hidden="true" />
+                Edit
+              </Link>
+            )}
             {onViewVersions && (
               <button
                 type="button"

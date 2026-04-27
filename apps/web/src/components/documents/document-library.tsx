@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { PenTool, X } from 'lucide-react';
+import Link from 'next/link';
+import { FilePlus2, PenTool, X } from 'lucide-react';
 import { isElevatedRole, type CommunityRole, type NewCommunityRole, type ManagerPermissions } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { DocumentList, type DocumentListItem } from './document-list';
@@ -111,6 +112,15 @@ export function DocumentLibrary({
             </button>
           )}
           {canUpload && (
+            <Link
+              href={`/communities/${communityId}/documents/author/new`}
+              className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive sm:px-4"
+            >
+              <FilePlus2 size={16} aria-hidden="true" />
+              Author Document
+            </Link>
+          )}
+          {canUpload && (
             <button
               type="button"
               onClick={() => {
@@ -216,6 +226,7 @@ export function DocumentLibrary({
             )}
             {viewMode === 'viewer' && (
               <DocumentViewer
+                canEditAuthored={canUpload}
                 communityId={communityId}
                 document={selectedDocument}
                 onClose={handleCloseViewer}
