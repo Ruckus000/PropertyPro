@@ -11,13 +11,9 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { PackageStaffView } from '@/components/packages/PackageStaffView';
 import { PackageResidentView } from '@/components/packages/PackageResidentView';
-import {
-  PackagesUnavailableState,
-  type PackagesUnavailableReason,
-} from '@/components/packages/PackagesUnavailableState';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -42,22 +38,15 @@ export default async function PackagesPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasPackageLogging) {
-    // Render an explanatory guard state instead of silently redirecting.
-    // Discriminate cause so copy can explain whether the limitation is the
-    // community type (e.g. HOA) or the subscription plan.
-    const typeFeatures = getFeaturesForCommunity(membership.communityType);
-    const reason: PackagesUnavailableReason = !typeFeatures.hasPackageLogging
-      ? 'community_type'
-      : 'plan';
-    return <PackagesUnavailableState communityId={communityId} reason={reason} />;
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasPackageLogging) {
+    redirect('/dashboard?reason=feature-not-available');
   }
 
   const isStaff = isAdminRole(membership.role);
 
   return (
-    <>
+    <FeatureGate feature="hasPackageLogging" communityId={communityId}>
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">
           {isStaff ? 'Package Logging' : 'My Packages'}
@@ -74,6 +63,6 @@ export default async function PackagesPage({ searchParams }: PageProps) {
       ) : (
         <PackageResidentView communityId={communityId} />
       )}
-    </>
+    </FeatureGate>
   );
 }

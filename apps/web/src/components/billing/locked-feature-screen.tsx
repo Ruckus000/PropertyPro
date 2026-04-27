@@ -10,7 +10,7 @@
  * consistent across entry points.
  */
 import * as React from 'react';
-import { Check, Sparkles } from 'lucide-react';
+import { Check } from 'lucide-react';
 import {
   findCheapestPlanForFeature,
   getLockedFeatureBehavior,
@@ -21,6 +21,7 @@ import {
 } from '@propertypro/shared';
 import { PlanBadge } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
+import { FeatureHero } from './feature-hero';
 import { UpgradeDialog } from './upgrade-dialog';
 
 export interface LockedFeatureScreenProps {
@@ -49,19 +50,7 @@ export function LockedFeatureScreen({
   return (
     <div className="rounded-md border border-edge bg-surface-card p-6 sm:p-8">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center">
-        {/* Hero — placeholder gradient + sparkle icon */}
-        <div className="relative flex h-56 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-[#3B82F6] via-[#6366F1] to-[#8B5CF6] sm:h-72">
-          <div className="absolute inset-0 opacity-20" aria-hidden="true">
-            <div className="absolute -left-10 -top-10 size-40 rounded-full bg-white blur-3xl" />
-            <div className="absolute -right-12 bottom-0 size-48 rounded-full bg-white blur-3xl" />
-          </div>
-          <Sparkles
-            size={88}
-            strokeWidth={1.4}
-            className="relative text-white drop-shadow-md"
-            aria-hidden="true"
-          />
-        </div>
+        <FeatureHero featureKey={featureKey} variant="screen" />
 
         {/* Right column — value prop + CTA */}
         <div className="space-y-5">

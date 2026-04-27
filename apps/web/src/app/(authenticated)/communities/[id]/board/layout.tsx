@@ -2,6 +2,7 @@ import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context'
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { BoardChrome } from '@/components/board/board-chrome';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { requireCommunityBoardEnabled } from '@/lib/polls/common';
 
 interface LayoutProps {
@@ -23,12 +24,14 @@ export default async function BoardLayout({ children, params }: LayoutProps) {
   const features = getFeaturesForCommunity(membership.communityType);
 
   return (
-    <BoardChrome
-      communityId={communityId}
-      communityName={membership.communityName}
-      electionsEnabled={features.hasVoting && membership.electionsAttorneyReviewed}
-    >
-      {children}
-    </BoardChrome>
+    <FeatureGate feature="hasCommunityBoard" communityId={communityId}>
+      <BoardChrome
+        communityId={communityId}
+        communityName={membership.communityName}
+        electionsEnabled={features.hasVoting && membership.electionsAttorneyReviewed}
+      >
+        {children}
+      </BoardChrome>
+    </FeatureGate>
   );
 }

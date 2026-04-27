@@ -12,9 +12,9 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { SubmissionDetail } from '@/components/esign/submission-detail';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -50,8 +50,8 @@ export default async function SubmissionDetailPage({
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasEsign) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasEsign) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
@@ -60,9 +60,11 @@ export default async function SubmissionDetailPage({
   }
 
   return (
-    <SubmissionDetail
-      communityId={communityId}
-      submissionId={submissionId}
-    />
+    <FeatureGate feature="hasEsign" communityId={communityId}>
+      <SubmissionDetail
+        communityId={communityId}
+        submissionId={submissionId}
+      />
+    </FeatureGate>
   );
 }

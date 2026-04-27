@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { ChecklistListPage } from '@/components/move-checklists/ChecklistListPage';
 
 interface PageProps {
@@ -29,13 +29,13 @@ export default async function MoveInOutPage({ searchParams }: PageProps) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasLeaseTracking) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasLeaseTracking) {
     redirect('/dashboard?reason=feature-unavailable');
   }
 
   return (
-    <>
+    <FeatureGate feature="hasLeaseTracking" communityId={communityId}>
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">Move In/Out</h1>
         <p className="mt-1 text-sm text-content-secondary">
@@ -43,6 +43,6 @@ export default async function MoveInOutPage({ searchParams }: PageProps) {
         </p>
       </div>
       <ChecklistListPage communityId={communityId} />
-    </>
+    </FeatureGate>
   );
 }

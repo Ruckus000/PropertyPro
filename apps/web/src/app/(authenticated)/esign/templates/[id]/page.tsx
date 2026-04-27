@@ -5,11 +5,14 @@
  * Route: /esign/templates/:id?communityId=X
  * Auth: community member with esign read access.
  */
+import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { FeatureGate } from '@/components/billing/feature-gate';
 import { TemplateDetailClient } from './template-detail-client';
 
 interface PageProps {
@@ -45,12 +48,19 @@ export default async function EsignTemplateDetailPage({
   }
 
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(context.communityId, userId);
+  const membership = await requireCommunityMembership(context.communityId, userId);
+
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasEsign) {
+    redirect('/dashboard?reason=feature-not-available');
+  }
 
   return (
-    <TemplateDetailClient
-      communityId={context.communityId}
-      templateId={templateId}
-    />
+    <FeatureGate feature="hasEsign" communityId={context.communityId}>
+      <TemplateDetailClient
+        communityId={context.communityId}
+        templateId={templateId}
+      />
+    </FeatureGate>
   );
 }

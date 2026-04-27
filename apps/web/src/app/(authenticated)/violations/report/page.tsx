@@ -15,7 +15,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
 import { getActorUnitIds, isResidentRole } from '@/lib/violations/common';
 import { resolveReportMode } from '@/lib/violations/report-mode';
@@ -24,6 +24,7 @@ import { listViolationsForCommunity } from '@/lib/services/violations-service';
 import { ViolationReportForm } from '@/components/violations/ViolationReportForm';
 import { StaffViolationReportForm } from '@/components/violations/StaffViolationReportForm';
 import { ViolationCard } from '@/components/violations/ViolationCard';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -48,8 +49,8 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasViolations) {
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasViolations) {
     redirect('/dashboard?reason=feature-unavailable');
   }
 
@@ -67,6 +68,7 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
       : [];
 
   return (
+    <FeatureGate feature="hasViolations" communityId={communityId}>
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-content">Report a Violation</h1>
@@ -126,5 +128,6 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
         </section>
       )}
     </div>
+    </FeatureGate>
   );
 }

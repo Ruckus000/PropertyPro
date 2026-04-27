@@ -16,7 +16,7 @@
  *                fallback if it ever does.
  */
 import * as React from 'react';
-import { Check, Loader2, Sparkles } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import {
   PLAN_FEATURES,
   findCheapestPlanForFeature,
@@ -28,6 +28,7 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 import { PlanBadge } from '@propertypro/ui';
+import { FeatureHero } from './feature-hero';
 import {
   Dialog,
   DialogContent,
@@ -153,19 +154,7 @@ export function UpgradeDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden">
-        {/* Hero — placeholder gradient + feature icon */}
-        <div className="relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br from-[#3B82F6] via-[#6366F1] to-[#8B5CF6]">
-          <div className="absolute inset-0 opacity-20" aria-hidden="true">
-            <div className="absolute -left-6 -top-6 size-32 rounded-full bg-white blur-3xl" />
-            <div className="absolute -right-12 bottom-0 size-40 rounded-full bg-white blur-3xl" />
-          </div>
-          <Sparkles
-            size={56}
-            strokeWidth={1.5}
-            className="relative text-white drop-shadow-md"
-            aria-hidden="true"
-          />
-        </div>
+        <FeatureHero featureKey={featureKey} variant="dialog" />
 
         <div className="space-y-5 p-6">
           <div className="space-y-2">
