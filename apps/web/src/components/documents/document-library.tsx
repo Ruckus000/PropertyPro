@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FilePlus2, PenTool, X } from 'lucide-react';
+import { FilePlus2, PenTool } from 'lucide-react';
 import { isElevatedRole, type CommunityRole, type NewCommunityRole, type ManagerPermissions } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { DocumentList, type DocumentListItem } from './document-list';
@@ -18,6 +18,8 @@ interface DocumentLibraryProps {
   userRole: CommunityRole | NewCommunityRole;
   isUnitOwner?: boolean;
   permissions?: ManagerPermissions;
+  /** Effective community feature — hide E‑Sign when the plan/type does not include it. */
+  hasEsign: boolean;
   /** Pre-populate search from command palette "View all" link */
   initialSearchQuery?: string;
 }
@@ -30,6 +32,7 @@ export function DocumentLibrary({
   userRole,
   isUnitOwner,
   permissions,
+  hasEsign,
   initialSearchQuery,
 }: DocumentLibraryProps) {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -39,7 +42,6 @@ export function DocumentLibrary({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
-  const [showEsignBanner, setShowEsignBanner] = useState(false);
 
   const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
 
@@ -97,19 +99,14 @@ export function DocumentLibrary({
           >
             {searchMode ? 'Hide Search' : 'Search'}
           </button>
-          {canUpload && (
-            <button
-              type="button"
-              onClick={() => setShowEsignBanner(!showEsignBanner)}
-              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
-                showEsignBanner
-                  ? 'border-interactive bg-interactive-subtle text-interactive'
-                  : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
-              }`}
+          {canUpload && hasEsign && (
+            <Link
+              href={`/esign?communityId=${communityId}`}
+              className="flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-hover sm:px-4"
             >
-              <PenTool size={16} />
+              <PenTool size={16} aria-hidden />
               E-Sign
-            </button>
+            </Link>
           )}
           {canUpload && (
             <Link
@@ -143,32 +140,6 @@ export function DocumentLibrary({
           )}
         </div>
       </div>
-
-      {showEsignBanner && (
-        <div className="relative rounded-md border border-interactive bg-interactive-subtle p-4">
-          <button
-            type="button"
-            onClick={() => setShowEsignBanner(false)}
-            className="absolute right-3 top-3 text-content-disabled hover:text-content-link"
-            aria-label="Dismiss"
-          >
-            <X size={16} />
-          </button>
-          <div className="flex items-start gap-3">
-            <PenTool size={20} className="mt-0.5 shrink-0 text-content-link" />
-            <div>
-              <h3 className="text-sm font-semibold text-content">
-                E-Signatures Coming Soon
-              </h3>
-              <p className="mt-1 text-sm text-interactive">
-                Built-in document signing is on the way. Create templates,
-                send for signature, and track completions — all without
-                leaving PropertyPro.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showUpload && canUpload && (
         <div className="rounded-md border border-edge bg-surface-card p-6">
