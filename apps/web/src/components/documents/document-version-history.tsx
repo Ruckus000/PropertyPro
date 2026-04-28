@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { DocumentListItem } from './document-list';
+import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface VersionHistoryItem {
   id: number;
@@ -50,6 +51,13 @@ export function DocumentVersionHistory({
   const [versions, setVersions] = useState<VersionHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewerDocument, setViewerDocument] = useState<{ id: number; fileName: string } | null>(null);
+
+  function isPreviewable(mimeType: string): boolean {
+    // Exclude image/svg+xml — SVGs can carry script payloads.
+    if (mimeType === 'image/svg+xml') return false;
+    return mimeType.includes('pdf') || mimeType.includes('image');
+  }
 
   useEffect(() => {
     setIsLoading(true);
@@ -154,7 +162,13 @@ export function DocumentVersionHistory({
                   {version.id !== document.id && onSelectVersion && (
                     <button
                       type="button"
-                      onClick={() => onSelectVersion(version)}
+                      onClick={() => {
+                        if (isPreviewable(version.mimeType)) {
+                          setViewerDocument({ id: version.id, fileName: version.fileName });
+                          return;
+                        }
+                        onSelectVersion(version);
+                      }}
                       className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary hover:bg-surface-hover"
                     >
                       View
@@ -172,6 +186,17 @@ export function DocumentVersionHistory({
           </div>
         )}
       </div>
+      <DocumentViewerModal
+        open={viewerDocument != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerDocument(null);
+          }
+        }}
+        communityId={communityId}
+        documentId={viewerDocument?.id ?? null}
+        fileName={viewerDocument?.fileName}
+      />
     </div>
   );
 }
