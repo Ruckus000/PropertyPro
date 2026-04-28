@@ -5,7 +5,9 @@
  * Pattern follows AdminInbox.tsx from maintenance.
  */
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { AnyCommunityRole } from '@propertypro/shared';
+import { Button } from '@propertypro/ui';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
 import { ViolationDetailPanel } from './ViolationDetailPanel';
@@ -120,9 +122,20 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
   }, [fetchViolations]);
 
   const totalPages = Math.ceil(total / LIMIT);
+  const canCreateViolation = userRole !== 'resident' && userRole !== 'owner' && userRole !== 'tenant';
 
   return (
     <div>
+      {canCreateViolation ? (
+        <div className="mb-4 flex justify-end">
+          <Link href={`/violations/report?communityId=${communityId}`}>
+            <Button variant="primary" size="md">
+              New violation
+            </Button>
+          </Link>
+        </div>
+      ) : null}
+
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <select
