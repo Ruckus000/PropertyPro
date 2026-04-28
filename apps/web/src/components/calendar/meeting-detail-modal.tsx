@@ -8,6 +8,7 @@ import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
+import { DocumentViewerModal } from '@/components/documents/DocumentViewerModal';
 
 interface MeetingDetailModalProps {
   communityId: number;
@@ -47,6 +48,7 @@ export function MeetingDetailModal({
   const detailQuery = useMeeting(communityId, meetingId);
   const deleteMutation = useDeleteMeeting(communityId);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [viewerDocument, setViewerDocument] = useState<{ id: number; fileName: string } | null>(null);
 
   async function handleDelete() {
     const confirmed = window.confirm('Delete this meeting?');
@@ -189,18 +191,17 @@ export function MeetingDetailModal({
                 ) : (
                   <div className="space-y-2">
                     {meeting.documents.map((document) => (
-                      <a
+                      <button
                         key={document.id}
-                        href={`/api/v1/documents/${document.id}/download?communityId=${communityId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3 text-sm transition-colors hover:bg-[var(--surface-hover)]"
+                        type="button"
+                        onClick={() => setViewerDocument({ id: document.id, fileName: document.fileName })}
+                        className="block w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--surface-hover)]"
                       >
                         <div className="font-medium text-[var(--text-primary)]">{document.title}</div>
                         <div className="mt-1 text-xs text-[var(--text-tertiary)]">
                           {document.category ?? 'Uncategorized'} • {document.fileName}
                         </div>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -232,6 +233,17 @@ export function MeetingDetailModal({
           </Card.Footer>
         ) : null}
       </Card>
+      <DocumentViewerModal
+        open={viewerDocument != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerDocument(null);
+          }
+        }}
+        communityId={communityId}
+        documentId={viewerDocument?.id ?? null}
+        fileName={viewerDocument?.fileName}
+      />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
