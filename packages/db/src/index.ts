@@ -82,6 +82,7 @@ export {
   searchMaintenanceByTrigram,
   searchViolationsByTrigram,
   searchResidentsByTrigram,
+  searchUsersByTrigram,
 } from './queries/trigram-search';
 export type {
   TrigramSearchResult,
@@ -91,6 +92,7 @@ export type {
   MaintenanceSearchHit,
   ViolationSearchHit,
   ResidentSearchHit,
+  UserSearchHit,
 } from './queries/trigram-search';
 
 // Document access control

@@ -389,3 +389,68 @@ export async function searchResidentsByTrigram(
     return { results, totalCount: results.length };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Community member search (audit / staff pickers — same trigram strategy as
+// resident search but omits raw email from the projected row set; subtitles
+// are derived server-side without exposing phone/email.)
+// ---------------------------------------------------------------------------
+
+export interface UserSearchHit {
+  id: string;
+  full_name: string | null;
+  unit_number: string | null;
+  role: string;
+  display_title: string | null;
+  preset_key: string | null;
+  relevance: number;
+}
+
+/**
+ * Search all community-linked accounts (residents + managers). Permission is
+ * enforced by the `/api/v1/search/users` route (`audit` read).
+ *
+ * Hybrid strategy mirrors {@link searchResidentsByTrigram}; email is matched
+ * in SQL but excluded from SELECT output.
+ */
+export async function searchUsersByTrigram(
+  communityId: number,
+  query: string,
+  sanitizedInput: string,
+  limit: number,
+): Promise<TrigramSearchResult<UserSearchHit>> {
+  return withTrigramTx(async (tx) => {
+    const likePattern = `${sanitizedInput}%`;
+
+    const rows = await tx.execute(sql`
+      SELECT
+        usi.user_id AS id,
+        usi.full_name,
+        un.unit_number,
+        ur.role,
+        ur.display_title,
+        ur.preset_key,
+        CASE
+          WHEN un.unit_number LIKE ${likePattern} THEN 0.9
+          ELSE GREATEST(
+            word_similarity(${query}, usi.full_name),
+            word_similarity(${query}, usi.email)
+          )
+        END AS relevance
+      FROM user_roles ur
+      JOIN public.user_search_index usi ON usi.user_id = ur.user_id
+      LEFT JOIN units un ON un.id = ur.unit_id
+      WHERE ur.community_id = ${communityId}
+        AND (
+          usi.full_name %> ${query}
+          OR usi.email %> ${query}
+          OR un.unit_number LIKE ${likePattern}
+        )
+      ORDER BY relevance DESC
+      LIMIT ${limit}
+    `);
+
+    const results = asRows<UserSearchHit>(rows);
+    return { results, totalCount: results.length };
+  });
+}

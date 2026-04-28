@@ -3,8 +3,10 @@
 /**
  * P3-53: Audit trail filter controls.
  *
- * Supports filtering by action type, date range, and user ID.
+ * Supports filtering by action type, date range, and user.
  */
+
+import { UserSearchCombobox } from '@/components/shared/UserSearchCombobox';
 
 export interface AuditFilterValues {
   action?: string;
@@ -14,6 +16,7 @@ export interface AuditFilterValues {
 }
 
 interface AuditFiltersProps {
+  communityId: number;
   filters: AuditFilterValues;
   onFilterChange: (filters: AuditFilterValues) => void;
 }
@@ -31,7 +34,11 @@ const AUDIT_ACTIONS = [
   { value: 'announcement_email_sent', label: 'Announcement Sent' },
 ];
 
-export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
+export function AuditFilters({
+  communityId,
+  filters,
+  onFilterChange,
+}: AuditFiltersProps) {
   function handleChange(key: keyof AuditFilterValues, value: string) {
     onFilterChange({ ...filters, [key]: value || undefined });
   }
@@ -82,18 +89,18 @@ export function AuditFilters({ filters, onFilterChange }: AuditFiltersProps) {
         />
       </div>
 
-      <div>
-        <label htmlFor="filter-user" className="block text-xs font-medium text-content-tertiary">
-          User ID
-        </label>
-        <input
-          id="filter-user"
-          type="text"
-          value={filters.userId ?? ''}
-          onChange={(e) => handleChange('userId', e.target.value)}
-          placeholder="Filter by user..."
-          className="mt-1 block w-48 rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
-        />
+      <div className="w-full min-w-0 flex-1 basis-full sm:basis-64">
+        <span className="block text-xs font-medium text-content-tertiary">User</span>
+        <div className="mt-1">
+          <UserSearchCombobox
+            communityId={communityId}
+            value={filters.userId ?? null}
+            onChange={(userId) =>
+              onFilterChange({ ...filters, userId: userId ?? undefined })
+            }
+            placeholder="Search by name or unit..."
+          />
+        </div>
       </div>
     </div>
   );
