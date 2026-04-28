@@ -70,7 +70,7 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
   `/emergency`, `/esign/templates`, `/esign/submissions`), use a human-readable
   section name and keep it consistent across every breadcrumb that links to
   that section. Canonical mappings: `'Announcements'`, `'Board'`, `'E-Sign'`,
-  `'Violations Inbox'`, `'ARC Requests'`, `'Residents'`, `'Communities'` (PM sidebar — not
+  `'Violations'`, `'ARC Requests'`, `'Residents'`, `'Communities'` (PM sidebar — not
   "Portfolio").
 - Breadcrumb hrefs to nested `/communities/[id]/...` routes must NOT append
   `?communityId=...` — the `[id]` path segment is the authoritative tenant id

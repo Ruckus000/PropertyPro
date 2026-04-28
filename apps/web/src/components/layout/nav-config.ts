@@ -213,7 +213,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasViolations',
-    matchPrefixes: ['/violations/inbox', '/violations'],
+    matchPrefixes: ['/violations'],
   },
   {
     id: 'arc-requests',

@@ -239,7 +239,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
   },
   {
     id: 'page-violations-inbox',
-    label: 'Violations Inbox',
+    label: 'Violations',
     keywords: ['violation', 'complaint', 'rule', 'infraction', 'notice', 'hearing', 'fine', 'penalty', 'enforcement'],
     description: 'Review and manage violation cases',
     icon: AlertTriangle,
