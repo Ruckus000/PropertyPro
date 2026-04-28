@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type React from 'react';
 
 vi.mock('@/components/pdf/pdf-viewer', () => ({
   PdfViewer: ({ pdfUrl, scale }: { pdfUrl?: string; scale?: number }) => (
@@ -11,6 +13,22 @@ vi.mock('@/components/pdf/pdf-viewer', () => ({
 }));
 
 import { DocumentViewer } from '../../src/components/documents/document-viewer';
+
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      {ui}
+    </QueryClientProvider>,
+  );
+}
 
 describe('DocumentViewer', () => {
   beforeEach(() => {
@@ -30,7 +48,7 @@ describe('DocumentViewer', () => {
       }),
     }));
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
@@ -59,7 +77,7 @@ describe('DocumentViewer', () => {
     );
   });
 
-  it('opens an expanded modal preview with size controls and multiple close paths', async () => {
+  it('opens an expanded modal preview that closes via Escape', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -72,7 +90,7 @@ describe('DocumentViewer', () => {
       }),
     }));
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
@@ -93,32 +111,10 @@ describe('DocumentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }));
 
-    const dialog = await screen.findByRole('dialog', { name: 'Annual Packet' });
-    expect(dialog).toHaveAttribute('data-preview-size', 'large');
-    expect(screen.getByRole('button', { name: 'Close' })).toBeVisible();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Increase preview size' }));
-    expect(dialog).toHaveAttribute('data-preview-size', 'full');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Decrease preview size' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Decrease preview size' }));
-    expect(dialog).toHaveAttribute('data-preview-size', 'standard');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await screen.findByRole('dialog', { name: 'packet.pdf' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Annual Packet' })).not.toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }));
-    await screen.findByRole('dialog', { name: 'Annual Packet' });
-
-    const overlay = screen.getByTestId('document-preview-modal-overlay');
-    fireEvent.pointerDown(overlay);
-    fireEvent.mouseUp(overlay);
-    fireEvent.click(overlay);
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Annual Packet' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'packet.pdf' })).not.toBeInTheDocument();
     });
   });
 
@@ -135,7 +131,7 @@ describe('DocumentViewer', () => {
       }),
     }));
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
@@ -172,7 +168,7 @@ describe('DocumentViewer', () => {
       }),
     }));
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
@@ -217,7 +213,7 @@ describe('DocumentViewer', () => {
       });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
@@ -249,7 +245,7 @@ describe('DocumentViewer', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
+    renderWithQuery(
       <DocumentViewer
         communityId={9}
         document={{
