@@ -4,10 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { ComplianceActivityFeed } from '../compliance-activity-feed';
 
-// Mock the history sheet so we can assert open prop without rendering the
+// Mock the history modal so we can assert open prop without rendering the
 // full AuditTrailViewer (which fetches its own data).
-vi.mock('../compliance-activity-history-sheet', () => ({
-  ComplianceActivityHistorySheet: ({
+vi.mock('../compliance-activity-history-modal', () => ({
+  ComplianceActivityHistoryModal: ({
     open,
     communityId,
   }: {
@@ -16,7 +16,7 @@ vi.mock('../compliance-activity-history-sheet', () => ({
   }) =>
     open ? (
       <div data-testid="history-sheet-open" data-community-id={communityId}>
-        history sheet
+        activity history modal
       </div>
     ) : null,
 }));

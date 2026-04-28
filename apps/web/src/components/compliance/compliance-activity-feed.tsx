@@ -10,7 +10,7 @@ import {
   Eye,
   Clock,
 } from "lucide-react";
-import { ComplianceActivityHistorySheet } from "./compliance-activity-history-sheet";
+import { ComplianceActivityHistoryModal } from "./compliance-activity-history-modal";
 
 // ── Types ───────────────────────────────────────────
 
@@ -220,7 +220,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
         </div>
       )}
 
-      <ComplianceActivityHistorySheet
+      <ComplianceActivityHistoryModal
         communityId={communityId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
