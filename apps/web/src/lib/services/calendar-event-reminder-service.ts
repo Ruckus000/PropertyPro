@@ -916,7 +916,7 @@ async function buildAggregateAssessmentEmailPayload(params: {
         `${formatCurrency(assessment.totalAmountCents)} total open balance`,
       ],
       ctaLabel: 'Review finance',
-      ctaUrl: `${baseUrl}/finance?communityId=${params.community.id}`,
+      ctaUrl: `${baseUrl}/communities/${params.community.id}/payments?tab=overview`,
     }),
   };
 }

@@ -5,6 +5,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { PaymentPortal } from '@/components/finance/payment-portal';
+import { AdminPaymentsTabs } from './_components/AdminPaymentsTabs';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 
 interface PageProps {
@@ -41,21 +42,22 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   }
 
   const resolved = await searchParams;
+  const initialTab = typeof resolved['tab'] === 'string' ? resolved['tab'] : undefined;
   const rawUnitId = typeof resolved['unitId'] === 'string' ? resolved['unitId'] : undefined;
   const parsedUnitId = rawUnitId ? Number(rawUnitId) : undefined;
   const queryUnitId = parsedUnitId !== undefined && Number.isFinite(parsedUnitId) && parsedUnitId > 0
     ? parsedUnitId
     : undefined;
 
-  // Staff / manager roles: community-wide dashboard. Skip the per-resident
-  // unit-picker flow entirely — PaymentPortal fetches aggregated data.
-  if (membership.role !== 'resident') {
+  const isResidentRole = membership.role === 'resident';
+  if (!isResidentRole) {
     return (
       <FeatureGate feature="hasFinance" communityId={communityId}>
-        <PaymentPortal
+        <AdminPaymentsTabs
           communityId={communityId}
+          userId={userId}
           userRole={membership.role}
-          mode="community"
+          initialTab={initialTab}
         />
       </FeatureGate>
     );
