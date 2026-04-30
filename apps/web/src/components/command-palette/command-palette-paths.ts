@@ -52,8 +52,8 @@ export function getEntityListPath(
     case 'violations':
       if (!communityId) return null;
       return isAdmin
-        ? withCommunityQuery('/violations/inbox', communityId, query)
-        : withCommunityQuery('/violations', communityId, query);
+        ? withCommunityQuery('/violations', communityId, query)
+        : withCommunityQuery('/violations/report', communityId, query);
     case 'residents':
       if (!communityId) return null;
       return withCommunityQuery('/dashboard/residents', communityId, query);
