@@ -8,7 +8,7 @@
  * role/feature gating is consistent with the sidebar.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Command } from 'cmdk';
 import {
   Settings,
@@ -91,6 +91,7 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { recentPages, addPage } = useRecentPages();
   const [search, setSearch] = useState('');
 
@@ -130,14 +131,14 @@ export function CommandPalette({
   // Track page visits for recent pages using nav-config's route matching
   useEffect(() => {
     const navItems = pathname.startsWith('/pm/') ? PM_NAV_ITEMS : NAV_ITEMS;
-    const activeId = getActiveItemId(navItems, pathname);
+    const activeId = getActiveItemId(navItems, pathname, searchParams.toString());
     if (activeId) {
       const matchingItem = items.find((item) => item.id === activeId);
       if (matchingItem) {
         addPage(matchingItem.href, matchingItem.label);
       }
     }
-  }, [pathname, items, addPage]);
+  }, [pathname, searchParams, items, addPage]);
 
   const handleSelect = useCallback(
     (href: string, label: string) => {
