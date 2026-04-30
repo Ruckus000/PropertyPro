@@ -11,7 +11,6 @@ import {
   StaggerChildren,
   StaggerItem,
 } from "@/components/motion";
-import { DocumentViewerModal } from "@/components/documents/DocumentViewerModal";
 
 // ── Types ───────────────────────────────────────────
 
