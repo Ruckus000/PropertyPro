@@ -24,6 +24,8 @@ interface DocumentViewerModalProps {
   communityId: number;
   documentId: number | null;
   fileName?: string;
+  /** Optional test id on dialog content for unit tests / e2e. */
+  contentTestId?: string;
 }
 
 async function fetchSignedUrl(communityId: number, documentId: number): Promise<{ url: string; fileName?: string }> {
@@ -50,6 +52,7 @@ export function DocumentViewerModal({
   communityId,
   documentId,
   fileName,
+  contentTestId,
 }: DocumentViewerModalProps) {
   const query = useQuery({
     queryKey: ['document-viewer-modal', communityId, documentId],
@@ -72,7 +75,7 @@ export function DocumentViewerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[960px]">
+      <DialogContent className="sm:max-w-[960px]" data-testid={contentTestId}>
         <DialogHeader>
           <DialogTitle>{fileName ?? 'Document preview'}</DialogTitle>
           <DialogDescription>
@@ -93,7 +96,7 @@ export function DocumentViewerModal({
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => {
                     void query.refetch();
                   }}

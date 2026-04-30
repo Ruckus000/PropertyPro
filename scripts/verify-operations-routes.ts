@@ -65,6 +65,7 @@ const NON_OPS_ALLOWLIST = new Set<string>([
 
   // Implemented: top-level pages that the walker reaches
   '/audit-trail',
+  '/violations',
   '/violations/inbox',
   '/violations/report',
   '/esign',

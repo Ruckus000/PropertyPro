@@ -180,7 +180,7 @@ describe('nav href generation', () => {
     expect(byId.get('meetings')?.href(42)).toBe('/communities/42/meetings');
     expect(byId.get('payments')?.href(42)).toBe('/communities/42/payments');
     expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
-    expect(byId.get('assessments')?.href(42)).toBe('/communities/42/assessments');
+    expect(byId.get('assessments')?.href(42)).toBe('/communities/42/finance?tab=assessments');
     expect(byId.get('finance')?.href(42)).toBe('/communities/42/finance');
   });
 });
@@ -199,7 +199,16 @@ describe('getActiveItemId', () => {
   it('matches canonical finance paths', () => {
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/payments')).toBe('payments');
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/assessments')).toBe('assessments');
-    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance')).toBe('finance');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance')).toBe('assessments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance', '')).toBe('assessments');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance', 'tab=ledger')).toBe('finance');
+    expect(getActiveItemId(NAV_ITEMS, '/communities/1/finance', 'tab=payments')).toBe('finance');
+  });
+
+  it('distinguishes admin violations inbox from violation report path', () => {
+    expect(getActiveItemId(NAV_ITEMS, '/violations/report')).toBe('violations-report');
+    expect(getActiveItemId(NAV_ITEMS, '/violations')).toBe('violations-inbox');
+    expect(getActiveItemId(NAV_ITEMS, '/violations/inbox')).toBe('violations-inbox');
   });
 
   it('matches board and operations paths', () => {

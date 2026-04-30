@@ -48,6 +48,24 @@ describe('getEntityListPath', () => {
     ).toBe('/dashboard/residents?communityId=9&q=smith');
   });
 
+  it('routes violations search hits to inbox vs resident report paths', () => {
+    expect(
+      getEntityListPath('violations', {
+        communityId: 5,
+        isAdmin: true,
+        query: 'noise',
+      }),
+    ).toBe('/violations?communityId=5&q=noise');
+
+    expect(
+      getEntityListPath('violations', {
+        communityId: 5,
+        isAdmin: false,
+        query: '',
+      }),
+    ).toBe('/violations/report?communityId=5');
+  });
+
   it('returns null when a list view requires a community but none is selected', () => {
     expect(
       getEntityListPath('maintenance', {

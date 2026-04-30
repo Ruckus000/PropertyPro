@@ -107,10 +107,10 @@ test.describe('phase 1 roadmap smoke', () => {
   test('Phase 1C violations inbox renders filters and content shell for a board user', async ({ page }) => {
     const communityId = await loginAs(page, 'board_president');
 
-    await page.goto(`/violations/inbox?communityId=${communityId}`);
+    await page.goto(`/violations?communityId=${communityId}`);
 
     await expect(
-      page.locator('#main-content').getByRole('heading', { name: 'Violations Inbox' }),
+      page.locator('#main-content').getByRole('heading', { name: 'Violations' }),
     ).toBeVisible();
     await expect(page.getByRole('combobox').nth(0)).toBeVisible();
     await expect(page.getByRole('combobox').nth(1)).toBeVisible();
