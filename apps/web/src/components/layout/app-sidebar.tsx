@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Building } from 'lucide-react';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
@@ -69,6 +69,7 @@ export function AppSidebar({
   onNavigate,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { expanded, toggleExpanded } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
@@ -166,7 +167,7 @@ export function AppSidebar({
     }))
     .filter((section) => section.items.length > 0);
 
-  const activeId = getActiveItemId(allVisible, pathname) ?? '';
+  const activeId = getActiveItemId(allVisible, pathname, searchParams.toString()) ?? '';
 
   // Brand header
   const header = (

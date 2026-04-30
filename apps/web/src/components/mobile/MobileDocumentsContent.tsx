@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { FileText, Search } from "lucide-react";
 import { AlertBanner } from "@/components/shared/alert-banner";
+import { DocumentViewerModal } from "@/components/documents/DocumentViewerModal";
 import { cn } from "@/lib/utils";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import {
@@ -22,11 +23,6 @@ interface SerializedDocument {
   category: string;
   createdAt: string;
   requiresSignature: boolean;
-}
-
-interface MobileViewerDocument {
-  id: number;
-  fileName: string;
 }
 
 interface MobileDocumentsContentProps {
@@ -61,7 +57,11 @@ export function MobileDocumentsContent({
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [viewerDocument, setViewerDocument] = useState<MobileViewerDocument | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<{
+    id: number;
+    fileName: string;
+    title: string;
+  } | null>(null);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(documents.map((d) => d.category))).sort();
@@ -87,7 +87,7 @@ export function MobileDocumentsContent({
 
   function handleOpen(doc: SerializedDocument): void {
     setActionError(null);
-    setViewerDocument({ id: doc.id, fileName: doc.fileName });
+    setViewerDoc({ id: doc.id, fileName: doc.fileName, title: doc.title });
   }
 
   function handleDownload(doc: SerializedDocument): void {
@@ -235,18 +235,17 @@ export function MobileDocumentsContent({
             </ul>
           </StaggerChildren>
         )}
+
+        <DocumentViewerModal
+          open={viewerDoc !== null}
+          onOpenChange={(open) => {
+            if (!open) setViewerDoc(null);
+          }}
+          communityId={communityId}
+          documentId={viewerDoc?.id ?? null}
+          fileName={viewerDoc?.title ?? viewerDoc?.fileName}
+        />
       </div>
-      <DocumentViewerModal
-        open={viewerDocument != null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setViewerDocument(null);
-          }
-        }}
-        documentId={viewerDocument?.id ?? null}
-        fileName={viewerDocument?.fileName}
-        communityId={communityId}
-      />
     </PageTransition>
   );
 }

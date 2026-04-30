@@ -15,6 +15,13 @@ const mockFetch = vi.fn();
 
 vi.stubGlobal('fetch', mockFetch);
 
+const routerReplace = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplace }),
+  usePathname: () => '/communities/3/finance',
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+}));
+
 vi.mock('../finance-kpi-row', () => ({
   FinanceKpiRow: ({ delinquencyEnabled }: { delinquencyEnabled?: boolean }) => {
     financeKpiRowSpy(delinquencyEnabled);
@@ -58,6 +65,7 @@ function createWrapper() {
 describe('FinanceDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    routerReplace.mockReset();
   });
 
   it('only mounts the default assessments tab on cold entry', () => {
@@ -117,5 +125,20 @@ describe('FinanceDashboard', () => {
 
     expect(delinquencyTableSpy).toHaveBeenCalledTimes(1);
     expect(financeKpiRowSpy).toHaveBeenLastCalledWith(true);
+  });
+
+  it('updates the browser URL when changing tabs', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FinanceDashboard communityId={3} userId="user-1" userRole="board_member" />,
+      { wrapper: createWrapper() },
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Ledger' }));
+
+    await waitFor(() => {
+      expect(routerReplace).toHaveBeenCalledWith('/communities/3/finance?tab=ledger', { scroll: false });
+    });
   });
 });
