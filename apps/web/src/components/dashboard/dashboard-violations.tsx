@@ -52,7 +52,7 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
         <h2 className="text-lg font-semibold text-content">Violations</h2>
         {isAdmin ? (
           <Link
-            href={`/violations/inbox?communityId=${communityId}`}
+            href={`/violations?communityId=${communityId}`}
             className="text-sm font-medium text-content-link hover:text-interactive-hover"
           >
             View All

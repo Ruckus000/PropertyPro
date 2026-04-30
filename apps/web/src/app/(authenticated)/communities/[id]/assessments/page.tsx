@@ -1,21 +1,13 @@
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity } from '@propertypro/shared';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { FeatureGate } from '@/components/billing/feature-gate';
-import { AssessmentManager } from '@/components/finance/assessment-manager';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 /**
- * Assessment Management — admin-only page for managing community assessments.
- *
- * Route: /communities/[id]/assessments
- * Auth: board_member, board_president, cam, site_manager, property_manager_admin.
+ * Legacy URL: /communities/[id]/assessments → finance dashboard Assessments tab.
  */
-export default async function AssessmentsPage({ params }: PageProps) {
+export default async function AssessmentsRedirectPage({ params }: PageProps) {
   const { id } = await params;
   const communityId = Number(id);
 
@@ -28,21 +20,5 @@ export default async function AssessmentsPage({ params }: PageProps) {
     );
   }
 
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  const typeFeatures = getFeaturesForCommunity(membership.communityType);
-  if (!typeFeatures.hasFinance) {
-    redirect('/dashboard?reason=feature-not-available');
-  }
-
-  return (
-    <FeatureGate feature="hasFinance" communityId={communityId}>
-      <AssessmentManager
-        communityId={communityId}
-        userId={userId}
-        userRole={membership.role}
-      />
-    </FeatureGate>
-  );
+  redirect(`/communities/${communityId}/finance?tab=assessments`);
 }

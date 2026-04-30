@@ -1,28 +1,9 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query';
+import type { PropsWithChildren } from 'react';
 import { ComplianceItemActions } from '../compliance-item-actions';
 import type { ChecklistItemData } from '../compliance-checklist-item';
-
-// Stub DocumentViewer so we don't pull in pdfjs-dist (which isn't friendly to jsdom).
-// We only care about: which document is mounted, and that onClose works.
-vi.mock('@/components/documents/document-viewer', () => ({
-  DocumentViewer: ({
-    document,
-    onClose,
-  }: {
-    document: { id: number; title: string; mimeType: string; fileName: string } | null;
-    onClose?: () => void;
-  }) =>
-    document ? (
-      <div data-testid="stub-document-viewer">
-        <div data-testid="viewer-doc-id">{document.id}</div>
-        <div data-testid="viewer-doc-title">{document.title}</div>
-        <div data-testid="viewer-doc-mime">{document.mimeType}</div>
-        <div data-testid="viewer-doc-filename">{document.fileName}</div>
-        <button type="button" onClick={onClose}>Stub close</button>
-      </div>
-    ) : null,
-}));
 
 const mockFetch = vi.fn() as Mock;
 vi.stubGlobal('fetch', mockFetch);
@@ -58,12 +39,23 @@ const baseHandlers = {
   onUnlink: vi.fn(),
 };
 
+function createQueryWrapper(options?: DefaultOptions) {
+  const queryClient = new QueryClient({
+    defaultOptions: options ?? {
+      queries: { retry: false },
+    },
+  });
+  return ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe('ComplianceItemActions \u2014 View Document', () => {
-  it('does not call window.open and instead fetches metadata + mounts DocumentViewer', async () => {
+  it('opens the shared document modal and loads the signed URL from the download API', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
         data: {
@@ -76,33 +68,28 @@ describe('ComplianceItemActions \u2014 View Document', () => {
     );
 
     render(
-      <ComplianceItemActions
-        item={baseSatisfiedItem}
-        communityId={9}
-        {...baseHandlers}
-      />,
+      <ComplianceItemActions item={baseSatisfiedItem} communityId={9} {...baseHandlers} />,
+      { wrapper: createQueryWrapper() },
     );
 
-    const viewBtn = screen.getByRole('button', { name: /view document/i });
     await act(async () => {
-      fireEvent.click(viewBtn);
+      fireEvent.click(screen.getByRole('button', { name: /view document/i }));
     });
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/documents/555/download?communityId=9',
-      );
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/documents/555/download?communityId=9');
     });
     expect(windowOpenSpy).not.toHaveBeenCalled();
 
-    const viewer = await screen.findByTestId('stub-document-viewer');
-    expect(viewer).toBeTruthy();
-    expect(screen.getByTestId('viewer-doc-id').textContent).toBe('555');
-    expect(screen.getByTestId('viewer-doc-mime').textContent).toBe('application/pdf');
-    expect(screen.getByTestId('viewer-doc-filename').textContent).toBe('bylaws.pdf');
+    expect(screen.getByTestId('compliance-document-viewer')).toBeVisible();
+
+    await waitFor(() => {
+      const frame = document.querySelector('iframe[src="https://signed.example/file.pdf"]');
+      expect(frame).toBeTruthy();
+    });
   });
 
-  it('unmounts the viewer when onClose is called', async () => {
+  it('closes the modal via the dialog close control', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
         data: {
@@ -115,47 +102,48 @@ describe('ComplianceItemActions \u2014 View Document', () => {
     );
 
     render(
-      <ComplianceItemActions
-        item={baseSatisfiedItem}
-        communityId={9}
-        {...baseHandlers}
-      />,
+      <ComplianceItemActions item={baseSatisfiedItem} communityId={9} {...baseHandlers} />,
+      { wrapper: createQueryWrapper() },
     );
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /view document/i }));
     });
 
-    const stubClose = await screen.findByRole('button', { name: /stub close/i });
+    await screen.findByTestId('compliance-document-viewer');
+
+    const closeButtons = screen.getAllByRole('button', { name: /close/i });
+    const dialogClose = closeButtons[closeButtons.length - 1];
+    expect(dialogClose).toBeTruthy();
+
     await act(async () => {
-      fireEvent.click(stubClose);
+      fireEvent.click(dialogClose!);
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId('stub-document-viewer')).toBeNull();
+      expect(screen.queryByTestId('compliance-document-viewer')).not.toBeInTheDocument();
     });
   });
 
-  it('surfaces an error message when the metadata fetch fails', async () => {
-    mockFetch.mockReturnValue(
-      jsonResponse({ error: { message: 'Document not found' } }, 404),
-    );
+  it('shows an in-modal error state when the signed URL request fails', async () => {
+    mockFetch.mockReturnValue(jsonResponse({ error: { message: 'Document not found' } }, 404));
 
     render(
-      <ComplianceItemActions
-        item={baseSatisfiedItem}
-        communityId={9}
-        {...baseHandlers}
-      />,
+      <ComplianceItemActions item={baseSatisfiedItem} communityId={9} {...baseHandlers} />,
+      { wrapper: createQueryWrapper() },
     );
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /view document/i }));
     });
 
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent ?? '').toMatch(/document not found/i);
-    expect(screen.queryByTestId('stub-document-viewer')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId('compliance-document-viewer')).toBeVisible();
+    });
+
+    expect(
+      await screen.findByText(/unable to load this document preview/i),
+    ).toBeVisible();
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 });

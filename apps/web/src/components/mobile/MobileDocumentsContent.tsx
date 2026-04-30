@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { FileText, Search } from "lucide-react";
 import { AlertBanner } from "@/components/shared/alert-banner";
+import { DocumentViewerModal } from "@/components/documents/DocumentViewerModal";
 import { cn } from "@/lib/utils";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import {
@@ -55,6 +56,11 @@ export function MobileDocumentsContent({
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<{
+    id: number;
+    fileName: string;
+    title: string;
+  } | null>(null);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(documents.map((d) => d.category))).sort();
@@ -78,20 +84,9 @@ export function MobileDocumentsContent({
     return mimeType.includes("pdf") || mimeType.includes("image");
   }
 
-  async function handleOpen(doc: SerializedDocument): Promise<void> {
+  function handleOpen(doc: SerializedDocument): void {
     setActionError(null);
-
-    try {
-      const response = await fetch(`/api/v1/documents/${doc.id}/download?communityId=${communityId}`);
-      if (!response.ok) {
-        throw new Error("Unable to open document");
-      }
-
-      const body = (await response.json()) as { data: { url: string } };
-      window.location.assign(body.data.url);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Unable to open document");
-    }
+    setViewerDoc({ id: doc.id, fileName: doc.fileName, title: doc.title });
   }
 
   function handleDownload(doc: SerializedDocument): void {
@@ -216,7 +211,7 @@ export function MobileDocumentsContent({
                         {isPreviewable(doc.mimeType) && (
                           <button
                             type="button"
-                            onClick={() => void handleOpen(doc)}
+                            onClick={() => handleOpen(doc)}
                             data-testid={`mobile-document-open-${doc.id}`}
                             className="min-h-11 rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
                           >
@@ -239,6 +234,16 @@ export function MobileDocumentsContent({
             </ul>
           </StaggerChildren>
         )}
+
+        <DocumentViewerModal
+          open={viewerDoc !== null}
+          onOpenChange={(open) => {
+            if (!open) setViewerDoc(null);
+          }}
+          communityId={communityId}
+          documentId={viewerDoc?.id ?? null}
+          fileName={viewerDoc?.title ?? viewerDoc?.fileName}
+        />
       </div>
     </PageTransition>
   );

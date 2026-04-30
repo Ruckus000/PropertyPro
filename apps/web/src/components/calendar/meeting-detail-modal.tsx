@@ -48,7 +48,11 @@ export function MeetingDetailModal({
   const detailQuery = useMeeting(communityId, meetingId);
   const deleteMutation = useDeleteMeeting(communityId);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [viewerDocument, setViewerDocument] = useState<{ id: number; fileName: string } | null>(null);
+  const [viewerDocument, setViewerDocument] = useState<{
+    id: number;
+    title: string;
+    fileName: string;
+  } | null>(null);
 
   async function handleDelete() {
     const confirmed = window.confirm('Delete this meeting?');
@@ -72,6 +76,7 @@ export function MeetingDetailModal({
   const endsAt = meeting && startsAt ? resolveEndsAt(startsAt, meeting.endsAt) : null;
 
   return (
+    <>
     <Dialog.Root
       open
       onOpenChange={(nextOpen) => {
@@ -194,7 +199,13 @@ export function MeetingDetailModal({
                       <button
                         key={document.id}
                         type="button"
-                        onClick={() => setViewerDocument({ id: document.id, fileName: document.fileName })}
+                        onClick={() =>
+                          setViewerDocument({
+                            id: document.id,
+                            title: document.title,
+                            fileName: document.fileName,
+                          })
+                        }
                         className="block w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--surface-hover)]"
                       >
                         <div className="font-medium text-[var(--text-primary)]">{document.title}</div>
@@ -233,19 +244,19 @@ export function MeetingDetailModal({
           </Card.Footer>
         ) : null}
       </Card>
-      <DocumentViewerModal
-        open={viewerDocument != null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setViewerDocument(null);
-          }
-        }}
-        communityId={communityId}
-        documentId={viewerDocument?.id ?? null}
-        fileName={viewerDocument?.fileName}
-      />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+    <DocumentViewerModal
+      open={viewerDocument !== null}
+      onOpenChange={(open) => {
+        if (!open) setViewerDocument(null);
+      }}
+      communityId={communityId}
+      documentId={viewerDocument?.id ?? null}
+      fileName={viewerDocument?.title ?? viewerDocument?.fileName}
+      contentTestId="meeting-document-viewer-modal"
+    />
+    </>
   );
 }

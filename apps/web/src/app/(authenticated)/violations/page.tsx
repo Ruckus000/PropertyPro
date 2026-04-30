@@ -1,29 +1,62 @@
+/**
+ * Violations — admin review inbox and ARC requests (tabbed).
+ *
+ * Route: /violations?communityId=X
+ */
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
-import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
+import type { SearchParams } from 'next/dist/server/request/search-params';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
+import { ViolationsInboxTabs } from '@/components/violations/ViolationsInboxTabs';
+import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<SearchParams>;
 }
 
-/**
- * Redirect: /violations?communityId=X -> /violations/inbox?communityId=X
- */
-export default async function ViolationsRedirectPage({ searchParams }: PageProps) {
-  const [resolvedSearchParams, requestHeaders] = await Promise.all([
-    searchParams,
-    headers(),
-  ]);
+export default async function ViolationsPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const rawId = Number(params['communityId']);
 
-  const context = resolveCommunityContext({
-    searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
-  });
-
-  if (context.communityId) {
-    redirect(`/violations/inbox?communityId=${context.communityId}`);
+  if (!Number.isInteger(rawId) || rawId <= 0) {
+    redirect('/dashboard?reason=invalid-selection');
   }
 
-  redirect('/violations/inbox');
+  const communityId = rawId;
+  let userId: string;
+
+  try {
+    userId = await requireAuthenticatedUserId();
+  } catch {
+    redirect('/auth/login');
+  }
+
+  const membership = await requireCommunityMembership(communityId, userId);
+
+  if (!isAdminRole(membership.role)) {
+    redirect('/dashboard?reason=insufficient-permissions');
+  }
+
+  const typeFeatures = getFeaturesForCommunity(membership.communityType);
+  if (!typeFeatures.hasViolations) {
+    redirect('/dashboard?reason=feature-unavailable');
+  }
+
+  return (
+    <FeatureGate feature="hasViolations" communityId={communityId}>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-content">Violations</h1>
+        <p className="mt-1 text-sm text-content-secondary">
+          Review, track, and manage violation cases and ARC requests for the community.
+        </p>
+      </div>
+
+      <ViolationsInboxTabs
+        communityId={communityId}
+        userId={userId}
+        userRole={membership.role}
+      />
+    </FeatureGate>
+  );
 }
