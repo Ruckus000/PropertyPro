@@ -106,6 +106,7 @@ describe('DocumentLibrary', () => {
         communityId={9}
         userId="user-1"
         userRole="board_president"
+        hasEsign
       />,
     );
 

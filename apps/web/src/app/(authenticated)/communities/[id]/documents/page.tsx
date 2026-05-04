@@ -1,3 +1,4 @@
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { DocumentLibrary } from '@/components/documents/document-library';
@@ -24,6 +25,11 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
+
   return (
     <DocumentLibrary
       communityId={communityId}
@@ -31,6 +37,7 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
       userRole={membership.role}
       isUnitOwner={membership.isUnitOwner}
       permissions={membership.permissions}
+      hasEsign={features.hasEsign}
       initialSearchQuery={q}
     />
   );
