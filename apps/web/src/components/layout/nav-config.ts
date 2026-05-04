@@ -18,7 +18,6 @@ import {
   Building2,
   Paintbrush,
   CreditCard,
-  DollarSign,
   BarChart3,
   AlertTriangle,
   Package,
@@ -149,7 +148,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Payments',
     icon: CreditCard,
     href: (cid) => `/communities/${cid}/payments`,
-    children: ['assessments', 'finance'],
     roles: FINANCE_READ_NAV_ROLES,
     featureKey: 'hasFinance',
     matchPrefixes: ['/payments'],
@@ -243,24 +241,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     roles: ADMIN_ROLES,
     matchPrefixes: ['/audit-trail'],
   },
-  {
-    id: 'assessments',
-    label: 'Assessments',
-    icon: DollarSign,
-    href: (cid) => `/communities/${cid}/finance?tab=assessments`,
-    roles: ADMIN_ROLES,
-    featureKey: 'hasFinance',
-    matchPrefixes: ['/assessments', '/finance'],
-  },
-  {
-    id: 'finance',
-    label: 'Finance',
-    icon: BarChart3,
-    href: (cid) => `/communities/${cid}/finance`,
-    roles: ADMIN_ROLES,
-    featureKey: 'hasFinance',
-    matchPrefixes: ['/finance'],
-  },
 ];
 
 const NAV_ITEM_BY_ID = new Map(NAV_ITEMS.map((item) => [item.id, item] as const));
@@ -298,8 +278,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     'arc-requests',
     'move-in-out',
     'audit-trail',
-    'assessments',
-    'finance',
   ]),
 ];
 
@@ -523,8 +501,6 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'arc-requests': { title: 'ARC Requests', subtitle: 'Review architectural submissions' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
-  assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
-  finance: { title: 'Finance', subtitle: 'Payment dashboard & reports' },
   residents: { title: 'Residents', subtitle: 'Manage community members' },
   units: { title: 'Units', subtitle: 'Manage community units' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
