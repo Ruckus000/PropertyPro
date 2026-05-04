@@ -43,6 +43,8 @@ export interface UpgradeDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Feature that triggered the lock; drives the marketing copy. Nullable when the lock came from an any-of gate. */
   featureKey: keyof CommunityFeatures | null;
+  /** Preferred upgrade target plan id when the lock came from any-of gates. */
+  upgradePlanId?: PlanId | null;
   /** Current plan id (resolved). Used to render the "Current plan" card. */
   currentPlanId: PlanId | null;
   /** Raw plan string from the community row, used as a fallback for resolution. */
@@ -65,6 +67,7 @@ export function UpgradeDialog({
   open,
   onOpenChange,
   featureKey,
+  upgradePlanId = null,
   currentPlanId,
   currentPlanRaw,
   role,
@@ -91,11 +94,15 @@ export function UpgradeDialog({
     ? PLAN_FEATURES[resolvedCurrentPlan]
     : null;
 
-  // Pick the cheapest plan that includes the feature we're trying to unlock.
-  const upgradePlan = featureKey ? findCheapestPlanForFeature(featureKey) : null;
-  const upgradePlanId: PlanId | null = upgradePlan
-    ? (Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === upgradePlan)?.[0] as PlanId | undefined) ?? null
+  // Prefer the caller-provided plan id (for any-of gates), then fall back to
+  // deriving from the triggering feature key.
+  const fallbackUpgradePlan = featureKey ? findCheapestPlanForFeature(featureKey) : null;
+  const fallbackUpgradePlanId: PlanId | null = fallbackUpgradePlan
+    ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === fallbackUpgradePlan)?.[0] as PlanId | undefined) ??
+      null)
     : null;
+  const recommendedPlanId: PlanId | null = upgradePlanId ?? fallbackUpgradePlanId;
+  const recommendedPlan = recommendedPlanId ? PLAN_FEATURES[recommendedPlanId] : null;
 
   const tenantQuery = communityId ? `?communityId=${communityId}` : '';
 
@@ -121,7 +128,7 @@ export function UpgradeDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           featureKey,
-          requestedPlan: upgradePlanId,
+          requestedPlan: recommendedPlanId,
         }),
       });
       if (!res.ok) {
@@ -143,12 +150,12 @@ export function UpgradeDialog({
   const headingText = copy?.displayName ?? 'Upgrade required';
   const tagline =
     copy?.tagline ??
-    `This feature is available on the ${upgradePlan?.displayName ?? 'higher'} plan.`;
+    `This feature is available on the ${recommendedPlan?.displayName ?? 'recommended'} plan.`;
   const benefits = copy?.benefits;
 
   const recommendedTone =
-    upgradePlan?.displayName === 'Operations Plus' ? 'enterprise'
-      : upgradePlan?.displayName === 'Professional' ? 'pro'
+    recommendedPlan?.displayName === 'Operations Plus' ? 'enterprise'
+      : recommendedPlan?.displayName === 'Professional' ? 'pro'
       : 'plus';
 
   return (
@@ -189,8 +196,8 @@ export function UpgradeDialog({
             />
             <PlanCard
               kind="recommended"
-              displayName={upgradePlan?.displayName ?? 'Higher plan'}
-              priceUsd={upgradePlan?.monthlyPriceUsd ?? null}
+              displayName={recommendedPlan?.displayName ?? 'Higher plan'}
+              priceUsd={recommendedPlan?.monthlyPriceUsd ?? null}
             />
           </div>
 
@@ -207,7 +214,7 @@ export function UpgradeDialog({
             onUpgrade={handleUpgrade}
             onNotify={handleNotify}
             onClose={() => onOpenChange(false)}
-            canUpgrade={Boolean(upgradePlanId)}
+            canUpgrade={Boolean(recommendedPlanId)}
           />
         </div>
       </DialogContent>

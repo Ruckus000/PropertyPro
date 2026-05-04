@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FinanceKpiRow } from './finance-kpi-row';
 import { AssessmentManager } from './assessment-manager';
@@ -10,15 +11,30 @@ import { useRecentPayments } from '@/hooks/use-finance';
 
 /* ─────── Types ─────── */
 
+type FinanceTab = 'assessments' | 'delinquency' | 'ledger' | 'payments';
+
+export function parseFinanceDashboardTab(raw: unknown): FinanceTab {
+  if (typeof raw === 'string' && ['assessments', 'delinquency', 'ledger', 'payments'].includes(raw)) {
+    return raw as FinanceTab;
+  }
+  return 'assessments';
+}
+
 interface FinanceDashboardProps {
   communityId: number;
   userId: string;
   userRole: string;
 }
-
-type FinanceTab = 'assessments' | 'delinquency' | 'ledger' | 'payments';
-
 /* ─────── Helpers ─────── */
+
+function financeTabVisitedFlags(tab: FinanceTab): Record<FinanceTab, boolean> {
+  return {
+    assessments: tab === 'assessments',
+    delinquency: tab === 'delinquency',
+    ledger: tab === 'ledger',
+    payments: tab === 'payments',
+  };
+}
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -36,14 +52,35 @@ function formatDateTime(dateStr: string): string {
 
 /* ─────── Main Component ─────── */
 
-export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashboardProps) {
-  const [activeTab, setActiveTab] = useState<FinanceTab>('assessments');
-  const [visitedTabs, setVisitedTabs] = useState<Record<FinanceTab, boolean>>({
-    assessments: true,
-    delinquency: false,
-    ledger: false,
-    payments: false,
-  });
+export function FinanceDashboard({
+  communityId,
+  userId,
+  userRole,
+}: FinanceDashboardProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const rawTab = searchParams.get('tab');
+  const tabFromUrl = useMemo(
+    () => parseFinanceDashboardTab(rawTab),
+    [rawTab],
+  );
+
+  const [activeTab, setActiveTab] = useState<FinanceTab>(tabFromUrl);
+  const [visitedTabs, setVisitedTabs] = useState<Record<FinanceTab, boolean>>(() =>
+    financeTabVisitedFlags(tabFromUrl),
+  );
+
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
+
+  useEffect(() => {
+    setVisitedTabs((current) =>
+      current[tabFromUrl] ? current : { ...current, [tabFromUrl]: true },
+    );
+  }, [tabFromUrl]);
 
   const handleTabChange = (value: string) => {
     const nextTab = value as FinanceTab;
@@ -51,6 +88,7 @@ export function FinanceDashboard({ communityId, userId, userRole }: FinanceDashb
     setVisitedTabs((current) =>
       current[nextTab] ? current : { ...current, [nextTab]: true },
     );
+    router.replace(`${pathname}?tab=${nextTab}`, { scroll: false });
   };
 
   return (

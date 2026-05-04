@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Building } from 'lucide-react';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
@@ -20,6 +20,7 @@ import {
   type AnyCommunityRole,
   type CommunityFeatures,
   type CommunityType,
+  type PlanId,
 } from '@propertypro/shared';
 import {
   NAV_ITEMS,
@@ -69,9 +70,11 @@ export function AppSidebar({
   onNavigate,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { expanded, toggleExpanded } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
+    upgradePlanId: PlanId | null;
   } | null>(null);
   const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
@@ -90,6 +93,7 @@ export function AppSidebar({
         ...i,
         planLocked: false,
         upgradePlanName: null,
+        upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
     : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
@@ -166,7 +170,7 @@ export function AppSidebar({
     }))
     .filter((section) => section.items.length > 0);
 
-  const activeId = getActiveItemId(allVisible, pathname) ?? '';
+  const activeId = getActiveItemId(allVisible, pathname, searchParams.toString()) ?? '';
 
   // Brand header
   const header = (
@@ -214,7 +218,10 @@ export function AppSidebar({
         onViewChange={(id) => {
           const clickedItem = visibleById.get(id);
           if (clickedItem?.planLocked) {
-            setUpgradeFor({ featureKey: clickedItem.upgradeFeatureKey });
+            setUpgradeFor({
+              featureKey: clickedItem.upgradeFeatureKey,
+              upgradePlanId: clickedItem.upgradePlanId,
+            });
             onNavigate?.();
           }
         }}
@@ -243,6 +250,7 @@ export function AppSidebar({
           if (!open) setUpgradeFor(null);
         }}
         featureKey={upgradeFor?.featureKey ?? null}
+        upgradePlanId={upgradeFor?.upgradePlanId ?? null}
         currentPlanId={resolvedPlanId}
         currentPlanRaw={plan}
         role={canonicalRole}

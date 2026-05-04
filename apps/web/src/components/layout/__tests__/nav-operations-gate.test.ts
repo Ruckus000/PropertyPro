@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NAV_ITEMS, getVisibleItems } from '../nav-config';
+import { NAV_ITEMS, getVisibleItems, getVisibleItemsWithPlanGate } from '../nav-config';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -64,5 +64,21 @@ describe('Operations nav entry visibility — feature matrix', () => {
     };
     const visible = getVisibleItems([operationsEntry!], 'resident', features);
     expect(visible).toHaveLength(1);
+  });
+
+  it('marks Operations as plan-locked with upgrade plan metadata when all 3 features are plan-excluded', () => {
+    const features = featuresFor('condo_718', 'essentials');
+    const visible = getVisibleItemsWithPlanGate(
+      [operationsEntry!],
+      'cam',
+      features,
+      'condo_718',
+      resolvePlanId('essentials'),
+    );
+
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.planLocked).toBe(true);
+    expect(visible[0]?.upgradePlanName).not.toBeNull();
+    expect(visible[0]?.upgradePlanId).not.toBeNull();
   });
 });

@@ -130,9 +130,9 @@ export function ViolationDetailView({
           <Breadcrumbs
             items={[
               {
-                label: isAdmin ? 'Violations Inbox' : 'Your Reports',
+                label: isAdmin ? 'Violations' : 'Your Reports',
                 href: isAdmin
-                  ? `/violations/inbox?communityId=${communityId}`
+                  ? `/violations?communityId=${communityId}`
                   : `/violations/report?communityId=${communityId}`,
               },
             ]}

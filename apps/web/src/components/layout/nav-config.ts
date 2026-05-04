@@ -210,12 +210,12 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   },
   {
     id: 'violations-inbox',
-    label: 'Violations Inbox',
+    label: 'Violations',
     icon: AlertTriangle,
-    href: (cid) => `/violations/inbox?communityId=${cid}`,
+    href: (cid) => `/violations?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasViolations',
-    matchPrefixes: ['/violations/inbox'],
+    matchPrefixes: ['/violations/inbox', '/violations'],
   },
   {
     id: 'move-in-out',
@@ -238,10 +238,10 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'assessments',
     label: 'Assessments',
     icon: DollarSign,
-    href: (cid) => `/communities/${cid}/assessments`,
+    href: (cid) => `/communities/${cid}/finance?tab=assessments`,
     roles: ADMIN_ROLES,
     featureKey: 'hasFinance',
-    matchPrefixes: ['/assessments'],
+    matchPrefixes: ['/assessments', '/finance'],
   },
   {
     id: 'finance',
@@ -353,6 +353,7 @@ export function getVisibleItems(
 export interface NavItemWithGateStatus extends NavItemConfig {
   planLocked: boolean;
   upgradePlanName: string | null;
+  upgradePlanId: PlanId | null;
   /**
    * The CommunityFeatures key that triggered the lock — used by the upgrade
    * dialog and locked-feature screen to render feature-specific copy.
@@ -403,6 +404,7 @@ export function getVisibleItemsWithPlanGate(
     .map((item) => {
       let planLocked = false;
       let upgradePlanName: string | null = null;
+      let upgradePlanId: PlanId | null = null;
       let upgradeFeatureKey: keyof CommunityFeatures | null = null;
 
       // Plan gate: type allows but composed features don't → plan-locked
@@ -413,6 +415,9 @@ export function getVisibleItemsWithPlanGate(
           // Find cheapest plan that includes this feature
           const upgrade = findCheapestPlanForFeature(item.featureKey);
           upgradePlanName = upgrade?.displayName ?? null;
+          upgradePlanId = upgrade
+            ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === upgrade)?.[0] as PlanId | undefined) ?? null)
+            : null;
           upgradeFeatureKey = item.featureKey;
         }
       }
@@ -431,6 +436,10 @@ export function getVisibleItemsWithPlanGate(
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             const cheapest = candidates.sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
             upgradePlanName = cheapest?.displayName ?? null;
+            upgradePlanId = cheapest
+              ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === cheapest)?.[0] as PlanId | undefined) ??
+                null)
+              : null;
             // For any-of gates we can't point at a single canonical feature
             // for marketing copy — leave it null and let the dialog fall back.
             upgradeFeatureKey = null;
@@ -438,7 +447,7 @@ export function getVisibleItemsWithPlanGate(
         }
       }
 
-      return { ...item, planLocked, upgradePlanName, upgradeFeatureKey };
+      return { ...item, planLocked, upgradePlanName, upgradePlanId, upgradeFeatureKey };
     })
     // Tenants: drop plan-locked items so they never see a "Pro" pill or upgrade prompt.
     .filter((item) => !(hideLockedEntirely && item.planLocked));
@@ -449,11 +458,26 @@ export function getVisibleItemsWithPlanGate(
  * Uses segment-aware matching: a prefix matches if the pathname starts
  * with it OR contains it as a path segment (e.g. '/compliance' matches
  * '/communities/1/compliance'). The longest matching prefix wins.
+ *
+ * Optional `search` (query string including leading `?` or without) resolves
+ * the Payments submenu: Assessments vs Finance tabs on `/communities/[id]/finance`.
  */
 export function getActiveItemId(
   items: readonly NavItemConfig[],
   pathname: string,
+  search?: string | null,
 ): string | null {
+  if (/\/communities\/\d+\/finance\/?$/.test(pathname)) {
+    const trimmed = search?.trim() ?? '';
+    const params =
+      trimmed.length > 0
+        ? new URLSearchParams(trimmed.startsWith('?') ? trimmed.slice(1) : trimmed)
+        : null;
+    const tab = params?.get('tab') ?? 'assessments';
+    if (tab === 'assessments') return 'assessments';
+    return 'finance';
+  }
+
   let bestMatch: { id: string; prefixLength: number } | null = null;
 
   for (const item of items) {
@@ -485,7 +509,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
-  'violations-inbox': { title: 'Violations Inbox', subtitle: 'Review & manage violations' },
+  'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
   assessments: { title: 'Assessments', subtitle: 'Manage dues & schedules' },
