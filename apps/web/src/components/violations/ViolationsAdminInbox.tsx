@@ -11,6 +11,8 @@ import { Button } from '@propertypro/ui';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
 import { ViolationDetailPanel } from './ViolationDetailPanel';
+import { PageHeader } from '@/components/shared/page-header';
+import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 const STATUS_OPTIONS: { value: ViolationStatus | ''; label: string }[] = [
   { value: '', label: 'All Statuses' },
@@ -126,15 +128,23 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
 
   return (
     <div>
-      {canCreateViolation ? (
-        <div className="mb-4 flex justify-end">
+      <PageHeader
+        title="Violations"
+        description="Review, track, and manage violation cases for the community."
+        breadcrumb={
+          <Breadcrumbs
+            items={[]}
+            currentLabel="Violations"
+          />
+        }
+        actions={canCreateViolation ? (
           <Link href={`/violations/report?communityId=${communityId}`}>
             <Button variant="primary" size="md">
               New violation
             </Button>
           </Link>
-        </div>
-      ) : null}
+        ) : undefined}
+      />
 
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
