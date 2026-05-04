@@ -142,7 +142,7 @@ describe('ComplianceItemActions \u2014 View Document', () => {
     });
 
     expect(
-      await screen.findByText(/unable to load this document preview/i),
+      await screen.findByText(/document not found/i),
     ).toBeVisible();
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });

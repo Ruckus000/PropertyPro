@@ -16,6 +16,9 @@ interface DownloadResponse {
     url?: string;
     fileName?: string;
   };
+  error?: {
+    message?: string;
+  };
 }
 
 interface DocumentViewerModalProps {
@@ -28,21 +31,34 @@ interface DocumentViewerModalProps {
   contentTestId?: string;
 }
 
+const FALLBACK_ERROR_MESSAGE = 'Unable to load document preview';
+const MAX_SURFACED_ERROR_LENGTH = 200;
+
 async function fetchSignedUrl(communityId: number, documentId: number): Promise<{ url: string; fileName?: string }> {
   const response = await fetch(`/api/v1/documents/${documentId}/download?communityId=${communityId}`);
-  if (!response.ok) {
-    throw new Error('Unable to load document preview');
+
+  let body: DownloadResponse | null = null;
+  try {
+    body = (await response.json()) as DownloadResponse;
+  } catch {
+    body = null;
   }
 
-  const body = (await response.json()) as DownloadResponse;
-  const url = body.data?.url;
+  if (!response.ok) {
+    const msg = body?.error?.message?.trim();
+    throw new Error(
+      msg && msg.length > 0 && msg.length <= MAX_SURFACED_ERROR_LENGTH ? msg : FALLBACK_ERROR_MESSAGE,
+    );
+  }
+
+  const url = body?.data?.url;
   if (!url) {
-    throw new Error('Unable to load document preview');
+    throw new Error(FALLBACK_ERROR_MESSAGE);
   }
 
   return {
     url,
-    fileName: body.data?.fileName,
+    fileName: body?.data?.fileName,
   };
 }
 
@@ -91,8 +107,13 @@ export function DocumentViewerModal({
           ) : null}
 
           {query.isError ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <p className="text-sm text-content-secondary">Unable to load this document preview.</p>
+            <div
+              className="flex h-full flex-col items-center justify-center gap-3"
+              role="alert"
+            >
+              <p className="text-sm text-content-secondary">
+                {query.error instanceof Error ? query.error.message : 'Unable to load this document preview.'}
+              </p>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"

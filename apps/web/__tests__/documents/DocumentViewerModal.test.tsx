@@ -66,7 +66,7 @@ describe('DocumentViewerModal', () => {
       { wrapper },
     );
 
-    await screen.findByText(/unable to load this document preview/i);
+    await screen.findByText(/nope/i);
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
 
     await waitFor(() => {
