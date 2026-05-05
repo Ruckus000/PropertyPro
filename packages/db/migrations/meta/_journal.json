@@ -778,6 +778,13 @@
       "when": 1775700000000,
       "tag": "0149_documents_authoring",
       "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1775710000000,
+      "tag": "0150_fix_access_requests_join_requests_rls",
+      "breakpoints": true
     }
   ]
 }

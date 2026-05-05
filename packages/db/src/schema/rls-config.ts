@@ -254,6 +254,18 @@ export const RLS_TENANT_TABLES = [
   },
   { tableName: 'support_consent_grants', policyFamily: 'service_only' },
   { tableName: 'support_access_log', policyFamily: 'audit_log_restricted' },
+  {
+    tableName: 'access_requests',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Self-service resident signup with OTP verification. RLS hardened in 0150 to use pp_rls_can_access_community(community_id) and the canonical pp_rls_enforce_tenant_scope trigger; original 0114 policies referenced the wrong GUC and never installed a write-scope trigger.',
+  },
+  {
+    tableName: 'community_join_requests',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Self-service community linking: users submit a request to join a community, admins approve/deny. RLS hardened in 0150 (same drift fix as access_requests).',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -284,7 +296,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 52;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 54;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

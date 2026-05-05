@@ -4,9 +4,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/schema';
+import { accessRequests } from '../src/schema/access-requests';
 import { announcementDeliveryLog } from '../src/schema/announcement-delivery-log';
 import { announcements } from '../src/schema/announcements';
 import { communities } from '../src/schema/communities';
+import { communityJoinRequests } from '../src/schema/community-join-requests';
 import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { demoSeedRegistry } from '../src/schema/demo-seed-registry';
 import { documents } from '../src/schema/documents';
@@ -52,6 +54,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
   const createdDocumentIds = new Set<number>();
   const createdDemoSeedRegistryIds = new Set<number>();
   const createdAnnouncementDeliveryLogIds = new Set<number>();
+  const createdAccessRequestIds = new Set<number>();
+  const createdCommunityJoinRequestIds = new Set<number>();
 
   async function resetSession(sqlClient: SqlClient): Promise<void> {
     await sqlClient.unsafe('reset role');
@@ -373,6 +377,18 @@ describeDb('P4-55 RLS policies (integration)', () => {
       const documentIds = [...createdDocumentIds];
       if (documentIds.length > 0) {
         await db.delete(documents).where(inArray(documents.id, documentIds));
+      }
+
+      const accessRequestIds = [...createdAccessRequestIds];
+      if (accessRequestIds.length > 0) {
+        await db.delete(accessRequests).where(inArray(accessRequests.id, accessRequestIds));
+      }
+
+      const communityJoinRequestIds = [...createdCommunityJoinRequestIds];
+      if (communityJoinRequestIds.length > 0) {
+        await db
+          .delete(communityJoinRequests)
+          .where(inArray(communityJoinRequests.id, communityJoinRequestIds));
       }
 
       await db
@@ -1478,5 +1494,141 @@ describeDb('P4-55 RLS policies (integration)', () => {
         `${entry.tableName} (${entry.policyFamily}) should have policies: ${expectedPolicies.join(', ')}`,
       ).toEqual(expectedPolicies);
     }
+  });
+
+  describe('0150: access_requests + community_join_requests RLS repair', () => {
+    it('installs pp_rls_enforce_tenant_scope trigger on every tenant-scoped table', async () => {
+      const rows = await adminSql<{ relname: string; tgname: string }[]>`
+        select c.relname, t.tgname
+        from pg_trigger t
+        join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and t.tgname = 'pp_rls_enforce_tenant_scope'
+          and not t.tgisinternal
+      `;
+
+      const tablesWithTrigger = new Set(rows.map((row) => row.relname));
+
+      // The communities root table is excluded — its identity isolation is on `id`,
+      // not `community_id`, so the generic write-scope trigger does not apply.
+      // Service-only and audit-restricted tables also intentionally lack this trigger
+      // because they are written exclusively under privileged role.
+      const familiesWithoutTrigger = new Set([
+        'service_only',
+        'audit_log_restricted',
+      ]);
+
+      const expectedTables = RLS_TENANT_TABLES.filter(
+        (entry) => !familiesWithoutTrigger.has(entry.policyFamily),
+      ).map((entry) => entry.tableName);
+
+      // Both repaired tables (access_requests, community_join_requests) must be present.
+      expect(tablesWithTrigger.has('access_requests')).toBe(true);
+      expect(tablesWithTrigger.has('community_join_requests')).toBe(true);
+
+      for (const tableName of expectedTables) {
+        expect(
+          tablesWithTrigger.has(tableName),
+          `${tableName} should have pp_rls_enforce_tenant_scope trigger`,
+        ).toBe(true);
+      }
+    });
+
+    it('rewrites a forged community_id on access_requests INSERT to the active tenant', async () => {
+      // Use admin (manager) role — access_requests is tenant_crud, but the trigger
+      // short-circuits for any non-privileged authenticated context that has
+      // community membership. tenantA also has a role in community A and qualifies.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const refCode = `${seed.runTag}-ar-forge`;
+      const inserted = await authSql<{ id: number; community_id: number }[]>`
+        insert into public.access_requests (
+          community_id,
+          email,
+          full_name,
+          role_requested,
+          ref_code
+        ) values (
+          ${seed.communityBId},
+          ${`${seed.runTag}-ar-forge@example.com`},
+          ${`Forged AR ${seed.runTag}`},
+          'resident',
+          ${refCode}
+        )
+        returning id, community_id
+      `;
+
+      expect(inserted).toHaveLength(1);
+      expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
+      if (inserted[0]) {
+        createdAccessRequestIds.add(Number(inserted[0].id));
+      }
+    });
+
+    it('blocks cross-tenant SELECT on access_requests', async () => {
+      // First, seed an access_requests row in community B via service role.
+      await setServiceRoleContext(serviceSql);
+      const seededId = await nextSequenceValue('public.access_requests_id_seq');
+      await serviceSql`
+        insert into public.access_requests (
+          id,
+          community_id,
+          email,
+          full_name,
+          role_requested,
+          ref_code
+        ) values (
+          ${seededId},
+          ${seed.communityBId},
+          ${`${seed.runTag}-ar-b@example.com`},
+          ${`AR B ${seed.runTag}`},
+          'resident',
+          ${`${seed.runTag}-ar-b`}
+        )
+      `;
+      createdAccessRequestIds.add(seededId);
+
+      // Tenant A reading must not see community B's row.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      const visible = await authSql<{ id: number }[]>`
+        select id from public.access_requests where id = ${seededId}
+      `;
+      expect(visible).toHaveLength(0);
+    });
+
+    it('blocks cross-tenant UPDATE on community_join_requests', async () => {
+      // Seed a community_join_requests row in community B via service role.
+      await setServiceRoleContext(serviceSql);
+      const seededId = await nextSequenceValue('public.community_join_requests_id_seq');
+      await serviceSql`
+        insert into public.community_join_requests (
+          id,
+          user_id,
+          community_id,
+          unit_identifier,
+          resident_type,
+          status
+        ) values (
+          ${seededId},
+          ${seed.adminBUserId},
+          ${seed.communityBId},
+          ${'B-101'},
+          'owner',
+          'pending'
+        )
+      `;
+      createdCommunityJoinRequestIds.add(seededId);
+
+      // Tenant A acting in community A must not be able to update community B's row.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      const updated = await authSql<{ id: number }[]>`
+        update public.community_join_requests
+        set status = 'approved'
+        where id = ${seededId}
+        returning id
+      `;
+      expect(updated).toHaveLength(0);
+    });
   });
 });
