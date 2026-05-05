@@ -16,6 +16,10 @@ import {
   createTemplate,
   listTemplates,
 } from '@/lib/services/esign-service';
+import {
+  assertCommunityOwnedStoragePath,
+  assertPdfMagicBytes,
+} from '@/lib/services/storage-validators';
 import type { EsignTemplateStatus, EsignTemplateType } from '@propertypro/shared';
 
 const createTemplateSchema = z.object({
@@ -103,6 +107,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   await requireEsignWritePermission(membership);
   await requirePlanFeature(communityId, 'hasEsign');
+
+  // Reject storage paths that don't belong to this community. Without this
+  // check a writer with esign permission for community A could supply a
+  // path pointing at community B's bucket prefix (or any other path) and
+  // bind it to an A template.
+  assertCommunityOwnedStoragePath(
+    parseResult.data.sourceDocumentPath,
+    communityId,
+    'esign-templates',
+  );
+
+  // Verify the actual uploaded bytes are a PDF. The presign route trusts
+  // the client-asserted MIME type; without this server-side magic-byte
+  // check, a writer can presign as application/pdf and upload arbitrary
+  // bytes which the e-sign flow would sign and serve as a PDF.
+  // On invalid content the helper deletes the offending object before
+  // throwing so storage doesn't fill up with rejected uploads.
+  await assertPdfMagicBytes('documents', parseResult.data.sourceDocumentPath);
 
   const requestId = req.headers.get('x-request-id');
   const data = await createTemplate(
