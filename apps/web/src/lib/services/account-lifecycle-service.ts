@@ -307,6 +307,10 @@ export async function cancelUserDeletion(requestId: number, cancelledBy: string)
  * Soft-deletes a user: sets users.deletedAt and bans in Supabase auth.
  * The auth ban is non-fatal — if Supabase is unreachable the DB state
  * is still committed.
+ *
+ * State-guarded: only progresses a request whose status is still
+ * 'cooling'. Returns null if the request was cancelled or recovered
+ * between the cron scan and this call (TOCTOU race protection).
  */
 export async function executeUserSoftDelete(requestId: number) {
   const now = new Date();
@@ -317,10 +321,18 @@ export async function executeUserSoftDelete(requestId: number) {
     const [request] = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(eq(accountDeletionRequests.id, requestId))
+      .where(
+        and(
+          eq(accountDeletionRequests.id, requestId),
+          eq(accountDeletionRequests.status, 'cooling'),
+        ),
+      )
       .returning();
 
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
+    if (!request) {
+      // Status changed since the cron scan — caller (cancellation) won.
+      return null;
+    }
 
     await tx
       .update(users)
@@ -329,6 +341,10 @@ export async function executeUserSoftDelete(requestId: number) {
 
     return request;
   });
+
+  if (!result) {
+    return null;
+  }
 
   // Ban in Supabase auth (non-fatal)
   try {
@@ -469,6 +485,10 @@ export async function interveneCommunityDeletion(
 
 /**
  * Soft-deletes a community: sets communities.deletedAt and schedules purge.
+ *
+ * State-guarded: only progresses a request whose status is still
+ * 'cooling'. Returns null if the request was cancelled or recovered
+ * between the cron scan and this call (TOCTOU race protection).
  */
 export async function executeCommunitySoftDelete(requestId: number) {
   const now = new Date();
@@ -479,10 +499,18 @@ export async function executeCommunitySoftDelete(requestId: number) {
     const [request] = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(eq(accountDeletionRequests.id, requestId))
+      .where(
+        and(
+          eq(accountDeletionRequests.id, requestId),
+          eq(accountDeletionRequests.status, 'cooling'),
+        ),
+      )
       .returning();
 
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
+    if (!request) {
+      // Status changed since the cron scan — caller (cancellation) won.
+      return null;
+    }
 
     await tx
       .update(communities)

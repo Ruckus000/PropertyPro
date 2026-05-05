@@ -68,6 +68,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const now = new Date();
   const summary = {
     softDeleted: { users: 0, communities: 0 },
+    skipped: { users: 0, communities: 0 },
     purged: { users: 0, communities: 0 },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     errors: [] as string[],
@@ -89,11 +90,20 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   for (const req of coolingExpired) {
     try {
       if (req.requestType === 'user') {
-        await executeUserSoftDelete(req.id);
-        summary.softDeleted.users++;
+        const result = await executeUserSoftDelete(req.id);
+        if (result) {
+          summary.softDeleted.users++;
+        } else {
+          // State raced — request was cancelled or recovered between scan and execute.
+          summary.skipped.users++;
+        }
       } else {
-        await executeCommunitySoftDelete(req.id);
-        summary.softDeleted.communities++;
+        const result = await executeCommunitySoftDelete(req.id);
+        if (result) {
+          summary.softDeleted.communities++;
+        } else {
+          summary.skipped.communities++;
+        }
       }
     } catch (err) {
       summary.errors.push(`soft-delete ${req.requestType} ${req.id}: ${String(err)}`);
