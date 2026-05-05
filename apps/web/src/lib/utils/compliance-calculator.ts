@@ -13,7 +13,19 @@ export type ComplianceStatus = 'satisfied' | 'unsatisfied' | 'overdue' | 'not_ap
 export interface ComplianceStatusInput {
   isApplicable?: boolean;
   documentId?: number | null;
+  /**
+   * Timestamp the linked document was attached to this checklist item.
+   * Compared against `deadline` to detect a late posting.
+   */
   documentPostedAt?: Date | null;
+  /**
+   * If the linked document was soft-deleted, this is the document's
+   * `deleted_at` timestamp. The calculator treats a deleted document as
+   * if the item were unlinked (defense-in-depth — the canonical fix is
+   * to null out the FK on document soft-delete, but a race during read
+   * is still possible).
+   */
+  documentDeletedAt?: Date | null;
   deadline?: Date | null;
   rollingWindowMonths?: number | null;
   now?: Date;
@@ -58,12 +70,29 @@ export function calculateComplianceStatus(input: ComplianceStatusInput): Complia
     return 'not_applicable';
   }
 
-  if (input.documentId != null) {
+  // A soft-deleted document cannot satisfy a checklist item. Treat as if
+  // the FK had been cleared (the canonical fix is to null out the FK in
+  // the same transaction as the document soft-delete; this branch is the
+  // read-time defense-in-depth check).
+  const documentEffectivelyLinked =
+    input.documentId != null && input.documentDeletedAt == null;
+
+  if (documentEffectivelyLinked) {
     if (input.rollingWindowMonths && input.documentPostedAt) {
       const windowStart = calculateRollingWindowStart(now, input.rollingWindowMonths);
       if (isBefore(input.documentPostedAt, windowStart)) {
         return 'overdue';
       }
+    }
+
+    // A document posted past its deadline does not retroactively satisfy
+    // the item — surface as overdue so admins still see the compliance gap.
+    if (
+      input.deadline &&
+      input.documentPostedAt &&
+      isAfter(input.documentPostedAt, input.deadline)
+    ) {
+      return 'overdue';
     }
 
     return 'satisfied';

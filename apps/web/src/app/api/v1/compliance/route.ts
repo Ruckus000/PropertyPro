@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   complianceChecklistItems,
   createScopedClient,
+  documents,
   logAuditEvent,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
@@ -73,6 +74,32 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const rows = await scoped.query(complianceChecklistItems);
 
+  // Look up `documents.deletedAt` for every linked document so a soft-deleted
+  // document does not silently keep its checklist item satisfied. Use
+  // queryIncludingDeleted so we can detect the deletion explicitly rather than
+  // having the document silently disappear from the result set.
+  const linkedDocumentIds = Array.from(
+    new Set(
+      rows
+        .map((r) => r['documentId'] as number | null)
+        .filter((v): v is number => typeof v === 'number'),
+    ),
+  );
+  const documentDeletedAtById = new Map<number, Date | null>();
+  if (linkedDocumentIds.length > 0) {
+    const allDocs = await scoped.queryIncludingDeleted(documents);
+    for (const doc of allDocs) {
+      const id = doc['id'] as number;
+      if (linkedDocumentIds.includes(id)) {
+        const deletedAtRaw = doc['deletedAt'] as string | Date | null;
+        documentDeletedAtById.set(
+          id,
+          deletedAtRaw ? new Date(deletedAtRaw as string) : null,
+        );
+      }
+    }
+  }
+
   const data = rows.map((row) => {
     const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
     const documentPostedAt = row['documentPostedAt']
@@ -85,12 +112,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         ? rollingWindowRecord.months
         : null;
 
+    const documentId = (row['documentId'] as number | null) ?? null;
+    const documentDeletedAt =
+      documentId != null ? documentDeletedAtById.get(documentId) ?? null : null;
+
     return {
       ...row,
       status: calculateComplianceStatus({
         isApplicable: row['isApplicable'] as boolean | undefined,
-        documentId: (row['documentId'] as number | null) ?? null,
+        documentId,
         documentPostedAt,
+        documentDeletedAt,
         deadline,
         rollingWindowMonths,
       }),

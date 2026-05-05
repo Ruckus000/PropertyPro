@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
+  complianceChecklistItems,
   createScopedClient,
   documents,
   logAuditEvent,
@@ -148,6 +149,22 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   if (!docToDelete) {
     throw new ValidationError('Document not found');
   }
+
+  // Unlink any compliance checklist items that satisfy themselves via this
+  // document. The compliance calculator also defends against this at read
+  // time (treating documentDeletedAt as unlinked), but clearing the FK keeps
+  // the data model honest and avoids confusing audit trails. The two writes
+  // are not strictly atomic here — the calculator's defense covers a brief
+  // window where the checklist row still references the now-deleted doc.
+  await scoped.update(
+    complianceChecklistItems,
+    {
+      documentId: null,
+      documentPostedAt: null,
+      lastModifiedBy: userId,
+    },
+    eq(complianceChecklistItems.documentId, id),
+  );
 
   // Perform soft delete
   const deletedRows = await scoped.softDelete(documents, eq(documents.id, id));
