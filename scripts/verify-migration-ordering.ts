@@ -119,6 +119,54 @@ function checkRangeOverlaps(): Problem[] {
   return problems;
 }
 
+/**
+ * Allowlist of historical 4-digit migration prefixes that are knowingly
+ * duplicated (e.g., `0126_public_site_templates.sql` and
+ * `0126_election_ballot_submissions.sql` both shipped in different
+ * branches and were merged before this guard existed). New duplicates
+ * must NOT be added — pick a fresh number.
+ */
+const DUPLICATE_FILE_PREFIX_ALLOWLIST = new Set<string>(['0126']);
+
+function checkDuplicateFilePrefixes(): Problem[] {
+  let sqlFiles: string[];
+  try {
+    sqlFiles = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
+  } catch {
+    return [];
+  }
+
+  const prefixToFiles = new Map<string, string[]>();
+  for (const file of sqlFiles) {
+    const match = file.match(/^(\d{4})_/);
+    if (!match) continue;
+    const prefix = match[1];
+    const existing = prefixToFiles.get(prefix);
+    if (existing) {
+      existing.push(file);
+    } else {
+      prefixToFiles.set(prefix, [file]);
+    }
+  }
+
+  const problems: Problem[] = [];
+  for (const [prefix, files] of prefixToFiles.entries()) {
+    if (files.length <= 1) continue;
+    if (DUPLICATE_FILE_PREFIX_ALLOWLIST.has(prefix)) {
+      problems.push({
+        severity: 'warning',
+        message: `Allowlisted historical duplicate prefix ${prefix}: ${files.join(', ')}`,
+      });
+      continue;
+    }
+    problems.push({
+      severity: 'error',
+      message: `Duplicate migration file prefix ${prefix}: ${files.join(', ')}. Pick a fresh number.`,
+    });
+  }
+  return problems;
+}
+
 function checkMigrationFilesExist(entries: JournalEntry[]): Problem[] {
   const problems: Problem[] = [];
 
@@ -202,6 +250,9 @@ function main(): void {
 
   console.log('Checking for duplicate indices...');
   allProblems.push(...checkDuplicateIndices(journal.entries));
+
+  console.log('Checking for duplicate file prefixes...');
+  allProblems.push(...checkDuplicateFilePrefixes());
 
   console.log('Checking reserved range overlaps...');
   allProblems.push(...checkRangeOverlaps());
