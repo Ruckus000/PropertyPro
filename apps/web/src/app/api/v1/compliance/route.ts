@@ -24,6 +24,7 @@ import {
 } from '@/lib/utils/compliance-calculator';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
@@ -230,6 +231,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'compliance', 'write');
 
   const scoped = createScopedClient(communityId);
+
+  // Reject foreign-tenant document references before any write happens.
+  if (patchAction === 'link_document') {
+    await assertDocumentInCommunity(scoped, documentId);
+  }
 
   // Build the update payload based on the action
   let updateData: Record<string, unknown>;

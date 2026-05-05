@@ -44,6 +44,7 @@ import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/commu
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -198,6 +199,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError(validation.error ?? 'Invalid role assignment');
   }
 
+  // Reject foreign-tenant unit references before any write happens.
+  await assertUnitInCommunity(scoped, unitId);
+
   // Validate hybrid-model invariants
   if (role === 'manager' && !presetKey) {
     throw new ValidationError('presetKey is required when role is "manager"');
@@ -346,6 +350,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     const validation = validateRoleAssignment(newRole, communityType, newUnitId);
     if (!validation.valid) {
       throw new ValidationError(validation.error ?? 'Invalid role assignment');
+    }
+    if (unitId !== undefined) {
+      await assertUnitInCommunity(scoped, unitId);
     }
   }
 

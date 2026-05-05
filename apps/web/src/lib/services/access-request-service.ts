@@ -27,6 +27,7 @@ import {
 } from '@propertypro/email';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
+import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -289,6 +290,9 @@ export async function approveAccessRequest(params: {
   if (request['status'] !== 'pending') {
     throw new ValidationError('Only pending requests can be approved.');
   }
+
+  // Reject foreign-tenant unit references before any auth-user / role write.
+  await assertUnitInCommunity(scoped, unitId);
 
   const requestEmail = (request['email'] as string).toLowerCase();
   const requestFullName = request['fullName'] as string;
