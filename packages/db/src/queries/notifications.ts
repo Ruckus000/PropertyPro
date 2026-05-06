@@ -18,6 +18,18 @@ import type { NotificationCategory } from '../schema/notifications';
 
 export type { NotificationCategory };
 
+/**
+ * Either the package-level `db` or a Drizzle transaction handle. Both expose
+ * the `insert()` method that {@link insertNotifications} uses; passing the
+ * transaction handle from inside a `db.transaction()` callback keeps the
+ * notification write atomic with the surrounding state change (Plan C3:
+ * notifications must commit or roll back together with the action that
+ * spawned them, not silently fire-and-forget).
+ */
+export type NotificationExecutor = {
+  insert: typeof db.insert;
+};
+
 export interface ListNotificationsParams {
   communityId: number;
   userId: string;
@@ -117,15 +129,26 @@ export interface InsertNotificationRow {
 
 const INSERT_CHUNK_SIZE = 100;
 
+/**
+ * Insert one or more notifications.
+ *
+ * @param rows - Notification rows to insert.
+ * @param executor - Optional executor (`db` by default). Pass the transaction
+ *   handle from a `db.transaction(async (tx) => ...)` callback to keep the
+ *   notification write atomic with the surrounding state change. Doing so
+ *   prevents the historical fire-and-forget loss class where the parent
+ *   action committed but the notification silently dropped.
+ */
 export async function insertNotifications(
   rows: InsertNotificationRow[],
+  executor: NotificationExecutor = db,
 ): Promise<{ created: number }> {
   if (rows.length === 0) return { created: 0 };
 
   let created = 0;
   for (let i = 0; i < rows.length; i += INSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + INSERT_CHUNK_SIZE);
-    const result = await db
+    const result = await executor
       .insert(notifications)
       .values(chunk.map((r) => ({ ...r, priority: r.priority ?? 'normal' })))
       .onConflictDoNothing()
