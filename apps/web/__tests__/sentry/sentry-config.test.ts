@@ -39,7 +39,7 @@ describe('Sentry server config', () => {
 
     // Dynamic import to pick up the stubbed env
     vi.resetModules();
-    await import('../../sentry.server.config');
+    await import('../../src/sentry.server.config');
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -51,7 +51,7 @@ describe('Sentry server config', () => {
     vi.stubEnv('SENTRY_DSN', '');
 
     vi.resetModules();
-    await import('../../sentry.server.config');
+    await import('../../src/sentry.server.config');
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -63,7 +63,7 @@ describe('Sentry server config', () => {
     delete process.env['SENTRY_DSN'];
 
     vi.resetModules();
-    await import('../../sentry.server.config');
+    await import('../../src/sentry.server.config');
 
     expect(mockInit).toHaveBeenCalledOnce();
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -74,7 +74,7 @@ describe('Sentry server config', () => {
     vi.stubEnv('SENTRY_DSN', 'https://test@sentry.io/123');
 
     vi.resetModules();
-    await import('../../sentry.server.config');
+    await import('../../src/sentry.server.config');
 
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     const beforeSend = config['beforeSend'] as (event: Record<string, unknown>) => Record<string, unknown>;
@@ -107,7 +107,7 @@ describe('Sentry server config', () => {
     vi.stubEnv('SENTRY_DSN', 'https://test@sentry.io/123');
 
     vi.resetModules();
-    await import('../../sentry.server.config');
+    await import('../../src/sentry.server.config');
 
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     const beforeSend = config['beforeSend'] as (event: Record<string, unknown>) => Record<string, unknown>;
@@ -129,7 +129,7 @@ describe('Sentry client instrumentation', () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public@sentry.io/456');
 
     vi.resetModules();
-    const module = await import('../../instrumentation-client');
+    const module = await import('../../src/instrumentation-client');
     await flushMicrotasks();
 
     expect(mockInit).toHaveBeenCalledOnce();
@@ -146,7 +146,7 @@ describe('Sentry client instrumentation', () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', '');
 
     vi.resetModules();
-    const module = await import('../../instrumentation-client');
+    const module = await import('../../src/instrumentation-client');
 
     expect(mockInit).not.toHaveBeenCalled();
 
@@ -163,7 +163,7 @@ describe('Sentry client instrumentation', () => {
     });
 
     vi.resetModules();
-    const module = await import('../../instrumentation-client');
+    const module = await import('../../src/instrumentation-client');
     await flushMicrotasks();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -184,7 +184,7 @@ describe('Sentry edge config', () => {
     vi.stubEnv('SENTRY_DSN', 'https://test@sentry.io/789');
 
     vi.resetModules();
-    await import('../../sentry.edge.config');
+    await import('../../src/sentry.edge.config');
 
     const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
     const beforeSend = config['beforeSend'] as (event: Record<string, unknown>) => Record<string, unknown>;
