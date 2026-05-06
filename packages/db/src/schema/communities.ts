@@ -2,7 +2,8 @@
  * Communities table — the core tenant entity.
  * Every tenant-scoped table references communities.id.
  */
-import { bigint, bigserial, boolean, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 import { billingGroups } from './billing-groups';
 
@@ -86,4 +87,10 @@ export const communities = pgTable('communities', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  // Hourly payment-alert-scheduler cron filters communities by next_reminder_at IS NOT NULL.
+  // Partial index keeps the scan cheap regardless of total community count.
+  index('communities_next_reminder_at_idx')
+    .on(table.nextReminderAt)
+    .where(sql`next_reminder_at IS NOT NULL`),
+]);
