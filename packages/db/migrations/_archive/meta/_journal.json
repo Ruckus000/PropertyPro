@@ -1,0 +1,783 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770661017832,
+      "tag": "0000_flashy_toro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770847885060,
+      "tag": "0001_condemned_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770902637217,
+      "tag": "0002_invitation_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770902660815,
+      "tag": "0003_meetings",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770924460099,
+      "tag": "0004_boring_whistler",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771103942260,
+      "tag": "0005_append_only_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771168242695,
+      "tag": "0006_bouncy_grandmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771247770680,
+      "tag": "0007_sudden_sphinx",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771295335886,
+      "tag": "0008_billing_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771374643935,
+      "tag": "0009_absent_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771415383058,
+      "tag": "0010_drop_legacy_notification_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1771520395122,
+      "tag": "0011_flawless_diamondback",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1771541317270,
+      "tag": "0012_modern_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771705755540,
+      "tag": "0013_subscription_status_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1771705759818,
+      "tag": "0014_nifty_scorpion",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1771733172871,
+      "tag": "0015_nostalgic_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1771800000000,
+      "tag": "0016_communities_branding",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1771900000000,
+      "tag": "0017_contracts_and_bids",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1771990000000,
+      "tag": "0018_maintenance_p3_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772000000000,
+      "tag": "0019_contracts_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772100000000,
+      "tag": "0020_p4_55_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772200000000,
+      "tag": "0021_p4_55b_user_roles_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772300000000,
+      "tag": "0022_p4_55c_maintenance_comments_and_user_roles_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1772400000000,
+      "tag": "0023_p4_55d_admin_write_tables_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772500000000,
+      "tag": "0024_p4_55e_documents_invitations_admin_write",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772600000000,
+      "tag": "0025_p4_55f_community_settings_and_user_scoped_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772700000000,
+      "tag": "0026_p4_55g_rls_idor_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1772800000000,
+      "tag": "0027_p4_55h_rls_force_all_tenant_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1772810000000,
+      "tag": "0028_fix_audit_log_rls_deleted_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1772820000000,
+      "tag": "0029_create_platform_admin_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1772830000000,
+      "tag": "0030_add_demo_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1772840000000,
+      "tag": "0031_extend_branding_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1772850000000,
+      "tag": "0032_create_demo_instances",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1772860000000,
+      "tag": "0033_create_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1772870000000,
+      "tag": "0034_fix_site_blocks_anon_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1772880000000,
+      "tag": "0035_add_transparency_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1772890000000,
+      "tag": "0036_add_is_applicable",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1772900000000,
+      "tag": "0037_create_ledger_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1772910000000,
+      "tag": "0038_ledger_entries_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1772920000000,
+      "tag": "0039_ledger_entries_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1772930000000,
+      "tag": "0040_ledger_entries_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1772940000000,
+      "tag": "0041_finance_dues_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1772950000000,
+      "tag": "0056_create_violations_arc",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1772960000000,
+      "tag": "0066_create_polls_forum",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1772970000000,
+      "tag": "0071_create_work_orders_amenities",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1772980000000,
+      "tag": "0081_calendar_sync_and_accounting_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1772990000000,
+      "tag": "0086_package_and_visitor_logging",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1773000000000,
+      "tag": "0087_add_token_encryption_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1773010000000,
+      "tag": "0088_force_rls_site_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1773020000000,
+      "tag": "0089_fix_anon_rls_graceful_fail",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1773030000000,
+      "tag": "0090_esign_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1773040000000,
+      "tag": "0091_role_simplification_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1773050000000,
+      "tag": "0092_role_simplification_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1773060000000,
+      "tag": "0093_role_simplification_swap",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1773070000000,
+      "tag": "0094_role_simplification_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1773080000000,
+      "tag": "0095_role_simplification_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1773090000000,
+      "tag": "0096_esign_rls_admin_write",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1773100000000,
+      "tag": "0097_add_jsx_template_block_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1773110000000,
+      "tag": "0098_add_demo_customized_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1773120000000,
+      "tag": "0099_add_template_variant",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1773130000000,
+      "tag": "0100_emergency_notifications_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1773140000000,
+      "tag": "0101_emergency_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1773150000000,
+      "tag": "0102_elections_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1773160000000,
+      "tag": "0103_otp_rate_limit_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1773170000000,
+      "tag": "0104_add_deleted_at_broadcast_recipients",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1773180000000,
+      "tag": "0105_add_meetings_ends_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1773190000000,
+      "tag": "0106_create_move_checklists",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1773200000000,
+      "tag": "0107_esign_native_template_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1773210000000,
+      "tag": "0108_add_faqs_and_community_contact",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1773220000000,
+      "tag": "0109_add_pg_trgm_and_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1773230000000,
+      "tag": "0110_add_user_search_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1773240000000,
+      "tag": "0111_add_help_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1773250000000,
+      "tag": "0112_add_units_number_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1774260000000,
+      "tag": "0113_demo_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1774360000000,
+      "tag": "0114_access_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1774460000000,
+      "tag": "0115_account_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1774470000000,
+      "tag": "0116_documents_source_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1774560000000,
+      "tag": "0117_visitor_system_upgrade",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1774563600000,
+      "tag": "0118_visitor_user_fk_alignment",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1774650000000,
+      "tag": "0119_support_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1774750000000,
+      "tag": "0120_stripe_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1774760000000,
+      "tag": "0121_conversion_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1774770000000,
+      "tag": "0122_trial_ends_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1774780000000,
+      "tag": "0123_support_access_service_role_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1774790000000,
+      "tag": "0124_allow_system_audit_actor",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1774800000000,
+      "tag": "0126_public_site_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1774810000000,
+      "tag": "0126_election_ballot_submissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1774820000000,
+      "tag": "0127_election_ballot_submissions_fk_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1774830000000,
+      "tag": "0128_election_ballot_submissions_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1774840000000,
+      "tag": "0129_create_notifications_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1774850000000,
+      "tag": "0130_add_in_app_muting_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1775088000000,
+      "tag": "0131_slug_reservation_after_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1775350000000,
+      "tag": "0132_add_onboarding_checklist_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1775360000000,
+      "tag": "0133_apartment_rent_obligations_and_lease_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1775370000000,
+      "tag": "0134_ledger_rent_payable_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1775550000000,
+      "tag": "0135_billing_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1775560000000,
+      "tag": "0136_drop_communities_stripe_customer_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1775570000000,
+      "tag": "0137_community_join_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1775580000000,
+      "tag": "0138_add_cancellation_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1775590000000,
+      "tag": "0139_stripe_prices_unit_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1775600000000,
+      "tag": "0139a_stripe_prices_unit_amount_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1775610000000,
+      "tag": "0140_revenue_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1775620000000,
+      "tag": "0141_metrics_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1775630000000,
+      "tag": "0142_enhance_faqs_for_help_center",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1775640000000,
+      "tag": "0143_help_article_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1775650000000,
+      "tag": "0144_calendar_event_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1775660000000,
+      "tag": "0145_pending_signups_structured_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1775670000000,
+      "tag": "0146_harden_finance_rls_and_platform_admin_acl",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1775680000000,
+      "tag": "0147_repair_esign_rls_policy_drift",
+      "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1775690000000,
+      "tag": "0148_stripe_prices_allow_year",
+      "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1775700000000,
+      "tag": "0149_documents_authoring",
+      "breakpoints": true
+    }
+  ]
+}
