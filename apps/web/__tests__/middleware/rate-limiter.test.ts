@@ -203,6 +203,24 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/pricing', 'GET')).toBe('public');
     expect(classifyRoute('/dashboard', 'GET')).toBe('public');
   });
+
+  it('classifies e-sign signing routes as esign-sign tier', () => {
+    expect(
+      classifyRoute('/api/v1/esign/sign/abc123/slug-1', 'GET'),
+    ).toBe('esign-sign');
+    expect(
+      classifyRoute('/api/v1/esign/sign/abc123/slug-1', 'POST'),
+    ).toBe('esign-sign');
+    expect(
+      classifyRoute('/api/v1/esign/sign/abc123/slug-1', 'PATCH'),
+    ).toBe('esign-sign');
+  });
+
+  it('does not classify other esign routes as esign-sign', () => {
+    expect(classifyRoute('/api/v1/esign/templates', 'GET')).toBe('read');
+    expect(classifyRoute('/api/v1/esign/submissions', 'POST')).toBe('write');
+    expect(classifyRoute('/api/v1/esign/consent', 'POST')).toBe('write');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -270,6 +288,15 @@ describe('buildRateLimitKey', () => {
     );
     expect(buildRateLimitKey('write', '1.2.3.4', null)).toBe(
       'rl:write:ip:1.2.3.4',
+    );
+  });
+
+  it('uses IP for esign-sign routes regardless of user ID', () => {
+    expect(buildRateLimitKey('esign-sign', '1.2.3.4', null)).toBe(
+      'rl:esign-sign:ip:1.2.3.4',
+    );
+    expect(buildRateLimitKey('esign-sign', '1.2.3.4', 'user-123')).toBe(
+      'rl:esign-sign:ip:1.2.3.4',
     );
   });
 });
@@ -381,6 +408,36 @@ describe('checkRateLimit', () => {
     const result = checkRateLimit(request, userId);
     expect(result!.allowed).toBe(false);
     expect(result!.category).toBe('write');
+  });
+
+  it('enforces esign-sign route limit (10 req/min) and is IP-keyed', () => {
+    const ip = '10.0.0.42';
+    for (let i = 0; i < 10; i++) {
+      const request = createRequest(
+        'http://localhost:3000/api/v1/esign/sign/abc123/slug-1',
+        {
+          method: 'POST',
+          headers: { 'x-real-ip': ip },
+        },
+      );
+      // userId is irrelevant for esign-sign — route is unauthenticated.
+      const result = checkRateLimit(request, null);
+      expect(result!.allowed).toBe(true);
+      expect(result!.category).toBe('esign-sign');
+      expect(result!.limit).toBe(10);
+    }
+
+    // 11th request from the same IP should be blocked.
+    const request = createRequest(
+      'http://localhost:3000/api/v1/esign/sign/abc123/slug-1',
+      {
+        method: 'POST',
+        headers: { 'x-real-ip': ip },
+      },
+    );
+    const result = checkRateLimit(request, null);
+    expect(result!.allowed).toBe(false);
+    expect(result!.category).toBe('esign-sign');
   });
 
   it('enforces public route limit (60 req/min)', () => {

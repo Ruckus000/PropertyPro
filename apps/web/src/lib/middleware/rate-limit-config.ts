@@ -22,7 +22,13 @@ export interface RateLimitTier {
 }
 
 /** Route category for rate limiting purposes. */
-export type RouteCategory = 'auth' | 'write' | 'read' | 'public' | 'webhook';
+export type RouteCategory =
+  | 'auth'
+  | 'write'
+  | 'read'
+  | 'public'
+  | 'esign-sign'
+  | 'webhook';
 
 /** Rate limit tiers per route category. */
 const RATE_LIMIT_TIERS: Record<RouteCategory, RateLimitTier> = {
@@ -37,6 +43,15 @@ const RATE_LIMIT_TIERS: Record<RouteCategory, RateLimitTier> = {
 
   /** Public routes (no auth): 60 req/min per IP */
   public: { limit: 60, windowMs: 60_000 },
+
+  /**
+   * E-sign unauthenticated signing routes: 10 req/min per IP.
+   * Tighter than `public` because the token-based signing flow is a
+   * high-value abuse target (repeated signature submission attempts).
+   * The single-use server-side token validation provides the primary
+   * defense; this tier is a secondary throttle.
+   */
+  'esign-sign': { limit: 10, windowMs: 60_000 },
 
   /** Webhook routes: exempt (Stripe retries need to succeed) */
   webhook: { limit: 0, windowMs: 0 },
@@ -65,6 +80,13 @@ const WEBHOOK_PATHS = [
   '/api/webhooks/',
 ];
 
+/**
+ * E-sign unauthenticated signing route prefix.
+ * These routes are token-authenticated (no session) and have their own
+ * tighter tier — they must be matched before the generic API classification.
+ */
+const ESIGN_SIGN_PATH_PREFIX = '/api/v1/esign/sign/';
+
 /** API route prefix for identifying API requests. */
 const API_PREFIX = '/api/';
 
@@ -80,6 +102,12 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
   // Auth routes have strict limits
   if (AUTH_RATE_LIMIT_PATHS.some((prefix) => pathname.startsWith(prefix))) {
     return 'auth';
+  }
+
+  // E-sign signing routes (unauthenticated, token-based) — must be matched
+  // before the generic API_PREFIX classification below.
+  if (pathname.startsWith(ESIGN_SIGN_PATH_PREFIX)) {
+    return 'esign-sign';
   }
 
   // Public unauthenticated API endpoints
@@ -137,7 +165,7 @@ export function buildRateLimitKey(
   ip: string,
   userId: string | null,
 ): string {
-  if (category === 'auth' || category === 'public') {
+  if (category === 'auth' || category === 'public' || category === 'esign-sign') {
     return `rl:${category}:ip:${ip}`;
   }
 
