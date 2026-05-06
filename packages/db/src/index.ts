@@ -12,6 +12,23 @@
 export { createScopedClient, isSoftDeleteExempt, isAppendOnlyTable } from './scoped-client';
 export type { ScopedClient, ScopedRow, ScopedTable } from './types/scoped-client';
 
+// Pagination contract (Plan A2 / ADR-003) — the canonical way to return a list
+export {
+  paginate,
+  encodeCursor,
+  decodeCursor,
+  clampPageSize,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from './pagination';
+export type {
+  PaginationInput,
+  PaginationResult,
+  PaginatedResult,
+  PaginationDirection,
+  PaginateOptions,
+} from './pagination';
+
 // Tenant context
 export type { TenantContext } from './tenant-context';
 export { TenantContextMissing } from './errors/TenantContextMissing';
