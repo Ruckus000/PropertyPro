@@ -92,12 +92,23 @@ describe('getEffectiveFeatures', () => {
       expect(features.hasMaintenanceRequests).toBe(true);
       expect(features.hasFinance).toBe(true);
       expect(features.hasVoting).toBe(true);
+      expect(features.hasPackageLogging).toBe(true);
+      expect(features.hasVisitorLogging).toBe(true);
       expect(features.hasMeetings).toBe(true);
       expect(features.hasAnnouncements).toBe(true);
     });
 
     it('lease tracking remains false (type disables for condos)', () => {
       expect(features.hasLeaseTracking).toBe(false);
+    });
+  });
+
+  describe('hoa_720 + professional', () => {
+    const features = getEffectiveFeatures('hoa_720', 'professional');
+
+    it('package and visitor logging remain false because HOA type disables them', () => {
+      expect(features.hasPackageLogging).toBe(false);
+      expect(features.hasVisitorLogging).toBe(false);
     });
   });
 

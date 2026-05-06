@@ -85,6 +85,12 @@ describe('PLAN_FEATURES config', () => {
     }
   });
 
+  it('Professional includes package and visitor logging for supported community types', () => {
+    const professional = PLAN_FEATURES.professional.features;
+    expect(professional.hasPackageLogging).toBe(true);
+    expect(professional.hasVisitorLogging).toBe(true);
+  });
+
   it('Operations Plus includes apartment-specific features', () => {
     const ops = PLAN_FEATURES.operations_plus.features;
     expect(ops.hasLeaseTracking).toBe(true);
