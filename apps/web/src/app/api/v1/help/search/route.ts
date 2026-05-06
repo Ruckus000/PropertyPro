@@ -9,12 +9,17 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createScopedClient, faqs } from '@propertypro/db';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { getAllArticles, searchArticles } from '@/lib/services/help-article-service';
+import {
+  filterArticlesByFeatures,
+  getAllArticles,
+  searchArticles,
+} from '@/lib/services/help-article-service';
 
 const searchSchema = z.object({
   q: z.string().min(2).max(200),
@@ -35,10 +40,13 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { q } = parsed.data;
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
   const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, userId);
 
-  // Search both sources in parallel
-  const allArticles = getAllArticles();
+  // Search both sources in parallel.
+  // Filter articles by community feature gates so apartment-only articles
+  // don't surface in condo/HOA search results (and vice versa).
+  const features = getFeaturesForCommunity(membership.communityType);
+  const allArticles = filterArticlesByFeatures(getAllArticles(), features);
   const articleResults = searchArticles(allArticles, q);
 
   const scoped = createScopedClient(communityId);

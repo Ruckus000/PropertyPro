@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFeatureEvaluator,
+  filterArticlesByFeatures,
   getAllArticles,
   getAllTags,
   getArticlesByTag,
@@ -130,6 +132,45 @@ Body.
     expect(isArticleAvailableForFeatures(article, () => false)).toBe(false);
     expect(isArticleAvailableForFeatures({ featureGates: [] }, () => false)).toBe(true);
     expect(isArticleAvailableForFeatures({ featureGates: undefined }, () => false)).toBe(true);
+  });
+
+  it('buildFeatureEvaluator reads boolean flags from a features object', () => {
+    const evaluator = buildFeatureEvaluator({
+      hasLeaseTracking: true,
+      hasViolations: false,
+    });
+    expect(evaluator('hasLeaseTracking')).toBe(true);
+    expect(evaluator('hasViolations')).toBe(false);
+    // Unknown gate returns false (does not throw).
+    expect(evaluator('hasUndefinedGate')).toBe(false);
+  });
+
+  it('filterArticlesByFeatures excludes gated articles and keeps ungated ones', () => {
+    const articles = [
+      { slug: 'condo-only', featureGates: ['hasCompliance'] },
+      { slug: 'apartment-only', featureGates: ['hasLeaseTracking'] },
+      { slug: 'always-shown', featureGates: [] as string[] },
+      { slug: 'no-gate-field' },
+    ];
+    const apartmentFeatures = {
+      hasCompliance: false,
+      hasLeaseTracking: true,
+    };
+    const result = filterArticlesByFeatures(articles, apartmentFeatures);
+    expect(result.map((a) => a.slug)).toEqual([
+      'apartment-only',
+      'always-shown',
+      'no-gate-field',
+    ]);
+  });
+
+  it('filterArticlesByFeatures requires ALL gates to be satisfied', () => {
+    const articles = [
+      { slug: 'multi-gate', featureGates: ['hasA', 'hasB'] },
+    ];
+    expect(filterArticlesByFeatures(articles, { hasA: true, hasB: true })).toHaveLength(1);
+    expect(filterArticlesByFeatures(articles, { hasA: true, hasB: false })).toHaveLength(0);
+    expect(filterArticlesByFeatures(articles, { hasA: false, hasB: true })).toHaveLength(0);
   });
 
   it('returns all unique tags across articles', () => {

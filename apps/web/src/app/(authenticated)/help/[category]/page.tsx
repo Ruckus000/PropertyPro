@@ -1,8 +1,12 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getCategoryTree } from '@/lib/services/help-article-service';
+import {
+  filterArticlesByFeatures,
+  getCategoryTree,
+} from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
@@ -17,9 +21,19 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
   const effectiveRole = membership.presetKey ?? membership.role;
 
   const categoryTree = getCategoryTree();
-  const articles = categoryTree[category];
+  const allArticles = categoryTree[category];
 
-  if (!articles || articles.length === 0) {
+  if (!allArticles || allArticles.length === 0) {
+    notFound();
+  }
+
+  // Filter out articles whose featureGates don't match this community type
+  // (e.g. apartment-only articles for a condo). If every article in the
+  // category is gated out for this community, treat the category as missing.
+  const features = getFeaturesForCommunity(membership.communityType);
+  const articles = filterArticlesByFeatures(allArticles, features);
+
+  if (articles.length === 0) {
     notFound();
   }
 
