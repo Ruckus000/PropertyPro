@@ -73,6 +73,8 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasCommunityBoard: true,
       hasWorkOrders: true,
       hasAmenities: true,
+      hasPackageLogging: true,
+      hasVisitorLogging: true,
       hasCalendarSync: true,
       hasAccountingConnectors: true,
     },
