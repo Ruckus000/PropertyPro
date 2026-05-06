@@ -1,0 +1,1 @@
+CREATE INDEX "communities_next_reminder_at_idx" ON "communities" USING btree ("next_reminder_at") WHERE next_reminder_at IS NOT NULL;
