@@ -175,6 +175,23 @@ function checkSnapshotChainIntact(entries: JournalEntry[]): Problem[] {
   return problems;
 }
 
+/**
+ * SQL files known to exist on disk without a corresponding journal entry.
+ *
+ * Historical artifacts from before the migration journal was strictly
+ * enforced. Adding new entries here is NOT acceptable — any new migration
+ * MUST go through `drizzle-kit generate` so the journal is updated
+ * atomically.
+ *
+ * The 2026-05-06 drizzle re-baseline (PR #191) moved every pre-baseline SQL
+ * file into `packages/db/migrations/_archive/`, so this set is currently
+ * empty. The strengthened orphan check below only scans `migrations/` root
+ * and ignores `_archive/`, which means archived files cannot trip it. The
+ * set is kept as a future escape hatch for legitimately grandfathered
+ * cases.
+ */
+const KNOWN_ORPHAN_MIGRATION_FILES = new Set<string>([]);
+
 function checkMigrationFilesExist(entries: JournalEntry[]): Problem[] {
   const problems: Problem[] = [];
 
@@ -190,34 +207,41 @@ function checkMigrationFilesExist(entries: JournalEntry[]): Problem[] {
     return problems;
   }
 
-  // Extract migration numbers from filenames (e.g., "0035_add_transparency_columns.sql" → 35)
-  const fileNumbers = new Set<number>();
-  for (const file of sqlFiles) {
-    const match = file.match(/^(\d{4})_/);
-    if (match) {
-      fileNumbers.add(parseInt(match[1], 10));
-    }
-  }
-
-  // Check for journal entries without corresponding files
-  // Note: not all journal tags directly map to file numbers, so this is informational
   const journalTags = new Set(entries.map(e => e.tag));
 
-  // Check for SQL files beyond last journal entry (potential untracked migrations)
-  const lastJournalIdx = entries.length > 0 ? entries[entries.length - 1].idx : -1;
-  const untrackedFiles = sqlFiles.filter(f => {
-    const match = f.match(/^(\d{4})_/);
-    if (!match) return false;
-    const num = parseInt(match[1], 10);
-    // Files with numbers beyond the journal's coverage
-    return num > lastJournalIdx && !f.includes('rollback');
+  // STRICT: every SQL file in the migrations directory must correspond to a
+  // journal entry (matched by tag = filename minus `.sql`). The previous
+  // version of this guard only checked for SQL files *beyond* the last
+  // journal index, missing orphan files at lower indices — that is exactly
+  // the drift class we want to prevent.
+  const orphanFiles = sqlFiles.filter((file) => {
+    const tag = file.replace(/\.sql$/, '');
+    if (journalTags.has(tag)) return false;
+    if (KNOWN_ORPHAN_MIGRATION_FILES.has(file)) return false;
+    return true;
   });
 
-  if (untrackedFiles.length > 0) {
+  if (orphanFiles.length > 0) {
+    problems.push({
+      severity: 'error',
+      message:
+        `${orphanFiles.length} SQL file(s) exist on disk without a journal entry: ` +
+        orphanFiles.join(', ') +
+        '. Generate migrations via `drizzle-kit generate` so the journal stays ' +
+        'authoritative. To grandfather a historical file, add it to ' +
+        'KNOWN_ORPHAN_MIGRATION_FILES with a comment explaining why.',
+    });
+  }
+
+  // Also surface known orphans as a warning each run so they don't get
+  // forgotten — the goal is to drain this set, not grow it.
+  if (KNOWN_ORPHAN_MIGRATION_FILES.size > 0) {
     problems.push({
       severity: 'warning',
-      message: `${untrackedFiles.length} SQL file(s) exist beyond last journal entry (idx ${lastJournalIdx}): `
-        + untrackedFiles.join(', '),
+      message:
+        `${KNOWN_ORPHAN_MIGRATION_FILES.size} grandfathered orphan migration file(s) ` +
+        `still present (see KNOWN_ORPHAN_MIGRATION_FILES). These need DB-side ` +
+        `reconciliation to either be added to the journal or removed.`,
     });
   }
 
