@@ -31,7 +31,8 @@
     "guard:breadcrumbs": "tsx scripts/verify-page-breadcrumbs.ts",
     "guard:operations-routes": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-operations-routes.ts",
     "guard:sentry-instrumentation": "tsx scripts/verify-sentry-instrumentation.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation",
+    "guard:component-api-calls": "tsx scripts/verify-component-api-calls.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls",
     "clean": "turbo run clean"
   },
   "pnpm": {
