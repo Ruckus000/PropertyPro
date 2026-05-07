@@ -63,7 +63,12 @@ describe('StatutoryDocumentsStep', () => {
             if (url === '/api/v1/document-categories?communityId=1') {
                 return Promise.resolve({
                     ok: true,
-                    json: async () => ({ data: [{ id: 11, name: 'Governing Documents', slug: 'governing-documents' }] }),
+                    json: async () => ({
+                        data: {
+                            data: [{ id: 11, name: 'Governing Documents', slug: 'governing-documents' }],
+                            pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+                        },
+                    }),
                 });
             }
 
@@ -119,7 +124,10 @@ describe('StatutoryDocumentsStep', () => {
             await flushEffects();
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('/api/v1/document-categories?communityId=1');
+        // requestJson() calls fetch(url, init) with init=undefined; assert URL irrespective of the second arg
+        expect(
+            fetchMock.mock.calls.some(([url]: [string, unknown]) => url === '/api/v1/document-categories?communityId=1'),
+        ).toBe(true);
         expect(onNext).toHaveBeenCalledWith({
             items: [
                 { templateKey: '718_articles', documentId: 123, categoryId: 11 },
@@ -133,8 +141,19 @@ describe('StatutoryDocumentsStep', () => {
             if (url === '/api/v1/compliance' && options?.method === 'POST') {
                 return Promise.resolve({ ok: true });
             }
-            if (url === '/api/v1/compliance?communityId=1' || url === '/api/v1/document-categories?communityId=1') {
+            if (url === '/api/v1/compliance?communityId=1') {
                 return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
+            }
+            if (url === '/api/v1/document-categories?communityId=1') {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        data: {
+                            data: [],
+                            pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+                        },
+                    }),
+                });
             }
 
             return Promise.resolve({ ok: false });
@@ -239,7 +258,12 @@ describe('StatutoryDocumentsStep', () => {
             if (url === '/api/v1/document-categories?communityId=1') {
                 return Promise.resolve({
                     ok: true,
-                    json: async () => ({ data: [{ id: 11, name: 'Governing Documents', slug: 'governing-documents' }] }),
+                    json: async () => ({
+                        data: {
+                            data: [{ id: 11, name: 'Governing Documents', slug: 'governing-documents' }],
+                            pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+                        },
+                    }),
                 });
             }
 

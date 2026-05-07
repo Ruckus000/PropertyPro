@@ -1,14 +1,32 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { requestJson } from '@/lib/api/request-json';
 import {
   resolveDocumentCategoryId,
   type DocumentCategoryOption,
 } from '@/lib/documents/categories';
 
-interface CategoriesResponse {
+interface CategoriesPage {
   data: DocumentCategoryOption[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
 }
+
+/**
+ * Loads every document category for a community, walking the cursor-based
+ * pagination contract (Plan B3 pilot). The consumer needs the full list to
+ * resolve a category by name, so we keep fetching until `hasMore` is false.
+ *
+ * In practice document_categories tables hold ~10–30 rows per community, so
+ * the walk almost always completes in a single request (default page size 50).
+ * The loop is a safety net for atypically large tables — and a simple guard
+ * against runaway pagination.
+ */
+const MAX_PAGES = 20; // 20 × 100 = 2000 categories — well above any realistic ceiling.
 
 export function useDocumentCategories(communityId: number) {
   const [categories, setCategories] = useState<DocumentCategoryOption[]>([]);
@@ -23,14 +41,25 @@ export function useDocumentCategories(communityId: number) {
       setError(null);
 
       try {
-        const response = await fetch(`/api/v1/document-categories?communityId=${communityId}`);
-        if (!response.ok) {
-          throw new Error('Failed to load document categories');
+        const collected: DocumentCategoryOption[] = [];
+        let cursor: string | null = null;
+        for (let i = 0; i < MAX_PAGES; i++) {
+          // Bail early if communityId changed or the component unmounted
+          // while a previous page was in flight — avoids issuing dependent
+          // requests whose result we'd discard.
+          if (!active) return;
+          const params = new URLSearchParams({ communityId: String(communityId) });
+          if (cursor) params.set('cursor', cursor);
+          const page = await requestJson<CategoriesPage>(
+            `/api/v1/document-categories?${params.toString()}`,
+          );
+          collected.push(...page.data);
+          if (!page.pagination.hasMore || !page.pagination.nextCursor) break;
+          cursor = page.pagination.nextCursor;
         }
 
-        const body = (await response.json()) as CategoriesResponse;
         if (active) {
-          setCategories(body.data ?? []);
+          setCategories(collected);
         }
       } catch (loadError) {
         if (active) {
@@ -44,7 +73,7 @@ export function useDocumentCategories(communityId: number) {
       }
     }
 
-    loadCategories();
+    void loadCategories();
 
     return () => {
       active = false;

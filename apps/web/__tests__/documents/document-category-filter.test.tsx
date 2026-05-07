@@ -32,7 +32,9 @@ describe('document category filter', () => {
   it('renders empty-state message when no categories are configured', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: [] }),
+      json: async () => ({
+        data: { data: [], pagination: { nextCursor: null, hasMore: false, pageSize: 50 } },
+      }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -56,10 +58,13 @@ describe('document category filter', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        data: [
-          { id: 1, name: 'Rules', description: null },
-          { id: 2, name: 'Meeting Minutes', description: null },
-        ],
+        data: {
+          data: [
+            { id: 1, name: 'Rules', description: null },
+            { id: 2, name: 'Meeting Minutes', description: null },
+          ],
+          pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+        },
       }),
     });
     vi.stubGlobal('fetch', fetchMock);
