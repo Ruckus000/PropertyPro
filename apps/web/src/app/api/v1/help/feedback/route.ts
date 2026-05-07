@@ -15,6 +15,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { captureMessage } from '@sentry/nextjs';
 import { createScopedClient, helpArticleFeedback } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -23,6 +24,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 
+const NEGATIVE_FEEDBACK_COMMENT_MAX_LEN = 500;
 const UNIQUE_VIOLATION = '23505';
 
 function isUniqueViolation(error: unknown): boolean {
@@ -86,6 +88,23 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
+
+  // Telemetry: thumbs-down with a comment is the highest-signal content-gap
+  // event — surface it via Sentry so the weekly content-gaps script can
+  // collect it. We truncate the comment to bound any incidental PII the
+  // user types into the feedback box. Sentry's beforeSend hook strips
+  // auth/cookie headers; this is the runtime defense for body content.
+  if (rating === -1 && comment && comment.trim().length > 0) {
+    captureMessage('help_feedback_negative', {
+      level: 'info',
+      extra: {
+        articleSlug,
+        articleCategory,
+        communityId,
+        comment: comment.slice(0, NEGATIVE_FEEDBACK_COMMENT_MAX_LEN),
+      },
+    });
+  }
 
   const scoped = createScopedClient(communityId);
 

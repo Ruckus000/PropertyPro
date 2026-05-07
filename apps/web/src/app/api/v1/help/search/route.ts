@@ -22,6 +22,16 @@ import {
   searchArticles,
 } from '@/lib/services/help-article-service';
 
+/**
+ * Length cap on the `query` field sent to Sentry on a zero-result event.
+ * The route's Zod schema allows up to 200 chars; users sometimes type
+ * identifying strings into search boxes (names, addresses), so we truncate
+ * before send to bound any incidental PII. Sentry's beforeSend hook strips
+ * auth/cookie headers; this is the runtime defense for body content (parity
+ * with the comment-truncation rationale on /api/v1/help/feedback).
+ */
+const SEARCH_QUERY_CAPTURE_MAX_LEN = 100;
+
 const searchSchema = z.object({
   q: z.string().min(2).max(200),
   communityId: z.coerce.number().int().positive(),
@@ -86,6 +96,24 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       return question.includes(qLower) || answer.includes(qLower);
     })
     .slice(0, 10);
+
+  // Telemetry: zero-result searches (queries ≥ 3 chars to avoid 2-char noise).
+  // Fires only when BOTH article and FAQ results are empty — a query that
+  // matches an FAQ still gives the user something useful and is not a
+  // content gap. Surfaced via Sentry messages; the weekly content-gaps
+  // script aggregates these into an authors-readable report.
+  // See ADR-004 / 2026-05-07 audit.
+  if (q.length >= 3 && articleResults.length === 0 && faqResults.length === 0) {
+    captureMessage('help_search_no_results', {
+      level: 'info',
+      extra: {
+        query: q.slice(0, SEARCH_QUERY_CAPTURE_MAX_LEN),
+        communityId,
+        articleCount: allArticles.length,
+        faqCount: faqRows.length,
+      },
+    });
+  }
 
   return NextResponse.json({
     data: {
