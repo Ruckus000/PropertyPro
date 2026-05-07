@@ -8,6 +8,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { captureMessage } from '@sentry/nextjs';
 import { createScopedClient, faqs } from '@propertypro/db';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -16,8 +17,8 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
-  filterArticlesByFeatures,
   getAllArticles,
+  safelyFilterArticlesByFeatures,
   searchArticles,
 } from '@/lib/services/help-article-service';
 
@@ -44,9 +45,35 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   // Search both sources in parallel.
   // Filter articles by community feature gates so apartment-only articles
-  // don't surface in condo/HOA search results (and vice versa).
-  const features = getFeaturesForCommunity(membership.communityType);
-  const allArticles = filterArticlesByFeatures(getAllArticles(), features);
+  // don't surface in condo/HOA search results (and vice versa). Fail open
+  // (return everything) when feature evaluation throws — see ADR-004.
+  let features;
+  try {
+    features = getFeaturesForCommunity(membership.communityType);
+  } catch (error) {
+    captureMessage('help_feature_gate_failure', {
+      level: 'warning',
+      extra: {
+        source: 'help_search_api',
+        communityId,
+        communityType: membership.communityType,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    features = null;
+  }
+  const allArticles = safelyFilterArticlesByFeatures(getAllArticles(), features, {
+    onError: (error) => {
+      captureMessage('help_feature_gate_failure', {
+        level: 'warning',
+        extra: {
+          source: 'help_search_api_filter',
+          communityId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    },
+  });
   const articleResults = searchArticles(allArticles, q);
 
   const scoped = createScopedClient(communityId);
