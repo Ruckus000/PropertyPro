@@ -23,6 +23,7 @@ export const HELP_KEYS = {
     ['help', 'search', query, communityId] as const,
   contextual: (path: string, communityId: number) =>
     ['help', 'contextual', path, communityId] as const,
+  readArticles: (communityId: number) => ['help', 'read', communityId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -108,6 +109,28 @@ export function useHelpSearch(query: string, communityId: number) {
     },
     enabled: debouncedQuery.length >= 2 && communityId > 0,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * Returns the set of article slugs the current user has viewed in this
+ * community. Sourced from `help_article_views` via `/api/v1/help/views`.
+ * Used by the read-state ✓ checkmark in category lists and the Start Here
+ * hero. Best-effort: errors return an empty set rather than blocking UI.
+ */
+export function useReadArticles(communityId: number) {
+  return useQuery<{ slugs: Set<string> }>({
+    queryKey: HELP_KEYS.readArticles(communityId),
+    queryFn: async ({ signal }) => {
+      const data = await requestJson<{ slugs: string[] }>(
+        `/api/v1/help/views?communityId=${communityId}`,
+        { signal },
+      );
+      return { slugs: new Set(data.slugs) };
+    },
+    enabled: communityId > 0,
+    staleTime: 60_000,
+    retry: false,
   });
 }
 
