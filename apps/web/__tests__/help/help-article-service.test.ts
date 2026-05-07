@@ -27,6 +27,7 @@ keywords:
   - sample
 relatedArticles: []
 featured: true
+updatedAt: "2026-04-01"
 ---
 
 This is the example body.
@@ -112,6 +113,7 @@ roles: []
 keywords: []
 relatedArticles: []
 featured: false
+updatedAt: "2026-04-01"
 ---
 
 Body.
@@ -121,7 +123,52 @@ Body.
     expect(metadata.tags).toEqual([]);
     expect(metadata.statutes).toEqual([]);
     expect(metadata.featureGates).toEqual([]);
-    expect(metadata.updatedAt).toBeUndefined();
+    expect(metadata.updatedAt).toBe('2026-04-01');
+  });
+
+  it('rejects frontmatter that fails the schema (updatedAt missing)', () => {
+    expect(() =>
+      parseArticleFrontmatter(
+        '/tmp/broken.mdx',
+        `---
+title: "Broken"
+description: "missing updatedAt"
+category: "test"
+slug: "broken"
+roles: []
+keywords: []
+relatedArticles: []
+featured: false
+---
+
+Body.
+`,
+      ),
+    ).toThrow(/updatedAt/);
+  });
+
+  it('rejects frontmatter with featureGates not in CommunityFeatures', () => {
+    expect(() =>
+      parseArticleFrontmatter(
+        '/tmp/typo.mdx',
+        `---
+title: "Typo"
+description: "featureGates typo"
+category: "test"
+slug: "typo"
+roles: []
+keywords: []
+relatedArticles: []
+featured: false
+updatedAt: "2026-04-01"
+featureGates:
+  - hasNotARealFlag
+---
+
+Body.
+`,
+      ),
+    ).toThrow(/featureGates/);
   });
 
   it('filters articles by feature gates', () => {

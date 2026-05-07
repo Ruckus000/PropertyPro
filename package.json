@@ -34,7 +34,9 @@
     "guard:component-api-calls": "tsx scripts/verify-component-api-calls.ts",
     "guard:authz-comments": "tsx scripts/verify-authz-comments.ts",
     "guard:component-service-imports": "tsx scripts/verify-component-service-imports.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments && pnpm guard:component-service-imports",
+    "guard:help-content": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-help-content.ts",
+    "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments && pnpm guard:component-service-imports && pnpm guard:help-content",
     "clean": "turbo run clean"
   },
   "pnpm": {

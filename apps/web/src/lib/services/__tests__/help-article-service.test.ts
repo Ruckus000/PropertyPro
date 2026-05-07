@@ -32,6 +32,7 @@ describe('help-article-service', () => {
           keywords: ['test', 'help'],
           relatedArticles: [],
           featured: false,
+          updatedAt: '2026-04-01',
         },
         content: '# Hello world',
       });
@@ -50,7 +51,7 @@ describe('help-article-service', () => {
         contextPaths: [],
         statutes: [],
         featureGates: [],
-        updatedAt: undefined,
+        updatedAt: '2026-04-01',
         readTimeMinutes: expect.any(Number),
         filePath: '/fake/path.mdx',
         contentHash: expect.any(String),
@@ -69,6 +70,7 @@ describe('help-article-service', () => {
           roles: [],
           keywords: [],
           relatedArticles: [],
+          updatedAt: '2026-04-01',
         },
         content: 'Short content here.',
       });
