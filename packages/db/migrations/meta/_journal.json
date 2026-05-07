@@ -15,6 +15,13 @@
       "when": 1778106092617,
       "tag": "0001_round_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778115661662,
+      "tag": "0002_reconcile_help_articles_user_search",
+      "breakpoints": true
     }
   ]
 }
