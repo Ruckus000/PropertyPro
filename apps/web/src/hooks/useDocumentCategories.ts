@@ -44,6 +44,10 @@ export function useDocumentCategories(communityId: number) {
         const collected: DocumentCategoryOption[] = [];
         let cursor: string | null = null;
         for (let i = 0; i < MAX_PAGES; i++) {
+          // Bail early if communityId changed or the component unmounted
+          // while a previous page was in flight — avoids issuing dependent
+          // requests whose result we'd discard.
+          if (!active) return;
           const params = new URLSearchParams({ communityId: String(communityId) });
           if (cursor) params.set('cursor', cursor);
           const page = await requestJson<CategoriesPage>(
