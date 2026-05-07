@@ -127,13 +127,26 @@ interface CrossListResponse {
   totalUnread: number;
 }
 
+/**
+ * Cross-community notifications use a separate route (`/api/v1/notifications/all`)
+ * that has not been migrated to `paginate()` yet — its cursor is still a raw
+ * numeric id. Keeping its filter type independent of `NotificationFilters`
+ * (whose cursor is now an opaque string) prevents callers from accidentally
+ * mixing the two cursor formats.
+ */
+export interface CrossNotificationFilters {
+  limit?: number;
+  cursor?: number;
+  unreadOnly?: boolean;
+}
+
 export const CROSS_NOTIFICATION_KEYS = {
   all: () => ['notifications', 'cross'] as const,
-  list: (filters?: NotificationFilters) =>
+  list: (filters?: CrossNotificationFilters) =>
     ['notifications', 'cross', 'list', filters ?? {}] as const,
 };
 
-export function useCrossNotifications(filters: NotificationFilters = {}) {
+export function useCrossNotifications(filters: CrossNotificationFilters = {}) {
   return useQuery<CrossListResponse>({
     queryKey: CROSS_NOTIFICATION_KEYS.list(filters),
     queryFn: async () => {

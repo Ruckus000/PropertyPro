@@ -147,6 +147,37 @@ describe('GET /api/v1/notifications', () => {
     expect(call[3]?.where).toBeDefined();
   });
 
+  it('treats unread_only=false as filter-off (regression: z.coerce.boolean treats "false" as truthy)', async () => {
+    // The literal string "false" must NOT enable the unread filter. The
+    // schema uses z.preprocess((v) => v === 'true', ...) to avoid the
+    // Boolean(string) trap where any non-empty string is truthy.
+    paginateMock.mockResolvedValueOnce({
+      data: [makeNotificationRow({ readAt: '2026-05-01T13:00:00Z' })],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 20 },
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/notifications?communityId=42&unread_only=false',
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as JsonEnvelope;
+    expect(json.data.data).toHaveLength(1);
+  });
+
+  it('uses default pageSize=20 when limit is omitted (not paginate default of 50)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/notifications?communityId=42');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+
+    const [, , input] = paginateMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      { cursor?: string; pageSize?: number },
+    ];
+    expect(input.pageSize).toBe(20);
+  });
+
   it('rejects invalid category enum values with 400', async () => {
     const req = new NextRequest(
       'http://localhost:3000/api/v1/notifications?communityId=42&category=bogus',

@@ -53,9 +53,14 @@ const VALID_CATEGORIES = [
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
   cursor: z.string().min(1).max(256).optional(),
-  limit: z.coerce.number().int().positive().optional(),
+  // Default 20 preserves the route's prior pageSize default. Without this,
+  // omitting `limit` would fall through to paginate()'s DEFAULT_PAGE_SIZE (50).
+  limit: z.coerce.number().int().positive().default(20),
   category: z.enum(VALID_CATEGORIES).optional(),
-  unread_only: z.coerce.boolean().optional(),
+  // `z.coerce.boolean()` is unsafe for query strings: `Boolean("false") === true`.
+  // Treat the param as a flag — only the literal string "true" enables it; any
+  // other value (including "false", "0", missing) means "filter off".
+  unread_only: z.preprocess((val) => val === 'true', z.boolean()).optional(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
