@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Public transparency page resolves community by subdomain slug before any tenant context exists; no communityId is available yet.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { TransparencyPage } from '@/components/transparency/transparency-page';

@@ -6,7 +6,7 @@
  * already verified the reviewer's admin membership in the target community
  * via requirePermission(membership, 'residents', 'write').
  */
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Cross-tenant by design — the requester is not yet a member of the target community, so a scoped client wouldn't have permission. Caller MUST have verified reviewer admin membership via requirePermission(membership, 'residents', 'write') first.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   communityJoinRequests,

@@ -11,8 +11,7 @@ import {
   notificationPreferences,
   users,
 } from '@propertypro/db';
-// Unsafe escape hatch: digest queue claiming scans cross-community rows by design.
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Notification digest cron drains queued rows across every community in one pass — by-design cross-tenant scan; no single communityId applies.
 import {
   claimDigestQueueRows,
   findCandidateDigestCommunityIds,

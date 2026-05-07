@@ -14,7 +14,7 @@
 import type Stripe from 'stripe';
 import { and, eq, isNull } from '@propertypro/db/filters';
 import { communities, demoInstances, users, userRoles } from '@propertypro/db';
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getPresetPermissions } from '@propertypro/shared';
