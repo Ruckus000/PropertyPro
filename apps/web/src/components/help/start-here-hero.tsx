@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Sparkles } from 'lucide-react';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 import type { StartHereContent } from '@/lib/help/start-here';
 
@@ -20,13 +20,20 @@ interface StartHereHeroProps {
   communityId: number;
   content: StartHereContent;
   articles: HelpArticleMetadata[];
+  /** Slugs the current user has already viewed; surface a ✓ on those tiles. */
+  readSlugs?: ReadonlySet<string>;
 }
 
 function articleHref(article: HelpArticleMetadata, communityId: number): string {
   return `/help/${article.category}/${article.slug}?communityId=${communityId}`;
 }
 
-export function StartHereHero({ communityId, content, articles }: StartHereHeroProps) {
+export function StartHereHero({
+  communityId,
+  content,
+  articles,
+  readSlugs,
+}: StartHereHeroProps) {
   if (articles.length === 0) return null;
 
   return (
@@ -63,29 +70,39 @@ export function StartHereHero({ communityId, content, articles }: StartHereHeroP
       </div>
 
       <ol className="mt-6 grid gap-3 md:grid-cols-2">
-        {articles.map((article, index) => (
-          <li key={article.slug}>
-            <Link
-              href={articleHref(article, communityId)}
-              className="group flex items-start gap-3 rounded-xl border border-edge bg-surface-page p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
-            >
-              <span
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-xs font-semibold text-content-secondary"
-                aria-hidden="true"
+        {articles.map((article, index) => {
+          const isRead = readSlugs?.has(article.slug) ?? false;
+          return (
+            <li key={article.slug}>
+              <Link
+                href={articleHref(article, communityId)}
+                className="group flex items-start gap-3 rounded-xl border border-edge bg-surface-page p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
               >
-                {index + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-content group-hover:text-[var(--interactive-primary)]">
-                  {article.title}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-content-tertiary line-clamp-2">
-                  {article.description}
-                </p>
-              </div>
-            </Link>
-          </li>
-        ))}
+                <span
+                  className={
+                    isRead
+                      ? 'flex size-7 shrink-0 items-center justify-center rounded-lg bg-status-success-subtle text-status-success'
+                      : 'flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-xs font-semibold text-content-secondary'
+                  }
+                  aria-hidden="true"
+                >
+                  {isRead ? <Check size={14} /> : index + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-content group-hover:text-[var(--interactive-primary)]">
+                    {article.title}
+                    {isRead && (
+                      <span className="sr-only"> — already read</span>
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-content-tertiary line-clamp-2">
+                    {article.description}
+                  </p>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );

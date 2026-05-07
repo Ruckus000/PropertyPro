@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Clock } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 import { captureMessage } from '@sentry/nextjs';
 import { getFeaturesForCommunity } from '@propertypro/shared';
+import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { getReadArticleSlugs } from '@/lib/help/read-state';
 import {
   getCategoryTree,
   safelyFilterArticlesByFeatures,
@@ -18,6 +20,7 @@ interface CategoryPageProps {
 
 export default async function HelpCategoryPage({ params }: CategoryPageProps) {
   const { category } = await params;
+  const userId = await requirePageAuthenticatedUserId();
   const membership = await requireCommunityMembership();
   const effectiveRole = membership.presetKey ?? membership.role;
 
@@ -72,6 +75,8 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
     return a.title.localeCompare(b.title);
   });
 
+  const readSlugs = await getReadArticleSlugs(membership.communityId, userId);
+
   const categoryLabel = category
     .replace(/-/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -92,7 +97,9 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
       <HelpSearchInput className="mt-6" />
 
       <div className="mt-6 space-y-3">
-        {sorted.map((article) => (
+        {sorted.map((article) => {
+          const isRead = readSlugs.has(article.slug);
+          return (
           <Link
             key={article.slug}
             href={`/help/${article.category}/${article.slug}`}
@@ -100,7 +107,14 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-content group-hover:text-[var(--interactive-primary)]">
+                <p className="flex items-center gap-2 text-sm font-medium text-content group-hover:text-[var(--interactive-primary)]">
+                  {isRead && (
+                    <Check
+                      size={14}
+                      className="shrink-0 text-status-success"
+                      aria-label="Already read"
+                    />
+                  )}
                   {article.title}
                 </p>
                 <p className="mt-1 text-xs text-content-tertiary line-clamp-2">
@@ -122,7 +136,8 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
               </div>
             )}
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

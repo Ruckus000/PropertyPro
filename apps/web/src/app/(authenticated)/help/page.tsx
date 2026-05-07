@@ -4,6 +4,7 @@ import { HelpHubContent } from '@/components/help/help-hub-content';
 import { StartHereHero } from '@/components/help/start-here-hero';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
+import { getReadArticleSlugs } from '@/lib/help/read-state';
 import { buildHelpTaskCardsFromFeatures } from '@/lib/help/task-cards';
 import {
   getStartHereContentForRole,
@@ -24,11 +25,14 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
   const effectiveRole = context.membership.presetKey ?? context.membership.role;
 
   const scoped = createScopedClient(context.communityId);
-  const communityRows = await scoped.selectFrom(
-    communities,
-    {},
-    eq(communities.id, context.communityId),
-  );
+  const [communityRows, readSlugs] = await Promise.all([
+    scoped.selectFrom(
+      communities,
+      {},
+      eq(communities.id, context.communityId),
+    ),
+    getReadArticleSlugs(context.communityId, context.userId),
+  ]);
   const community = communityRows[0] as Community | undefined;
 
   const startHereContent = getStartHereContentForRole(effectiveRole);
@@ -47,6 +51,7 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
         communityId={context.communityId}
         content={startHereContent}
         articles={startHereArticles}
+        readSlugs={readSlugs}
       />
       <HelpHubContent
         communityId={context.communityId}

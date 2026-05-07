@@ -2,6 +2,7 @@
 
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
@@ -73,7 +74,16 @@ export function ElectionDetailDialog({
 
             <div className="grid gap-3 rounded-xl border border-edge bg-surface-card p-4 text-sm text-content-secondary md:grid-cols-2">
               <p><span className="font-medium text-content">Type:</span> {data.election.electionType}</p>
-              <p><span className="font-medium text-content">Quorum:</span> {data.election.quorumPercentage}%</p>
+              <p className="flex items-center gap-1.5">
+                <span className="font-medium text-content">Quorum:</span>
+                {data.election.quorumPercentage}%
+                <HelpTooltip
+                  articleSlug="running-a-board-election"
+                  articleCategory="elections"
+                  content="Quorum is the minimum share of eligible units that must cast a ballot for the election to be valid under your bylaws and Florida statute."
+                  label="What is quorum?"
+                />
+              </p>
               <p><span className="font-medium text-content">Opens:</span> {new Date(data.election.opensAt).toLocaleString()}</p>
               <p><span className="font-medium text-content">Closes:</span> {new Date(data.election.closesAt).toLocaleString()}</p>
               <p><span className="font-medium text-content">Ballots cast:</span> {data.election.totalBallotsCast}</p>

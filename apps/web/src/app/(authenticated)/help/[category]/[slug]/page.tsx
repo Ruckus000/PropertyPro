@@ -130,6 +130,19 @@ export default async function HelpArticlePage({
         )}
       </div>
 
+      {/* Mobile TOC — collapsible disclosure above the body on <lg viewports.
+          Desktop continues to render a sticky sidebar (hidden lg:block below). */}
+      {tocItems.length > 0 && (
+        <details className="rounded-2xl border border-edge bg-surface-card lg:hidden">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-content [&::-webkit-details-marker]:hidden">
+            On this page
+          </summary>
+          <div className="border-t border-edge-subtle px-4 py-3">
+            <TableOfContents items={tocItems} />
+          </div>
+        </details>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
         <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
           {content}
