@@ -119,6 +119,62 @@ function checkRangeOverlaps(): Problem[] {
   return problems;
 }
 
+/**
+ * Verify the snapshot chain in meta/ is in lockstep with the journal:
+ *
+ *   1. Count of NNNN_snapshot.json files == journal entry count.
+ *   2. For each journal idx N, meta/NNNN_snapshot.json must exist (zero-padded
+ *      to 4 digits, matching drizzle-kit's output).
+ *
+ * Drizzle-kit advances the snapshot chain on every `generate`. If the chain
+ * stops being updated while new SQL files keep landing, `drizzle-kit generate`
+ * starts producing duplicate-content migrations because it has no fresh
+ * baseline to diff against. That is exactly how we ended up with idx 0021–
+ * 0024 being byte-identical copies of 0020 and required a full re-baseline
+ * of 114 SQL files. See project_drizzle_snapshot_collision.md.
+ */
+function checkSnapshotChainIntact(entries: JournalEntry[]): Problem[] {
+  const problems: Problem[] = [];
+  const metaDir = join(migrationsDir, 'meta');
+
+  let metaFiles: string[];
+  try {
+    metaFiles = readdirSync(metaDir);
+  } catch {
+    problems.push({
+      severity: 'error',
+      message: `Cannot read migrations meta directory: ${metaDir}`,
+    });
+    return problems;
+  }
+
+  const snapshotFiles = metaFiles.filter((f) => /^\d{4}_snapshot\.json$/.test(f));
+
+  if (snapshotFiles.length !== entries.length) {
+    problems.push({
+      severity: 'error',
+      message:
+        `Snapshot/journal drift: ${snapshotFiles.length} snapshot file(s) in meta/ ` +
+        `but journal has ${entries.length} entries. ` +
+        `Drizzle-kit must advance the snapshot chain on every generate; if these ` +
+        `diverge, future generate runs produce duplicate-content migrations against ` +
+        `a stale baseline (see project_drizzle_snapshot_collision.md).`,
+    });
+  }
+
+  for (const entry of entries) {
+    const expected = `${String(entry.idx).padStart(4, '0')}_snapshot.json`;
+    if (!metaFiles.includes(expected)) {
+      problems.push({
+        severity: 'error',
+        message: `Journal idx ${entry.idx} (${entry.tag}) is missing meta/${expected}`,
+      });
+    }
+  }
+
+  return problems;
+}
+
 function checkMigrationFilesExist(entries: JournalEntry[]): Problem[] {
   const problems: Problem[] = [];
 
@@ -205,6 +261,9 @@ function main(): void {
 
   console.log('Checking reserved range overlaps...');
   allProblems.push(...checkRangeOverlaps());
+
+  console.log('Checking snapshot chain integrity...');
+  allProblems.push(...checkSnapshotChainIntact(journal.entries));
 
   console.log('Checking migration files...');
   allProblems.push(...checkMigrationFilesExist(journal.entries));
