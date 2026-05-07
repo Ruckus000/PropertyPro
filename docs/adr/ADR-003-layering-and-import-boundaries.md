@@ -81,6 +81,7 @@ This ADR codifies the canonical layering so the codebase converges over time, an
 - ✅ **DB access guard** ([`scripts/verify-scoped-db-access.ts`](scripts/verify-scoped-db-access.ts)) — already in `pnpm lint`. Routes/services may not import drizzle ops directly; must use `@propertypro/db/filters`. Unsafe DB access is allowlisted with documented per-file rationale.
 - ✅ **Migration journal guard** ([`scripts/verify-migration-ordering.ts`](scripts/verify-migration-ordering.ts)) — strengthened 2026-05-06 to flag any orphan SQL files.
 - 🆕 **Component-API-call guard** ([`scripts/verify-component-api-calls.ts`](scripts/verify-component-api-calls.ts), this ADR) — components and pages may not call `fetch('/api/v1/*')` directly. The 57 historical violators are grandfathered into a `KNOWN_DIRECT_API_CALL_FILES` allowlist; new violators fail CI.
+- 🆕 **Component → service boundary guard** ([`scripts/verify-component-service-imports.ts`](scripts/verify-component-service-imports.ts)) — components under `apps/web/src/components/**` may not value-import from `@/lib/<domain>/services/*` (or `@/lib/<domain>/<x>-service`). `import type` is allowed (types erase at build). Server components / page files / route handlers are out of scope — they may legitimately call services. Current state is clean (0 violations); guard is preventive.
 
 ### Not yet enforced (future work)
 

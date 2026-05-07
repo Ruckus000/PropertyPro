@@ -33,7 +33,8 @@
     "guard:sentry-instrumentation": "tsx scripts/verify-sentry-instrumentation.ts",
     "guard:component-api-calls": "tsx scripts/verify-component-api-calls.ts",
     "guard:authz-comments": "tsx scripts/verify-authz-comments.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments",
+    "guard:component-service-imports": "tsx scripts/verify-component-service-imports.ts",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments && pnpm guard:component-service-imports",
     "clean": "turbo run clean"
   },
   "pnpm": {
