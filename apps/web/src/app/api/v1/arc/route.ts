@@ -26,7 +26,8 @@ const createArcSchema = z.object({
   projectType: z.string().trim().min(1).max(120),
   estimatedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   estimatedCompletionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  attachmentDocumentIds: z.array(z.number().int().positive()).optional() });
+  attachmentDocumentIds: z.array(z.number().int().positive()).optional(),
+});
 
 const listArcStatusSchema = z.enum(['submitted', 'under_review', 'approved', 'denied', 'withdrawn']);
 
@@ -45,7 +46,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const parsedStatus = rawStatus ? listArcStatusSchema.safeParse(rawStatus) : null;
   if (rawStatus && !parsedStatus?.success) {
     throw new ValidationError('Invalid ARC status filter', {
-      fields: [{ field: 'status', message: 'status must be one of submitted, under_review, approved, denied, withdrawn' }] });
+      fields: [{ field: 'status', message: 'status must be one of submitted, under_review, approved, denied, withdrawn' }],
+    });
   }
 
   const status = parsedStatus?.success ? (parsedStatus.data as ArcSubmissionStatus) : undefined;
@@ -69,7 +71,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const data = await listArcSubmissionsForCommunity(communityId, {
     status,
     unitId,
-    allowedUnitIds: residentUnitIds });
+    allowedUnitIds: residentUnitIds,
+  });
   return NextResponse.json({ data });
 });
 
@@ -80,7 +83,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid ARC submission payload', {
-      fields: formatZodErrors(parseResult.error) });
+      fields: formatZodErrors(parseResult.error),
+    });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

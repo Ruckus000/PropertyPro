@@ -15,7 +15,8 @@ import { createElectionProxyForCommunity, listElectionProxiesForCommunity } from
 const createElectionProxySchema = z.object({
   communityId: z.number().int().positive(),
   proxyHolderUserId: z.string().uuid(),
-  grantorUnitId: z.number().int().positive().nullable().optional() });
+  grantorUnitId: z.number().int().positive().nullable().optional(),
+});
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -43,7 +44,8 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election proxy payload', {
-        fields: formatZodErrors(parsed.error) });
+        fields: formatZodErrors(parsed.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);

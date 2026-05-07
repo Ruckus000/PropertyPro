@@ -17,7 +17,8 @@ const imposeFineSchema = z.object({
   amountCents: z.number().int().positive(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   graceDays: z.number().int().min(1).max(120).optional(),
-  notes: z.string().max(1000).nullable().optional() });
+  notes: z.string().max(1000).nullable().optional(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -29,7 +30,8 @@ export const POST = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid fine payload', {
-        fields: formatZodErrors(parseResult.error) });
+        fields: formatZodErrors(parseResult.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

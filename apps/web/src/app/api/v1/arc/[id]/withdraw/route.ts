@@ -14,7 +14,8 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
 
 const withdrawSchema = z.object({
-  communityId: z.number().int().positive() });
+  communityId: z.number().int().positive(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -26,7 +27,8 @@ export const POST = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid ARC withdraw payload', {
-        fields: formatZodErrors(parseResult.error) });
+        fields: formatZodErrors(parseResult.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

@@ -26,7 +26,8 @@ const updateViolationSchema = z.object({
   evidenceDocumentIds: z.array(z.number().int().positive()).optional(),
   noticeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   hearingDate: z.string().datetime().nullable().optional(),
-  resolutionNotes: z.string().max(4000).nullable().optional() });
+  resolutionNotes: z.string().max(4000).nullable().optional(),
+});
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -59,7 +60,8 @@ export const PATCH = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid violation update payload', {
-        fields: formatZodErrors(parseResult.error) });
+        fields: formatZodErrors(parseResult.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

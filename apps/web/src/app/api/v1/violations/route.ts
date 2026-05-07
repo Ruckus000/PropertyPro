@@ -22,7 +22,8 @@ const createViolationSchema = z.object({
   category: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(4000),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),
-  evidenceDocumentIds: z.array(z.number().int().positive()).optional() });
+  evidenceDocumentIds: z.array(z.number().int().positive()).optional(),
+});
 
 const listStatusSchema = z.enum([
   'reported',
@@ -72,7 +73,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     unitId,
     allowedUnitIds: residentUnitIds,
     createdAfter,
-    createdBefore });
+    createdBefore,
+  });
 
   const hydrated = await hydrateReportedByRole(scoped, data);
   return NextResponse.json({ data: hydrated });
@@ -85,7 +87,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid violation payload', {
-      fields: formatZodErrors(parseResult.error) });
+      fields: formatZodErrors(parseResult.error),
+    });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

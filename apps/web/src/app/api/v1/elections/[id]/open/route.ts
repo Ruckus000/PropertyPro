@@ -13,7 +13,8 @@ import { openElectionForCommunity } from '@/lib/services/elections-service';
 import { requirePermission } from '@/lib/db/access-control';
 
 const stateTransitionSchema = z.object({
-  communityId: z.number().int().positive() });
+  communityId: z.number().int().positive(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -25,7 +26,8 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election open payload', {
-        fields: formatZodErrors(parsed.error) });
+        fields: formatZodErrors(parsed.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);

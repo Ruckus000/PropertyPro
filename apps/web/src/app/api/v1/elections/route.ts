@@ -26,7 +26,8 @@ const electionsQuerySchema = z.object({
         .split(',')
         .map((entry) => entry.trim())
         .filter(Boolean) as ElectionStatus[];
-    }) });
+    }),
+  });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -40,12 +41,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const parsed = electionsQuerySchema.safeParse(searchParams);
   if (!parsed.success) {
     throw new ValidationError('Invalid elections query', {
-      fields: formatZodErrors(parsed.error) });
+      fields: formatZodErrors(parsed.error),
+    });
   }
 
   const data = await listElectionsForCommunity(communityId, {
     limit: parsed.data.limit,
-    statuses: parsed.data.statuses });
+    statuses: parsed.data.statuses,
+  });
 
   return NextResponse.json({ data });
 });

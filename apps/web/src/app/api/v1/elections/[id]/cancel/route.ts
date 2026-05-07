@@ -14,7 +14,8 @@ import { requirePermission } from '@/lib/db/access-control';
 
 const cancelElectionSchema = z.object({
   communityId: z.number().int().positive(),
-  canceledReason: z.string().trim().min(1).max(500) });
+  canceledReason: z.string().trim().min(1).max(500),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -26,7 +27,8 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election cancel payload', {
-        fields: formatZodErrors(parsed.error) });
+        fields: formatZodErrors(parsed.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);

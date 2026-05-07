@@ -14,7 +14,8 @@ import { requirePermission } from '@/lib/db/access-control';
 
 const dismissSchema = z.object({
   communityId: z.number().int().positive(),
-  resolutionNotes: z.string().max(4000).nullable().optional() });
+  resolutionNotes: z.string().max(4000).nullable().optional(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -26,7 +27,8 @@ export const POST = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid dismiss payload', {
-        fields: formatZodErrors(parseResult.error) });
+        fields: formatZodErrors(parseResult.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

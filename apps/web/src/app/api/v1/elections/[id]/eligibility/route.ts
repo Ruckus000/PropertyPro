@@ -13,7 +13,8 @@ import { snapshotElectionEligibilityForCommunity } from '@/lib/services/election
 import { requirePermission } from '@/lib/db/access-control';
 
 const snapshotEligibilitySchema = z.object({
-  communityId: z.number().int().positive() });
+  communityId: z.number().int().positive(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -26,7 +27,8 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election eligibility payload', {
-        fields: formatZodErrors(parsed.error) });
+        fields: formatZodErrors(parsed.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);

@@ -18,7 +18,8 @@ const createViolationEvidenceSchema = z.object({
   filePath: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
-  mimeType: z.string().min(1).optional() });
+  mimeType: z.string().min(1).optional(),
+});
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -27,7 +28,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid violation evidence payload', {
-      fields: formatZodErrors(parseResult.error) });
+      fields: formatZodErrors(parseResult.error),
+    });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
@@ -46,7 +48,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     fileName: parseResult.data.fileName,
     fileSize: parseResult.data.fileSize,
     sourceType: 'violation_evidence',
-    sendDocumentNotifications: false });
+    sendDocumentNotifications: false,
+  });
 
   return NextResponse.json({ data: result.document }, { status: 201 });
 });

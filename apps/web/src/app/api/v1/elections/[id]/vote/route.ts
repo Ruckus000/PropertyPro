@@ -17,7 +17,8 @@ const castElectionVoteSchema = z.object({
   selectedCandidateIds: z.array(z.number().int().positive()).max(25).optional(),
   isAbstention: z.boolean().optional(),
   proxyId: z.number().int().positive().nullable().optional(),
-  unitId: z.number().int().positive().nullable().optional() });
+  unitId: z.number().int().positive().nullable().optional(),
+});
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -29,7 +30,8 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election vote payload', {
-        fields: formatZodErrors(parsed.error) });
+        fields: formatZodErrors(parsed.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);

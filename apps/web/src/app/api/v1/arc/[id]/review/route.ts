@@ -14,7 +14,8 @@ import { requirePermission } from '@/lib/db/access-control';
 
 const reviewSchema = z.object({
   communityId: z.number().int().positive(),
-  reviewNotes: z.string().max(4000).nullable().optional() });
+  reviewNotes: z.string().max(4000).nullable().optional(),
+});
 
 export const PATCH = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -26,7 +27,8 @@ export const PATCH = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid ARC review payload', {
-        fields: formatZodErrors(parseResult.error) });
+        fields: formatZodErrors(parseResult.error),
+      });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);

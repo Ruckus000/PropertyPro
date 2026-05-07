@@ -27,7 +27,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const { results, totalCount } = await searchViolationsByTrigram(communityId, q, limit, {
     isAdmin: membership.isAdmin,
-    userId: membership.userId });
+    userId: membership.userId,
+  });
 
   return NextResponse.json({
     results: results.map((r) => ({
@@ -40,5 +41,6 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       severity: r.severity,
       relevance: r.relevance })),
     totalCount,
-    status: 'ok' });
+    status: 'ok',
+  });
 });
