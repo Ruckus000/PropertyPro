@@ -29,7 +29,7 @@ const CATEGORIES = [
 export function NotificationsPageClient({ communityId }: NotificationsPageClientProps) {
   const [category, setCategory] = useState('');
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulated, setAccumulated] = useState<NotificationItem[]>([]);
 
   const filters: NotificationFilters = {
@@ -42,14 +42,14 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
   const { data, isLoading, isError, isFetching } = useNotifications(communityId, filters);
   const markRead = useMarkRead();
 
-  const currentPage = data?.notifications ?? [];
+  const currentPage = data?.data ?? [];
   const allItems = cursor ? [...accumulated, ...currentPage] : currentPage;
 
   const handleLoadMore = useCallback(() => {
-    if (!data?.nextCursor) return;
+    if (!data?.pagination.nextCursor) return;
     setAccumulated(allItems);
-    setCursor(Number(data.nextCursor));
-  }, [data?.nextCursor, allItems]);
+    setCursor(data.pagination.nextCursor);
+  }, [data?.pagination.nextCursor, allItems]);
 
   const resetPagination = useCallback(() => {
     setCursor(undefined);
@@ -127,7 +127,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
         )}
       </div>
 
-      {data?.nextCursor && (
+      {data?.pagination.nextCursor && (
         <button
           type="button"
           onClick={handleLoadMore}

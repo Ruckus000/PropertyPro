@@ -1,12 +1,39 @@
 /**
  * GET /api/v1/notifications
  *
- * Returns a paginated list of in-app notifications for the current user.
- * Excludes archived and soft-deleted. Cursor-based pagination (id < cursor).
+ * Returns a paginated list of in-app notifications for the current user
+ * within a community. Excludes archived and soft-deleted rows.
+ *
+ * Migrated to the canonical `paginate()` helper from `@propertypro/db`
+ * (Plan B3; see ADR-003 / Plan A2). Replaces the previous bespoke
+ * cursor-based path that used `listNotifications()` with raw numeric
+ * cursors and a custom response shape.
+ *
+ * Response envelope is double-wrapped per the paginated-route contract:
+ *
+ *     { data: { data: NotificationItem[], pagination: { nextCursor, hasMore, pageSize } } }
+ *
+ * Behavioral changes from the previous implementation:
+ * - Cursor format: was a raw numeric id stringified, now opaque base64url
+ *   issued by `paginate()`. Old numeric cursors will fail to decode and
+ *   will silently fall back to "first page" per `paginate()`'s permissive
+ *   contract. Acceptable because cursors are scoped to a single user
+ *   session and aren't typically persisted long-term.
+ * - Inner shape: was `{ notifications, nextCursor }`, now `{ data, pagination }`.
+ * - Sort order: was `(createdAt DESC, id DESC)`, now `id DESC`. For the
+ *   bigserial monotonic id this is equivalent.
+ * - Limit cap: was 50 (hard 400 on >50), now 100 (silent clamp at paginate
+ *   MAX_PAGE_SIZE). Default still 20 if not specified.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { listNotifications, type NotificationCategory } from '@propertypro/db';
+import {
+  createScopedClient,
+  notifications,
+  paginate,
+  type NotificationCategory,
+} from '@propertypro/db';
+import { and, eq, isNull } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -14,16 +41,21 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 
 const VALID_CATEGORIES = [
-  'announcement', 'document', 'meeting', 'maintenance',
-  'violation', 'election', 'system',
+  'announcement',
+  'document',
+  'meeting',
+  'maintenance',
+  'violation',
+  'election',
+  'system',
 ] as const;
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
-  cursor: z.coerce.number().int().positive().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().min(1).max(256).optional(),
+  limit: z.coerce.number().int().positive().optional(),
   category: z.enum(VALID_CATEGORIES).optional(),
-  unread_only: z.coerce.boolean().default(false),
+  unread_only: z.coerce.boolean().optional(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -45,23 +77,28 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const rows = await listNotifications({
-    communityId,
-    userId,
-    cursor,
-    limit: limit + 1,
-    category: category as NotificationCategory | undefined,
-    unreadOnly: unread_only,
-  });
+  // Build the where predicate: user-scoped within this community, excluding
+  // archived rows. The scoped client already filters by communityId and
+  // deletedAt; we add userId + archivedAt + optional category/unread_only.
+  const conditions = [
+    eq(notifications.userId, userId),
+    isNull(notifications.archivedAt),
+  ];
+  if (category != null) {
+    conditions.push(eq(notifications.category, category as NotificationCategory));
+  }
+  if (unread_only) {
+    conditions.push(isNull(notifications.readAt));
+  }
+  const where = and(...conditions);
 
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? String(items[items.length - 1]?.id) : null;
+  const scoped = createScopedClient(communityId);
+  const result = await paginate(scoped, notifications, { cursor, pageSize: limit }, { where });
 
   return NextResponse.json({
     data: {
-      notifications: items,
-      nextCursor,
+      data: result.data,
+      pagination: result.pagination,
     },
   });
 });
