@@ -6,8 +6,10 @@
  * - Create payload includes both IDs when filled
  * - Edit mode preserves and submits existing documentId and checklistItemId
  */
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ContractForm } from '../../src/components/contracts/ContractForm';
 
 const fetchMock = vi.fn();
@@ -18,6 +20,11 @@ function makeOkResponse() {
     ok: true,
     json: () => Promise.resolve({ data: {} }),
   };
+}
+
+function renderWithClient(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
 function makeContract(overrides: Record<string, unknown> = {}) {
@@ -47,7 +54,7 @@ describe('ContractForm', () => {
   // -------------------------------------------------------------------------
 
   it('renders the Linked Document ID field', () => {
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={null}
@@ -59,7 +66,7 @@ describe('ContractForm', () => {
   });
 
   it('renders the Compliance Checklist Item ID field', () => {
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={null}
@@ -78,7 +85,7 @@ describe('ContractForm', () => {
     fetchMock.mockResolvedValue(makeOkResponse());
     const onSaved = vi.fn();
 
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={null}
@@ -111,7 +118,7 @@ describe('ContractForm', () => {
   it('sends null documentId and complianceChecklistItemId when fields are empty', async () => {
     fetchMock.mockResolvedValue(makeOkResponse());
 
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={null}
@@ -139,7 +146,7 @@ describe('ContractForm', () => {
   // -------------------------------------------------------------------------
 
   it('pre-populates documentId and complianceChecklistItemId in edit mode', () => {
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={makeContract({ documentId: 5, complianceChecklistItemId: 9 })}
@@ -158,7 +165,7 @@ describe('ContractForm', () => {
   it('preserves and submits documentId and complianceChecklistItemId in edit mode', async () => {
     fetchMock.mockResolvedValue(makeOkResponse());
 
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={makeContract({ documentId: 5, complianceChecklistItemId: 9 })}
@@ -181,7 +188,7 @@ describe('ContractForm', () => {
   it('allows clearing documentId and complianceChecklistItemId in edit mode', async () => {
     fetchMock.mockResolvedValue(makeOkResponse());
 
-    render(
+    renderWithClient(
       <ContractForm
         communityId={42}
         contract={makeContract({ documentId: 5, complianceChecklistItemId: 9 })}
