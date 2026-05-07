@@ -14,7 +14,12 @@ interface AuditTrailViewerProps {
   communityId: number;
 }
 
-interface AuditResponse {
+/**
+ * Inner shape of the response after the standard `{ data: ... }` envelope is
+ * unwrapped. The audit-trail route uses the canonical paginate() helper plus
+ * a `users` map of display names alongside the page (Plan B3).
+ */
+interface AuditPage {
   data: AuditLogEntry[];
   pagination: {
     nextCursor: string | null;
@@ -22,6 +27,10 @@ interface AuditResponse {
     pageSize: number;
   };
   users: Record<string, string>;
+}
+
+interface AuditEnvelope {
+  data: AuditPage;
 }
 
 export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
@@ -56,11 +65,12 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
         const errJson = (await res.json()) as { error: { message: string } };
         throw new Error(errJson.error.message);
       }
-      const json = (await res.json()) as AuditResponse;
-      setEntries(json.data);
-      setNextCursor(json.pagination.nextCursor);
-      setHasMore(json.pagination.hasMore);
-      setUsers(json.users);
+      const envelope = (await res.json()) as AuditEnvelope;
+      const page = envelope.data;
+      setEntries(page.data);
+      setNextCursor(page.pagination.nextCursor);
+      setHasMore(page.pagination.hasMore);
+      setUsers(page.users);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit trail');
     } finally {
@@ -74,11 +84,12 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
     try {
       const res = await fetch(buildUrl(nextCursor));
       if (!res.ok) throw new Error('Failed to load more');
-      const json = (await res.json()) as AuditResponse;
-      setEntries((prev) => [...prev, ...json.data]);
-      setNextCursor(json.pagination.nextCursor);
-      setHasMore(json.pagination.hasMore);
-      setUsers((prev) => ({ ...prev, ...json.users }));
+      const envelope = (await res.json()) as AuditEnvelope;
+      const page = envelope.data;
+      setEntries((prev) => [...prev, ...page.data]);
+      setNextCursor(page.pagination.nextCursor);
+      setHasMore(page.pagination.hasMore);
+      setUsers((prev) => ({ ...prev, ...page.users }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load more');
     } finally {

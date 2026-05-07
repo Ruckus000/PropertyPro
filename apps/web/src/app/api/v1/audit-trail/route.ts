@@ -4,18 +4,42 @@
  * Patterns:
  * - withErrorHandler for structured error responses
  * - createScopedClient for tenant isolation (AGENTS #13)
- * - Cursor-based pagination ordered by (createdAt DESC, id DESC)
- * - CSV export via ?format=csv query parameter
+ * - Cursor-based pagination via the canonical `paginate()` helper from
+ *   `@propertypro/db` (Plan B3; ADR-003 / Plan A2)
+ * - CSV export via ?format=csv query parameter — keeps its own MAX_CSV_ROWS
+ *   path because exporters need every matching row, not page-sized chunks
  * - Formula-injection sanitization on CSV cells
  * - Read-only: no POST/PATCH/DELETE routes
  * - Admin-only: owner/tenant roles are denied
+ *
+ * Response envelope (JSON path) is double-wrapped per the paginated-route
+ * contract:
+ *
+ *     { data: { data: AuditLogRow[], pagination: { nextCursor, hasMore, pageSize }, users: { [id]: name } } }
+ *
+ * `users` lives inside the inner `data` object so the entire payload unwraps
+ * via `requestJson<{ data, pagination, users }>` in one hop. See
+ * `apps/web/src/lib/api/request-json.ts` for the envelope rules.
+ *
+ * Behavioral changes from the previous custom implementation:
+ * - Cursor format: was composite base64(`{createdAt, id}`), now opaque
+ *   base64url(`{id}`) issued by `paginate()`. Old cursors with extra
+ *   `createdAt` fields still decode (the helper ignores unknown keys).
+ *   Sort order is `id DESC`; for `compliance_audit_log` (`bigserial id`,
+ *   monotonic) this is equivalent to the old `(createdAt DESC, id DESC)`
+ *   composite ordering.
+ * - Limit upper bound: was 200, now clamps silently to MAX_PAGE_SIZE (100)
+ *   per the paginate contract.
+ * - Invalid cursors: was 400, now silently treated as "first page" (per the
+ *   paginate contract — stale cursors from old clients shouldn't 400).
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import {
   createScopedClient,
   complianceAuditLog,
+  paginate,
 } from '@propertypro/db';
-import { and, desc, eq, gte, lte, sql } from '@propertypro/db/filters';
+import { and, desc, eq, gte, lte } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -24,9 +48,6 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
 
 /** Maximum rows for CSV export to prevent OOM on large datasets. */
 const MAX_CSV_ROWS = 10_000;
@@ -113,43 +134,6 @@ function redactValue(value: unknown): unknown {
   return value;
 }
 
-/**
- * Decode a cursor string to { createdAt, id }.
- */
-function decodeCursor(cursor: string): { createdAt: Date; id: number } | null {
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) as {
-      createdAt?: unknown;
-      id?: unknown;
-    };
-    if (typeof decoded.createdAt !== 'string') {
-      return null;
-    }
-    if (!Number.isInteger(decoded.id) || (decoded.id as number) <= 0) {
-      return null;
-    }
-    const createdAt = new Date(decoded.createdAt);
-    if (Number.isNaN(createdAt.getTime())) {
-      return null;
-    }
-    return {
-      createdAt,
-      id: decoded.id as number,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Encode a cursor from a row's createdAt and id.
- */
-function encodeCursor(row: AuditLogRow): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: row.createdAt.toISOString(), id: row.id }),
-  ).toString('base64');
-}
-
 // ---------------------------------------------------------------------------
 // GET — List audit trail entries with cursor pagination + CSV export
 // ---------------------------------------------------------------------------
@@ -172,22 +156,21 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'audit', 'read');
 
-  // --- Cursor-based pagination params (validated before DB query) ---
-  const cursor = searchParams.get('cursor');
+  // --- Pagination params (validated; paginate() clamps pageSize to [1, 100]) ---
+  const cursor = searchParams.get('cursor') ?? undefined;
   const rawLimit = searchParams.get('limit');
-  let limit = DEFAULT_PAGE_SIZE;
+  let pageSize: number | undefined;
 
   if (rawLimit !== null) {
     const parsedLimit = Number(rawLimit);
-    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE) {
-      throw new BadRequestError(
-        `limit must be an integer between 1 and ${MAX_PAGE_SIZE}`,
-      );
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestError('limit must be a positive integer');
     }
-    limit = parsedLimit;
+    pageSize = parsedLimit;
+    // No upper-bound 400: paginate() clamps to MAX_PAGE_SIZE silently.
   }
 
-  // --- Build DB-level WHERE clause from filters ---
+  // --- Build DB-level WHERE clause from filters (cursor predicate is built by paginate) ---
   const conditions: ReturnType<typeof eq>[] = [];
 
   const actionFilter = searchParams.get('action');
@@ -214,22 +197,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     conditions.push(lte(complianceAuditLog.createdAt, end));
   }
 
-  if (cursor) {
-    const decoded = decodeCursor(cursor);
-    if (!decoded) {
-      throw new BadRequestError('Invalid cursor value');
-    }
-    // Compound cursor: (created_at, id) < (cursor.createdAt, cursor.id) in DESC order
-    conditions.push(
-      sql`(${complianceAuditLog.createdAt}, ${complianceAuditLog.id}) < (${decoded.createdAt.toISOString()}::timestamptz, ${decoded.id})`,
-    );
-  }
-
   const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
 
   const scoped = createScopedClient(communityId);
 
-  // --- CSV Export: fetch all matching rows from DB ---
+  // --- CSV Export: fetch all matching rows from DB (no cursor pagination) ---
   const format = searchParams.get('format');
   if (format === 'csv') {
     const csvRawRows = await scoped
@@ -272,20 +244,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     return new NextResponse(csv, { status: 200, headers: responseHeaders });
   }
 
-  // --- Paginated query: fetch limit+1 rows to detect hasMore ---
-  const rawRows = await scoped
-    .selectFrom(complianceAuditLog, {}, additionalWhere)
-    .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id))
-    .limit(limit + 1);
-  const auditRows = (rawRows as unknown as Record<string, unknown>[]).map(coerceAuditRow);
-
-  const hasMore = auditRows.length > limit;
-  const page = auditRows.slice(0, limit);
-  const lastEntry = page[page.length - 1];
-  const nextCursor = lastEntry && hasMore ? encodeCursor(lastEntry) : null;
+  // --- Paginated JSON path: delegate to paginate() ---
+  const result = await paginate(scoped, complianceAuditLog, { cursor, pageSize }, {
+    where: additionalWhere,
+  });
+  const auditRows = (result.data as unknown as Record<string, unknown>[]).map(coerceAuditRow);
 
   // Redact sensitive keys in metadata, oldValues, and newValues
-  const redactedPage = page.map((row) => ({
+  const redactedPage = auditRows.map((row) => ({
     ...row,
     oldValues: redactMetadata(row.oldValues),
     newValues: redactMetadata(row.newValues),
@@ -293,16 +259,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }));
 
   // Load user display names for this page
-  const userIds = page.flatMap((row) => (row.userId ? [row.userId] : []));
+  const userIds = auditRows.flatMap((row) => (row.userId ? [row.userId] : []));
   const userNames = await resolveUserDisplayNames(communityId, userIds);
 
   return NextResponse.json({
-    data: redactedPage,
-    pagination: {
-      nextCursor,
-      hasMore,
-      pageSize: limit,
+    data: {
+      data: redactedPage,
+      pagination: result.pagination,
+      users: Object.fromEntries(userNames),
     },
-    users: Object.fromEntries(userNames),
   });
 });
