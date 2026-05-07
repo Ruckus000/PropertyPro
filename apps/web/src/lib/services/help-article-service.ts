@@ -4,6 +4,35 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import type { CommunityFeatures } from '@propertypro/shared';
 import { validateFrontmatter } from '@/lib/help/frontmatter-schema';
+import { expandQuery, type ExpandedQuery } from '@/lib/help/aliases';
+
+/**
+ * Maximum article results returned by searchArticles. Help search runs in
+ * memory (filesystem-sourced MDX); the cap bounds latency and response
+ * size while leaving plenty of headroom over today's 50-article corpus.
+ */
+const SEARCH_RESULT_CAP = 50;
+
+/**
+ * Field weights for relevance ranking. Alias hits are scaled at ALIAS_SCALE.
+ *
+ * `slug` is included so URL-style identifiers (e.g. `welcome-to-propertypro`)
+ * remain searchable, matching the previous substring matcher's behavior.
+ * Array fields (`keywords`, `tags`) are scored per-element to avoid the
+ * cross-element false-positive class — joining with a space and matching
+ * against the joined string would let a query like `"o a"` slip through
+ * `["pro", "active"]`.
+ */
+const FIELD_WEIGHTS = {
+  title: 100,
+  keywords: 80,
+  slug: 80,
+  description: 60,
+  tags: 50,
+  category: 30,
+  excerpt: 20,
+} as const;
+const ALIAS_SCALE = 0.7;
 
 /**
  * Shape acceptable to feature-gate helpers.
@@ -263,20 +292,60 @@ export function matchesArticleQuery(
   >,
   query: string,
 ): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
+  return scoreArticleForQuery(article, expandQuery(query)) > 0;
+}
 
-  return [
-    article.title,
-    article.description,
-    article.category,
-    article.slug,
-    article.excerpt ?? '',
-    ...(article.keywords ?? []),
-    ...(article.tags ?? []),
-  ].some((value) => String(value).toLowerCase().includes(normalized));
+/**
+ * Returns a relevance score for an article against an expanded query.
+ *
+ * A direct hit (the user's literal query, or any token therein) earns the
+ * full field weight. An alias-only hit earns ALIAS_SCALE × the field weight,
+ * so an article that contains the literal query always outranks one that
+ * only matches by synonym. The article's overall score is the maximum
+ * field score (a single strong title hit beats several weak excerpt hits).
+ *
+ * Returns 0 when neither primary nor alias terms appear, which matchesArticleQuery
+ * uses as the boolean decision.
+ */
+export function scoreArticleForQuery(
+  article: Pick<
+    HelpArticleMetadata,
+    'title' | 'description' | 'keywords' | 'category' | 'slug' | 'excerpt' | 'tags'
+  >,
+  expanded: ExpandedQuery,
+): number {
+  if (!expanded.primary.length && !expanded.aliases.length) return 0;
+
+  // Array fields stay as arrays so we match per-element. Joining with a
+  // space and substring-matching the joined string would let cross-element
+  // false positives slip through (e.g. query "o a" hitting ["pro", "active"]).
+  const fields: Array<{ value: string | string[]; weight: number }> = [
+    { value: article.title, weight: FIELD_WEIGHTS.title },
+    { value: article.keywords ?? [], weight: FIELD_WEIGHTS.keywords },
+    { value: article.slug, weight: FIELD_WEIGHTS.slug },
+    { value: article.description, weight: FIELD_WEIGHTS.description },
+    { value: article.tags ?? [], weight: FIELD_WEIGHTS.tags },
+    { value: article.category, weight: FIELD_WEIGHTS.category },
+    { value: article.excerpt ?? '', weight: FIELD_WEIGHTS.excerpt },
+  ];
+
+  let best = 0;
+  for (const { value, weight } of fields) {
+    const valuesLower = (Array.isArray(value) ? value : [value])
+      .filter((v) => v.length > 0)
+      .map((v) => v.toLowerCase());
+    if (valuesLower.length === 0) continue;
+
+    const matches = (term: string) =>
+      valuesLower.some((v) => v.includes(term));
+
+    if (expanded.primary.some((term) => term && matches(term))) {
+      best = Math.max(best, weight);
+    } else if (expanded.aliases.some((term) => term && matches(term))) {
+      best = Math.max(best, Math.round(weight * ALIAS_SCALE));
+    }
+  }
+  return best;
 }
 
 export function getArticlesByTag(tag: string): HelpArticleMetadata[] {
@@ -319,21 +388,39 @@ export function searchArticles(
   queryOrRole: string,
   maybeRole?: string,
 ): HelpArticleMetadata[] {
+  let articles: readonly HelpArticleMetadata[];
+  let query: string;
+  let role: string | undefined;
+
   if (Array.isArray(source)) {
-    const query = queryOrRole;
-    const role = maybeRole;
-    return source.filter(
-      (article) =>
-        (!role || isArticleVisibleToRole(article, role)) &&
-        matchesArticleQuery(article, query),
-    );
+    articles = source as readonly HelpArticleMetadata[];
+    query = queryOrRole;
+    role = maybeRole;
+  } else {
+    articles = getAllArticles();
+    query = source as string;
+    role = queryOrRole;
   }
 
-  const query = source as string;
-  const role = queryOrRole;
-  return getAllArticles().filter(
-    (article) => isArticleVisibleToRole(article, role) && matchesArticleQuery(article, query),
-  );
+  const expanded = expandQuery(query);
+  if (!expanded.primary.length && !expanded.aliases.length) return [];
+
+  const scored: Array<{ article: HelpArticleMetadata; score: number }> = [];
+  for (const article of articles) {
+    if (role && !isArticleVisibleToRole(article, role)) continue;
+    const score = scoreArticleForQuery(article, expanded);
+    if (score > 0) {
+      scored.push({ article, score });
+    }
+  }
+
+  // Sort by score descending; tie-break on title for stable ordering.
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.article.title.localeCompare(b.article.title);
+  });
+
+  return scored.slice(0, SEARCH_RESULT_CAP).map((s) => s.article);
 }
 
 export function getArticleBySlug(slug: string): HelpArticleSource | null {
