@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { HelpSearchInput } from './help-search-input';
 import type { HelpTaskCard } from '@/lib/help/task-cards';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
-import type { VisibleFaq } from '@/lib/services/faq-service';
 
 interface HelpContactInfo {
   name: string | null;
@@ -15,7 +14,6 @@ interface HelpHubContentProps {
   isAdmin: boolean;
   taskCards: HelpTaskCard[];
   featuredArticles: HelpArticleMetadata[];
-  faqs: VisibleFaq[];
   contact: HelpContactInfo;
 }
 
@@ -28,7 +26,6 @@ export function HelpHubContent({
   isAdmin,
   taskCards,
   featuredArticles,
-  faqs,
   contact,
 }: HelpHubContentProps) {
   const hasAnyContact = !!(contact.name || contact.email || contact.phone);
@@ -86,36 +83,16 @@ export function HelpHubContent({
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-content">Community FAQs</h2>
-            <p className="mt-1 text-sm text-content-secondary">
-              Quick answers managed for this community.
-            </p>
-          </div>
-          {isAdmin && (
-            <Link
-              href={`/help/manage?communityId=${communityId}`}
-              className="inline-flex items-center justify-center rounded-xl border border-edge px-4 py-2 text-sm font-medium text-content transition-colors hover:bg-surface-hover"
-            >
-              Manage FAQs
-            </Link>
-          )}
+      {isAdmin && (
+        <div className="flex justify-end">
+          <Link
+            href={`/help/manage?communityId=${communityId}`}
+            className="inline-flex items-center justify-center rounded-xl border border-edge px-4 py-2 text-sm font-medium text-content transition-colors hover:bg-surface-hover"
+          >
+            Manage community FAQs
+          </Link>
         </div>
-        <div className="overflow-hidden rounded-2xl border border-edge bg-surface-card shadow-sm">
-          {faqs.map((faq) => (
-            <details key={faq.id} className="border-b border-edge last:border-b-0">
-              <summary className="cursor-pointer list-none px-5 py-4 text-sm font-medium text-content">
-                {faq.question}
-              </summary>
-              <div className="px-5 pb-4 text-sm leading-6 text-content-secondary">
-                {faq.answer}
-              </div>
-            </details>
-          ))}
-        </div>
-      </section>
+      )}
 
       <section className="space-y-4">
         <div>

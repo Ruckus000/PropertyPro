@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { HelpHubContent } from '../../src/components/help/help-hub-content';
 
 describe('HelpHubContent', () => {
-  it('renders task cards ahead of FAQs, shows contact info, and includes admin manage CTA', () => {
+  it('renders task cards, featured articles, and management contact, with admin Manage CTA', () => {
     render(
       <HelpHubContent
         communityId={42}
@@ -24,20 +24,12 @@ describe('HelpHubContent', () => {
             slug: 'welcome-to-propertypro',
             roles: ['tenant'],
             keywords: ['welcome'],
+            tags: [],
             relatedArticles: [],
             featured: true,
             excerpt: 'Get oriented quickly.',
             filePath: '/tmp/help.mdx',
-          },
-        ]}
-        faqs={[
-          {
-            id: 7,
-            question: 'How do I view documents?',
-            answer: 'Open Documents.',
-            sortOrder: 0,
-            category: 'documents',
-            roleVisibility: null,
+            contentHash: 'deadbeefdeadbeef',
           },
         ]}
         contact={{
@@ -49,13 +41,26 @@ describe('HelpHubContent', () => {
     );
 
     const commonTasksHeading = screen.getByRole('heading', { name: 'Common tasks' });
-    const faqHeading = screen.getByRole('heading', { name: 'Community FAQs' });
+    const featuredHeading = screen.getByRole('heading', { name: 'Featured guides' });
+    const contactHeading = screen.getByRole('heading', { name: 'Management contact' });
 
+    // Common tasks → Featured guides → Management contact ordering.
     expect(
-      commonTasksHeading.compareDocumentPosition(faqHeading) &
+      commonTasksHeading.compareDocumentPosition(featuredHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Manage FAQs' })).toBeInTheDocument();
+    expect(
+      featuredHeading.compareDocumentPosition(contactHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // FAQ section is no longer on the hub (WS3 — removed duplication).
+    expect(screen.queryByRole('heading', { name: 'Community FAQs' })).not.toBeInTheDocument();
+
+    // Admin still gets the FAQ management entrypoint.
+    expect(
+      screen.getByRole('link', { name: 'Manage community FAQs' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Alex Manager')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /View Documents/ })).toBeInTheDocument();
   });
@@ -67,11 +72,12 @@ describe('HelpHubContent', () => {
         isAdmin={false}
         taskCards={[]}
         featuredArticles={[]}
-        faqs={[]}
         contact={{ name: null, email: null, phone: null }}
       />,
     );
 
-    expect(screen.queryByRole('link', { name: 'Manage FAQs' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Manage community FAQs' }),
+    ).not.toBeInTheDocument();
   });
 });
