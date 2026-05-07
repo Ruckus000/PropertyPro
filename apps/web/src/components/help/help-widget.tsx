@@ -1,13 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { captureMessage } from '@sentry/nextjs';
 import { X, Search, BookOpen, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useHelpWidget } from './help-widget-provider';
 import { useHelpSearch, useContextualHelp, type HelpArticleResult } from '@/hooks/use-help';
+
+/** Capture a content-gap signal after this many consecutive no-match routes. */
+const CONTEXTUAL_GAP_THRESHOLD = 3;
 
 interface HelpWidgetProps {
   communityId: number;
@@ -40,7 +44,41 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
     searchQuery,
     communityId,
   );
-  const { data: contextualArticles } = useContextualHelp(pathname, communityId);
+  const {
+    data: contextualArticles,
+    isFetching: contextualFetching,
+    isError: contextualHasError,
+  } = useContextualHelp(pathname, communityId);
+
+  // Track consecutive routes with no contextual matches; surface a one-shot
+  // Sentry signal when the threshold trips so the weekly content-gaps script
+  // can prioritise context paths the team should add.
+  const noMatchRunRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (contextualFetching || contextualHasError) return;
+    if (Array.isArray(contextualArticles) && contextualArticles.length === 0) {
+      if (!noMatchRunRef.current.includes(pathname)) {
+        noMatchRunRef.current = [...noMatchRunRef.current, pathname].slice(
+          -CONTEXTUAL_GAP_THRESHOLD,
+        );
+      }
+      if (noMatchRunRef.current.length >= CONTEXTUAL_GAP_THRESHOLD) {
+        captureMessage('help_contextual_no_match', {
+          level: 'info',
+          extra: {
+            communityId,
+            paths: [...noMatchRunRef.current],
+          },
+        });
+        noMatchRunRef.current = [];
+      }
+    } else if (
+      Array.isArray(contextualArticles) &&
+      contextualArticles.length > 0
+    ) {
+      noMatchRunRef.current = [];
+    }
+  }, [pathname, contextualArticles, contextualFetching, contextualHasError, communityId]);
 
   const isSearching = searchQuery.length >= 2;
   const hasSearchResults =
