@@ -75,7 +75,11 @@ export async function walkPaginated<T>(
   let cursor: string | null = null;
 
   for (let i = 0; i < maxPages; i++) {
-    if (options.signal?.aborted) return collected;
+    // Throw rather than returning partial data on abort: TanStack Query
+    // would otherwise cache the incomplete list as a successful fetch,
+    // masking that the request was cancelled. fetch() itself throws
+    // AbortError on aborted signals — this matches that contract.
+    options.signal?.throwIfAborted?.();
 
     const params = new URLSearchParams({ ...baseParams, pageSize });
     if (cursor) params.set('cursor', cursor);

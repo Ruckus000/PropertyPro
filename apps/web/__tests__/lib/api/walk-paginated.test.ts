@@ -173,18 +173,47 @@ describe('walkPaginated', () => {
     expect(init?.signal).toBe(controller.signal);
   });
 
-  it('returns early without fetching when signal is pre-aborted', async () => {
+  it('throws (not returns partial data) when signal is pre-aborted', async () => {
+    // Throwing rather than returning partial data is critical for TanStack
+    // Query consumers — returning early would cause TanStack to cache the
+    // incomplete list as a successful fetch.
     const controller = new AbortController();
     controller.abort();
 
-    const result = await walkPaginated<Item>(
-      '/api/v1/things',
-      { communityId: '42' },
-      { signal: controller.signal },
-    );
+    await expect(
+      walkPaginated<Item>(
+        '/api/v1/things',
+        { communityId: '42' },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
 
-    expect(result).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('throws if aborted between pages (does not return partial data)', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementationOnce(async () => {
+      // First page succeeds, then we abort before the second page is requested.
+      controller.abort();
+      return jsonOk({
+        data: {
+          data: [{ id: 1, name: 'A' }],
+          pagination: { nextCursor: 'next', hasMore: true, pageSize: 100 },
+        },
+      });
+    });
+
+    await expect(
+      walkPaginated<Item>(
+        '/api/v1/things',
+        { communityId: '42' },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow();
+
+    // Only the first page was fetched; the second iteration aborted before fetch.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('propagates errors from non-OK responses', async () => {
