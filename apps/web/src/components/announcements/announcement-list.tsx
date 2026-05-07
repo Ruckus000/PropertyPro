@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import type { Announcement } from '@propertypro/db';
+import type { ReactNode } from 'react';
 import { Loader2, Pin, RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -19,7 +18,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { useDeleteAnnouncement, useRestoreAnnouncement } from '@/hooks/use-announcements';
 
 export interface AnnouncementListItem {
   id: number;
@@ -33,13 +31,33 @@ export interface AnnouncementListItem {
   deletedAt: string | Date | null;
 }
 
-interface AnnouncementListProps {
+/**
+ * Pure presentational announcement list. No data hooks, no permission props,
+ * no mutations — receives display data and behavioral callbacks from a
+ * container (see `announcement-list-container.tsx`). UI state internal to
+ * presentation (e.g. the delete-confirm dialog open state) lives here.
+ */
+export interface AnnouncementListProps {
   items: AnnouncementListItem[];
   communityId: number;
-  currentUserId: string;
-  isAdmin: boolean;
-  canWriteAnnouncements?: boolean;
-  showDeleted?: boolean;
+  showDeleted: boolean;
+  /** "Show deleted" toggle, only rendered when the container provides it. */
+  headerAction?: ReactNode;
+  /** Action shown inside the empty state (e.g. a "Create announcement" CTA). */
+  emptyStateAction?: ReactNode;
+  /** Per-item authorization decision; container computes from server state. */
+  canManageItem: (item: AnnouncementListItem) => boolean;
+  /** Container-supplied mutation handlers. The presenter only knows when they're in flight. */
+  onDelete: (id: number) => Promise<void>;
+  onRestore: (id: number) => Promise<void>;
+  isDeleteBusy: boolean;
+  isRestoreBusy: boolean;
+  /** id whose restore mutation is currently flight, if any (for per-card spinner). */
+  pendingRestoreId: number | null;
+  deleteError: string | null;
+  restoreError: string | null;
+  /** Called when the dialog closes successfully or via cancel; container resets mutation state. */
+  onDialogClose?: () => void;
 }
 
 function stripHtml(html: string): string {
@@ -186,33 +204,20 @@ function AnnouncementCard({
 export function AnnouncementList({
   items,
   communityId,
-  currentUserId,
-  isAdmin,
-  canWriteAnnouncements = false,
-  showDeleted = false,
+  showDeleted,
+  headerAction,
+  emptyStateAction,
+  canManageItem,
+  onDelete,
+  onRestore,
+  isDeleteBusy,
+  isRestoreBusy,
+  pendingRestoreId,
+  deleteError,
+  restoreError,
+  onDialogClose,
 }: AnnouncementListProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
-  const deleteMutation = useDeleteAnnouncement(communityId);
-  const restoreMutation = useRestoreAnnouncement(communityId);
-
-  const toggleHref = (() => {
-    const params = new URLSearchParams(searchParams?.toString() ?? '');
-    if (showDeleted) {
-      params.delete('includeDeleted');
-    } else {
-      params.set('includeDeleted', 'true');
-    }
-    if (!params.has('communityId')) {
-      params.set('communityId', String(communityId));
-    }
-    return `/announcements?${params.toString()}`;
-  })();
-
-  function canManage(item: AnnouncementListItem): boolean {
-    return isAdmin || item.publishedBy === currentUserId;
-  }
 
   const visibleItems = showDeleted ? items : items.filter((item) => item.deletedAt == null);
   const { pinned, unpinned } = visibleItems.reduce<{
@@ -229,36 +234,25 @@ export function AnnouncementList({
   async function handleConfirmDelete() {
     if (pendingDeleteId === null) return;
     try {
-      await deleteMutation.mutateAsync({ id: pendingDeleteId });
+      await onDelete(pendingDeleteId);
       setPendingDeleteId(null);
-      router.refresh();
     } catch {
-      // error surfaced in dialog body
+      // error rendered in dialog body via deleteError prop
     }
   }
 
   async function handleRestore(id: number) {
     try {
-      await restoreMutation.mutateAsync({ id });
-      router.refresh();
+      await onRestore(id);
     } catch {
-      // surfaced via banner below
+      // surfaced via restoreError banner
     }
   }
 
-  const restoreError =
-    restoreMutation.error instanceof Error ? restoreMutation.error.message : null;
-
   return (
     <div className="space-y-4">
-      {isAdmin ? (
-        <div className="flex items-center justify-end">
-          <Button asChild variant="outline" size="sm">
-            <Link href={toggleHref}>
-              {showDeleted ? 'Hide deleted' : 'Show deleted'}
-            </Link>
-          </Button>
-        </div>
+      {headerAction ? (
+        <div className="flex items-center justify-end">{headerAction}</div>
       ) : null}
 
       {restoreError ? (
@@ -277,19 +271,11 @@ export function AnnouncementList({
           description={
             showDeleted
               ? 'Deleted announcements show up here. Admins can restore them.'
-              : canWriteAnnouncements
+              : emptyStateAction
                 ? 'Post your first announcement to keep residents informed.'
                 : 'Announcements from your community will appear here.'
           }
-          action={
-            canWriteAnnouncements && !showDeleted ? (
-              <Button asChild>
-                <Link href={`/announcements/new?communityId=${communityId}`}>
-                  Create announcement
-                </Link>
-              </Button>
-            ) : undefined
-          }
+          action={!showDeleted ? emptyStateAction : undefined}
         />
       ) : (
         <div className="space-y-6">
@@ -304,12 +290,12 @@ export function AnnouncementList({
                     key={item.id}
                     item={item}
                     communityId={communityId}
-                    canManage={canManage(item)}
+                    canManage={canManageItem(item)}
                     onRequestDelete={setPendingDeleteId}
                     onRequestRestore={handleRestore}
                     isBusy={
-                      (deleteMutation.isPending && pendingDeleteId === item.id) ||
-                      (restoreMutation.isPending && restoreMutation.variables?.id === item.id)
+                      (isDeleteBusy && pendingDeleteId === item.id) ||
+                      (isRestoreBusy && pendingRestoreId === item.id)
                     }
                   />
                 ))}
@@ -330,12 +316,12 @@ export function AnnouncementList({
                     key={item.id}
                     item={item}
                     communityId={communityId}
-                    canManage={canManage(item)}
+                    canManage={canManageItem(item)}
                     onRequestDelete={setPendingDeleteId}
                     onRequestRestore={handleRestore}
                     isBusy={
-                      (deleteMutation.isPending && pendingDeleteId === item.id) ||
-                      (restoreMutation.isPending && restoreMutation.variables?.id === item.id)
+                      (isDeleteBusy && pendingDeleteId === item.id) ||
+                      (isRestoreBusy && pendingRestoreId === item.id)
                     }
                   />
                 ))}
@@ -348,9 +334,9 @@ export function AnnouncementList({
       <AlertDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => {
-          if (!open && !deleteMutation.isPending) {
+          if (!open && !isDeleteBusy) {
             setPendingDeleteId(null);
-            deleteMutation.reset();
+            onDialogClose?.();
           }
         }}
       >
@@ -362,29 +348,25 @@ export function AnnouncementList({
               deleted view.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {deleteMutation.error && pendingDeleteId !== null ? (
+          {deleteError && pendingDeleteId !== null ? (
             <AlertBanner
               status="danger"
               variant="subtle"
               title="We couldn't delete this announcement."
-              description={
-                deleteMutation.error instanceof Error
-                  ? deleteMutation.error.message
-                  : 'Please try again.'
-              }
+              description={deleteError}
             />
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleteBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
-              disabled={deleteMutation.isPending || pendingDeleteId === null}
+              disabled={isDeleteBusy || pendingDeleteId === null}
               onClick={(event) => {
                 event.preventDefault();
                 void handleConfirmDelete();
               }}
             >
-              {deleteMutation.isPending ? (
+              {isDeleteBusy ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />
               ) : null}
               Delete announcement

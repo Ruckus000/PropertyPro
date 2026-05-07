@@ -36,7 +36,7 @@ vi.mock('@/hooks/use-announcements', () => ({
   }),
 }));
 
-import { AnnouncementList } from '../../src/components/announcements/announcement-list';
+import { AnnouncementListContainer } from '../../src/components/announcements/announcement-list-container';
 
 const liveAnnouncement = {
   id: 17,
@@ -62,16 +62,32 @@ const deletedAnnouncement = {
   deletedAt: '2026-04-11T09:00:00.000Z',
 } as const;
 
-function renderList(props: Parameters<typeof AnnouncementList>[0]) {
+interface ContainerProps {
+  items: typeof liveAnnouncement[];
+  communityId: number;
+  currentUserId: string;
+  isAdmin: boolean;
+  canWriteAnnouncements: boolean;
+  showDeleted?: boolean;
+}
+
+function renderList(props: ContainerProps) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <AnnouncementList {...props} />
+      <AnnouncementListContainer
+        items={props.items}
+        communityId={props.communityId}
+        currentUserId={props.currentUserId}
+        isAdmin={props.isAdmin}
+        canWriteAnnouncements={props.canWriteAnnouncements}
+        showDeleted={props.showDeleted ?? false}
+      />
     </QueryClientProvider>,
   );
 }
 
-describe('AnnouncementList', () => {
+describe('AnnouncementListContainer', () => {
   beforeEach(() => {
     routerMock.push.mockReset();
     routerMock.refresh.mockReset();
@@ -95,12 +111,13 @@ describe('AnnouncementList', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     rerender(
       <QueryClientProvider client={qc}>
-        <AnnouncementList
+        <AnnouncementListContainer
           items={[]}
           communityId={42}
           currentUserId="user-resident"
           isAdmin={false}
           canWriteAnnouncements={false}
+          showDeleted={false}
         />
       </QueryClientProvider>,
     );
@@ -162,12 +179,13 @@ describe('AnnouncementList', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     rerender(
       <QueryClientProvider client={qc}>
-        <AnnouncementList
+        <AnnouncementListContainer
           items={[liveAnnouncement]}
           communityId={42}
           currentUserId="user-resident"
           isAdmin={false}
           canWriteAnnouncements={false}
+          showDeleted={false}
         />
       </QueryClientProvider>,
     );
