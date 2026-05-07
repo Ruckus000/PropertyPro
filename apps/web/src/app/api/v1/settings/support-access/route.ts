@@ -6,7 +6,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ConsentToggleSchema } from '@propertypro/shared';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { logAuditEvent } from '@propertypro/db';
 import { z } from 'zod';
 
@@ -26,8 +26,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'settings', 'read');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any;
+  const supabase = createAdminTypedClient();
 
   const [consentResult, accessLogResult] = await Promise.all([
     supabase
@@ -68,8 +67,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'settings', 'write');
 
   const { enabled } = parsed.data;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any;
+  const supabase = createAdminTypedClient();
 
   if (enabled) {
     // Check if active consent already exists

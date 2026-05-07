@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { EsignInvitationEmail, EsignReminderEmail, sendEmail } from '@propertypro/email';
 import {
-  createAdminClient,
+  createAdminTypedClient,
   createScopedClient,
   esignConsent,
   esignEvents,
@@ -407,14 +407,8 @@ function mapTemplateRow(row: AnyRow): EsignTemplateRecord {
   };
 }
 
-/**
- * Returns an untyped admin Supabase client.
- * TODO: Generate Supabase Database types and pass to createAdminClient<Database>()
- * to remove this `as any` cast. Affects all admin client consumers project-wide.
- */
 function getAdmin() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createAdminClient() as any;
+  return createAdminTypedClient();
 }
 
 // ---------------------------------------------------------------------------

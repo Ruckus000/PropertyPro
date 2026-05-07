@@ -17,8 +17,12 @@ export type SupportConsentGrantRow = {
   community_id: number;
   access_level: string;
   granted_by: string;
+  granted_at: string;
+  expires_at: string | null;
   revoked_at: string | null;
+  revoked_by: string | null;
   created_at: string;
+  deleted_at: string | null;
 };
 
 export type PlatformAdminUserRow = {
@@ -44,7 +48,7 @@ export type SupportSessionRow = {
 
 export type SupportAccessLogRow = {
   id: number;
-  session_id: number;
+  session_id: number | null;
   admin_user_id: string;
   community_id: number;
   event: string;
@@ -92,12 +96,14 @@ export type AccountDeletionRequestRow = {
 export type AdminUserRow = {
   id: string;
   email: string;
+  full_name: string;
   raw_user_meta_data: Record<string, unknown> | null;
 };
 
 export type AdminCommunityRow = {
   id: number;
   name: string;
+  timezone: string;
 };
 
 // ─── Database definition for typed client ───
@@ -118,38 +124,77 @@ type AdminTable<
   Relationships: [];
 };
 
+// Fields that the database fills in (serial PKs, defaultNow timestamps,
+// nullable columns) — callers shouldn't have to provide them on Insert.
+type ConsentGrantInsert = Omit<
+  SupportConsentGrantRow,
+  'id' | 'access_level' | 'granted_at' | 'expires_at' | 'revoked_at' | 'revoked_by' | 'created_at' | 'deleted_at'
+> & {
+  id?: number;
+  access_level?: string;
+  granted_at?: string;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+  created_at?: string;
+  deleted_at?: string | null;
+};
+
+type SupportSessionInsert = Omit<
+  SupportSessionRow,
+  'id' | 'created_at' | 'ended_at' | 'ended_reason' | 'ticket_id'
+> & {
+  id?: number;
+  created_at?: string;
+  ended_at?: string | null;
+  ended_reason?: string | null;
+  ticket_id?: string | null;
+};
+
+type SupportAccessLogInsert = Omit<
+  SupportAccessLogRow,
+  'id' | 'created_at' | 'session_id' | 'metadata'
+> & {
+  id?: number;
+  created_at?: string;
+  session_id?: number | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+type AccessPlanInsert = Omit<
+  AccessPlanRow,
+  'id' | 'created_at' | 'revoked_at' | 'revoked_by' | 'converted_at' | 'notes'
+> & {
+  id?: number;
+  created_at?: string;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+  converted_at?: string | null;
+  notes?: string | null;
+};
+
 export type AdminDatabase = {
   public: {
     Tables: {
-      support_consent_grants: AdminTable<SupportConsentGrantRow>;
+      support_consent_grants: AdminTable<
+        SupportConsentGrantRow,
+        ConsentGrantInsert,
+        Partial<SupportConsentGrantRow>
+      >;
       platform_admin_users: AdminTable<PlatformAdminUserRow>;
       support_sessions: AdminTable<
         SupportSessionRow,
-        Omit<SupportSessionRow, 'id' | 'created_at' | 'ended_at' | 'ended_reason'> & {
-          id?: number;
-          created_at?: string;
-          ended_at?: string | null;
-          ended_reason?: string | null;
-        },
+        SupportSessionInsert,
         Partial<SupportSessionRow>
       >;
       support_access_log: AdminTable<
         SupportAccessLogRow,
-        Omit<SupportAccessLogRow, 'id' | 'created_at'> & {
-          id?: number;
-          created_at?: string;
-        },
+        SupportAccessLogInsert,
         Partial<SupportAccessLogRow>
       >;
       access_plans: AdminTable<
         AccessPlanRow,
-        Omit<AccessPlanRow, 'id' | 'created_at' | 'revoked_at' | 'revoked_by' | 'converted_at'> & {
-          id?: number;
-          created_at?: string;
-          revoked_at?: string | null;
-          revoked_by?: string | null;
-          converted_at?: string | null;
-        },
+        AccessPlanInsert,
         Partial<AccessPlanRow>
       >;
       account_deletion_requests: AdminTable<AccountDeletionRequestRow>;

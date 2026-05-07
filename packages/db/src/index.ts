@@ -36,7 +36,7 @@ export { TenantContextMissing } from './errors/TenantContextMissing';
 // Supabase clients
 export { createBrowserClient } from './supabase/client';
 export { createServerClient } from './supabase/server';
-export { createAdminClient } from './supabase/admin';
+export { createAdminClient, createAdminTypedClient } from './supabase/admin';
 export { createMiddlewareClient } from './supabase/middleware';
 export {
   createPresignedUploadUrl,
