@@ -13,7 +13,8 @@ export const NOTIFICATION_KEYS = {
 
 export interface NotificationFilters {
   limit?: number;
-  cursor?: number;
+  /** Opaque cursor returned by a prior page response; never construct client-side. */
+  cursor?: string;
   category?: NotificationCategory;
   unreadOnly?: boolean;
 }
@@ -32,14 +33,22 @@ export interface NotificationItem {
   createdAt: string;
 }
 
-interface ListResponse {
-  notifications: NotificationItem[];
-  nextCursor: string | null;
+/**
+ * Inner page shape after the standard `{ data: ... }` envelope unwrap.
+ * Post-B3 the route returns the canonical paginate() result.
+ */
+export interface NotificationsPage {
+  data: NotificationItem[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
 }
 
 function buildListUrl(communityId: number, filters: NotificationFilters): string {
   const params = new URLSearchParams({ communityId: String(communityId) });
-  if (filters.cursor != null) params.set('cursor', String(filters.cursor));
+  if (filters.cursor != null) params.set('cursor', filters.cursor);
   if (filters.limit != null) params.set('limit', String(filters.limit));
   if (filters.category != null) params.set('category', filters.category);
   if (filters.unreadOnly) params.set('unread_only', 'true');
@@ -47,12 +56,12 @@ function buildListUrl(communityId: number, filters: NotificationFilters): string
 }
 
 export function useNotifications(communityId: number, filters: NotificationFilters = {}) {
-  return useQuery<ListResponse>({
+  return useQuery<NotificationsPage>({
     queryKey: NOTIFICATION_KEYS.list(communityId, filters),
     queryFn: async () => {
       const res = await fetch(buildListUrl(communityId, filters));
       if (!res.ok) throw new Error('Failed to fetch notifications');
-      const json = await res.json() as { data: ListResponse };
+      const json = await res.json() as { data: NotificationsPage };
       return json.data;
     },
     enabled: communityId > 0,
@@ -118,13 +127,26 @@ interface CrossListResponse {
   totalUnread: number;
 }
 
+/**
+ * Cross-community notifications use a separate route (`/api/v1/notifications/all`)
+ * that has not been migrated to `paginate()` yet — its cursor is still a raw
+ * numeric id. Keeping its filter type independent of `NotificationFilters`
+ * (whose cursor is now an opaque string) prevents callers from accidentally
+ * mixing the two cursor formats.
+ */
+export interface CrossNotificationFilters {
+  limit?: number;
+  cursor?: number;
+  unreadOnly?: boolean;
+}
+
 export const CROSS_NOTIFICATION_KEYS = {
   all: () => ['notifications', 'cross'] as const,
-  list: (filters?: NotificationFilters) =>
+  list: (filters?: CrossNotificationFilters) =>
     ['notifications', 'cross', 'list', filters ?? {}] as const,
 };
 
-export function useCrossNotifications(filters: NotificationFilters = {}) {
+export function useCrossNotifications(filters: CrossNotificationFilters = {}) {
   return useQuery<CrossListResponse>({
     queryKey: CROSS_NOTIFICATION_KEYS.list(filters),
     queryFn: async () => {

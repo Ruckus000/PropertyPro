@@ -14,7 +14,7 @@ export function MobileNotificationsContent({ communityId }: MobileNotificationsC
   const { data, isLoading } = useNotifications(communityId, { limit: 30 });
   const markRead = useMarkRead();
 
-  const items = data?.notifications ?? [];
+  const items = data?.data ?? [];
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--surface-page)]">

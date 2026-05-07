@@ -36,7 +36,7 @@ export function NotificationDropdown({ communityId, onClose }: NotificationDropd
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const items = data?.notifications ?? [];
+  const items = data?.data ?? [];
   const hasUnread = items.some((n) => n.readAt === null);
 
   return (
