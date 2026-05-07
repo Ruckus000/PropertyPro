@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { ApproveDialog } from '@/components/access-requests/approve-dialog';
 import { DenyDialog } from '@/components/access-requests/deny-dialog';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 import { cn } from '@/lib/utils';
 
 /* ─────── Types ─────── */
@@ -25,41 +26,22 @@ export interface AccessRequest {
 
 /* ─────── API helper ─────── */
 
-interface AccessRequestsPage {
-  data: AccessRequest[];
-  pagination: {
-    nextCursor: string | null;
-    hasMore: boolean;
-    pageSize: number;
-  };
-}
-
 /**
  * The admin review surface needs the full pending-request list to render.
- * Walks the cursor-based pagination contract (Plan B3) until `hasMore` is
- * false. We request the maximum page size (paginate's MAX_PAGE_SIZE=100) to
- * minimize network round-trips for communities with backlogs; the cap of
- * MAX_PAGES × 100 = 2000 is a safety net well above any realistic ceiling.
+ * Walks the cursor-based pagination contract via the canonical
+ * `walkPaginated()` helper (Plan B3) until `hasMore` is false. The TanStack
+ * Query `signal` is forwarded so a stale request is cancelled at the network
+ * layer if the query is invalidated mid-walk.
  */
-const MAX_PAGES = 20;
-const PAGE_SIZE = '100'; // matches paginate's MAX_PAGE_SIZE — silently clamped if higher.
-
-async function fetchAccessRequests(communityId: number): Promise<AccessRequest[]> {
-  const collected: AccessRequest[] = [];
-  let cursor: string | null = null;
-  for (let i = 0; i < MAX_PAGES; i++) {
-    const params = new URLSearchParams({ communityId: String(communityId), pageSize: PAGE_SIZE });
-    if (cursor) params.set('cursor', cursor);
-    const response = await fetch(`/api/v1/access-requests?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error('Failed to load access requests');
-    }
-    const json = (await response.json()) as { data: AccessRequestsPage };
-    collected.push(...json.data.data);
-    if (!json.data.pagination.hasMore || !json.data.pagination.nextCursor) break;
-    cursor = json.data.pagination.nextCursor;
-  }
-  return collected;
+async function fetchAccessRequests(
+  communityId: number,
+  signal?: AbortSignal,
+): Promise<AccessRequest[]> {
+  return walkPaginated<AccessRequest>(
+    '/api/v1/access-requests',
+    { communityId: String(communityId) },
+    { signal },
+  );
 }
 
 /* ─────── Helpers ─────── */
@@ -132,7 +114,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
     refetch,
   } = useQuery({
     queryKey: ['access-requests', communityId],
-    queryFn: () => fetchAccessRequests(communityId),
+    queryFn: ({ signal }) => fetchAccessRequests(communityId, signal),
   });
 
   const handleActionSuccess = () => {
