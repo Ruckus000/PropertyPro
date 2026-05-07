@@ -12,7 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole } from '@propertypro/shared';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
-import { ContractTable } from '@/components/contracts/ContractTable';
+import { ContractTableContainer } from '@/components/contracts/contract-table-container';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -56,7 +56,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <ContractTable communityId={communityId} />
+      <ContractTableContainer communityId={communityId} />
     </>
   );
 }
