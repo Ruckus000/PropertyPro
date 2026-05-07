@@ -8,6 +8,13 @@
       "when": 1778104090479,
       "tag": "0000_nappy_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778106092617,
+      "tag": "0001_round_pixie",
+      "breakpoints": true
     }
   ]
 }
