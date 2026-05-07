@@ -60,7 +60,26 @@ const { dbState, selectMock, insertNotificationsMock, mockDb } = vi.hoisted(() =
         };
       },
     }),
-    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb),
+    // Transaction with snapshot/restore rollback semantics. The real Postgres
+    // driver rolls every change in `fn` back if `fn` throws; this mock mirrors
+    // that contract so failure-injection tests (C3) can verify the in-tx
+    // behavior of approve/deny — i.e., that an `insertNotifications` failure
+    // takes the join-request status flip and any userRoles insert with it.
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot = {
+        joinRequests: dbState.joinRequests.map((r) => ({ ...r })),
+        userRoles: dbState.userRoles.slice(),
+      };
+      try {
+        return await fn(mockDb);
+      } catch (err) {
+        dbState.joinRequests.length = 0;
+        dbState.joinRequests.push(...snapshot.joinRequests);
+        dbState.userRoles.length = 0;
+        dbState.userRoles.push(...snapshot.userRoles);
+        throw err;
+      }
+    },
   };
 
   return { dbState, selectMock, insertNotificationsMock, mockDb };
@@ -212,6 +231,64 @@ describe('approveJoinRequest', () => {
       approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
     ).rejects.toThrow('Request is not pending');
   });
+
+  // Failure-injection (Plan C3): the in-tx pattern in approveJoinRequest must
+  // roll back ALL writes if insertNotifications fails. Without this guarantee,
+  // an admin could see "approved" but the requester would never get notified
+  // — and the next manual approve attempt would 409 because status is no
+  // longer 'pending'. Verify the entire transaction is atomic.
+  describe('C3 failure-injection — notifications insert fails', () => {
+    it('rolls back the request status when insertNotifications throws', async () => {
+      const req = seedRequest({ residentType: 'owner' });
+      mockSelectReturnsRequest(req);
+      insertNotificationsMock.mockRejectedValueOnce(
+        new Error('simulated notifications-table failure'),
+      );
+
+      await expect(
+        approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
+      ).rejects.toThrow('simulated notifications-table failure');
+
+      // Status MUST remain pending — otherwise the next legitimate approve
+      // attempt would 409 even though the requester was never notified.
+      expect(dbState.joinRequests[0]!.status).toBe('pending');
+      expect(dbState.joinRequests[0]!.reviewedBy).toBeNull();
+      expect(dbState.joinRequests[0]!.reviewedAt).toBeNull();
+    });
+
+    it('does NOT create a user_roles row when insertNotifications throws', async () => {
+      const req = seedRequest({ residentType: 'owner' });
+      mockSelectReturnsRequest(req);
+      insertNotificationsMock.mockRejectedValueOnce(
+        new Error('simulated notifications-table failure'),
+      );
+
+      await expect(
+        approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
+      ).rejects.toThrow();
+
+      // The user_roles insert ran inside the same transaction as the
+      // notification insert; it must roll back too. Otherwise the requester
+      // would have a residency role with no notification breadcrumb and no
+      // approved request — silently inconsistent.
+      expect(dbState.userRoles).toHaveLength(0);
+    });
+
+    it('still calls insertNotifications inside the transaction (sanity)', async () => {
+      const req = seedRequest({ residentType: 'tenant' });
+      mockSelectReturnsRequest(req);
+      insertNotificationsMock.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
+      ).rejects.toThrow();
+
+      // Sanity: the notification path was actually invoked. Without this,
+      // the rollback assertions above could pass even if approveJoinRequest
+      // skipped insertNotifications entirely.
+      expect(insertNotificationsMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('denyJoinRequest', () => {
@@ -265,5 +342,40 @@ describe('denyJoinRequest', () => {
     await expect(
       denyJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
     ).rejects.toThrow('Request is not pending');
+  });
+
+  describe('C3 failure-injection — notifications insert fails', () => {
+    it('rolls back the request status when insertNotifications throws', async () => {
+      const req = seedRequest();
+      mockSelectReturnsRequest(req);
+      insertNotificationsMock.mockRejectedValueOnce(
+        new Error('simulated notifications-table failure'),
+      );
+
+      await expect(
+        denyJoinRequest({
+          requestId: 1,
+          reviewerUserId: 'admin-222',
+          notes: 'Unit not recognized',
+        }),
+      ).rejects.toThrow('simulated notifications-table failure');
+
+      expect(dbState.joinRequests[0]!.status).toBe('pending');
+      expect(dbState.joinRequests[0]!.reviewedBy).toBeNull();
+      expect(dbState.joinRequests[0]!.reviewedAt).toBeNull();
+      expect(dbState.joinRequests[0]!.reviewNotes).toBeNull();
+    });
+
+    it('still calls insertNotifications inside the transaction (sanity)', async () => {
+      const req = seedRequest();
+      mockSelectReturnsRequest(req);
+      insertNotificationsMock.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        denyJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' }),
+      ).rejects.toThrow();
+
+      expect(insertNotificationsMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
