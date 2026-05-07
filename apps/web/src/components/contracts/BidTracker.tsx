@@ -3,17 +3,20 @@
 /**
  * P3-52: Bid tracker panel for a specific contract.
  *
- * Shows bid list (or embargoed summary if bidding is still open).
- * Allows adding new bids via POST /api/v1/contracts with action=add_bid.
+ * Shows bid list (or embargoed summary if bidding is still open). Submits new
+ * bids via the `useAddContractBid` mutation hook from `@/hooks/use-contracts`,
+ * which self-invalidates the contracts query on success.
  */
 import { useState } from 'react';
+import { useAddContractBid } from '@/hooks/use-contracts';
 import type { ContractRecord } from './types';
 
 interface BidTrackerProps {
   communityId: number;
   contract: ContractRecord;
   onClose: () => void;
-  onBidAdded: () => void;
+  /** Optional: parent hook to run after a bid is added. The mutation self-invalidates the contracts query, so most parents have nothing to do. */
+  onBidAdded?: () => void;
 }
 
 export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTrackerProps) {
@@ -21,42 +24,27 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
   const [vendorName, setVendorName] = useState('');
   const [bidAmount, setBidAmount] = useState('');
   const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const addBid = useAddContractBid(communityId);
+  const saving = addBid.isPending;
+  const error = addBid.error instanceof Error ? addBid.error.message : null;
 
   async function handleAddBid(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
-
     try {
-      const res = await fetch('/api/v1/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'add_bid',
-          communityId,
-          contractId: contract.id,
-          vendorName,
-          bidAmount,
-          notes: notes || null,
-        }),
+      await addBid.mutateAsync({
+        contractId: contract.id,
+        vendorName,
+        bidAmount,
+        notes: notes || null,
       });
-
-      if (!res.ok) {
-        const errJson = (await res.json()) as { error: { message: string } };
-        throw new Error(errJson.error.message);
-      }
-
       setVendorName('');
       setBidAmount('');
       setNotes('');
       setShowAddBid(false);
-      onBidAdded();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add bid');
-    } finally {
-      setSaving(false);
+      onBidAdded?.();
+    } catch {
+      // error surfaced via `error` above
     }
   }
 

@@ -3,10 +3,13 @@
 /**
  * P3-52: Contract create/edit form.
  *
- * Handles creating new contracts and editing existing ones.
- * Sends POST (create) or PATCH (update) to /api/v1/contracts.
+ * Submits via the `useCreateContract` / `useUpdateContract` mutation hooks
+ * from `@/hooks/use-contracts`. Both hooks self-invalidate the contracts
+ * query on success — `onSaved` is now purely "the form is done; close the
+ * modal," not "refetch the list."
  */
 import { useState } from 'react';
+import { useCreateContract, useUpdateContract } from '@/hooks/use-contracts';
 
 interface ContractRecord {
   id: number;
@@ -48,63 +51,42 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
   const [complianceChecklistItemId, setComplianceChecklistItemId] = useState<string>(
     contract?.complianceChecklistItemId != null ? String(contract.complianceChecklistItemId) : '',
   );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const createMutation = useCreateContract(communityId);
+  const updateMutation = useUpdateContract(communityId);
+  const activeMutation = isEdit ? updateMutation : createMutation;
+  const saving = activeMutation.isPending;
+  const error = activeMutation.error instanceof Error ? activeMutation.error.message : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+
+    const parsedDocumentId = documentId !== '' ? Number(documentId) : null;
+    const parsedChecklistItemId =
+      complianceChecklistItemId !== '' ? Number(complianceChecklistItemId) : null;
+
+    const payload = {
+      title,
+      vendorName,
+      description: description || null,
+      contractValue: contractValue || null,
+      startDate,
+      endDate: endDate || null,
+      biddingClosesAt: biddingClosesAt ? new Date(biddingClosesAt).toISOString() : null,
+      conflictOfInterest,
+      documentId: parsedDocumentId,
+      complianceChecklistItemId: parsedChecklistItemId,
+    };
 
     try {
-      const parsedDocumentId = documentId !== '' ? Number(documentId) : null;
-      const parsedChecklistItemId =
-        complianceChecklistItemId !== '' ? Number(complianceChecklistItemId) : null;
-
-      const payload: Record<string, unknown> = {
-        communityId,
-        title,
-        vendorName,
-        description: description || null,
-        contractValue: contractValue || null,
-        startDate,
-        endDate: endDate || null,
-        biddingClosesAt: biddingClosesAt ? new Date(biddingClosesAt).toISOString() : null,
-        conflictOfInterest,
-        documentId: parsedDocumentId,
-        complianceChecklistItemId: parsedChecklistItemId,
-      };
-
       if (isEdit) {
-        payload['id'] = contract.id;
-        const res = await fetch('/api/v1/contracts', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          const errJson = (await res.json()) as { error: { message: string } };
-          throw new Error(errJson.error.message);
-        }
+        await updateMutation.mutateAsync({ id: contract.id, ...payload });
       } else {
-        const res = await fetch('/api/v1/contracts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          const errJson = (await res.json()) as { error: { message: string } };
-          throw new Error(errJson.error.message);
-        }
+        await createMutation.mutateAsync(payload);
       }
-
       onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save contract');
-    } finally {
-      setSaving(false);
+    } catch {
+      // error surfaced via `error` above; keep the form open
     }
   }
 

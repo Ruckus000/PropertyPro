@@ -25,8 +25,6 @@ interface ContractTableProps {
   errorMessage: string | null;
   /** Passed through to child mutation components (`<ContractForm />`, `<BidTracker />`). */
   communityId: number;
-  /** Invoked after a successful create/update/bid; the container wires this to query invalidation. */
-  onAfterMutation: () => void;
 }
 
 export function ContractTable({
@@ -35,7 +33,6 @@ export function ContractTable({
   isLoading,
   errorMessage,
   communityId,
-  onAfterMutation,
 }: ContractTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
@@ -105,10 +102,7 @@ export function ContractTable({
           communityId={communityId}
           contract={selectedContract}
           onClose={() => setShowForm(false)}
-          onSaved={() => {
-            setShowForm(false);
-            onAfterMutation();
-          }}
+          onSaved={() => setShowForm(false)}
         />
       )}
 
@@ -118,7 +112,6 @@ export function ContractTable({
           communityId={communityId}
           contract={selectedContract}
           onClose={() => setSelectedContract(null)}
-          onBidAdded={() => onAfterMutation()}
         />
       )}
 
