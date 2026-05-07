@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
 import type { CommunityFeatures } from '@propertypro/shared';
+import { validateFrontmatter } from '@/lib/help/frontmatter-schema';
 
 /**
  * Shape acceptable to feature-gate helpers.
@@ -98,25 +99,34 @@ export function parseArticleFrontmatter(
   rawContent: string,
 ): HelpArticleMetadata {
   const { data, content } = matter(rawContent);
+  const validation = validateFrontmatter(data);
+  if (!validation.ok) {
+    const summary = validation.errors
+      .map((err) => `  - ${err.path}: ${err.message}`)
+      .join('\n');
+    throw new Error(
+      `Invalid help article frontmatter in ${filePath}:\n${summary}`,
+    );
+  }
+
+  const valid = validation.value;
   const wordCount = content.split(/\s+/).filter(Boolean).length;
   const metadata = {
-    title: String(data.title ?? ''),
-    description: String(data.description ?? ''),
-    category: String(data.category ?? ''),
-    slug: String(data.slug ?? ''),
-    roles: Array.isArray(data.roles) ? data.roles.map(String) : [],
-    keywords: Array.isArray(data.keywords) ? data.keywords.map(String) : [],
-    tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
-    relatedArticles: Array.isArray(data.relatedArticles)
-      ? data.relatedArticles.map(String)
-      : [],
-    featured: Boolean(data.featured ?? false),
+    title: valid.title,
+    description: valid.description,
+    category: valid.category,
+    slug: valid.slug,
+    roles: valid.roles,
+    keywords: valid.keywords,
+    tags: valid.tags,
+    relatedArticles: valid.relatedArticles,
+    featured: valid.featured,
     excerpt: extractExcerpt(content),
     filePath,
-    contextPaths: Array.isArray(data.contextPaths) ? data.contextPaths.map(String) : [],
-    statutes: Array.isArray(data.statutes) ? data.statutes.map(String) : [],
-    featureGates: Array.isArray(data.featureGates) ? data.featureGates.map(String) : [],
-    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+    contextPaths: valid.contextPaths ?? [],
+    statutes: valid.statutes ?? [],
+    featureGates: valid.featureGates ?? [],
+    updatedAt: valid.updatedAt,
     readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
     contentHash: crypto.createHash('sha256').update(rawContent).digest('hex').slice(0, 16),
   };
