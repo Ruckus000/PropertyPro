@@ -20,7 +20,10 @@ const {
   verifyOtpMock,
   approveAccessRequestMock,
   denyAccessRequestMock,
-  listPendingRequestsMock,
+  paginateMock,
+  scopedClient,
+  createScopedClientMock,
+  accessRequestsTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
@@ -30,20 +33,38 @@ const {
   verifyOtpMock: vi.fn(),
   approveAccessRequestMock: vi.fn(),
   denyAccessRequestMock: vi.fn(),
-  listPendingRequestsMock: vi.fn(),
+  paginateMock: vi.fn(),
+  scopedClient: { __scoped: true },
+  createScopedClientMock: vi.fn(),
+  accessRequestsTable: { id: Symbol('access_requests.id'), status: Symbol('access_requests.status') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
 }));
 
-// Mock the access-request service
+// Mock the access-request service (mutation/submit paths only — list path now
+// uses paginate() directly, mocked separately below).
 vi.mock('@/lib/services/access-request-service', () => ({
   submitAccessRequest: submitAccessRequestMock,
   verifyOtp: verifyOtpMock,
   approveAccessRequest: approveAccessRequestMock,
   denyAccessRequest: denyAccessRequestMock,
-  listPendingRequests: listPendingRequestsMock,
+}));
+
+// Mock @propertypro/db for the GET path's paginate() call. The route imports
+// `accessRequests` (table), `createScopedClient`, and `paginate` from here.
+vi.mock('@propertypro/db', () => ({
+  accessRequests: accessRequestsTable,
+  createScopedClient: createScopedClientMock,
+  paginate: paginateMock,
+}));
+
+// `eq` is imported from @propertypro/db/filters for the where predicate.
+// Stub it as identity-ish — the route's only use is `paginate(..., { where: eq(...) })`,
+// and we just need `where` to be defined for assertions.
+vi.mock('@propertypro/db/filters', () => ({
+  eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
 }));
 
 // Mock auth helpers
@@ -266,37 +287,106 @@ describe('Access Request Routes', () => {
   // =========================================================================
 
   describe('GET /api/v1/access-requests', () => {
-    it('returns pending requests for admin user', async () => {
+    beforeEach(() => {
+      createScopedClientMock.mockReturnValue(scopedClient);
+    });
+
+    it('returns paginated pending requests for admin user', async () => {
       const pendingRows = [
         { id: 1, email: 'a@test.com', fullName: 'Alice', status: 'pending' },
         { id: 2, email: 'b@test.com', fullName: 'Bob', status: 'pending' },
       ];
-      listPendingRequestsMock.mockResolvedValue(pendingRows);
+      paginateMock.mockResolvedValueOnce({
+        data: pendingRows,
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
 
       const req = makeRequest('/api/v1/access-requests');
       const response = await listGET(req);
       const json = await response.json();
 
       expect(response.status).toBe(200);
-      expect(json.data).toHaveLength(2);
+      expect(json.data.data).toHaveLength(2);
+      expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
       expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
       expect(requirePermissionMock).toHaveBeenCalledWith(
         defaultMembership,
         'residents',
         'write',
       );
-      expect(listPendingRequestsMock).toHaveBeenCalledWith(1);
+      expect(createScopedClientMock).toHaveBeenCalledWith(1);
+      const [client, table, input, options] = paginateMock.mock.calls[0] as [
+        unknown,
+        unknown,
+        { cursor?: string; pageSize?: number },
+        { where?: unknown },
+      ];
+      expect(client).toBe(scopedClient);
+      expect(table).toBe(accessRequestsTable);
+      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
+      // Where predicate should filter status='pending' — captured by the
+      // identity-ish eq() mock; assert its shape rather than exact SQL.
+      expect(options.where).toEqual({ __eq: { col: accessRequestsTable.status, val: 'pending' } });
     });
 
-    it('returns empty array when no pending requests', async () => {
-      listPendingRequestsMock.mockResolvedValue([]);
+    it('returns empty page when no pending requests', async () => {
+      paginateMock.mockResolvedValueOnce({
+        data: [],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
 
       const req = makeRequest('/api/v1/access-requests');
       const response = await listGET(req);
       const json = await response.json();
 
       expect(response.status).toBe(200);
-      expect(json.data).toHaveLength(0);
+      expect(json.data.data).toHaveLength(0);
+    });
+
+    it('treats empty-string query params as missing (regression: ?cursor= and ?pageSize= must not 400)', async () => {
+      // The route uses `||` (not `??`) so empty-string params are treated as
+      // undefined rather than passed to Zod, which would 400 on the `min(1)`
+      // / `positive()` constraints. This protects against stale clients
+      // sending `?cursor=` or `?pageSize=` in URL builders.
+      paginateMock.mockResolvedValueOnce({
+        data: [],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
+
+      const req = makeRequest('/api/v1/access-requests?cursor=&pageSize=');
+      const response = await listGET(req);
+      expect(response.status).toBe(200);
+
+      const [, , input] = paginateMock.mock.calls[0] as [
+        unknown,
+        unknown,
+        { cursor?: string; pageSize?: number },
+      ];
+      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
+    });
+
+    it('forwards cursor and pageSize to paginate()', async () => {
+      paginateMock.mockResolvedValueOnce({
+        data: [],
+        pagination: { nextCursor: 'next-opaque', hasMore: true, pageSize: 25 },
+      });
+
+      const req = makeRequest('/api/v1/access-requests?cursor=abc&pageSize=25');
+      const response = await listGET(req);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.pagination).toEqual({
+        nextCursor: 'next-opaque',
+        hasMore: true,
+        pageSize: 25,
+      });
+      const [, , input] = paginateMock.mock.calls[0] as [
+        unknown,
+        unknown,
+        { cursor?: string; pageSize?: number },
+      ];
+      expect(input).toEqual({ cursor: 'abc', pageSize: 25 });
     });
   });
 
