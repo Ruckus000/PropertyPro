@@ -12,7 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
-import { AnnouncementList } from '@/components/announcements/announcement-list';
+import { AnnouncementListContainer } from '@/components/announcements/announcement-list-container';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 
@@ -92,7 +92,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
         }
       />
 
-      <AnnouncementList
+      <AnnouncementListContainer
         items={serializedItems}
         communityId={context.communityId}
         currentUserId={userId}
