@@ -120,6 +120,23 @@ describe('document categories route', () => {
     expect(json.data.pagination).toEqual({ nextCursor: 'opaque-next', hasMore: true, pageSize: 25 });
   });
 
+  it('treats empty-string params as missing (regression: ?cursor= and ?pageSize= must not 400)', async () => {
+    paginateMock.mockResolvedValueOnce({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/document-categories?communityId=42&cursor=&pageSize=',
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(paginateMock).toHaveBeenCalledWith(scopedClient, documentCategoriesTable, {
+      cursor: undefined,
+      pageSize: undefined,
+    });
+  });
+
   it('rejects non-integer pageSize', async () => {
     const req = new NextRequest(
       'http://localhost:3000/api/v1/document-categories?communityId=42&pageSize=abc',

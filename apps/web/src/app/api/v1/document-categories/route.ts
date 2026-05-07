@@ -45,10 +45,13 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 
   const { searchParams } = new URL(req.url);
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // collapse to undefined rather than passing `""`/`""` to Zod, which would
+  // 400 on the `min(1)` / `positive()` constraints.
   const parseResult = querySchema.safeParse({
     communityId: searchParams.get('communityId'),
-    cursor: searchParams.get('cursor') ?? undefined,
-    pageSize: searchParams.get('pageSize') ?? undefined,
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
   });
 
   if (!parseResult.success) {

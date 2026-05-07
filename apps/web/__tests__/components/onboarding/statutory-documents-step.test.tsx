@@ -60,7 +60,7 @@ describe('StatutoryDocumentsStep', () => {
                     }),
                 });
             }
-            if (url === '/api/v1/document-categories?communityId=1') {
+            if (url === '/api/v1/document-categories?communityId=1&pageSize=100') {
                 return Promise.resolve({
                     ok: true,
                     json: async () => ({
@@ -126,7 +126,7 @@ describe('StatutoryDocumentsStep', () => {
 
         // requestJson() calls fetch(url, init) with init=undefined; assert URL irrespective of the second arg
         expect(
-            fetchMock.mock.calls.some(([url]: [string, unknown]) => url === '/api/v1/document-categories?communityId=1'),
+            fetchMock.mock.calls.some(([url]: [string, unknown]) => url === '/api/v1/document-categories?communityId=1&pageSize=100'),
         ).toBe(true);
         expect(onNext).toHaveBeenCalledWith({
             items: [
@@ -144,7 +144,7 @@ describe('StatutoryDocumentsStep', () => {
             if (url === '/api/v1/compliance?communityId=1') {
                 return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
             }
-            if (url === '/api/v1/document-categories?communityId=1') {
+            if (url === '/api/v1/document-categories?communityId=1&pageSize=100') {
                 return Promise.resolve({
                     ok: true,
                     json: async () => ({
@@ -255,7 +255,7 @@ describe('StatutoryDocumentsStep', () => {
                     }),
                 });
             }
-            if (url === '/api/v1/document-categories?communityId=1') {
+            if (url === '/api/v1/document-categories?communityId=1&pageSize=100') {
                 return Promise.resolve({
                     ok: true,
                     json: async () => ({

@@ -594,6 +594,14 @@ describe('p3-53 audit trail route', () => {
       expect(res.status).toBe(200);
     });
 
+    it('treats empty-string params as missing (regression: ?cursor= and ?limit= must not 400)', async () => {
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/audit-trail?communityId=42&cursor=&limit=',
+      );
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+    });
+
     it('returns 200 for malformed cursor (paginate silently treats as first page)', async () => {
       // paginate() is intentionally permissive: stale/malformed cursors from
       // old clients fall back to "first page" rather than 400. This is a

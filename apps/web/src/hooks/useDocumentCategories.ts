@@ -22,11 +22,13 @@ interface CategoriesPage {
  * resolve a category by name, so we keep fetching until `hasMore` is false.
  *
  * In practice document_categories tables hold ~10–30 rows per community, so
- * the walk almost always completes in a single request (default page size 50).
- * The loop is a safety net for atypically large tables — and a simple guard
- * against runaway pagination.
+ * the walk almost always completes in a single request. We request the
+ * maximum page size (paginate's MAX_PAGE_SIZE=100) to minimize round-trips
+ * for atypically large tables; the cap of MAX_PAGES × 100 = 2000 is a safety
+ * net well above any realistic ceiling.
  */
-const MAX_PAGES = 20; // 20 × 100 = 2000 categories — well above any realistic ceiling.
+const MAX_PAGES = 20;
+const PAGE_SIZE = '100'; // matches paginate's MAX_PAGE_SIZE — silently clamped if higher.
 
 export function useDocumentCategories(communityId: number) {
   const [categories, setCategories] = useState<DocumentCategoryOption[]>([]);
@@ -48,7 +50,10 @@ export function useDocumentCategories(communityId: number) {
           // while a previous page was in flight — avoids issuing dependent
           // requests whose result we'd discard.
           if (!active) return;
-          const params = new URLSearchParams({ communityId: String(communityId) });
+          const params = new URLSearchParams({
+            communityId: String(communityId),
+            pageSize: PAGE_SIZE,
+          });
           if (cursor) params.set('cursor', cursor);
           const page = await requestJson<CategoriesPage>(
             `/api/v1/document-categories?${params.toString()}`,
