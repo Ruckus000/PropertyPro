@@ -1,50 +1,44 @@
 'use client';
 
 /**
- * P3-52: Contract listing table with expiration alerts and bid tracking.
+ * P3-52: Contract listing table — pure-prop presenter (B5 pattern).
  *
- * Fetches contracts from /api/v1/contracts and displays them in a table
- * with expiration alert badges and bid summary (embargoed or revealed).
+ * Renders the contract list, expiration alerts, status pills, and edit/bid
+ * action buttons. Data fetching and cache invalidation live in
+ * `<ContractTableContainer />` (see `contract-table-container.tsx`).
+ *
+ * UI state that is purely local (which row is selected for edit/bid, whether
+ * the form modal is open) stays here in the presenter — this is consistent
+ * with the documents/announcements precedent: container = data, presenter =
+ * UI state.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { ContractForm } from './ContractForm';
 import { BidTracker } from './BidTracker';
 import type { ContractRecord, ExpirationAlert } from './types';
 
 interface ContractTableProps {
+  /** Pure-prop presenter input — fetched by the container. */
+  contracts: ContractRecord[];
+  alerts: ExpirationAlert[];
+  isLoading: boolean;
+  errorMessage: string | null;
+  /** Passed through to child mutation components (`<ContractForm />`, `<BidTracker />`). */
   communityId: number;
+  /** Invoked after a successful create/update/bid; the container wires this to query invalidation. */
+  onAfterMutation: () => void;
 }
 
-export function ContractTable({ communityId }: ContractTableProps) {
-  const [contracts, setContracts] = useState<ContractRecord[]>([]);
-  const [alerts, setAlerts] = useState<ExpirationAlert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function ContractTable({
+  contracts,
+  alerts,
+  isLoading,
+  errorMessage,
+  communityId,
+  onAfterMutation,
+}: ContractTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
-
-  const fetchContracts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/v1/contracts?communityId=${communityId}`);
-      if (!res.ok) {
-        const errJson = (await res.json()) as { error: { message: string } };
-        throw new Error(errJson.error.message);
-      }
-      const json = (await res.json()) as { data: ContractRecord[]; alerts: ExpirationAlert[] };
-      setContracts(json.data);
-      setAlerts(json.alerts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load contracts');
-    } finally {
-      setLoading(false);
-    }
-  }, [communityId]);
-
-  useEffect(() => {
-    void fetchContracts();
-  }, [fetchContracts]);
 
   function getStatusBadgeColor(status: string): string {
     switch (status) {
@@ -65,12 +59,12 @@ export function ContractTable({ communityId }: ContractTableProps) {
     return alerts.find((a) => a.contractId === contractId);
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-sm text-content-tertiary">Loading contracts...</div>;
   }
 
-  if (error) {
-    return <div className="text-sm text-status-danger">Error: {error}</div>;
+  if (errorMessage) {
+    return <div className="text-sm text-status-danger">Error: {errorMessage}</div>;
   }
 
   return (
@@ -113,7 +107,7 @@ export function ContractTable({ communityId }: ContractTableProps) {
           onClose={() => setShowForm(false)}
           onSaved={() => {
             setShowForm(false);
-            void fetchContracts();
+            onAfterMutation();
           }}
         />
       )}
@@ -124,7 +118,7 @@ export function ContractTable({ communityId }: ContractTableProps) {
           communityId={communityId}
           contract={selectedContract}
           onClose={() => setSelectedContract(null)}
-          onBidAdded={() => void fetchContracts()}
+          onBidAdded={() => onAfterMutation()}
         />
       )}
 
