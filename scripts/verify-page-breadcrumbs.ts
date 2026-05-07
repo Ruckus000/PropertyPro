@@ -38,8 +38,51 @@ export interface VerifyResult {
 // Every migrated <PageHeader> must place `breadcrumb=` before `actions=`
 // or any other JSX-valued prop.
 const PAGE_HEADER_BREADCRUMB_RE = /<PageHeader\b[^>]*\sbreadcrumb=/s;
+const PAGE_HEADER_OPENING_TAG_RE = /<PageHeader\b[\s\S]*?>/;
+const BREADCRUMBS_ITEMS_RE = /<Breadcrumbs\s+items=\{(\[[\s\S]*?\])\}/;
+// Match ?communityId= appearing anywhere after a /communities/<id>/ prefix
+// (works for template literals like `/communities/${id}/foo?communityId=...`).
+const NESTED_COMMUNITY_QUERY_RE = /\/communities\/[^`'"]+\?communityId=/;
 const EXEMPT_RE = /^\s*\/\/\s*breadcrumbs:exempt(.*)$/m;
 const DELEGATED_RE = /delegated\s+to\s+(\S+)/;
+
+/**
+ * Runs the deeper design-rule checks against the file that actually owns the
+ * <PageHeader breadcrumb=...> render (which may be a delegated client component).
+ * Returns the first failure found, or null on success.
+ *
+ *  - prop-order: `breadcrumb=` must appear before any JSX-valued prop on
+ *    <PageHeader> (the spec's note about `[^>]*` halting at the first `>`).
+ *  - no-?communityId-on-nested: hrefs that target `/communities/<id>/...`
+ *    must not append `?communityId=` — the path segment is the authoritative
+ *    tenant id for those routes.
+ */
+function verifyDesignRules(content: string, label: string): string | null {
+  const openTagMatch = content.match(PAGE_HEADER_OPENING_TAG_RE);
+  if (openTagMatch) {
+    const tag = openTagMatch[0];
+    const breadcrumbIdx = tag.indexOf('breadcrumb=');
+    const actionsMatch = tag.match(/\sactions=/);
+    if (
+      breadcrumbIdx >= 0 &&
+      actionsMatch &&
+      actionsMatch.index !== undefined &&
+      actionsMatch.index < breadcrumbIdx
+    ) {
+      return `${label}: \`actions=\` appears before \`breadcrumb=\` on <PageHeader>; reorder so \`breadcrumb=\` comes first (design.md rule).`;
+    }
+  }
+
+  const itemsMatch = content.match(BREADCRUMBS_ITEMS_RE);
+  if (itemsMatch) {
+    const itemsBlock = itemsMatch[1] ?? '';
+    if (NESTED_COMMUNITY_QUERY_RE.test(itemsBlock)) {
+      return `${label}: a Breadcrumbs item href targets \`/communities/<id>/...\` but appends \`?communityId=\`. The path segment is the authoritative tenant id for nested routes; drop the query param (design.md rule).`;
+    }
+  }
+
+  return null;
+}
 
 export function verifyFile(absolutePath: string): VerifyResult {
   if (!existsSync(absolutePath)) {
@@ -61,6 +104,8 @@ export function verifyFile(absolutePath: string): VerifyResult {
       if (!PAGE_HEADER_BREADCRUMB_RE.test(targetContent)) {
         return { ok: false, reason: `delegated target ${targetRel} has no <PageHeader breadcrumb=...>` };
       }
+      const designIssue = verifyDesignRules(targetContent, `delegated target ${targetRel}`);
+      if (designIssue) return { ok: false, reason: designIssue };
       return { ok: true };
     }
     return { ok: true };
@@ -69,6 +114,9 @@ export function verifyFile(absolutePath: string): VerifyResult {
   if (!PAGE_HEADER_BREADCRUMB_RE.test(content)) {
     return { ok: false, reason: 'no breadcrumb: file has no <PageHeader ... breadcrumb=...> and no exemption comment' };
   }
+
+  const designIssue = verifyDesignRules(content, 'file');
+  if (designIssue) return { ok: false, reason: designIssue };
 
   return { ok: true };
 }
