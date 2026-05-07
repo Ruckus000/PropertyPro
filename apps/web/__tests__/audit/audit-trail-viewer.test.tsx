@@ -18,9 +18,13 @@ function makeAuditResponse(entries: Record<string, unknown>[] = []) {
     ok: true,
     json: () =>
       Promise.resolve({
-        data: entries,
-        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
-        users: {},
+        // Double-wrapped envelope: outer `data` matches the standard API
+        // contract; inner `data`/`pagination`/`users` is the paginate() page.
+        data: {
+          data: entries,
+          pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+          users: {},
+        },
       }),
   };
 }
