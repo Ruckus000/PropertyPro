@@ -33,6 +33,7 @@ import {
   type SeedCommunityResult,
   type SeedUserConfig,
 } from '@propertypro/db/seed/seed-community';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';

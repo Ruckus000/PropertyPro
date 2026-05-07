@@ -1,4 +1,5 @@
 // Unsafe escape hatch: tenant slug resolution must happen before tenant context exists.
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveTimezone } from '@/lib/utils/timezone';

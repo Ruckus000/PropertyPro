@@ -1,3 +1,4 @@
+// AUTHZ: Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
 import { eq, and, isNull, sql, inArray } from '@propertypro/db/filters';

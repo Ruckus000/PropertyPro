@@ -1,4 +1,5 @@
 // Unsafe DB access is intentional here: signup intent is pre-tenant state.
+// AUTHZ: Auth flow — pre-tenant state lookup, no community context yet.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
 import { and, eq, gt, isNull, notInArray, or } from '@propertypro/db/filters';

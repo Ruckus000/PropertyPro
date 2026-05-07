@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+// AUTHZ: Transparency public route: slug resolution and opt-in lookup before tenant scoping
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';

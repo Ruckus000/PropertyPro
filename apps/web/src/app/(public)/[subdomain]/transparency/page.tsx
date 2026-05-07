@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { TransparencyPage } from '@/components/transparency/transparency-page';

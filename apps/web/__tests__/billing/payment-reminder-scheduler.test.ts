@@ -47,6 +47,7 @@ vi.mock('react', () => ({
 // Imports (after mocks are in place)
 // ---------------------------------------------------------------------------
 
+// AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createElement } from 'react';
 import {

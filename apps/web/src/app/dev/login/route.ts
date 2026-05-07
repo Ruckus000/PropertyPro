@@ -8,6 +8,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+// AUTHZ: Dev auto-login — resolves user's community for /mobile redirect (dev-only, 404 in production)
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 
 const ROLE_ENV_MAP: Record<string, string> = {

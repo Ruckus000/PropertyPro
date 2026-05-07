@@ -20,6 +20,7 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import { and, eq, gte, inArray, isNull, lt, or } from '@propertypro/db/filters';
+// AUTHZ: Public e-sign links are authorized by possession of submissionExternalId + signer slug and must resolve across tenants before any community context exists.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   ESIGN_CONSENT_TEXT,

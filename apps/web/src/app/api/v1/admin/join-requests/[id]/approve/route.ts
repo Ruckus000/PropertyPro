@@ -16,6 +16,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
 import { approveJoinRequest } from '@/lib/join-requests/approve-request';
+// AUTHZ: Admin approve/deny endpoints: cross-community service dispatched after permission check
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communityJoinRequests, logAuditEvent } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';

@@ -11,6 +11,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq, sql } from '@propertypro/db/filters';
+// AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { castElectionVoteForCommunity } from '@/lib/services/elections-service';
 import { UnprocessableEntityError } from '@/lib/api/errors';

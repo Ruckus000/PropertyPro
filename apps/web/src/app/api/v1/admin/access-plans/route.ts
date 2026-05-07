@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { eq, isNull } from '@propertypro/db/filters';
 import { accessPlans, communities } from '@propertypro/db';
+// AUTHZ: Admin access-plans routes — platform-level CRUD on access_plans table
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';

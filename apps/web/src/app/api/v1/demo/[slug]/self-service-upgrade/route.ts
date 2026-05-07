@@ -13,6 +13,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { demoInstances, communities } from '@propertypro/db';
+// AUTHZ: Demo lifecycle — cross-tenant fixture setup before tenant binding.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS } from '@propertypro/shared';
 import { computeDemoStatus } from '@propertypro/shared';

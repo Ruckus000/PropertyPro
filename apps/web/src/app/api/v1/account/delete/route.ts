@@ -16,6 +16,7 @@ import {
 } from '@/lib/services/account-lifecycle-service';
 import { eq, and } from '@propertypro/db/filters';
 import { accountDeletionRequests } from '@propertypro/db';
+// AUTHZ: User-facing deletion routes — cross-community deletion workflows
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 

@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { users } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

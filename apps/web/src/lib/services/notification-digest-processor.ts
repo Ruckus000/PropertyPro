@@ -12,6 +12,7 @@ import {
   users,
 } from '@propertypro/db';
 // Unsafe escape hatch: digest queue claiming scans cross-community rows by design.
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import {
   claimDigestQueueRows,
   findCandidateDigestCommunityIds,

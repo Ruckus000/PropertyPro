@@ -1,3 +1,4 @@
+// AUTHZ: Downgrade notifications — queries communities and admins in a billing group for notification dispatch
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, userRoles } from '@propertypro/db';
 import { eq, and, isNull, inArray } from '@propertypro/db/filters';

@@ -8,6 +8,7 @@ import {
   inArray,
   isNull,
 } from '@propertypro/db/filters';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   getComplianceTemplate,

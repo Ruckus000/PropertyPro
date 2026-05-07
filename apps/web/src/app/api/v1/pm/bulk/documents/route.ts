@@ -16,6 +16,7 @@ import {
   createScopedClient,
   documents,
 } from '@propertypro/db';
+// AUTHZ: PM portfolio route — cross-community aggregation by design.
 import {
   isPmAdminInAnyCommunity,
   findManagedCommunitiesPortfolioUnscoped,

@@ -15,6 +15,7 @@ import {
   units,
 } from '@propertypro/db';
 import { and, asc, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
+// AUTHZ: Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   AppError,

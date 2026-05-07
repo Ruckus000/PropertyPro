@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { COMMUNITY_TYPES } from '@propertypro/shared';
+// AUTHZ: Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
 import { isPmAdminInAnyCommunity, getPortfolioDashboard } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';

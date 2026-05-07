@@ -19,6 +19,7 @@
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+// AUTHZ: Demo lifecycle — cross-tenant fixture setup before tenant binding.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';

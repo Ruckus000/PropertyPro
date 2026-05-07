@@ -20,6 +20,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: E-02: Account profile — user-scoped update (no community_id on users table)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';

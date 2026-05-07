@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+// AUTHZ: Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, billingGroups } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';

@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
+// AUTHZ: O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { pendingSignups } from '@propertypro/db';

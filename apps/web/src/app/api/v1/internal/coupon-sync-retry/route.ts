@@ -7,6 +7,7 @@
  * Auth: cron secret (COUPON_SYNC_RETRY_CRON_SECRET, falling back to CRON_SECRET in local/dev)
  */
 import { NextResponse, type NextRequest } from 'next/server';
+// AUTHZ: Coupon sync retry cron — billing group tier recalculation and Stripe discount sync
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups } from '@propertypro/db';
 import { and, lt, inArray, isNull } from '@propertypro/db/filters';

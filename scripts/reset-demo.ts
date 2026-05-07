@@ -14,6 +14,7 @@
 import { pathToFileURL } from 'node:url';
 import { inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { DEMO_COMMUNITIES } from './config/demo-data';
 import { runSeedSafetyChecks } from './lib/seed-safety';

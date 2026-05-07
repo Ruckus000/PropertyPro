@@ -4,6 +4,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { calculatePricingImpact } from '@/lib/billing/pricing-preview';
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
+// AUTHZ: Cancel preview — queries communities in a billing group; authorized by billing group ownership
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, billingGroups } from '@propertypro/db';
 import { eq, and, isNull, ne } from '@propertypro/db/filters';

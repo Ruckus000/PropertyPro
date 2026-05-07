@@ -16,6 +16,7 @@ import {
   revenueSnapshots,
   stripePrices,
 } from '@propertypro/db';
+// AUTHZ: Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { getStripeClient } from '@/lib/services/stripe-service';

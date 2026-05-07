@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, RateLimitError } from '@/lib/api/errors';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
+// AUTHZ: Public community search: discovery endpoint intentionally queries across all communities, returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities } from '@propertypro/db';
 import { and, ilike, isNull, sql } from '@propertypro/db/filters';

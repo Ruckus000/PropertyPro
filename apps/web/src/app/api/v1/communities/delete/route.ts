@@ -17,6 +17,7 @@ import {
 } from '@/lib/services/account-lifecycle-service';
 import { eq, and } from '@propertypro/db/filters';
 import { accountDeletionRequests } from '@propertypro/db';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 

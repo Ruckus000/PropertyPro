@@ -1,3 +1,4 @@
+// AUTHZ: Community-scoped user display-name resolution for board/forum and elections UX
 import { findCommunityUserDisplayNames } from '@propertypro/db/unsafe';
 
 function getFallbackUserDisplayName(userId: string): string {

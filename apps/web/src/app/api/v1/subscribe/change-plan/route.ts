@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
+// AUTHZ: Change-plan route — Stripe subscription update for in-app upgrades
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS, comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';

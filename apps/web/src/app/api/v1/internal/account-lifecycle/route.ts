@@ -12,6 +12,7 @@ import { createElement } from 'react';
 import { NextResponse, type NextRequest } from 'next/server';
 import { eq, and, lt, isNull, isNotNull, inArray } from '@propertypro/db/filters';
 import { accessPlans, accountDeletionRequests, communities, users, userRoles } from '@propertypro/db';
+// AUTHZ: Account lifecycle cron — cross-community deletion + notification processing
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';

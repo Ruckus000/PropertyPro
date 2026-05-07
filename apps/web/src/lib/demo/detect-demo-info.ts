@@ -5,6 +5,7 @@
  */
 import { and, eq, isNull, or } from '@propertypro/db/filters';
 import { demoInstances, communities } from '@propertypro/db';
+// AUTHZ: Demo info detection — queries demo_instances joined with communities (cross-tenant lookup)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { computeDemoStatus, type DemoLifecycleStatus } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';

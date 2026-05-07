@@ -76,6 +76,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 // Imports (after mocks are in place)
 // ---------------------------------------------------------------------------
 
+// AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { POST } from '../../src/app/api/v1/internal/expire-demos/route';

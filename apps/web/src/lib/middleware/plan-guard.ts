@@ -12,6 +12,7 @@
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
+// AUTHZ: B-01: Plan-to-feature gating — cross-community plan lookup for feature guard
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_FEATURES, getEffectiveFeatures, findCheapestPlanForFeature } from '@propertypro/shared';
 import type { CommunityType, CommunityFeatures, PlanId } from '@propertypro/shared';

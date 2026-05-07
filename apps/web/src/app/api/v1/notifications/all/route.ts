@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+// AUTHZ: Cross-community notifications — aggregated feed across all communities the user belongs to.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 import { createScopedClient, notifications } from '@propertypro/db';
 import { and, desc, eq, isNull, lt, sql } from '@propertypro/db/filters';

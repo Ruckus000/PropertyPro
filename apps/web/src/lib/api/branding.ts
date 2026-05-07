@@ -7,6 +7,7 @@
 import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
+// AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import type { CommunityBranding } from '@propertypro/shared';

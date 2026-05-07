@@ -12,6 +12,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getBrandingForCommunity } from '@/lib/api/branding';
+// AUTHZ: Phase 2C: Branding settings — communities is root tenant table
 import { findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
 import { BrandingForm } from '@/components/pm/BrandingForm';
 import { BrandingTable } from '@/components/pm/BrandingTable';
