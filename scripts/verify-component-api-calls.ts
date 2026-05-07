@@ -152,7 +152,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/contracts/BidTracker.tsx',
   'apps/web/src/components/contracts/ContractForm.tsx',
   'apps/web/src/components/contracts/ContractTable.tsx',
-  'apps/web/src/components/documents/document-list.tsx',
   'apps/web/src/components/documents/document-search.tsx',
   'apps/web/src/components/documents/document-version-history.tsx',
   'apps/web/src/components/finance/assessment-manager.tsx',

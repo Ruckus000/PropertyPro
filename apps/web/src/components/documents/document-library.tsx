@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
 import { isElevatedRole, type CommunityRole, type NewCommunityRole, type ManagerPermissions } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
-import { DocumentList, type DocumentListItem } from './document-list';
+import { type DocumentListItem } from './document-list';
+import { DocumentListContainer, useDocumentsInvalidator } from './document-list-container';
 import { DocumentViewer } from './document-viewer';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentCategoryFilter } from './document-category-filter';
@@ -39,11 +40,11 @@ export function DocumentLibrary({
   const [uploadCategoryId, setUploadCategoryId] = useState<number | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<DocumentListItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [refreshKey, setRefreshKey] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
 
   const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
+  const invalidateDocuments = useDocumentsInvalidator(communityId);
 
   const openUploadPanel = useCallback(() => {
     setUploadCategoryId(selectedCategoryId);
@@ -51,11 +52,11 @@ export function DocumentLibrary({
   }, [selectedCategoryId]);
 
   const handleDocumentUploaded = useCallback((result: UploadDocumentResult) => {
-    setRefreshKey((prev) => prev + 1);
+    invalidateDocuments();
     if (result.warnings.length === 0) {
       setShowUpload(false);
     }
-  }, []);
+  }, [invalidateDocuments]);
 
   const handleSelectDocument = useCallback((doc: DocumentListItem) => {
     setSelectedDocument(doc);
@@ -170,13 +171,12 @@ export function DocumentLibrary({
         <div className="grid min-h-[500px] lg:grid-cols-2">
           {/* Document list — hidden on mobile when viewing a document */}
           <div className={`min-w-0 border-r border-edge p-6 ${viewMode !== 'list' ? 'hidden lg:block' : ''}`}>
-            <DocumentList
+            <DocumentListContainer
               communityId={communityId}
               categoryId={selectedCategoryId}
               onSelectDocument={handleSelectDocument}
               onDeleteDocument={handleDeleteDocument}
               onUploadRequest={openUploadPanel}
-              refreshKey={refreshKey}
               canManage={canUpload}
             />
           </div>
