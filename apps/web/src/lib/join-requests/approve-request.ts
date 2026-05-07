@@ -92,29 +92,29 @@ export async function approveJoinRequest(
       displayTitle,
       legacyRole: req.residentType,
     });
-  });
 
-  // Notify the requester (best-effort, outside the transaction)
-  try {
-    await insertNotifications([
-      {
-        communityId: req.communityId,
-        userId: req.userId,
-        category: 'system',
-        title: 'Welcome to the community',
-        body: 'Your request to join has been approved.',
-        sourceType: 'join_request',
-        sourceId: String(req.id),
-        priority: 'normal',
-        actionUrl: '/dashboard',
-      },
-    ]);
-  } catch (error) {
-    console.error('[approve-join-request] notification insert failed', {
-      requestId: input.requestId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+    // Notify the requester INSIDE the transaction (Plan C3): if the
+    // notification insert fails for any reason, the entire approve rolls back
+    // rather than leaving an approved request with no audit/notification
+    // breadcrumb. Previous fire-and-forget pattern silently dropped failures
+    // and broke the audit-trail contract.
+    await insertNotifications(
+      [
+        {
+          communityId: req.communityId,
+          userId: req.userId,
+          category: 'system',
+          title: 'Welcome to the community',
+          body: 'Your request to join has been approved.',
+          sourceType: 'join_request',
+          sourceId: String(req.id),
+          priority: 'normal',
+          actionUrl: '/dashboard',
+        },
+      ],
+      tx,
+    );
+  });
 
   return {
     requestId: req.id,
@@ -141,51 +141,50 @@ export async function denyJoinRequest(
   if (!req) throw new NotFoundError('Join request not found');
   if (req.status !== 'pending') throw new ConflictError('Request is not pending');
 
-  // Conditional update: only transition pending → denied. Ensures atomicity
-  // if two admins race to deny the same request.
-  const updated = await db
-    .update(communityJoinRequests)
-    .set({
-      status: 'denied',
-      reviewedBy: input.reviewerUserId,
-      reviewedAt: new Date(),
-      reviewNotes: input.notes ?? null,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(communityJoinRequests.id, input.requestId),
-        eq(communityJoinRequests.status, 'pending'),
-      ),
-    )
-    .returning();
+  // Conditional update + notification inside a single transaction (Plan C3):
+  // either the deny status flip + audit notification both commit, or both
+  // roll back. Atomic against concurrent deny attempts via the
+  // status='pending' WHERE clause.
+  await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(communityJoinRequests)
+      .set({
+        status: 'denied',
+        reviewedBy: input.reviewerUserId,
+        reviewedAt: new Date(),
+        reviewNotes: input.notes ?? null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(communityJoinRequests.id, input.requestId),
+          eq(communityJoinRequests.status, 'pending'),
+        ),
+      )
+      .returning();
 
-  if (updated.length === 0) {
-    throw new ConflictError('Request is no longer pending');
-  }
+    if (updated.length === 0) {
+      throw new ConflictError('Request is no longer pending');
+    }
 
-  // Notify the requester (best-effort)
-  try {
-    await insertNotifications([
-      {
-        communityId: req.communityId,
-        userId: req.userId,
-        category: 'system',
-        title: 'Join request not approved',
-        body: input.notes
-          ? `Reason: ${input.notes}`
-          : 'Please contact your community admin for details.',
-        sourceType: 'join_request',
-        sourceId: String(req.id),
-        priority: 'normal',
-      },
-    ]);
-  } catch (error) {
-    console.error('[deny-join-request] notification insert failed', {
-      requestId: input.requestId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+    await insertNotifications(
+      [
+        {
+          communityId: req.communityId,
+          userId: req.userId,
+          category: 'system',
+          title: 'Join request not approved',
+          body: input.notes
+            ? `Reason: ${input.notes}`
+            : 'Please contact your community admin for details.',
+          sourceType: 'join_request',
+          sourceId: String(req.id),
+          priority: 'normal',
+        },
+      ],
+      tx,
+    );
+  });
 
   return {
     requestId: req.id,

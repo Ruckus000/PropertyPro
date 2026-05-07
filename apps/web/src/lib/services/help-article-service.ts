@@ -2,6 +2,18 @@ import * as fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
+import type { CommunityFeatures } from '@propertypro/shared';
+
+/**
+ * Shape acceptable to feature-gate helpers.
+ *
+ * `CommunityFeatures` is a typed interface with named boolean properties
+ * (`hasLeaseTracking`, `hasCompliance`, …) and no index signature, so it is
+ * not directly assignable to `Record<string, boolean>`. The union here lets
+ * callers pass either the typed flag object straight from
+ * `getFeaturesForCommunity()` or a plain record (useful for tests).
+ */
+type FeatureFlagSource = CommunityFeatures | Readonly<Record<string, boolean>>;
 
 function resolveHelpContentRoot(): string {
   const candidates = [
@@ -175,6 +187,32 @@ export function isArticleAvailableForFeatures(
     return true;
   }
   return gates.every((gate) => hasFeature(gate));
+}
+
+/**
+ * Builds a FeatureGateEvaluator from a CommunityFeatures-shaped object.
+ *
+ * `featureGates` strings in MDX frontmatter map directly to keys on
+ * `CommunityFeatures` (e.g. `hasLeaseTracking`). This helper lets callers
+ * convert that flag object into the predicate `isArticleAvailableForFeatures`
+ * expects, without leaking the cast at every call site.
+ */
+export function buildFeatureEvaluator(features: FeatureFlagSource): FeatureGateEvaluator {
+  const record = features as Readonly<Record<string, boolean>>;
+  return (gate) => Boolean(record[gate]);
+}
+
+/**
+ * Filters a list of articles to those whose featureGates are all satisfied
+ * by the given community feature flags. Articles without featureGates pass
+ * through unchanged.
+ */
+export function filterArticlesByFeatures<T extends Pick<HelpArticleMetadata, 'featureGates'>>(
+  articles: readonly T[],
+  features: FeatureFlagSource,
+): T[] {
+  const hasFeature = buildFeatureEvaluator(features);
+  return articles.filter((article) => isArticleAvailableForFeatures(article, hasFeature));
 }
 
 export function matchesArticleQuery(

@@ -15,6 +15,31 @@ Every API route handler must:
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
 
+## List Endpoints — Pagination Contract (ADR-003 / Plan A2)
+
+Any handler that returns an array of rows MUST paginate via the canonical
+helper. Do not return unbounded arrays; do not roll your own offset-based
+paginator.
+
+```ts
+import { createScopedClient, paginate, announcements } from '@propertypro/db';
+
+const scoped = createScopedClient(communityId);
+const result = await paginate(scoped, announcements, {
+  cursor: parsed.data.cursor,        // optional opaque string from a prior response
+  pageSize: parsed.data.pageSize,    // optional; defaults to 50, hard-capped at 100
+});
+
+return NextResponse.json(result);    // { data: [...], pagination: { nextCursor, hasMore, pageSize } }
+```
+
+- Cursor-based keyset pagination on `id`. Stable under concurrent inserts/deletes.
+- `pageSize` is silently clamped to `[1, 100]`; 50 is the default.
+- The cursor format is **opaque** — never construct one client-side; always
+  echo back the `nextCursor` you received.
+- Optional second arg `{ where?: SQL, direction?: 'asc' | 'desc' }` for
+  filtering and sort direction (defaults to `desc`, i.e. newest first).
+
 ## Middleware
 
 `apps/web/src/middleware.ts` handles: Supabase session refresh, tenant resolution, auth redirects, email verification checks, request tracing (`X-Request-ID`), rate limiting, and header sanitization.
