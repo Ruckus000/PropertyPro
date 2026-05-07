@@ -118,12 +118,14 @@ export default async function HelpArticlePage({
             <span aria-hidden="true">/</span>
             <div className="flex flex-wrap gap-2">
               {(article.metadata.statutes ?? []).map((statute) => (
-                <span
+                <Link
                   key={statute}
-                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900"
+                  href={`/help/statutes/${encodeURIComponent(statute)}?communityId=${context.communityId}`}
+                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900 transition-colors hover:bg-purple-100"
+                  aria-label={`See all articles tagged with ${statute}`}
                 >
-                  § {statute.replace(/^§\s*/, '')}
-                </span>
+                  {statute}
+                </Link>
               ))}
             </div>
           </>

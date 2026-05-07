@@ -470,3 +470,38 @@ export function getContextualArticles(
     )
     .slice(0, limit);
 }
+
+/**
+ * Returns every article in the corpus tagged with the given statute or
+ * House/Senate Bill reference. The match is case-insensitive on the
+ * normalised form (trim + leading § or HB/SB prefix preserved). Used by
+ * `/help/statutes/[ref]` (WS5).
+ */
+export function findArticlesByStatute(ref: string): HelpArticleMetadata[] {
+  const normalised = ref.trim();
+  if (!normalised) return [];
+  const lower = normalised.toLowerCase();
+  return getAllArticles().filter((article) =>
+    (article.statutes ?? []).some((entry) => entry.toLowerCase() === lower),
+  );
+}
+
+/**
+ * Returns every distinct statute / bill reference in the corpus, paired
+ * with the count of articles that cite it. Sorted by count desc then by
+ * reference asc for stable display ordering. Used by `/help/statutes`.
+ */
+export function listAllStatutes(): Array<{ ref: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const article of getAllArticles()) {
+    for (const ref of article.statutes ?? []) {
+      counts.set(ref, (counts.get(ref) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([ref, count]) => ({ ref, count }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.ref.localeCompare(b.ref);
+    });
+}
