@@ -13,7 +13,7 @@
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Reads communities row by primary key — communities is the root tenant table and cannot be scoped by community_id (it IS the community_id).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 

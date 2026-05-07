@@ -13,7 +13,7 @@
  * Next.js production error sanitization and reach the client UI.
  */
 import { eq } from '@propertypro/db/filters';
-// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
+// AUTHZ: Pre-tenant Stripe checkout — writes pending_signups before any community exists; no communityId available yet (the community is provisioned after successful payment).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import {
