@@ -7,14 +7,10 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
-import {
-  requireArcEnabled,
-  requireArcReadPermission,
-  requireArcReviewPermission,
-  requireArcWritePermission,
-} from '@/lib/violations/common';
+import { requireArcEnabled, requireArcReviewPermission } from '@/lib/violations/common';
 import { decideArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 const decideSchema = z.object({
   communityId: z.number().int().positive(),
@@ -41,8 +37,8 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireArcEnabled(membership);
-    requireArcReadPermission(membership);
-    requireArcWritePermission(membership);
+    requirePermission(membership, 'arc_submissions', 'read');
+    requirePermission(membership, 'arc_submissions', 'write');
     requireArcReviewPermission(membership);
 
     const requestId = req.headers.get('x-request-id');
@@ -52,8 +48,7 @@ export const POST = withErrorHandler(
       actorUserId,
       {
         decision: parseResult.data.decision,
-        reviewNotes: parseResult.data.reviewNotes ?? null,
-      },
+        reviewNotes: parseResult.data.reviewNotes ?? null },
       requestId,
     );
 

@@ -5,13 +5,9 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
-import {
-  getActorUnitIds,
-  isResidentRole,
-  requireArcEnabled,
-  requireArcReadPermission,
-} from '@/lib/violations/common';
+import { getActorUnitIds, isResidentRole, requireArcEnabled } from '@/lib/violations/common';
 import { getArcSubmissionForCommunity } from '@/lib/services/violations-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -22,7 +18,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireArcEnabled(membership);
-    requireArcReadPermission(membership);
+    requirePermission(membership, 'arc_submissions', 'read');
 
     const scoped = createScopedClient(communityId);
     const residentUnitIds = isResidentRole(membership.role)

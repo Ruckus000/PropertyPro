@@ -8,12 +8,9 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
-import {
-  requireViolationAdminWrite,
-  requireViolationsEnabled,
-  requireViolationsWritePermission,
-} from '@/lib/violations/common';
+import { requireViolationAdminWrite, requireViolationsEnabled } from '@/lib/violations/common';
 import { imposeViolationFineForCommunity } from '@/lib/services/violations-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const imposeFineSchema = z.object({
   communityId: z.number().int().positive(),
@@ -41,7 +38,7 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireViolationsEnabled(membership);
-    requireViolationsWritePermission(membership);
+    requirePermission(membership, 'violations', 'write');
     requireViolationAdminWrite(membership);
 
     const requestId = req.headers.get('x-request-id');
@@ -53,8 +50,7 @@ export const POST = withErrorHandler(
         amountCents: parseResult.data.amountCents,
         dueDate: parseResult.data.dueDate,
         graceDays: parseResult.data.graceDays,
-        notes: parseResult.data.notes ?? null,
-      },
+        notes: parseResult.data.notes ?? null },
       requestId,
     );
 

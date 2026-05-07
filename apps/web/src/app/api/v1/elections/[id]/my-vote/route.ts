@@ -4,8 +4,9 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { requireElectionsEnabled, requireElectionsReadPermission } from '@/lib/elections/common';
+import { requireElectionsEnabled } from '@/lib/elections/common';
 import { getMyElectionVoteReceiptForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -16,7 +17,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsReadPermission(membership);
+    requirePermission(membership, 'elections', 'read');
 
     const data = await getMyElectionVoteReceiptForCommunity(communityId, electionId, actorUserId);
     return NextResponse.json({ data });

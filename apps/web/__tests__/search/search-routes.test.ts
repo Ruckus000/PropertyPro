@@ -10,7 +10,6 @@ const {
   requireCommunityMembershipMock,
   requirePermissionMock,
   requireViolationsEnabledMock,
-  requireViolationsReadPermissionMock,
   searchAnnouncementsByTrigramMock,
   searchDocumentsMock,
   searchMaintenanceByTrigramMock,
@@ -27,7 +26,6 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   requireViolationsEnabledMock: vi.fn(),
-  requireViolationsReadPermissionMock: vi.fn(),
   searchAnnouncementsByTrigramMock: vi.fn(),
   searchDocumentsMock: vi.fn(),
   searchMaintenanceByTrigramMock: vi.fn(),
@@ -63,7 +61,6 @@ vi.mock('@/lib/db/access-control', () => ({
 
 vi.mock('@/lib/violations/common', () => ({
   requireViolationsEnabled: requireViolationsEnabledMock,
-  requireViolationsReadPermission: requireViolationsReadPermissionMock,
 }));
 
 import { GET as getAnnouncements } from '../../src/app/api/v1/search/announcements/route';
@@ -114,7 +111,6 @@ describe('command palette search routes', () => {
     requireCommunityMembershipMock.mockResolvedValue(makeMembership());
     requirePermissionMock.mockReturnValue(undefined);
     requireViolationsEnabledMock.mockResolvedValue(undefined);
-    requireViolationsReadPermissionMock.mockReturnValue(undefined);
     searchDocumentsMock.mockResolvedValue({
       data: [
         {

@@ -7,13 +7,10 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import {
-  requireElectionsAdminRole,
-  requireElectionsEnabled,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsAdminRole, requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { openElectionForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const stateTransitionSchema = z.object({
   communityId: z.number().int().positive(),
@@ -38,7 +35,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 
     const data = await openElectionForCommunity(

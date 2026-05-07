@@ -12,12 +12,10 @@ import {
   getActorUnitIds,
   isResidentRole,
   requireViolationAdminWrite,
-  requireViolationsEnabled,
-  requireViolationsReadPermission,
-  requireViolationsWritePermission,
-} from '@/lib/violations/common';
+  requireViolationsEnabled } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { requirePermission } from '@/lib/db/access-control';
 
 const updateViolationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -40,7 +38,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
-    requireViolationsReadPermission(membership);
+    requirePermission(membership, 'violations', 'read');
 
     const scoped = createScopedClient(communityId);
     const residentUnitIds = isResidentRole(membership.role)
@@ -70,7 +68,7 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
-    requireViolationsWritePermission(membership);
+    requirePermission(membership, 'violations', 'write');
     requireViolationAdminWrite(membership);
 
     const requestId = req.headers.get('x-request-id');
@@ -89,8 +87,7 @@ export const PATCH = withErrorHandler(
         resolutionNotes:
           parseResult.data.resolutionNotes != null
             ? sanitizeHtml(parseResult.data.resolutionNotes)
-            : parseResult.data.resolutionNotes,
-      },
+            : parseResult.data.resolutionNotes },
       requestId,
     );
 

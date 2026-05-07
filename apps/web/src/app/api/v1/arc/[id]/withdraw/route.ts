@@ -7,10 +7,11 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { getActorUnitIds, requireArcEnabled, requireArcSubmitterRole, requireArcWritePermission } from '@/lib/violations/common';
+import { getActorUnitIds, requireArcEnabled, requireArcSubmitterRole } from '@/lib/violations/common';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { withdrawArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 const withdrawSchema = z.object({
   communityId: z.number().int().positive(),
@@ -34,7 +35,7 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireArcEnabled(membership);
-    requireArcWritePermission(membership);
+    requirePermission(membership, 'arc_submissions', 'write');
     requireArcSubmitterRole(membership);
 
     const scoped = createScopedClient(communityId);

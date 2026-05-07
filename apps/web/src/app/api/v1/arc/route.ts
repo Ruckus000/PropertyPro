@@ -13,15 +13,10 @@ import {
   getActorUnitIds,
   isResidentRole,
   requireArcEnabled,
-  requireArcReadPermission,
-  requireArcSubmitterRole,
-  requireArcWritePermission,
-} from '@/lib/violations/common';
-import {
-  createArcSubmissionForCommunity,
-  listArcSubmissionsForCommunity,
-} from '@/lib/services/violations-service';
+  requireArcSubmitterRole } from '@/lib/violations/common';
+import { createArcSubmissionForCommunity, listArcSubmissionsForCommunity } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 const createArcSchema = z.object({
   communityId: z.number().int().positive(),
@@ -42,7 +37,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireArcEnabled(membership);
-  requireArcReadPermission(membership);
+  requirePermission(membership, 'arc_submissions', 'read');
 
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get('status');
@@ -68,9 +63,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       {
         error: {
           code: 'FORBIDDEN',
-          message: 'You can only view ARC submissions for your own unit',
-        },
-      },
+          message: 'You can only view ARC submissions for your own unit' } },
       { status: 403 },
     );
   }
@@ -99,7 +92,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireArcEnabled(membership);
-  requireArcWritePermission(membership);
+  requirePermission(membership, 'arc_submissions', 'write');
   requireArcSubmitterRole(membership);
 
   const scoped = createScopedClient(communityId);
@@ -109,9 +102,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       {
         error: {
           code: 'FORBIDDEN',
-          message: 'Residents can only submit ARC applications for their own unit',
-        },
-      },
+          message: 'Residents can only submit ARC applications for their own unit' } },
       { status: 403 },
     );
   }
@@ -127,8 +118,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       projectType: parseResult.data.projectType,
       estimatedStartDate: parseResult.data.estimatedStartDate ?? null,
       estimatedCompletionDate: parseResult.data.estimatedCompletionDate ?? null,
-      attachmentDocumentIds: parseResult.data.attachmentDocumentIds,
-    },
+      attachmentDocumentIds: parseResult.data.attachmentDocumentIds },
     requestId,
   );
 

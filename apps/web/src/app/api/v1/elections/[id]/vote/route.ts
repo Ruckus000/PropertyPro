@@ -7,12 +7,10 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import {
-  requireElectionsEnabled,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { castElectionVoteForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const castElectionVoteSchema = z.object({
   communityId: z.number().int().positive(),
@@ -41,7 +39,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
 
     const requestId = req.headers.get('x-request-id');
     const data = await castElectionVoteForCommunity(
@@ -52,8 +50,7 @@ export const POST = withErrorHandler(
         selectedCandidateIds: parsed.data.selectedCandidateIds,
         isAbstention: parsed.data.isAbstention,
         proxyId: parsed.data.proxyId ?? null,
-        unitId: parsed.data.unitId ?? null,
-      },
+        unitId: parsed.data.unitId ?? null },
       requestId,
     );
 

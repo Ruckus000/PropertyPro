@@ -10,8 +10,7 @@ const {
   parseCommunityIdFromBodyMock,
   parseCommunityIdFromQueryMock,
   requireElectionsEnabledMock,
-  requireElectionsReadPermissionMock,
-  requireElectionsWritePermissionMock,
+  requirePermissionMock,
   getMyVoteReceiptForCommunityMock,
   castElectionVoteForCommunityMock,
   openElectionForCommunityMock,
@@ -30,8 +29,7 @@ const {
   parseCommunityIdFromBodyMock: vi.fn((_req: Request, communityId: number) => communityId),
   parseCommunityIdFromQueryMock: vi.fn(() => 42),
   requireElectionsEnabledMock: vi.fn(),
-  requireElectionsReadPermissionMock: vi.fn(),
-  requireElectionsWritePermissionMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
   getMyVoteReceiptForCommunityMock: vi.fn(),
   castElectionVoteForCommunityMock: vi.fn(),
   openElectionForCommunityMock: vi.fn(),
@@ -67,9 +65,11 @@ vi.mock('@/lib/finance/request', () => ({
 
 vi.mock('@/lib/elections/common', () => ({
   requireElectionsEnabled: requireElectionsEnabledMock,
-  requireElectionsReadPermission: requireElectionsReadPermissionMock,
-  requireElectionsWritePermission: requireElectionsWritePermissionMock,
   requireElectionsAdminRole: vi.fn(),
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/services/elections-service', () => ({
@@ -127,7 +127,7 @@ describe('elections routes', () => {
     expect(res.status).toBe(200);
     expect(getMyVoteReceiptForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1');
     expect(requireElectionsEnabledMock).toHaveBeenCalledTimes(1);
-    expect(requireElectionsReadPermissionMock).toHaveBeenCalledTimes(1);
+    expect(requirePermissionMock).toHaveBeenCalledWith(expect.anything(), 'elections', 'read');
   });
 
   it('returns 403 when attorney review is not complete for my-vote', async () => {
@@ -188,7 +188,7 @@ describe('elections routes', () => {
       },
       'req-1',
     );
-    expect(requireElectionsWritePermissionMock).toHaveBeenCalledTimes(1);
+    expect(requirePermissionMock).toHaveBeenCalledWith(expect.anything(), 'elections', 'write');
     expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
   });
 

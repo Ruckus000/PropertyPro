@@ -5,13 +5,13 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requireViolationsEnabledMock,
-  requireViolationsWritePermissionMock,
+  requirePermissionMock,
   createUploadedDocumentMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requireViolationsEnabledMock: vi.fn(),
-  requireViolationsWritePermissionMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
   createUploadedDocumentMock: vi.fn(),
 }));
 
@@ -25,7 +25,10 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 vi.mock('@/lib/violations/common', () => ({
   requireViolationsEnabled: requireViolationsEnabledMock,
-  requireViolationsWritePermission: requireViolationsWritePermissionMock,
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({

@@ -2,11 +2,16 @@ import type { NewCommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
-import { requirePermission } from '@/lib/db/access-control';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
+
+// RBAC permission checks ('violations' / 'arc_submissions', read/write) are
+// performed via requirePermission() from @/lib/db/access-control directly at
+// call sites. The helpers below cover non-RBAC concerns: feature flags, plan
+// gating, the isAdmin role flag, and resident-role checks — none of which
+// belong in the RBAC matrix.
 
 export async function requireViolationsEnabled(membership: CommunityMembership): Promise<void> {
   const features = getFeaturesForCommunity(membership.communityType);
@@ -24,26 +29,10 @@ export async function requireArcEnabled(membership: CommunityMembership): Promis
   await requirePlanFeature(membership.communityId, 'hasARC');
 }
 
-export function requireViolationsReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership, 'violations', 'read');
-}
-
-export function requireViolationsWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership, 'violations', 'write');
-}
-
 export function requireViolationAdminWrite(membership: CommunityMembership): void {
   if (!membership.isAdmin) {
     throw new ForbiddenError('Only violation administrators can perform this action');
   }
-}
-
-export function requireArcReadPermission(membership: CommunityMembership): void {
-  requirePermission(membership, 'arc_submissions', 'read');
-}
-
-export function requireArcWritePermission(membership: CommunityMembership): void {
-  requirePermission(membership, 'arc_submissions', 'write');
 }
 
 export function requireArcReviewPermission(membership: CommunityMembership): void {
