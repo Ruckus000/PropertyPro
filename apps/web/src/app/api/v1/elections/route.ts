@@ -7,11 +7,9 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import {
-  requireElectionsEnabled,
-  requireElectionsReadPermission,
-} from '@/lib/elections/common';
+import { requireElectionsEnabled } from '@/lib/elections/common';
 import { listElectionsForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const electionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(25).optional(),
@@ -28,8 +26,7 @@ const electionsQuerySchema = z.object({
         .split(',')
         .map((entry) => entry.trim())
         .filter(Boolean) as ElectionStatus[];
-    }),
-});
+    }) });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -37,20 +34,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   requireElectionsEnabled(membership);
-  requireElectionsReadPermission(membership);
+  requirePermission(membership, 'elections', 'read');
 
   const searchParams = Object.fromEntries(new URL(req.url).searchParams.entries());
   const parsed = electionsQuerySchema.safeParse(searchParams);
   if (!parsed.success) {
     throw new ValidationError('Invalid elections query', {
-      fields: formatZodErrors(parsed.error),
-    });
+      fields: formatZodErrors(parsed.error) });
   }
 
   const data = await listElectionsForCommunity(communityId, {
     limit: parsed.data.limit,
-    statuses: parsed.data.statuses,
-  });
+    statuses: parsed.data.statuses });
 
   return NextResponse.json({ data });
 });

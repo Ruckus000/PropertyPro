@@ -7,18 +7,14 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import {
-  requireElectionsAdminRole,
-  requireElectionsEnabled,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsAdminRole, requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { cancelElectionForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const cancelElectionSchema = z.object({
   communityId: z.number().int().positive(),
-  canceledReason: z.string().trim().min(1).max(500),
-});
+  canceledReason: z.string().trim().min(1).max(500) });
 
 export const POST = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -30,8 +26,7 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election cancel payload', {
-        fields: formatZodErrors(parsed.error),
-      });
+        fields: formatZodErrors(parsed.error) });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
@@ -39,7 +34,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 
     const data = await cancelElectionForCommunity(

@@ -11,18 +11,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
-import {
-  getActorUnitIds,
-  isResidentRole,
-  requireViolationsEnabled,
-  requireViolationsReadPermission,
-  requireViolationsWritePermission,
-} from '@/lib/violations/common';
+import { getActorUnitIds, isResidentRole, requireViolationsEnabled } from '@/lib/violations/common';
 import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
-import {
-  createViolationForCommunity,
-  listViolationsForCommunity,
-} from '@/lib/services/violations-service';
+import { requirePermission } from '@/lib/db/access-control';
+import { createViolationForCommunity, listViolationsForCommunity } from '@/lib/services/violations-service';
 
 const createViolationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -30,8 +22,7 @@ const createViolationSchema = z.object({
   category: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(4000),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),
-  evidenceDocumentIds: z.array(z.number().int().positive()).optional(),
-});
+  evidenceDocumentIds: z.array(z.number().int().positive()).optional() });
 
 const listStatusSchema = z.enum([
   'reported',
@@ -48,7 +39,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireViolationsEnabled(membership);
-  requireViolationsReadPermission(membership);
+  requirePermission(membership, 'violations', 'read');
 
   const { searchParams } = new URL(req.url);
   const rawUnitId = searchParams.get('unitId');
@@ -71,9 +62,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       {
         error: {
           code: 'FORBIDDEN',
-          message: 'You can only view violations for your own unit',
-        },
-      },
+          message: 'You can only view violations for your own unit' } },
       { status: 403 },
     );
   }
@@ -83,8 +72,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     unitId,
     allowedUnitIds: residentUnitIds,
     createdAfter,
-    createdBefore,
-  });
+    createdBefore });
 
   const hydrated = await hydrateReportedByRole(scoped, data);
   return NextResponse.json({ data: hydrated });
@@ -97,8 +85,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid violation payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
+      fields: formatZodErrors(parseResult.error) });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
@@ -106,7 +93,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireViolationsEnabled(membership);
-  requireViolationsWritePermission(membership);
+  requirePermission(membership, 'violations', 'write');
 
   const scoped = createScopedClient(communityId);
   if (isResidentRole(membership.role)) {
@@ -116,9 +103,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         {
           error: {
             code: 'FORBIDDEN',
-            message: 'You must be associated with a unit before reporting a violation',
-          },
-        },
+            message: 'You must be associated with a unit before reporting a violation' } },
         { status: 403 },
       );
     }
@@ -127,9 +112,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         {
           error: {
             code: 'FORBIDDEN',
-            message: 'Residents can only report violations for their own unit',
-          },
-        },
+            message: 'Residents can only report violations for their own unit' } },
         { status: 403 },
       );
     }
@@ -156,8 +139,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       category: parseResult.data.category,
       description: parseResult.data.description,
       severity: parseResult.data.severity as ViolationSeverity | undefined,
-      evidenceDocumentIds: parseResult.data.evidenceDocumentIds,
-    },
+      evidenceDocumentIds: parseResult.data.evidenceDocumentIds },
     requestId,
   );
 

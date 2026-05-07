@@ -13,15 +13,10 @@ import {
   getActorUnitIds,
   isResidentRole,
   requireArcEnabled,
-  requireArcReadPermission,
-  requireArcSubmitterRole,
-  requireArcWritePermission,
-} from '@/lib/violations/common';
-import {
-  createArcSubmissionForCommunity,
-  listArcSubmissionsForCommunity,
-} from '@/lib/services/violations-service';
+  requireArcSubmitterRole } from '@/lib/violations/common';
+import { createArcSubmissionForCommunity, listArcSubmissionsForCommunity } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePermission } from '@/lib/db/access-control';
 
 const createArcSchema = z.object({
   communityId: z.number().int().positive(),
@@ -31,8 +26,7 @@ const createArcSchema = z.object({
   projectType: z.string().trim().min(1).max(120),
   estimatedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   estimatedCompletionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  attachmentDocumentIds: z.array(z.number().int().positive()).optional(),
-});
+  attachmentDocumentIds: z.array(z.number().int().positive()).optional() });
 
 const listArcStatusSchema = z.enum(['submitted', 'under_review', 'approved', 'denied', 'withdrawn']);
 
@@ -42,7 +36,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireArcEnabled(membership);
-  requireArcReadPermission(membership);
+  requirePermission(membership, 'arc_submissions', 'read');
 
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get('status');
@@ -51,8 +45,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const parsedStatus = rawStatus ? listArcStatusSchema.safeParse(rawStatus) : null;
   if (rawStatus && !parsedStatus?.success) {
     throw new ValidationError('Invalid ARC status filter', {
-      fields: [{ field: 'status', message: 'status must be one of submitted, under_review, approved, denied, withdrawn' }],
-    });
+      fields: [{ field: 'status', message: 'status must be one of submitted, under_review, approved, denied, withdrawn' }] });
   }
 
   const status = parsedStatus?.success ? (parsedStatus.data as ArcSubmissionStatus) : undefined;
@@ -68,9 +61,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       {
         error: {
           code: 'FORBIDDEN',
-          message: 'You can only view ARC submissions for your own unit',
-        },
-      },
+          message: 'You can only view ARC submissions for your own unit' } },
       { status: 403 },
     );
   }
@@ -78,8 +69,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const data = await listArcSubmissionsForCommunity(communityId, {
     status,
     unitId,
-    allowedUnitIds: residentUnitIds,
-  });
+    allowedUnitIds: residentUnitIds });
   return NextResponse.json({ data });
 });
 
@@ -90,8 +80,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid ARC submission payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
+      fields: formatZodErrors(parseResult.error) });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
@@ -99,7 +88,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireArcEnabled(membership);
-  requireArcWritePermission(membership);
+  requirePermission(membership, 'arc_submissions', 'write');
   requireArcSubmitterRole(membership);
 
   const scoped = createScopedClient(communityId);
@@ -109,9 +98,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       {
         error: {
           code: 'FORBIDDEN',
-          message: 'Residents can only submit ARC applications for their own unit',
-        },
-      },
+          message: 'Residents can only submit ARC applications for their own unit' } },
       { status: 403 },
     );
   }
@@ -127,8 +114,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       projectType: parseResult.data.projectType,
       estimatedStartDate: parseResult.data.estimatedStartDate ?? null,
       estimatedCompletionDate: parseResult.data.estimatedCompletionDate ?? null,
-      attachmentDocumentIds: parseResult.data.attachmentDocumentIds,
-    },
+      attachmentDocumentIds: parseResult.data.attachmentDocumentIds },
     requestId,
   );
 

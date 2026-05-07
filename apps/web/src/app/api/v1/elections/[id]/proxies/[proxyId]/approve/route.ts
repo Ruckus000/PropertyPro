@@ -7,17 +7,13 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import {
-  requireElectionsAdminRole,
-  requireElectionsEnabled,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsAdminRole, requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { approveElectionProxyForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const proxyMutationSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+  communityId: z.number().int().positive() });
 
 export const POST = withErrorHandler(
   async (
@@ -33,8 +29,7 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid proxy approval payload', {
-        fields: formatZodErrors(parsed.error),
-      });
+        fields: formatZodErrors(parsed.error) });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
@@ -42,7 +37,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 
     const data = await approveElectionProxyForCommunity(

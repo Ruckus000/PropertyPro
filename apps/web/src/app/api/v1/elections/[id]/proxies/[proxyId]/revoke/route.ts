@@ -7,16 +7,13 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import {
-  requireElectionsEnabled,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { revokeElectionProxyForCommunity } from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
 
 const proxyMutationSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+  communityId: z.number().int().positive() });
 
 export const POST = withErrorHandler(
   async (
@@ -32,8 +29,7 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid proxy revoke payload', {
-        fields: formatZodErrors(parsed.error),
-      });
+        fields: formatZodErrors(parsed.error) });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
@@ -41,7 +37,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
 
     const actorIsAdmin = membership.isAdmin;
 

@@ -7,22 +7,15 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
-import {
-  requireElectionsEnabled,
-  requireElectionsReadPermission,
-  requireElectionsWritePermission,
-} from '@/lib/elections/common';
+import { requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import {
-  createElectionProxyForCommunity,
-  listElectionProxiesForCommunity,
-} from '@/lib/services/elections-service';
+import { requirePermission } from '@/lib/db/access-control';
+import { createElectionProxyForCommunity, listElectionProxiesForCommunity } from '@/lib/services/elections-service';
 
 const createElectionProxySchema = z.object({
   communityId: z.number().int().positive(),
   proxyHolderUserId: z.string().uuid(),
-  grantorUnitId: z.number().int().positive().nullable().optional(),
-});
+  grantorUnitId: z.number().int().positive().nullable().optional() });
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -33,7 +26,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsReadPermission(membership);
+    requirePermission(membership, 'elections', 'read');
 
     const data = await listElectionProxiesForCommunity(communityId, electionId);
     return NextResponse.json({ data });
@@ -50,8 +43,7 @@ export const POST = withErrorHandler(
 
     if (!parsed.success) {
       throw new ValidationError('Invalid election proxy payload', {
-        fields: formatZodErrors(parsed.error),
-      });
+        fields: formatZodErrors(parsed.error) });
     }
 
     const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
@@ -59,7 +51,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);
-    requireElectionsWritePermission(membership);
+    requirePermission(membership, 'elections', 'write');
 
     const data = await createElectionProxyForCommunity(
       communityId,
@@ -67,8 +59,7 @@ export const POST = withErrorHandler(
       actorUserId,
       {
         proxyHolderUserId: parsed.data.proxyHolderUserId,
-        grantorUnitId: parsed.data.grantorUnitId ?? null,
-      },
+        grantorUnitId: parsed.data.grantorUnitId ?? null },
       req.headers.get('x-request-id'),
     );
 

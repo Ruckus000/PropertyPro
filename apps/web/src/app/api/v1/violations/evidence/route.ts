@@ -7,11 +7,9 @@ import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import {
-  requireViolationsEnabled,
-  requireViolationsWritePermission,
-} from '@/lib/violations/common';
+import { requireViolationsEnabled } from '@/lib/violations/common';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
+import { requirePermission } from '@/lib/db/access-control';
 
 const createViolationEvidenceSchema = z.object({
   communityId: z.number().int().positive(),
@@ -20,8 +18,7 @@ const createViolationEvidenceSchema = z.object({
   filePath: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
-  mimeType: z.string().min(1).optional(),
-});
+  mimeType: z.string().min(1).optional() });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -30,8 +27,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (!parseResult.success) {
     throw new ValidationError('Invalid violation evidence payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
+      fields: formatZodErrors(parseResult.error) });
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
@@ -39,7 +35,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
   await requireViolationsEnabled(membership);
-  requireViolationsWritePermission(membership);
+  requirePermission(membership, 'violations', 'write');
 
   const result = await createUploadedDocument({
     userId: actorUserId,
@@ -50,8 +46,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     fileName: parseResult.data.fileName,
     fileSize: parseResult.data.fileSize,
     sourceType: 'violation_evidence',
-    sendDocumentNotifications: false,
-  });
+    sendDocumentNotifications: false });
 
   return NextResponse.json({ data: result.document }, { status: 201 });
 });

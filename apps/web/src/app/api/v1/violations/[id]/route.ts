@@ -12,12 +12,10 @@ import {
   getActorUnitIds,
   isResidentRole,
   requireViolationAdminWrite,
-  requireViolationsEnabled,
-  requireViolationsReadPermission,
-  requireViolationsWritePermission,
-} from '@/lib/violations/common';
+  requireViolationsEnabled } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { requirePermission } from '@/lib/db/access-control';
 
 const updateViolationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -28,8 +26,7 @@ const updateViolationSchema = z.object({
   evidenceDocumentIds: z.array(z.number().int().positive()).optional(),
   noticeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   hearingDate: z.string().datetime().nullable().optional(),
-  resolutionNotes: z.string().max(4000).nullable().optional(),
-});
+  resolutionNotes: z.string().max(4000).nullable().optional() });
 
 export const GET = withErrorHandler(
   async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
@@ -40,7 +37,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
-    requireViolationsReadPermission(membership);
+    requirePermission(membership, 'violations', 'read');
 
     const scoped = createScopedClient(communityId);
     const residentUnitIds = isResidentRole(membership.role)
@@ -62,15 +59,14 @@ export const PATCH = withErrorHandler(
 
     if (!parseResult.success) {
       throw new ValidationError('Invalid violation update payload', {
-        fields: formatZodErrors(parseResult.error),
-      });
+        fields: formatZodErrors(parseResult.error) });
     }
 
     const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
-    requireViolationsWritePermission(membership);
+    requirePermission(membership, 'violations', 'write');
     requireViolationAdminWrite(membership);
 
     const requestId = req.headers.get('x-request-id');
@@ -89,8 +85,7 @@ export const PATCH = withErrorHandler(
         resolutionNotes:
           parseResult.data.resolutionNotes != null
             ? sanitizeHtml(parseResult.data.resolutionNotes)
-            : parseResult.data.resolutionNotes,
-      },
+            : parseResult.data.resolutionNotes },
       requestId,
     );
 
