@@ -76,7 +76,7 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
-  createAdminClient: createAdminClientMock,
+  createAdminTypedClient: createAdminClientMock,
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   esignTemplates: esignTemplatesTable,
   esignSubmissions: esignSubmissionsTable,
