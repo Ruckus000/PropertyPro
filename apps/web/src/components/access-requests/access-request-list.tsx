@@ -25,13 +25,40 @@ export interface AccessRequest {
 
 /* ─────── API helper ─────── */
 
+interface AccessRequestsPage {
+  data: AccessRequest[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * The admin review surface needs the full pending-request list to render.
+ * Walks the cursor-based pagination contract (Plan B3) until `hasMore` is
+ * false. Default pageSize=50 covers typical pending volumes in a single
+ * request; the loop is the safety net for communities with backlogs, capped
+ * at MAX_PAGES to prevent runaway pagination.
+ */
+const MAX_PAGES = 20; // 20 × 100 = 2000 pending requests — well above any realistic ceiling.
+
 async function fetchAccessRequests(communityId: number): Promise<AccessRequest[]> {
-  const response = await fetch(`/api/v1/access-requests?communityId=${communityId}`);
-  if (!response.ok) {
-    throw new Error('Failed to load access requests');
+  const collected: AccessRequest[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const params = new URLSearchParams({ communityId: String(communityId) });
+    if (cursor) params.set('cursor', cursor);
+    const response = await fetch(`/api/v1/access-requests?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error('Failed to load access requests');
+    }
+    const json = (await response.json()) as { data: AccessRequestsPage };
+    collected.push(...json.data.data);
+    if (!json.data.pagination.hasMore || !json.data.pagination.nextCursor) break;
+    cursor = json.data.pagination.nextCursor;
   }
-  const json = await response.json() as { data: AccessRequest[] };
-  return json.data;
+  return collected;
 }
 
 /* ─────── Helpers ─────── */
