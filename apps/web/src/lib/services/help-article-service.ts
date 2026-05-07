@@ -225,6 +225,37 @@ export function filterArticlesByFeatures<T extends Pick<HelpArticleMetadata, 'fe
   return articles.filter((article) => isArticleAvailableForFeatures(article, hasFeature));
 }
 
+/**
+ * Fail-open variant of filterArticlesByFeatures.
+ *
+ * If feature evaluation throws — e.g. a malformed feature record, a renamed
+ * flag, or an upstream service blip — every article is returned unfiltered
+ * and the supplied onError callback is invoked. This prevents the worst-case
+ * help-center failure mode the 2026-05-07 audit identified: a feature-flag
+ * service blip silently emptying the help center for a tenant.
+ *
+ * Call sites that have access to Sentry should pass an `onError` that calls
+ * `captureMessage('help_feature_gate_failure', …)`. The helper itself stays
+ * dependency-free so it remains usable in tests and edge runtimes.
+ */
+export function safelyFilterArticlesByFeatures<
+  T extends Pick<HelpArticleMetadata, 'featureGates'>,
+>(
+  articles: readonly T[],
+  features: FeatureFlagSource | null | undefined,
+  options?: { onError?: (error: unknown) => void },
+): T[] {
+  if (!features) {
+    return [...articles];
+  }
+  try {
+    return filterArticlesByFeatures(articles, features);
+  } catch (error) {
+    options?.onError?.(error);
+    return [...articles];
+  }
+}
+
 export function matchesArticleQuery(
   article: Pick<
     HelpArticleMetadata,

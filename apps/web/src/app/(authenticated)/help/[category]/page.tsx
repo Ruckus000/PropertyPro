@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
+import { captureMessage } from '@sentry/nextjs';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import {
-  filterArticlesByFeatures,
   getCategoryTree,
+  safelyFilterArticlesByFeatures,
 } from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
 import { PageHeader } from '@/components/shared/page-header';
@@ -27,11 +28,37 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
     notFound();
   }
 
-  // Filter out articles whose featureGates don't match this community type
-  // (e.g. apartment-only articles for a condo). If every article in the
-  // category is gated out for this community, treat the category as missing.
-  const features = getFeaturesForCommunity(membership.communityType);
-  const articles = filterArticlesByFeatures(allArticles, features);
+  // Filter by featureGates with fail-open semantics: if feature evaluation
+  // throws (malformed flags, upstream service blip, renamed flag), surface
+  // every article and capture a Sentry warning rather than emptying the
+  // help center for the tenant. See ADR-004.
+  let features;
+  try {
+    features = getFeaturesForCommunity(membership.communityType);
+  } catch (error) {
+    captureMessage('help_feature_gate_failure', {
+      level: 'warning',
+      extra: {
+        source: 'help_category_page',
+        communityId: membership.communityId,
+        communityType: membership.communityType,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    features = null;
+  }
+  const articles = safelyFilterArticlesByFeatures(allArticles, features, {
+    onError: (error) => {
+      captureMessage('help_feature_gate_failure', {
+        level: 'warning',
+        extra: {
+          source: 'help_category_page_filter',
+          communityId: membership.communityId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    },
+  });
 
   if (articles.length === 0) {
     notFound();
