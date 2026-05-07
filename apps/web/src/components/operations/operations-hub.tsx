@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -19,9 +20,21 @@ import {
 } from '@/hooks/use-operations';
 import { cn } from '@/lib/utils';
 import { formatInCommunityTimezone } from '@/lib/utils/format-date';
-import { RequestCreateSheet } from './RequestCreateSheet';
-import { WorkOrderCreateSheet } from './WorkOrderCreateSheet';
-import { ReservationCreateSheet } from './ReservationCreateSheet';
+
+// Create-sheets are loaded on demand (when the user opens one) so the
+// initial Operations Hub bundle does not pay for them up front.
+const RequestCreateSheet = dynamic(
+  () => import('./RequestCreateSheet').then((m) => ({ default: m.RequestCreateSheet })),
+  { ssr: false },
+);
+const WorkOrderCreateSheet = dynamic(
+  () => import('./WorkOrderCreateSheet').then((m) => ({ default: m.WorkOrderCreateSheet })),
+  { ssr: false },
+);
+const ReservationCreateSheet = dynamic(
+  () => import('./ReservationCreateSheet').then((m) => ({ default: m.ReservationCreateSheet })),
+  { ssr: false },
+);
 
 /**
  * OPERATIONS_HUB_CREATE_SHEETS env var (read at module load):
@@ -541,22 +554,24 @@ export function OperationsHub({
         ) : null}
       </section>
 
-      <RequestCreateSheet
-        open={CREATE_SHEETS_ENABLED && createValue === 'request' && requestsEnabled}
-        onClose={closeCreate}
-        communityId={communityId}
-        userId={userId}
-      />
-      {isAdmin && workOrdersEnabled ? (
+      {CREATE_SHEETS_ENABLED && createValue === 'request' && requestsEnabled ? (
+        <RequestCreateSheet
+          open
+          onClose={closeCreate}
+          communityId={communityId}
+          userId={userId}
+        />
+      ) : null}
+      {CREATE_SHEETS_ENABLED && createValue === 'work-order' && isAdmin && workOrdersEnabled ? (
         <WorkOrderCreateSheet
-          open={CREATE_SHEETS_ENABLED && createValue === 'work-order'}
+          open
           onClose={closeCreate}
           communityId={communityId}
         />
       ) : null}
-      {reservationsEnabled ? (
+      {CREATE_SHEETS_ENABLED && createValue === 'reservation' && reservationsEnabled ? (
         <ReservationCreateSheet
-          open={CREATE_SHEETS_ENABLED && createValue === 'reservation'}
+          open
           onClose={closeCreate}
           communityId={communityId}
           communityTimezone={communityTimezone}

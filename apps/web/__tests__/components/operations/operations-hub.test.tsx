@@ -395,7 +395,7 @@ describe('OperationsHub', () => {
     expect(screen.queryByRole('button', { name: /dispatch work order/i })).not.toBeInTheDocument();
   });
 
-  it('opens a drawer when ?create=request is set in the URL', () => {
+  it('opens a drawer when ?create=request is set in the URL', async () => {
     searchParamsMock.mockReturnValue('tab=requests&create=request');
     render(
       <OperationsHub
@@ -409,7 +409,8 @@ describe('OperationsHub', () => {
         communityTimezone="America/New_York"
       />,
     );
-    expect(screen.getByRole('heading', { name: /submit request/i })).toBeInTheDocument();
+    // Create-sheets are loaded via next/dynamic, so wait for the chunk.
+    expect(await screen.findByRole('heading', { name: /submit request/i })).toBeInTheDocument();
   });
 
   it('pushes ?create=request when the CTA button is clicked', () => {
