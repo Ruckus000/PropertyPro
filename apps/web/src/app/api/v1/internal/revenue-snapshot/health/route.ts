@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server';
 import { desc } from '@propertypro/db/filters';
 import { revenueSnapshots } from '@propertypro/db';
+// AUTHZ: Internal cron/admin route — runs unauthenticated against system tables, not user-facing.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 const STALE_THRESHOLD_MS = 26 * 60 * 60 * 1000;

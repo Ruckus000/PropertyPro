@@ -5,6 +5,7 @@ import {
   notificationPreferences,
   logAuditEvent,
 } from '@propertypro/db';
+// AUTHZ: P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import type { CommunityType } from '@propertypro/shared';

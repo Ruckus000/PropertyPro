@@ -13,6 +13,7 @@ import { redirect } from 'next/navigation';
 import { type NextRequest } from 'next/server';
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
+// AUTHZ: Billing/Stripe path — pre-tenant subscription lookup.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createBillingPortalSession } from '@/lib/services/stripe-service';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

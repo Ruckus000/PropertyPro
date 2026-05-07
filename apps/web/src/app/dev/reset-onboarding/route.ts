@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@propertypro/db/filters';
+// AUTHZ: Dev reset-onboarding — resets community onboarding state (dev-only, 404 in production)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 const db = createUnscopedClient();

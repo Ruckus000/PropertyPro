@@ -27,6 +27,7 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import type { AccessPlan } from '@propertypro/db';
+// AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 

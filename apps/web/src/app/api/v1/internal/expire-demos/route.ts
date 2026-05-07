@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
+// AUTHZ: Internal cron/admin route — runs unauthenticated against system tables, not user-facing.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities, accessRequests } from '@propertypro/db';
 import { eq, and, isNull, lt, gt, inArray, sql } from '@propertypro/db/filters';

@@ -9,6 +9,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { eq } from '@propertypro/db/filters';
 import { accountDeletionRequests } from '@propertypro/db';
+// AUTHZ: Platform-admin route — operates on platform-level tables (no community_id scoping).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';

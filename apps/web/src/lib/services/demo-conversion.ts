@@ -14,6 +14,7 @@
 import type Stripe from 'stripe';
 import { and, eq, isNull } from '@propertypro/db/filters';
 import { communities, demoInstances, users, userRoles } from '@propertypro/db';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getPresetPermissions } from '@propertypro/shared';

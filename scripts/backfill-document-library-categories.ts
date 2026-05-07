@@ -2,6 +2,7 @@
 
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { documentCategories, documents, violations } from '@propertypro/db';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   normalizeCategoryName,

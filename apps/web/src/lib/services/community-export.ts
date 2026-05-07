@@ -12,6 +12,7 @@
  */
 import { createScopedClient } from '@propertypro/db';
 import { inArray } from '@propertypro/db/filters';
+// AUTHZ: P4-64: Community data export — residents export joins users table (no community_id column)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   userRoles,

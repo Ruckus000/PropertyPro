@@ -5,6 +5,7 @@
  * (the root tenant key) in a public-facing context where no session exists.
  */
 import { siteBlocks } from '@propertypro/db';
+// AUTHZ: JSX site template — public site queries published template by community_id (root tenant key)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq, and, isNull } from '@propertypro/db/filters';
 

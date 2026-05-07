@@ -13,6 +13,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { logAuditEvent, visitorLog } from '@propertypro/db';
 import { and, isNotNull, isNull, sql } from '@propertypro/db/filters';
+// AUTHZ: Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';

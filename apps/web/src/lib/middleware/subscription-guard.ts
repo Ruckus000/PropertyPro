@@ -13,6 +13,7 @@
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 

@@ -1,3 +1,4 @@
+// AUTHZ: Community picker — cross-community user membership query for post-login routing
 import {
   findUserCommunitiesUnscoped,
   countUserCommunitiesUnscoped,

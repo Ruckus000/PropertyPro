@@ -13,6 +13,7 @@
  * Next.js production error sanitization and reach the client UI.
  */
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import {

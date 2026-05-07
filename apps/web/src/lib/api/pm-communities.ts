@@ -1,3 +1,4 @@
+// AUTHZ: P3-PRE-03: PM portfolio cross-community read boundary
 import {
   findManagedCommunitiesPortfolioUnscoped,
   isPmAdminInAnyCommunity,

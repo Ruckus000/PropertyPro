@@ -19,6 +19,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
+// AUTHZ: Dev agent-login — password-based login for agents (dev-only, 404 in production)
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 
 /** Hard-coded demo emails — deterministic seed data, not secrets. */

@@ -6,6 +6,7 @@ vi.mock('@/lib/billing/volume-discounts', () => ({
   applyVolumeDiscountToSubscriptions: vi.fn().mockResolvedValue(undefined),
 }));
 
+// AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, userRoles, users } from '@propertypro/db';
 import { eq, inArray } from '@propertypro/db/filters';

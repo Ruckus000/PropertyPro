@@ -9,6 +9,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { eq, and, sql } from '@propertypro/db/filters';
 import { stripePrices } from '@propertypro/db';
+// AUTHZ: Readiness check — global stripe_prices + DB connectivity (no community context)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { requireCronSecret } from '@/lib/api/cron-auth';

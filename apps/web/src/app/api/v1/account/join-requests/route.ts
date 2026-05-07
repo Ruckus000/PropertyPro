@@ -23,6 +23,7 @@ import {
   RateLimitError,
 } from '@/lib/api/errors';
 import { checkJoinRequestEligibility } from '@/lib/join-requests/eligibility';
+// AUTHZ: Authenticated user's own join requests (own-user scoped, no community context yet)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communityJoinRequests } from '@propertypro/db';
 import { and, desc, eq } from '@propertypro/db/filters';

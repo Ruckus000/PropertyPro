@@ -20,6 +20,7 @@ import {
   stripePrices,
   stripeWebhookEvents,
 } from '@propertypro/db';
+// AUTHZ: Webhook handler — pre-tenant lookup before community context is resolved.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   getStripeClient,

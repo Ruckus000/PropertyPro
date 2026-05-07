@@ -15,6 +15,7 @@ import {
 } from '@propertypro/shared/server';
 import { communities, demoInstances } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';

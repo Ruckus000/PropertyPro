@@ -6,6 +6,7 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { calculatePricingImpact } from '@/lib/billing/pricing-preview';
 import { getBillingGroupByOwner } from '@/lib/billing/billing-group-service';
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
+// AUTHZ: Pricing preview — queries all communities in a billing group; authorized by billing group ownership
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';

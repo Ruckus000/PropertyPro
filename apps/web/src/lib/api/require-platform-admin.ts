@@ -9,6 +9,7 @@
  * platform-level lookup — no RLS scoping applies.
  */
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+// AUTHZ: Platform admin auth guard — queries platform_admin_users (no community_id)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { platformAdminUsers } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';

@@ -29,6 +29,7 @@ import {
   lte,
   or,
 } from '@propertypro/db/filters';
+// AUTHZ: Calendar reminder cron — cross-community reminder enqueue + delivery
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { CalendarEventReminderEmail, sendEmail } from '@propertypro/email';
 import { checkPermissionV2 } from '@/lib/db/access-control';

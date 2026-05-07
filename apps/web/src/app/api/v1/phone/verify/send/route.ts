@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { users } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

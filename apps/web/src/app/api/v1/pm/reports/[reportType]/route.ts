@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+// AUTHZ: PM portfolio route — cross-community aggregation by design.
 import {
   isPmAdminInAnyCommunity,
   getMaintenanceVolumeReport,

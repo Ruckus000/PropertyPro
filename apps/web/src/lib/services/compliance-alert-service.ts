@@ -13,6 +13,7 @@ import {
   visitorLog,
 } from '@propertypro/db';
 import { and, gte, inArray, isNull, lte } from '@propertypro/db/filters';
+// AUTHZ: Compliance alert cron — cross-community overdue scanning
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { sendNotification } from '@/lib/services/notification-service';
 import type { ComplianceAlertEvent } from '@/lib/services/notification-service';

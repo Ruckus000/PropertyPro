@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { eq, and } from '@propertypro/db/filters';
 import { accountDeletionRequests } from '@propertypro/db';
+// AUTHZ: Admin deletion-requests routes — platform-level deletion workflow management
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';

@@ -29,6 +29,7 @@
  * auto-execute it.
  */
 import { pathToFileURL } from 'node:url';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient } from '@propertypro/db/unsafe';
 
 export interface RunOpsScriptConfig {

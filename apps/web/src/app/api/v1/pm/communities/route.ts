@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { COMMUNITY_TYPES } from '@propertypro/shared';
+// AUTHZ: P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
 import { isPmAdminInAnyCommunity } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';

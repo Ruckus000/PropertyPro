@@ -5,6 +5,7 @@
  * awaited (not fire-and-forget), but non-fatal on failure.
  * Uses ON CONFLICT DO NOTHING for idempotent dedupe.
  */
+// AUTHZ: Conversion event emission — global analytics table, not community-scoped
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { conversionEvents } from '@propertypro/db';
 

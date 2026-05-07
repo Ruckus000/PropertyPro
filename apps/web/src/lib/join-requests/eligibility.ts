@@ -11,6 +11,7 @@
  * Authorization contract: the caller MUST have already authenticated the userId
  * via requireAuthenticatedUserId().
  */
+// AUTHZ: Self-service community linking: pre-tenant eligibility checks + cross-community lookups authorization contract: caller authenticates userId before invoking these helpers
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { userRoles, communityJoinRequests } from '@propertypro/db';
 import { and, eq, gte } from '@propertypro/db/filters';

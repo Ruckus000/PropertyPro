@@ -13,6 +13,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { accessPlans, communities } from '@propertypro/db';
+// AUTHZ: Subscribe route — Stripe checkout + access plan conversion
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';

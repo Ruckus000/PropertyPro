@@ -10,6 +10,7 @@
  * field so role selection works without client-side JavaScript.
  */
 import { notFound, redirect } from 'next/navigation';
+// AUTHZ: Demo lifecycle: landing page, entry, conversion, expiry cron, session helper
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';

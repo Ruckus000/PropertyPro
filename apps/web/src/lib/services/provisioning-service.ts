@@ -28,6 +28,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+// AUTHZ: P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db';
 import {

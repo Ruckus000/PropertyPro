@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
+// AUTHZ: Resend signup verification email — pre-tenant state, looks up pendingSignups row
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { pendingSignups } from '@propertypro/db';

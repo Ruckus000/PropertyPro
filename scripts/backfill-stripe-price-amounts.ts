@@ -8,6 +8,7 @@
 import Stripe from 'stripe';
 import { eq, isNull } from '@propertypro/db/filters';
 import { stripePrices } from '@propertypro/db';
+// AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { runOpsScript } from './lib/run-ops-script';
 

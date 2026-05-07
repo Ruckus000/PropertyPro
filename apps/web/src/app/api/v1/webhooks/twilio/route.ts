@@ -12,6 +12,7 @@ import { mapTwilioStatus } from '@/lib/services/sms/twilio-provider';
 import { updateRecipientSmsStatusByIds } from '@/lib/services/emergency-broadcast-service';
 import { emergencyBroadcastRecipients } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 /**

@@ -6,6 +6,7 @@
  * already verified the reviewer's admin membership in the target community
  * via requirePermission(membership, 'residents', 'write').
  */
+// AUTHZ: Documented bypass — see scripts/verify-scoped-db-access.ts unsafeAllowlist.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   communityJoinRequests,

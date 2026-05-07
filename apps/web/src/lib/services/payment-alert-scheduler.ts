@@ -16,6 +16,7 @@
  */
 import { createElement } from 'react';
 import { and, eq, inArray, isNull, lte } from '@propertypro/db/filters';
+// AUTHZ: P2-34a: Payment reminders + subscription guard — cross-community cron + mutation guard
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, users, userRoles } from '@propertypro/db';
 import {

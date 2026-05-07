@@ -13,6 +13,7 @@ import {
   announcements,
   users,
 } from '@propertypro/db';
+// AUTHZ: Phase 2C: Bulk operations — cross-community announcements + document uploads
 import {
   isPmAdminInAnyCommunity,
   findManagedCommunitiesPortfolioUnscoped,

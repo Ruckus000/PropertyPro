@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { eq } from '@propertypro/db/filters';
 import { provisioningJobs, pendingSignups } from '@propertypro/db';
+// AUTHZ: Provisioning status polling — pre-login endpoint, queries provisioning_jobs + pending_signups
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 

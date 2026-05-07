@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError } from '@/lib/api/errors';
+// AUTHZ: Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
 import { isPmAdminInAnyCommunity } from '@propertypro/db/unsafe';
 import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-service';
 

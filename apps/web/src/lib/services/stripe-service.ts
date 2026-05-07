@@ -8,6 +8,7 @@
  */
 import Stripe from 'stripe';
 import { eq, and } from '@propertypro/db/filters';
+// AUTHZ: P2-34: Stripe integration — pre-tenant context, no communityId available
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups, stripePrices } from '@propertypro/db';
 import type { CommunityType, PlanId } from '@propertypro/shared';

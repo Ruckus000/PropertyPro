@@ -12,6 +12,7 @@
  * `community_id IN (...)` that bypasses RLS — parallel scoped queries
  * preserve the RLS guarantee.
  */
+// AUTHZ: Cross-community query helpers — unified owner dashboard + aggregated notifications. User is the authorization anchor; callers MUST resolve the user's authorized community ids via getAuthorizedCommunityIds() and then run scoped queries per community.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 import { createScopedClient } from '@propertypro/db';
 import {

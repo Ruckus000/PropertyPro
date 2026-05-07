@@ -12,6 +12,7 @@ import {
   type WorkOrderStatus,
 } from '@propertypro/db';
 import { and, asc, desc, eq, inArray, sql } from '@propertypro/db/filters';
+// AUTHZ: Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch after the caller has already verified tenant membership and reservation ownership scope.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 import {

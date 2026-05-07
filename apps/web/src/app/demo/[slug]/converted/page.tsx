@@ -13,6 +13,7 @@
 export const dynamic = 'force-dynamic';
 
 import { notFound } from 'next/navigation';
+// AUTHZ: Demo lifecycle — cross-tenant fixture setup before tenant binding.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { demoInstances, communities } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';

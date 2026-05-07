@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { users } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// AUTHZ: E-02: Account settings page — reads user row (no community_id on users table)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { AccountSettingsClient } from '@/components/settings/account-settings-client';
