@@ -157,8 +157,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'audit', 'read');
 
   // --- Pagination params (validated; paginate() clamps pageSize to [1, 100]) ---
-  const cursor = searchParams.get('cursor') ?? undefined;
-  const rawLimit = searchParams.get('limit');
+  // Use `||` to collapse empty-string params to undefined/null. paginate's
+  // own decodeCursor guards against empty cursors, but limit parsing would
+  // otherwise see `Number("") === 0` and 400 with "must be a positive integer"
+  // when a caller sends `?limit=`.
+  const cursor = searchParams.get('cursor') || undefined;
+  const rawLimit = searchParams.get('limit') || null;
   let pageSize: number | undefined;
 
   if (rawLimit !== null) {

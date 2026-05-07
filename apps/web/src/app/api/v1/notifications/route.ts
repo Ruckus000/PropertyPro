@@ -65,12 +65,17 @@ const querySchema = z.object({
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?limit=`,
+  // `?category=`, `?unread_only=`) collapse to undefined rather than passing
+  // `""` to Zod, which would 400 on `min(1)` / `positive()` / `enum`
+  // constraints. The `unread_only` preprocessing also benefits — empty string
+  // becomes undefined → optional → no filter.
   const parsed = querySchema.safeParse({
     communityId: searchParams.get('communityId'),
-    cursor: searchParams.get('cursor') ?? undefined,
-    limit: searchParams.get('limit') ?? undefined,
-    category: searchParams.get('category') ?? undefined,
-    unread_only: searchParams.get('unread_only') ?? undefined,
+    cursor: searchParams.get('cursor') || undefined,
+    limit: searchParams.get('limit') || undefined,
+    category: searchParams.get('category') || undefined,
+    unread_only: searchParams.get('unread_only') || undefined,
   });
 
   if (!parsed.success) {

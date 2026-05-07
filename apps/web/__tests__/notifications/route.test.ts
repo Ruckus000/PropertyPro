@@ -204,6 +204,22 @@ describe('GET /api/v1/notifications', () => {
     expect(res.status).toBe(200);
   });
 
+  it('treats empty-string params as missing (regression: ?cursor= and ?limit= and ?category= and ?unread_only= must not 400)', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/notifications?communityId=42&cursor=&limit=&category=&unread_only=',
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const [, , input] = paginateMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      { cursor?: string; pageSize?: number },
+    ];
+    // cursor empty -> undefined; limit empty -> undefined -> default 20
+    expect(input.cursor).toBeUndefined();
+    expect(input.pageSize).toBe(20);
+  });
+
   it('returns 200 for malformed cursor (paginate treats as first page)', async () => {
     const req = new NextRequest(
       'http://localhost:3000/api/v1/notifications?communityId=42&cursor=not-base64url',
