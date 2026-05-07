@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('../../src/components/documents/document-upload-area', () => ({
   DocumentUploadArea: () => <div>upload area</div>,
@@ -101,13 +102,16 @@ import { DocumentLibrary } from '../../src/components/documents/document-library
 
 describe('DocumentLibrary', () => {
   it('updates mimeType when selecting a document version', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <DocumentLibrary
-        communityId={9}
-        userId="user-1"
-        userRole="board_president"
-        hasEsign
-      />,
+      <QueryClientProvider client={qc}>
+        <DocumentLibrary
+          communityId={9}
+          userId="user-1"
+          userRole="board_president"
+          hasEsign
+        />
+      </QueryClientProvider>,
     );
 
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');

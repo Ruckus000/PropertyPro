@@ -1,6 +1,5 @@
 'use client';
 
-import React, { useState, useTransition, useEffect, useCallback } from 'react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 
@@ -22,18 +21,21 @@ export interface DocumentListItem {
   sourceType?: 'library' | 'violation_evidence' | 'authored' | null;
 }
 
-interface DocumentListResponse {
-  data: DocumentListItem[];
-}
-
+/**
+ * Pure presentational document list. No data hooks, no fetch, no permission
+ * derivation — receives display data and behavioral callbacks from a
+ * container (see `document-list-container.tsx`). The B5 layering pattern.
+ */
 interface DocumentListProps {
-  communityId: number;
-  categoryId?: number | null;
+  documents: DocumentListItem[];
+  isLoading: boolean;
+  errorMessage: string | null;
+  deletingId: number | null;
+  canManage: boolean;
   onSelectDocument?: (document: DocumentListItem) => void;
-  onDeleteDocument?: (document: DocumentListItem) => void;
+  onDeleteDocument: (document: DocumentListItem) => void | Promise<void>;
+  onDownloadDocument: (document: DocumentListItem) => void;
   onUploadRequest?: () => void;
-  refreshKey?: number;
-  canManage?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -97,89 +99,27 @@ export function ExtractionStatusBadge({ status }: { status?: ExtractionStatus | 
 }
 
 export function DocumentList({
-  communityId,
-  categoryId,
+  documents,
+  isLoading,
+  errorMessage,
+  deletingId,
+  canManage,
   onSelectDocument,
   onDeleteDocument,
+  onDownloadDocument,
   onUploadRequest,
-  refreshKey = 0,
-  canManage = false,
 }: DocumentListProps) {
-  const [documents, setDocuments] = useState<DocumentListItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  const fetchDocuments = useCallback(() => {
-    startTransition(async () => {
-      try {
-        setError(null);
-        const params = new URLSearchParams({
-          communityId: String(communityId),
-        });
-        if (categoryId != null) {
-          params.set('categoryId', String(categoryId));
-        }
-
-        const res = await fetch(`/api/v1/documents?${params.toString()}`);
-        if (!res.ok) {
-          throw new Error(`Failed to load documents (${res.status})`);
-        }
-
-        const json = (await res.json()) as DocumentListResponse;
-        setDocuments(json.data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load documents');
-      }
-    });
-  }, [communityId, categoryId]);
-
-  useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments, refreshKey]);
-
-  const handleDelete = async (doc: DocumentListItem) => {
-    if (!canManage) {
-      return;
-    }
-    if (!confirm(`Are you sure you want to delete "${doc.title}"?`)) {
-      return;
-    }
-
-    setDeletingId(doc.id);
-    try {
-      const res = await fetch(`/api/v1/documents?id=${doc.id}&communityId=${communityId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to delete document');
-      }
-
-      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-      onDeleteDocument?.(doc);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete document');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleDownload = (doc: DocumentListItem) => {
-    window.open(`/api/v1/documents/${doc.id}/download?communityId=${communityId}&attachment=true`, '_blank');
-  };
-
-  if (error) {
+  if (errorMessage) {
     return (
       <AlertBanner
         status="danger"
         title="Something went wrong"
-        description={error}
+        description={errorMessage}
       />
     );
   }
 
-  if (isPending && documents.length === 0) {
+  if (isLoading && documents.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
@@ -235,7 +175,7 @@ export function DocumentList({
           <div className="ml-4 flex items-center gap-2">
             <button
               type="button"
-              onClick={() => handleDownload(doc)}
+              onClick={() => onDownloadDocument(doc)}
               className="rounded p-2 text-content-tertiary hover:bg-surface-muted hover:text-content-secondary"
               title="Download"
             >
@@ -251,7 +191,7 @@ export function DocumentList({
             {canManage && (
               <button
                 type="button"
-                onClick={() => handleDelete(doc)}
+                onClick={() => void onDeleteDocument(doc)}
                 disabled={deletingId === doc.id}
                 className="rounded p-2 text-content-tertiary hover:bg-status-danger-bg hover:text-status-danger disabled:opacity-50"
                 title="Delete"

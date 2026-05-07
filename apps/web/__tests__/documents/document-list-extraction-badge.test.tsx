@@ -123,6 +123,19 @@ describe('DocumentList extraction badges', () => {
     vi.unstubAllGlobals();
   });
 
+  // DocumentList is now a pure presentational component (B5 pattern). The
+  // container owns data fetching; these tests pass documents directly via
+  // props instead of stubbing global fetch.
+  const baseProps = {
+    isLoading: false,
+    errorMessage: null,
+    deletingId: null,
+    canManage: false,
+    onSelectDocument: () => {},
+    onDeleteDocument: () => {},
+    onDownloadDocument: () => {},
+  };
+
   it('renders extraction badges for documents with various statuses', async () => {
     const mockDocuments = [
       {
@@ -163,14 +176,8 @@ describe('DocumentList extraction badges', () => {
       },
     ];
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: mockDocuments }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
     await act(async () => {
-      root.render(<DocumentList communityId={42} />);
+      root.render(<DocumentList {...baseProps} documents={mockDocuments} />);
       await flushEffects();
     });
 
@@ -199,14 +206,8 @@ describe('DocumentList extraction badges', () => {
       },
     ];
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: mockDocuments }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
     await act(async () => {
-      root.render(<DocumentList communityId={42} />);
+      root.render(<DocumentList {...baseProps} documents={mockDocuments} />);
       await flushEffects();
     });
 
