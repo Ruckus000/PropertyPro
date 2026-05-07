@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { X, Search, BookOpen, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { useHelpWidget } from './help-widget-provider';
 import { useHelpSearch, useContextualHelp, type HelpArticleResult } from '@/hooks/use-help';
 
@@ -35,11 +36,15 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: searchResults } = useHelpSearch(searchQuery, communityId);
+  const { data: searchResults, error: searchError } = useHelpSearch(
+    searchQuery,
+    communityId,
+  );
   const { data: contextualArticles } = useContextualHelp(pathname, communityId);
 
   const isSearching = searchQuery.length >= 2;
-  const hasSearchResults = searchResults && (searchResults.articles.length > 0 || searchResults.faqs.length > 0);
+  const hasSearchResults =
+    searchResults && (searchResults.articles.length > 0 || searchResults.faqs.length > 0);
 
   return (
     <>
@@ -90,8 +95,19 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {/* Search error — explicit AlertBanner instead of silent stale-cache fallback */}
+          {isSearching && searchError && (
+            <AlertBanner
+              status="danger"
+              variant="subtle"
+              title="We couldn't run that search"
+              description="Try again, or visit the help center for the full article list."
+              className="mb-4"
+            />
+          )}
+
           {/* Search results */}
-          {isSearching && hasSearchResults && searchResults && (
+          {isSearching && !searchError && hasSearchResults && searchResults && (
             <div className="space-y-4">
               {searchResults.articles.length > 0 && (
                 <section>
@@ -124,7 +140,7 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
             </div>
           )}
 
-          {isSearching && !hasSearchResults && (
+          {isSearching && !searchError && !hasSearchResults && (
             <p className="py-8 text-center text-sm text-content-tertiary">
               No results for &ldquo;{searchQuery}&rdquo;
             </p>
