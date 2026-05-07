@@ -74,9 +74,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'residents', 'write');
 
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
   const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') ?? undefined,
-    pageSize: searchParams.get('pageSize') ?? undefined,
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
   });
   if (!parsedQuery.success) {
     throw new ValidationError('Invalid query parameters');

@@ -37,17 +37,18 @@ interface AccessRequestsPage {
 /**
  * The admin review surface needs the full pending-request list to render.
  * Walks the cursor-based pagination contract (Plan B3) until `hasMore` is
- * false. Default pageSize=50 covers typical pending volumes in a single
- * request; the loop is the safety net for communities with backlogs, capped
- * at MAX_PAGES to prevent runaway pagination.
+ * false. We request the maximum page size (paginate's MAX_PAGE_SIZE=100) to
+ * minimize network round-trips for communities with backlogs; the cap of
+ * MAX_PAGES × 100 = 2000 is a safety net well above any realistic ceiling.
  */
-const MAX_PAGES = 20; // 20 × 100 = 2000 pending requests — well above any realistic ceiling.
+const MAX_PAGES = 20;
+const PAGE_SIZE = '100'; // matches paginate's MAX_PAGE_SIZE — silently clamped if higher.
 
 async function fetchAccessRequests(communityId: number): Promise<AccessRequest[]> {
   const collected: AccessRequest[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < MAX_PAGES; i++) {
-    const params = new URLSearchParams({ communityId: String(communityId) });
+    const params = new URLSearchParams({ communityId: String(communityId), pageSize: PAGE_SIZE });
     if (cursor) params.set('cursor', cursor);
     const response = await fetch(`/api/v1/access-requests?${params.toString()}`);
     if (!response.ok) {

@@ -343,6 +343,28 @@ describe('Access Request Routes', () => {
       expect(json.data.data).toHaveLength(0);
     });
 
+    it('treats empty-string query params as missing (regression: ?cursor= and ?pageSize= must not 400)', async () => {
+      // The route uses `||` (not `??`) so empty-string params are treated as
+      // undefined rather than passed to Zod, which would 400 on the `min(1)`
+      // / `positive()` constraints. This protects against stale clients
+      // sending `?cursor=` or `?pageSize=` in URL builders.
+      paginateMock.mockResolvedValueOnce({
+        data: [],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
+
+      const req = makeRequest('/api/v1/access-requests?cursor=&pageSize=');
+      const response = await listGET(req);
+      expect(response.status).toBe(200);
+
+      const [, , input] = paginateMock.mock.calls[0] as [
+        unknown,
+        unknown,
+        { cursor?: string; pageSize?: number },
+      ];
+      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
+    });
+
     it('forwards cursor and pageSize to paginate()', async () => {
       paginateMock.mockResolvedValueOnce({
         data: [],
