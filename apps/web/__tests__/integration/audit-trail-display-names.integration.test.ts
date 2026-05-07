@@ -33,10 +33,16 @@ const describeDb = getDescribeDb();
 
 type AuditTrailRouteModule = typeof import('../../src/app/api/v1/audit-trail/route');
 
+/**
+ * Post-B3: audit-trail returns the canonical double-wrapped envelope. The
+ * inner page lives at `body.data` and contains `{ data, pagination, users }`.
+ */
 interface AuditTrailResponse {
-  data: Array<{ id: number; userId: string | null; action: string }>;
-  pagination: { nextCursor: string | null; hasMore: boolean; pageSize: number };
-  users: Record<string, string>;
+  data: {
+    data: Array<{ id: number; userId: string | null; action: string }>;
+    pagination: { nextCursor: string | null; hasMore: boolean; pageSize: number };
+    users: Record<string, string>;
+  };
 }
 
 let state: TestKitState | null = null;
@@ -127,11 +133,11 @@ describeDb('audit-trail returns real actor display names + scopes correctly', ()
     const body = (await res.json()) as AuditTrailResponse;
 
     const expectedFullName = `${actorA.fixture.fullName} ${kit.runSuffix}`;
-    expect(body.users[actorA.id]).toBe(expectedFullName);
+    expect(body.data.users[actorA.id]).toBe(expectedFullName);
 
     // The old (buggy) behavior would return a UUID prefix; assert it doesn't.
-    expect(body.users[actorA.id]).not.toBe(actorA.id.substring(0, 8));
-    expect(body.users[actorA.id]?.length ?? 0).toBeGreaterThan(8);
+    expect(body.data.users[actorA.id]).not.toBe(actorA.id.substring(0, 8));
+    expect(body.data.users[actorA.id]?.length ?? 0).toBeGreaterThan(8);
   });
 
   it('returns 403 when an actor in another community queries communityA', async () => {
@@ -184,8 +190,8 @@ describeDb('audit-trail returns real actor display names + scopes correctly', ()
     expect(res.status).toBe(200);
     const body = (await res.json()) as AuditTrailResponse;
 
-    const leaked = body.data.find((row) => row.userId === actorB.id);
+    const leaked = body.data.data.find((row) => row.userId === actorB.id);
     expect(leaked).toBeUndefined();
-    expect(body.users[actorB.id]).toBeUndefined();
+    expect(body.data.users[actorB.id]).toBeUndefined();
   });
 });
