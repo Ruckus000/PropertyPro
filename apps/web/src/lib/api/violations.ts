@@ -109,6 +109,14 @@ export async function listViolations(
     page?: number;
     limit?: number;
   },
+  /**
+   * Optional abort signal forwarded to `walkPaginated`. Pass this from a
+   * `useEffect` cleanup or TanStack Query queryFn signal to cancel an
+   * in-flight walk when filters change. Without it, rapid filter changes
+   * race: an older walk can resolve after a newer one and clobber its
+   * cached state.
+   */
+  signal?: AbortSignal,
 ): Promise<ListViolationsResponse> {
   const baseParams: Record<string, string> = {
     communityId: String(communityId),
@@ -119,7 +127,7 @@ export async function listViolations(
   if (params?.createdAfter) baseParams.createdAfter = params.createdAfter;
   if (params?.createdBefore) baseParams.createdBefore = params.createdBefore;
 
-  const all = await walkPaginated<ViolationItem>('/api/v1/violations', baseParams);
+  const all = await walkPaginated<ViolationItem>('/api/v1/violations', baseParams, { signal });
 
   const limit = params?.limit ?? all.length;
   const page = params?.page ?? 1;
