@@ -6,12 +6,12 @@
  *
  * GET pagination (Plan B3):
  * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
- * - Filters (`status`, `unitId`, `createdAfter`, `createdBefore`, and the
- *   resident-role `allowedUnitIds` safeguard) push into the SQL `where`
- *   predicate. The route now owns the where construction inline rather than
- *   delegating to the service. `listViolationsForCommunity` is preserved for
- *   the resident-self-view page (which renders a small list without needing
- *   pagination).
+ * - Filters (`status`, `severity`, `unitId`, `createdAfter`, `createdBefore`,
+ *   and the resident-role `allowedUnitIds` safeguard) push into the SQL
+ *   `where` predicate. The route now owns the where construction inline
+ *   rather than delegating to the service. `listViolationsForCommunity` is
+ *   preserved for the resident-self-view page (which renders a small list
+ *   without needing pagination).
  * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
  *   the previous `(createdAt desc, id desc)` composite ordering.
  * - Response envelope is double-wrapped per the paginated-route contract:
@@ -68,6 +68,8 @@ const listStatusSchema = z.enum([
   'dismissed',
 ]);
 
+const listSeveritySchema = z.enum(['minor', 'moderate', 'major']);
+
 const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
@@ -93,12 +95,19 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawUnitId = searchParams.get('unitId');
   const rawStatus = searchParams.get('status');
+  const rawSeverity = searchParams.get('severity');
   const createdAfter = searchParams.get('createdAfter') ?? undefined;
   const createdBefore = searchParams.get('createdBefore') ?? undefined;
 
   const unitId = rawUnitId ? parsePositiveInt(rawUnitId, 'unitId') : undefined;
   const status = rawStatus
     ? (listStatusSchema.parse(rawStatus) as ViolationStatus)
+    : undefined;
+  // Validate severity against the closed enum. Invalid values throw a
+  // ZodError → ValidationError via withErrorHandler — matches the strictness
+  // of `status` parsing above.
+  const severity = rawSeverity
+    ? (listSeveritySchema.parse(rawSeverity) as ViolationSeverity)
     : undefined;
 
   const scoped = createScopedClient(communityId);
@@ -129,6 +138,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const filterClauses = [];
   if (status !== undefined) filterClauses.push(eq(violations.status, status));
+  if (severity !== undefined) filterClauses.push(eq(violations.severity, severity));
   if (unitId !== undefined) filterClauses.push(eq(violations.unitId, unitId));
   if (residentUnitIds && residentUnitIds.length > 0) {
     filterClauses.push(inArray(violations.unitId, residentUnitIds));

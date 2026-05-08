@@ -38,6 +38,7 @@ const {
     id: Symbol('violations.id'),
     unitId: Symbol('violations.unit_id'),
     status: Symbol('violations.status'),
+    severity: Symbol('violations.severity'),
     createdAt: Symbol('violations.created_at'),
   },
   unitsTable: { id: Symbol('units.id') },
@@ -228,6 +229,59 @@ describe('GET /api/v1/violations — paginate() integration', () => {
     ];
     expect(options.where).toEqual({
       __eq: { col: violationsTable.status, val: 'resolved' },
+    });
+  });
+
+  it('pushes severity filter into the where predicate', async () => {
+    paginateMock.mockResolvedValueOnce({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    await GET(makeRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}&severity=major`));
+
+    const [, , , options] = paginateMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      unknown,
+      { where: unknown },
+    ];
+    expect(options.where).toEqual({
+      __eq: { col: violationsTable.severity, val: 'major' },
+    });
+  });
+
+  it('rejects an invalid severity value with a ValidationError', async () => {
+    await expect(
+      GET(makeRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}&severity=catastrophic`)),
+    ).rejects.toThrow();
+    expect(paginateMock).not.toHaveBeenCalled();
+  });
+
+  it('combines status + severity + unitId via and()', async () => {
+    paginateMock.mockResolvedValueOnce({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    await GET(
+      makeRequest(
+        `/api/v1/violations?communityId=${COMMUNITY_ID}&status=resolved&severity=major&unitId=7`,
+      ),
+    );
+
+    const [, , , options] = paginateMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      unknown,
+      { where: { __and: unknown[] } },
+    ];
+    expect(options.where).toEqual({
+      __and: [
+        { __eq: { col: violationsTable.status, val: 'resolved' } },
+        { __eq: { col: violationsTable.severity, val: 'major' } },
+        { __eq: { col: violationsTable.unitId, val: 7 } },
+      ],
     });
   });
 
