@@ -17,7 +17,7 @@ import {
   UnprocessableEntityError,
 } from '@/lib/api/errors';
 
-interface PollRecord {
+export interface PollRecord {
   [key: string]: unknown;
   id: number;
   communityId: number;
@@ -169,7 +169,7 @@ function parseOptionalEndDate(value: string | null | undefined): Date | null {
   return parsed;
 }
 
-function mapPollRow(row: PollRecord): PollRecord {
+export function mapPollRow(row: PollRecord): PollRecord {
   return {
     ...row,
     pollType: assertPollType(row.pollType),
@@ -226,31 +226,6 @@ function validateVoteSelection(poll: PollRecord, selectedOptions: string[]): str
   }
 
   return uniqueSelections;
-}
-
-export async function listPollsForCommunity(
-  communityId: number,
-  filters: {
-    isActive?: boolean;
-    includeEnded?: boolean;
-  },
-): Promise<PollRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const whereFilters = [];
-
-  whereFilters.push(eq(polls.isActive, filters.isActive ?? true));
-
-  const rows = await scoped
-    .selectFrom<PollRecord>(polls, {}, and(...whereFilters))
-    .orderBy(desc(polls.createdAt));
-
-  const mappedRows = rows.map(mapPollRow);
-  if (filters.includeEnded) {
-    return mappedRows;
-  }
-
-  const now = Date.now();
-  return mappedRows.filter((row) => row.endsAt === null || row.endsAt.getTime() > now);
 }
 
 export async function createPollForCommunity(

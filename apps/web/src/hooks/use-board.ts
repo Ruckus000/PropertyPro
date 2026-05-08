@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 export interface BoardPollListItem {
   id: number;
@@ -168,9 +169,14 @@ export function useBoardPolls(
 
   return useQuery({
     queryKey: BOARD_KEYS.polls.list(communityId, includeEnded),
-    queryFn: async () =>
-      requestJson<BoardPollListItem[]>(
-        `/api/v1/polls?communityId=${communityId}&includeEnded=${includeEnded ? 'true' : 'false'}`,
+    queryFn: ({ signal }) =>
+      walkPaginated<BoardPollListItem>(
+        '/api/v1/polls',
+        {
+          communityId: String(communityId),
+          includeEnded: includeEnded ? 'true' : 'false',
+        },
+        { signal },
       ),
     enabled: communityId > 0,
     staleTime: 60_000,
