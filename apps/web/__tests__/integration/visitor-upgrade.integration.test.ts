@@ -498,9 +498,13 @@ describeDb('visitor upgrade (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/visitors/denied?communityId=${communityA.id}&active=true`)),
     );
     expect(listResponse.status).toBe(200);
-    const listJson = await parseJson<{ data: Array<Record<string, unknown>> }>(listResponse);
-    expect(listJson.data.some((row) => row.id === inactiveEntryId)).toBe(true);
-    expect(listJson.data.some((row) => row.id === activeEntryId)).toBe(true);
+    // Plan B3: /api/v1/visitors/denied now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    const listJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(listResponse);
+    expect(listJson.data.data.some((row) => row.id === inactiveEntryId)).toBe(true);
+    expect(listJson.data.data.some((row) => row.id === activeEntryId)).toBe(true);
 
     const deactivateResponse = await routeModules.deniedVisitorDetail.PATCH(
       jsonRequest(apiUrl(`/api/v1/visitors/denied/${inactiveEntryId}`), 'PATCH', {
@@ -555,9 +559,11 @@ describeDb('visitor upgrade (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/visitors/denied?communityId=${communityA.id}&active=false`)),
     );
     expect(postDeleteListResponse.status).toBe(200);
-    const postDeleteListJson = await parseJson<{ data: Array<Record<string, unknown>> }>(postDeleteListResponse);
-    expect(postDeleteListJson.data.some((row) => row.id === inactiveEntryId)).toBe(true);
-    expect(postDeleteListJson.data.some((row) => row.id === activeEntryId)).toBe(false);
+    const postDeleteListJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(postDeleteListResponse);
+    expect(postDeleteListJson.data.data.some((row) => row.id === inactiveEntryId)).toBe(true);
+    expect(postDeleteListJson.data.data.some((row) => row.id === activeEntryId)).toBe(false);
   });
 
   it('auto-checks out overdue visitors through the internal cron query', async () => {

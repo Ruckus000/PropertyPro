@@ -878,20 +878,6 @@ export async function createDeniedVisitor(
   return row;
 }
 
-export async function listDeniedVisitors(
-  communityId: number,
-  onlyActive?: boolean,
-): Promise<DeniedVisitorRow[]> {
-  const scoped = createScopedClient(communityId);
-  const additionalWhere =
-    onlyActive !== undefined ? eq(deniedVisitors.isActive, onlyActive) : undefined;
-  const rows = await scoped
-    .selectFrom<DeniedVisitorRow>(deniedVisitors, {}, additionalWhere)
-    .orderBy(desc(deniedVisitors.createdAt));
-
-  return rows;
-}
-
 export async function updateDeniedVisitor(
   communityId: number,
   deniedId: number,
