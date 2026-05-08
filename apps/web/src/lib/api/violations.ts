@@ -102,12 +102,6 @@ export async function listViolations(
   communityId: number,
   params?: {
     status?: ViolationStatus;
-    /**
-     * NOTE: the route does not currently filter on severity. The param is
-     * preserved here for caller-API stability; it is forwarded to the URL but
-     * has no effect on results. Tracked as a follow-up — push severity into
-     * the route's SQL `where`.
-     */
     severity?: ViolationSeverity;
     unitId?: number;
     createdAfter?: string;
