@@ -17,6 +17,8 @@ const {
   requireCommunityMembershipMock,
   queuePdfExtractionMock,
   getAccessibleDocumentsMock,
+  buildAccessibleDocumentsFilterMock,
+  paginateMock,
   requireActiveSubscriptionForMutationMock,
   queueNotificationDetailedMock,
   createNotificationsForEventMock,
@@ -36,6 +38,8 @@ const {
   }),
   queuePdfExtractionMock: vi.fn(),
   getAccessibleDocumentsMock: vi.fn(),
+  buildAccessibleDocumentsFilterMock: vi.fn(),
+  paginateMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
   queueNotificationDetailedMock: vi.fn().mockResolvedValue({
     recipientsCount: 1,
@@ -47,12 +51,14 @@ const {
 }));
 
 vi.mock('@propertypro/db', () => ({
+  buildAccessibleDocumentsFilter: buildAccessibleDocumentsFilterMock,
   createScopedClient: createScopedClientMock,
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   deleteStorageObject: deleteStorageObjectMock,
   documents: documentsTable,
   logAuditEvent: logAuditEventMock,
   getAccessibleDocuments: getAccessibleDocumentsMock,
+  paginate: paginateMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -100,6 +106,14 @@ function resetRouteMocks() {
   deleteStorageObjectMock.mockResolvedValue(undefined);
   logAuditEventMock.mockResolvedValue(undefined);
   getAccessibleDocumentsMock.mockResolvedValue([]);
+  // Plan B3: GET path now uses paginate + buildAccessibleDocumentsFilter
+  // instead of getAccessibleDocuments. Default to a permissive filter +
+  // empty page so tests that don't set these explicitly don't 500.
+  buildAccessibleDocumentsFilterMock.mockResolvedValue({ __access: true });
+  paginateMock.mockResolvedValue({
+    data: [],
+    pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+  });
   requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
   queueNotificationDetailedMock.mockResolvedValue({
     recipientsCount: 1,
@@ -192,36 +206,45 @@ describe('p1-11 documents route', () => {
   });
 
   it('GET lists documents scoped by communityId', async () => {
-    getAccessibleDocumentsMock.mockResolvedValue([
-      { id: 1, communityId: 8, title: 'A' },
-      { id: 2, communityId: 8, title: 'B' },
-    ]);
+    // Plan B3: GET now uses paginate() + buildAccessibleDocumentsFilter
+    // instead of getAccessibleDocuments. The where clause from
+    // buildAccessibleDocumentsFilter is fed to paginate as `where`.
+    paginateMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, communityId: 8, title: 'A' },
+        { id: 2, communityId: 8, title: 'B' },
+      ],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents?communityId=8');
     const res = await GET(req);
     const json = (await res.json()) as {
-      data: Array<{ id: number }>;
+      data: { data: Array<{ id: number }>; pagination: unknown };
     };
 
     expect(res.status).toBe(200);
-    expect(getAccessibleDocumentsMock).toHaveBeenCalledWith({
+    expect(buildAccessibleDocumentsFilterMock).toHaveBeenCalledWith({
       communityId: 8,
       role: 'resident',
       communityType: 'condo_718',
       isUnitOwner: true,
       permissions: undefined,
     }, undefined);
-    expect(json.data).toHaveLength(2);
+    expect(json.data.data).toHaveLength(2);
   });
 
   it('GET forwards categoryId filter when provided', async () => {
-    getAccessibleDocumentsMock.mockResolvedValue([]);
+    paginateMock.mockResolvedValueOnce({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents?communityId=8&categoryId=55');
     const res = await GET(req);
     expect(res.status).toBe(200);
 
-    expect(getAccessibleDocumentsMock).toHaveBeenCalledWith(
+    expect(buildAccessibleDocumentsFilterMock).toHaveBeenCalledWith(
       {
         communityId: 8,
         role: 'resident',
@@ -229,7 +252,9 @@ describe('p1-11 documents route', () => {
         isUnitOwner: true,
         permissions: undefined,
       },
-      expect.any(Object),
+      // categoryId 55 was non-null, so the second arg (additionalFilter) is
+      // a defined SQL eq() clause. The exact shape is drizzle-internal.
+      expect.anything(),
     );
   });
 

@@ -114,6 +114,7 @@ export type {
 
 // Document access control
 export {
+  buildAccessibleDocumentsFilter,
   buildDocumentAccessFilter,
   getAccessibleDocuments,
   isDocumentAccessible,

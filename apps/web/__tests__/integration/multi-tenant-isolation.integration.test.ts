@@ -512,10 +512,12 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${seeded.communityAId}`)),
     );
     expect(documentsResponse.status).toBe(200);
-    const documentsJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
-      documentsResponse,
-    );
-    const documentFileNames = documentsJson.data.map((row) => String(row['fileName']));
+    // Plan B3: /api/v1/documents now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    const documentsJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(documentsResponse);
+    const documentFileNames = documentsJson.data.data.map((row) => String(row['fileName']));
     expect(documentFileNames).toContain(seeded.documentAFileName);
     expect(documentFileNames).not.toContain(seeded.documentASoftDeletedFileName);
     expect(documentFileNames).not.toContain(seeded.documentBFileName);
