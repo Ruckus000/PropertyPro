@@ -169,10 +169,12 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/packages?communityId=${communityA.id}`)),
     );
     expect(staffListAfterCreate.status).toBe(200);
+    // Plan B3: /api/v1/packages now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
     const staffListAfterCreateJson = await parseJson<{
-      data: Array<Record<string, unknown>>;
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
     }>(staffListAfterCreate);
-    expect(staffListAfterCreateJson.data.some((row) => row.id === packageId)).toBe(true);
+    expect(staffListAfterCreateJson.data.data.some((row) => row.id === packageId)).toBe(true);
 
     setActor(kit, 'tenantA');
     const myPackagesResponse = await routeModules.packagesMy.GET(

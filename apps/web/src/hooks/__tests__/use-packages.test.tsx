@@ -42,6 +42,24 @@ function jsonOk(body: unknown, status = 200) {
   );
 }
 
+/**
+ * Wrap an array as the canonical paginated response envelope (Plan B3) used
+ * by `/api/v1/packages` GET. `usePackages` consumes via `walkPaginated`, which
+ * expects `{ data: { data: T[], pagination } }`. `hasMore: false` short-circuits
+ * the walk after a single page.
+ */
+function paginatedOk<T>(rows: T[], status = 200) {
+  return jsonOk(
+    {
+      data: {
+        data: rows,
+        pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+      },
+    },
+    status,
+  );
+}
+
 const COMMUNITY_ID = 99;
 
 const PKG_1: PackageListItem = {
@@ -78,7 +96,7 @@ describe('useCreatePackage invalidation', () => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if (typeof url === 'string' && url.startsWith('/api/v1/packages?')) {
         listFetchCount += 1;
-        return jsonOk({ data: listFetchCount === 1 ? [] : [PKG_1] });
+        return paginatedOk(listFetchCount === 1 ? [] : [PKG_1]);
       }
       if (
         typeof url === 'string'
@@ -165,11 +183,11 @@ describe('usePickupPackage invalidation (regression for stale "my packages" view
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       if (typeof url === 'string' && url.startsWith('/api/v1/packages?')) {
         listFetchCount += 1;
-        return jsonOk({
-          data: listFetchCount === 1
+        return paginatedOk(
+          listFetchCount === 1
             ? [PKG_1, PKG_2]
             : [{ ...PKG_1, status: 'picked_up' as const }, PKG_2],
-        });
+        );
       }
       if (
         typeof url === 'string'

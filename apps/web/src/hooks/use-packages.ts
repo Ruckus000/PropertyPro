@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,11 +48,15 @@ export const PACKAGE_KEYS = {
 export function usePackages(communityId: number, filters?: PackageFilters) {
   return useQuery({
     queryKey: PACKAGE_KEYS.list(communityId, filters),
-    queryFn: async () => {
-      const params = new URLSearchParams({ communityId: String(communityId) });
-      if (filters?.status) params.set('status', filters.status);
-      if (filters?.unitId) params.set('unitId', String(filters.unitId));
-      return requestJson<PackageListItem[]>(`/api/v1/packages?${params.toString()}`);
+    queryFn: async ({ signal }) => {
+      const baseParams: Record<string, string> = {
+        communityId: String(communityId),
+      };
+      if (filters?.status) baseParams.status = filters.status;
+      if (filters?.unitId) baseParams.unitId = String(filters.unitId);
+      return walkPaginated<PackageListItem>('/api/v1/packages', baseParams, {
+        signal,
+      });
     },
     enabled: communityId > 0,
   });
