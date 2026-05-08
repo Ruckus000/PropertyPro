@@ -231,7 +231,7 @@ function mapViolationFineRow(row: ViolationFineRecord): ViolationFineRecord {
   };
 }
 
-function mapArcRow(row: ArcSubmissionRecord): ArcSubmissionRecord {
+export function mapArcRow(row: ArcSubmissionRecord): ArcSubmissionRecord {
   return {
     ...row,
     status: assertArcSubmissionStatus(row.status),
@@ -691,43 +691,6 @@ export async function dismissViolationForCommunity(
     },
     requestId,
   );
-}
-
-export async function listArcSubmissionsForCommunity(
-  communityId: number,
-  filters: {
-    status?: ArcSubmissionStatus;
-    unitId?: number;
-    allowedUnitIds?: number[];
-  },
-): Promise<ArcSubmissionRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const whereFilters = [];
-
-  if (filters.status) {
-    whereFilters.push(eq(arcSubmissions.status, filters.status));
-  }
-  if (filters.unitId !== undefined) {
-    whereFilters.push(eq(arcSubmissions.unitId, filters.unitId));
-  }
-  if (filters.allowedUnitIds) {
-    if (filters.allowedUnitIds.length === 0) {
-      return [];
-    }
-    whereFilters.push(inArray(arcSubmissions.unitId, filters.allowedUnitIds));
-  }
-
-  const whereClause = whereFilters.length === 0
-    ? undefined
-    : whereFilters.length === 1
-      ? whereFilters[0]
-      : and(...whereFilters);
-
-  const rows = await scoped
-    .selectFrom<ArcSubmissionRecord>(arcSubmissions, {}, whereClause)
-    .orderBy(desc(arcSubmissions.createdAt), desc(arcSubmissions.id));
-
-  return rows.map(mapArcRow);
 }
 
 export async function getArcSubmissionForCommunity(
