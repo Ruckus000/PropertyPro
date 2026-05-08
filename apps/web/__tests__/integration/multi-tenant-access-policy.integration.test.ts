@@ -270,10 +270,14 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${community.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+    // Plan B3: /api/v1/documents now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    const json = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(response);
     return {
-      titles: json.data.map((d) => String(d['title'])),
-      categoryIds: json.data.map((d) => (d['categoryId'] as number | null)),
+      titles: json.data.data.map((d) => String(d['title'])),
+      categoryIds: json.data.data.map((d) => (d['categoryId'] as number | null)),
     };
   }
 

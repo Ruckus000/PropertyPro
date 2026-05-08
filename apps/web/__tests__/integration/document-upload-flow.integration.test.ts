@@ -300,10 +300,14 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    expect(json.data.length).toBeGreaterThanOrEqual(2); // PDF + PNG from tests above
+    // Plan B3: /api/v1/documents now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    const json = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(response);
+    expect(json.data.data.length).toBeGreaterThanOrEqual(2); // PDF + PNG from tests above
 
-    const titles = json.data.map((d) => d['title'] as string);
+    const titles = json.data.data.map((d) => d['title'] as string);
     expect(titles).toContain(`PDF Test Doc ${kit.runSuffix}`);
     expect(titles).toContain(`PNG Test Doc ${kit.runSuffix}`);
   });
@@ -321,8 +325,10 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const getResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${communityA.id}`)),
     );
-    const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
-    const pngDoc = getJson.data.find((d) => d['title'] === `PNG Test Doc ${kit.runSuffix}`);
+    const getJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(getResponse);
+    const pngDoc = getJson.data.data.find((d) => d['title'] === `PNG Test Doc ${kit.runSuffix}`);
     if (!pngDoc) throw new Error('PNG document not found for deletion');
 
     const response = await route.DELETE(
@@ -340,8 +346,10 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const getAfter = await route.GET(
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${communityA.id}`)),
     );
-    const afterJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getAfter);
-    const deleted = afterJson.data.find((d) => d['id'] === pngDoc!['id']);
+    const afterJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(getAfter);
+    const deleted = afterJson.data.data.find((d) => d['id'] === pngDoc!['id']);
     expect(deleted).toBeUndefined();
   });
 
@@ -358,8 +366,10 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const getResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${communityA.id}`)),
     );
-    const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
-    const doc = getJson.data[0];
+    const getJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(getResponse);
+    const doc = getJson.data.data[0];
     expect(doc).toBeDefined();
 
     setActor(kit, 'tenantA');
