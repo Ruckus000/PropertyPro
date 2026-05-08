@@ -36,7 +36,7 @@ interface VendorRecord {
   updatedAt: Date;
 }
 
-interface WorkOrderRecord {
+export interface WorkOrderRecord {
   [key: string]: unknown;
   id: number;
   communityId: number;
@@ -227,7 +227,7 @@ function mapVendorRow(row: VendorRecord): VendorRecord {
   };
 }
 
-function mapWorkOrderRow(row: WorkOrderRecord): WorkOrderRecord {
+export function mapWorkOrderRow(row: WorkOrderRecord): WorkOrderRecord {
   return {
     ...row,
     priority: assertWorkOrderPriority(row.priority),
@@ -258,7 +258,7 @@ function reservationsOverlap(
   return startA < endB && startB < endA;
 }
 
-function deriveSlaState(row: WorkOrderRecord): {
+export function deriveSlaState(row: WorkOrderRecord): {
   responseSlaBreached: boolean;
   completionSlaBreached: boolean;
 } {
@@ -395,69 +395,10 @@ export async function updateVendorForCommunity(
   return row;
 }
 
-export interface PaginatedWorkOrders {
-  data: Array<WorkOrderRecord & { responseSlaBreached: boolean; completionSlaBreached: boolean }>;
-  total: number;
-}
-
-export async function listWorkOrdersForCommunity(
-  communityId: number,
-  filters?: {
-    status?: WorkOrderStatus;
-    unitId?: number;
-    allowedUnitIds?: number[];
-    page?: number;
-    limit?: number;
-  },
-): Promise<PaginatedWorkOrders> {
-  const scoped = createScopedClient(communityId);
-  // Page and limit are clamped at the route boundary (apps/web/src/app/api/v1/work-orders/route.ts).
-  // Service caller contract: page >= 1, limit in [1, 100]. Defensive defaults only.
-  const page = filters?.page ?? 1;
-  const limit = filters?.limit ?? 20;
-  const offset = (page - 1) * limit;
-  const whereFilters = [];
-
-  if (filters?.status) {
-    whereFilters.push(eq(workOrders.status, filters.status));
-  }
-  if (filters?.unitId !== undefined) {
-    whereFilters.push(eq(workOrders.unitId, filters.unitId));
-  }
-  if (filters?.allowedUnitIds) {
-    if (filters.allowedUnitIds.length === 0) {
-      return { data: [], total: 0 };
-    }
-    whereFilters.push(inArray(workOrders.unitId, filters.allowedUnitIds));
-  }
-
-  const additionalWhere = whereFilters.length > 0 ? and(...whereFilters) : undefined;
-
-  const rows = await scoped
-    .selectFrom<WorkOrderRecord>(workOrders, {}, additionalWhere as never)
-    .orderBy(desc(workOrders.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  // Count query: use buildWhere to get the full scoped WHERE (community_id + soft-delete + filters)
-  // then run a separate count using the unscoped db (work-orders-service is in the unsafe allowlist).
-  const whereClause = scoped.buildWhere(workOrders, additionalWhere as never);
-  const db = createUnscopedClient();
-  const countResult = await db
-    .select({ count: sql<number>`cast(count(*) as integer)` })
-    .from(workOrders)
-    .where(whereClause);
-  const total = countResult[0]?.count ?? 0;
-
-  const data = rows.map((row) => {
-    const mapped = mapWorkOrderRow(row);
-    return {
-      ...mapped,
-      ...deriveSlaState(mapped),
-    };
-  });
-
-  return { data, total };
+export interface WorkOrderListItem
+  extends WorkOrderRecord {
+  responseSlaBreached: boolean;
+  completionSlaBreached: boolean;
 }
 
 export async function getWorkOrderForCommunity(
