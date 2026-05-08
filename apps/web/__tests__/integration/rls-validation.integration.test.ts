@@ -299,14 +299,20 @@ describeDb('P4-55 RLS validation (integration)', () => {
   it('tenant-scoped reads return only own-community data through route handlers', async () => {
     const s = requireSeeded();
 
+    // Plan B3: /api/v1/documents now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    type PaginatedDocsBody = {
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    };
+
     // Actor A reads community A
     setActor(s.actorAId);
     const responseA = await documentsRoute!.GET(
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${s.communityAId}`)),
     );
     expect(responseA.status).toBe(200);
-    const bodyA = await parseJson<{ data: Array<Record<string, unknown>> }>(responseA);
-    const fileNamesA = bodyA.data.map((row) => String(row['fileName']));
+    const bodyA = await parseJson<PaginatedDocsBody>(responseA);
+    const fileNamesA = bodyA.data.data.map((row) => String(row['fileName']));
     expect(fileNamesA).toContain(s.documentAFileName);
     expect(fileNamesA).not.toContain(s.documentBFileName);
 
@@ -316,8 +322,8 @@ describeDb('P4-55 RLS validation (integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${s.communityBId}`)),
     );
     expect(responseB.status).toBe(200);
-    const bodyB = await parseJson<{ data: Array<Record<string, unknown>> }>(responseB);
-    const fileNamesB = bodyB.data.map((row) => String(row['fileName']));
+    const bodyB = await parseJson<PaginatedDocsBody>(responseB);
+    const fileNamesB = bodyB.data.data.map((row) => String(row['fileName']));
     expect(fileNamesB).toContain(s.documentBFileName);
     expect(fileNamesB).not.toContain(s.documentAFileName);
   });
@@ -347,8 +353,11 @@ describeDb('P4-55 RLS validation (integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents?communityId=${s.communityBId}`)),
     );
     expect(verifyResponse.status).toBe(200);
-    const verifyBody = await parseJson<{ data: Array<Record<string, unknown>> }>(verifyResponse);
-    const ghostFileNames = verifyBody.data
+    // Plan B3: paginated envelope.
+    const verifyBody = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(verifyResponse);
+    const ghostFileNames = verifyBody.data.data
       .map((row) => String(row['fileName']))
       .filter((name) => name.includes('ghost'));
     expect(ghostFileNames).toHaveLength(0);
