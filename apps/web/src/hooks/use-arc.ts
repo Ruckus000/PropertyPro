@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 /* ─────── Types ─────── */
 
@@ -51,13 +51,13 @@ export const ARC_KEYS = {
 export function useArcSubmissions(communityId: number, filters?: ArcFilters) {
   return useQuery({
     queryKey: ARC_KEYS.list(communityId, filters),
-    queryFn: () => {
-      const params = new URLSearchParams({
+    queryFn: ({ signal }) => {
+      const baseParams: Record<string, string> = {
         communityId: String(communityId),
-      });
-      if (filters?.status) params.set('status', filters.status);
-      if (filters?.unitId) params.set('unitId', String(filters.unitId));
-      return requestJson<ArcSubmission[]>(`/api/v1/arc?${params}`);
+      };
+      if (filters?.status) baseParams.status = filters.status;
+      if (filters?.unitId) baseParams.unitId = String(filters.unitId);
+      return walkPaginated<ArcSubmission>('/api/v1/arc', baseParams, { signal });
     },
     staleTime: 30_000,
     enabled: communityId > 0,
