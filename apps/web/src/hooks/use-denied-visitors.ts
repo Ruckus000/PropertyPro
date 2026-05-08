@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 export interface DeniedVisitorListItem {
   id: number;
@@ -80,10 +81,16 @@ export const DENIED_VISITOR_KEYS = {
 export function useDeniedVisitors(communityId: number, active?: boolean) {
   return useQuery({
     queryKey: DENIED_VISITOR_KEYS.list(communityId, active),
-    queryFn: async () => {
-      const params = new URLSearchParams({ communityId: String(communityId) });
-      if (active !== undefined) params.set('active', String(active));
-      return requestJson<DeniedVisitorListItem[]>(`/api/v1/visitors/denied?${params.toString()}`);
+    queryFn: ({ signal }) => {
+      const baseParams: Record<string, string> = {
+        communityId: String(communityId),
+      };
+      if (active !== undefined) baseParams.active = String(active);
+      return walkPaginated<DeniedVisitorListItem>(
+        '/api/v1/visitors/denied',
+        baseParams,
+        { signal },
+      );
     },
     enabled: communityId > 0,
   });
