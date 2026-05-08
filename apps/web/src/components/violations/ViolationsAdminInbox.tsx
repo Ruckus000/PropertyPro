@@ -87,29 +87,43 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
   const [createdBefore, setCreatedBefore] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const fetchViolations = useCallback(async () => {
+  const fetchViolations = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError('');
     try {
-      const res = await listViolations(communityId, {
-        status: selectedStatus || undefined,
-        severity: selectedSeverity || undefined,
-        createdAfter: createdAfter || undefined,
-        createdBefore: createdBefore || undefined,
-        page,
-        limit: LIMIT,
-      });
+      const res = await listViolations(
+        communityId,
+        {
+          status: selectedStatus || undefined,
+          severity: selectedSeverity || undefined,
+          createdAfter: createdAfter || undefined,
+          createdBefore: createdBefore || undefined,
+          page,
+          limit: LIMIT,
+        },
+        signal,
+      );
+      // Skip state updates if this fetch was aborted while in flight — a
+      // newer fetch is on its way and will overwrite, but committing this
+      // one's stale result first creates a flicker race.
+      if (signal?.aborted) return;
       setViolations(res.data);
       setTotal(res.meta?.total ?? res.data.length);
     } catch (err) {
+      if (signal?.aborted) return;
+      // walkPaginated throws AbortError on abort. Treat it as a no-op:
+      // a newer fetch is already pending or about to fire.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Failed to load violations');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [communityId, selectedStatus, selectedSeverity, createdAfter, createdBefore, page]);
 
   useEffect(() => {
-    void fetchViolations();
+    const controller = new AbortController();
+    void fetchViolations(controller.signal);
+    return () => controller.abort();
   }, [fetchViolations]);
 
   const handleFilterChange = useCallback((setter: (val: string) => void, value: string) => {
