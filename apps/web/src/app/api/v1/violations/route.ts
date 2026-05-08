@@ -100,15 +100,37 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const createdBefore = searchParams.get('createdBefore') ?? undefined;
 
   const unitId = rawUnitId ? parsePositiveInt(rawUnitId, 'unitId') : undefined;
-  const status = rawStatus
-    ? (listStatusSchema.parse(rawStatus) as ViolationStatus)
-    : undefined;
-  // Validate severity against the closed enum. Invalid values throw a
-  // ZodError → ValidationError via withErrorHandler — matches the strictness
-  // of `status` parsing above.
-  const severity = rawSeverity
-    ? (listSeveritySchema.parse(rawSeverity) as ViolationSeverity)
-    : undefined;
+
+  // Validate enum query params via safeParse + throw new ValidationError so
+  // that invalid client input produces a 400 with a structured error envelope
+  // instead of falling through `withErrorHandler`'s generic 500 + Sentry path.
+  let status: ViolationStatus | undefined;
+  if (rawStatus) {
+    const parsed = listStatusSchema.safeParse(rawStatus);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid status filter', {
+        fields: [{
+          field: 'status',
+          message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
+        }],
+      });
+    }
+    status = parsed.data as ViolationStatus;
+  }
+
+  let severity: ViolationSeverity | undefined;
+  if (rawSeverity) {
+    const parsed = listSeveritySchema.safeParse(rawSeverity);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid severity filter', {
+        fields: [{
+          field: 'severity',
+          message: `severity must be one of: ${listSeveritySchema.options.join(', ')}`,
+        }],
+      });
+    }
+    severity = parsed.data as ViolationSeverity;
+  }
 
   const scoped = createScopedClient(communityId);
   const residentUnitIds = isResidentRole(membership.role)
