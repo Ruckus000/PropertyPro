@@ -1,6 +1,12 @@
 /**
  * Client-side fetch helpers for maintenance requests (resident).
+ *
+ * Plan B3 note: `listMyRequests` walks the canonical paginated
+ * `/api/v1/maintenance-requests` envelope and JS-slices the result to the
+ * requested `page` window. Same pattern as `listAllRequests` and #228
+ * violations / #236 work-orders.
  */
+import { walkPaginated } from './walk-paginated';
 
 export interface PhotoEntry {
   url: string;
@@ -72,11 +78,25 @@ export async function listMyRequests(
   communityId: number,
   params?: { status?: string; page?: number; limit?: number },
 ): Promise<ListRequestsResponse> {
-  const sp = new URLSearchParams({ communityId: String(communityId) });
-  if (params?.status) sp.set('status', params.status);
-  if (params?.page) sp.set('page', String(params.page));
-  if (params?.limit) sp.set('limit', String(params.limit));
-  return apiFetch<ListRequestsResponse>(`/api/v1/maintenance-requests?${sp.toString()}`);
+  const baseParams: Record<string, string> = {
+    communityId: String(communityId),
+  };
+  if (params?.status) baseParams.status = params.status;
+
+  const all = await walkPaginated<MaintenanceRequestItem>(
+    '/api/v1/maintenance-requests',
+    baseParams,
+  );
+
+  const limit = params?.limit ?? all.length;
+  const page = params?.page ?? 1;
+  const offset = Math.max(0, (page - 1) * limit);
+  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
+
+  return {
+    data,
+    meta: { total: all.length, page, limit },
+  };
 }
 
 export async function getRequest(

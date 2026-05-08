@@ -126,16 +126,21 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/maintenance-requests?communityId=${communityA.id}`)),
     );
     expect(residentListResponse.status).toBe(200);
-    const residentList = await parseJson<{ data: Array<Record<string, unknown>> }>(residentListResponse);
-    expect(residentList.data.map((row) => row.id)).toEqual([tenantARequestId]);
+    // Plan B3: /api/v1/maintenance-requests now returns the canonical
+    // double-wrapped paginated envelope `{ data: { data, pagination } }`.
+    type PaginatedRequestsBody = {
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    };
+    const residentList = await parseJson<PaginatedRequestsBody>(residentListResponse);
+    expect(residentList.data.data.map((row) => row.id)).toEqual([tenantARequestId]);
 
     setActor(kit, 'actorA');
     const managerListResponse = await routeModules.maintenanceRequests.GET(
       new NextRequest(apiUrl(`/api/v1/maintenance-requests?communityId=${communityA.id}`)),
     );
     expect(managerListResponse.status).toBe(200);
-    const managerList = await parseJson<{ data: Array<Record<string, unknown>> }>(managerListResponse);
-    expect(managerList.data.map((row) => Number(row.id)).sort((a, b) => a - b)).toEqual(
+    const managerList = await parseJson<PaginatedRequestsBody>(managerListResponse);
+    expect(managerList.data.data.map((row) => Number(row.id)).sort((a, b) => a - b)).toEqual(
       [tenantARequestId, managerRequestId].sort((a, b) => a - b),
     );
 
@@ -144,10 +149,10 @@ describeDb('maintenance operations auth (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/maintenance-requests?communityId=${communityC.id}`)),
     );
     expect(pmAdminListResponse.status).toBe(200);
-    const pmAdminList = await parseJson<{ data: Array<Record<string, unknown>> }>(pmAdminListResponse);
+    const pmAdminList = await parseJson<PaginatedRequestsBody>(pmAdminListResponse);
     // pm_admin must see community-wide requests (their own AND tenantC's),
     // not just their own. This distinguishes community-wide read from self-scope.
-    expect(pmAdminList.data.map((row) => Number(row.id)).sort((a, b) => a - b)).toEqual(
+    expect(pmAdminList.data.data.map((row) => Number(row.id)).sort((a, b) => a - b)).toEqual(
       [tenantCRequestId, pmAdminRequestId].sort((a, b) => a - b),
     );
 

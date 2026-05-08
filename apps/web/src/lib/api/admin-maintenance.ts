@@ -1,7 +1,12 @@
 /**
  * Client-side fetch helpers for maintenance requests (admin).
+ *
+ * Plan B3 note: `listAllRequests` walks the canonical paginated
+ * `/api/v1/maintenance-requests` envelope and JS-slices the result to the
+ * requested `page` window. Same pattern as #228 violations, #236 work-orders.
  */
 import type { MaintenanceRequestItem } from './maintenance-requests';
+import { walkPaginated } from './walk-paginated';
 
 export type { MaintenanceRequestItem };
 
@@ -38,14 +43,28 @@ export async function listAllRequests(
   communityId: number,
   params?: ListAllRequestsParams,
 ): Promise<ListAllRequestsResponse> {
-  const sp = new URLSearchParams({ communityId: String(communityId) });
-  if (params?.status) sp.set('status', params.status);
-  if (params?.category) sp.set('category', params.category);
-  if (params?.priority) sp.set('priority', params.priority);
-  if (params?.assignedToId) sp.set('assignedToId', params.assignedToId);
-  if (params?.page) sp.set('page', String(params.page));
-  if (params?.limit) sp.set('limit', String(params.limit));
-  return apiFetch<ListAllRequestsResponse>(`/api/v1/maintenance-requests?${sp.toString()}`);
+  const baseParams: Record<string, string> = {
+    communityId: String(communityId),
+  };
+  if (params?.status) baseParams.status = params.status;
+  if (params?.category) baseParams.category = params.category;
+  if (params?.priority) baseParams.priority = params.priority;
+  if (params?.assignedToId) baseParams.assignedToId = params.assignedToId;
+
+  const all = await walkPaginated<MaintenanceRequestItem>(
+    '/api/v1/maintenance-requests',
+    baseParams,
+  );
+
+  const limit = params?.limit ?? all.length;
+  const page = params?.page ?? 1;
+  const offset = Math.max(0, (page - 1) * limit);
+  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
+
+  return {
+    data,
+    meta: { total: all.length, page, limit },
+  };
 }
 
 export async function updateRequestStatus(
