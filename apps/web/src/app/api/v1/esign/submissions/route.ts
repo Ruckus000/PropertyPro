@@ -59,9 +59,22 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get('status');
 
-  const status = rawStatus
-    ? (listStatusSchema.parse(rawStatus) as EsignSubmissionStatus)
-    : undefined;
+  // Validate enum query params via safeParse + throw new ValidationError so
+  // that invalid client input produces a 400 with a structured error envelope
+  // instead of falling through `withErrorHandler`'s generic 500 + Sentry path.
+  let status: EsignSubmissionStatus | undefined;
+  if (rawStatus) {
+    const parsed = listStatusSchema.safeParse(rawStatus);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid status filter', {
+        fields: [{
+          field: 'status',
+          message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
+        }],
+      });
+    }
+    status = parsed.data as EsignSubmissionStatus;
+  }
 
   const data = await listSubmissions(communityId, { status });
 

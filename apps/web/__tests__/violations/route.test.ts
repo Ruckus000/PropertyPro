@@ -251,10 +251,17 @@ describe('GET /api/v1/violations — paginate() integration', () => {
     });
   });
 
-  it('rejects an invalid severity value with a ValidationError', async () => {
+  it('rejects an invalid severity value with a ValidationError (400, not 500)', async () => {
     await expect(
       GET(makeRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}&severity=catastrophic`)),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Invalid severity filter');
+    expect(paginateMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid status value with a ValidationError (400, not 500)', async () => {
+    await expect(
+      GET(makeRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}&status=garbage`)),
+    ).rejects.toThrow('Invalid status filter');
     expect(paginateMock).not.toHaveBeenCalled();
   });
 

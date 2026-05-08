@@ -74,12 +74,35 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const rawStatus = searchParams.get('status');
   const rawType = searchParams.get('type');
 
-  const status = rawStatus
-    ? (listStatusSchema.parse(rawStatus) as EsignTemplateStatus)
-    : undefined;
-  const type = rawType
-    ? (listTypeSchema.parse(rawType) as EsignTemplateType)
-    : undefined;
+  // Validate enum query params via safeParse + throw new ValidationError so
+  // that invalid client input produces a 400 with a structured error envelope
+  // instead of falling through `withErrorHandler`'s generic 500 + Sentry path.
+  let status: EsignTemplateStatus | undefined;
+  if (rawStatus) {
+    const parsed = listStatusSchema.safeParse(rawStatus);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid status filter', {
+        fields: [{
+          field: 'status',
+          message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
+        }],
+      });
+    }
+    status = parsed.data as EsignTemplateStatus;
+  }
+  let type: EsignTemplateType | undefined;
+  if (rawType) {
+    const parsed = listTypeSchema.safeParse(rawType);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid type filter', {
+        fields: [{
+          field: 'type',
+          message: `type must be one of: ${listTypeSchema.options.join(', ')}`,
+        }],
+      });
+    }
+    type = parsed.data as EsignTemplateType;
+  }
 
   const data = await listTemplates(communityId, { status, type });
 
