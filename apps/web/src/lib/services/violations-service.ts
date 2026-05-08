@@ -215,7 +215,7 @@ async function assertDocumentsBelongToCommunity(
   }
 }
 
-function mapViolationRow(row: ViolationRecord): ViolationRecord {
+export function mapViolationRow(row: ViolationRecord): ViolationRecord {
   return {
     ...row,
     status: assertViolationStatus(row.status),
@@ -336,6 +336,15 @@ async function notifyArcDecision(
   }
 }
 
+/**
+ * List violations for a community.
+ *
+ * Note (Plan B3): the `/api/v1/violations` route NO LONGER uses this helper —
+ * it owns its where construction inline and calls `paginate()` directly. This
+ * helper is kept for the resident-self-view page
+ * (`apps/web/src/app/(authenticated)/violations/report/page.tsx`), which
+ * fetches its own small list of "my reports" without needing pagination.
+ */
 export async function listViolationsForCommunity(
   communityId: number,
   filters: {
