@@ -1,6 +1,33 @@
+/**
+ * Packages API — staff package log.
+ *
+ * GET   /api/v1/packages  — paginated package log (Plan B3 rollout)
+ * POST  /api/v1/packages  — create a new package log entry
+ *
+ * GET pagination (Plan B3):
+ * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * - Filters (`status`, `unitId`, and the resident-role `allowedUnitIds`
+ *   safeguard) are pushed into the SQL `where` predicate. Previously the
+ *   underlying service fetched the whole tenant's package log and returned
+ *   it unbounded.
+ * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
+ *   the previous `(createdAt desc, id desc)` composite ordering.
+ * - Response envelope is double-wrapped per the paginated-route contract:
+ *   `{ data: { data: PackageLog[], pagination: { nextCursor, hasMore, pageSize } } }`.
+ *
+ * Note: `/api/v1/packages/my` is intentionally NOT migrated in this PR — it
+ * has its own service path (`listMyPackagesForCommunity`) that filters out
+ * `picked_up` entries, and the resident-facing UI relies on the flat shape.
+ */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, type PackageLogStatus } from '@propertypro/db';
+import {
+  createScopedClient,
+  packageLog,
+  paginate,
+  type PackageLogStatus,
+} from '@propertypro/db';
+import { and, eq, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -17,10 +44,7 @@ import {
   requirePackagesWritePermission,
   requireStaffOperator,
 } from '@/lib/logistics/common';
-import {
-  createPackageForCommunity,
-  listPackagesForCommunity,
-} from '@/lib/services/package-visitor-service';
+import { createPackageForCommunity } from '@/lib/services/package-visitor-service';
 import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
 
 const createPackageSchema = z.object({
@@ -33,6 +57,11 @@ const createPackageSchema = z.object({
 });
 
 const packageStatusSchema = z.enum(['received', 'notified', 'picked_up']);
+
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -61,9 +90,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     ? (statusParsed.data as PackageLogStatus)
     : undefined;
 
+  const scoped = createScopedClient(communityId);
+
   let allowedUnitIds: number[] | undefined;
   if (isResidentRole(membership.role)) {
-    const scoped = createScopedClient(communityId);
     allowedUnitIds = await requireActorUnitIds(scoped, actorUserId);
 
     if (unitId !== undefined && !allowedUnitIds.includes(unitId)) {
@@ -71,13 +101,43 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  const data = await listPackagesForCommunity(communityId, {
-    unitId,
-    status,
-    allowedUnitIds,
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
+  const parsedQuery = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
   });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
 
-  return NextResponse.json({ data });
+  const filterClauses = [];
+  if (unitId !== undefined) filterClauses.push(eq(packageLog.unitId, unitId));
+  if (status !== undefined) filterClauses.push(eq(packageLog.status, status));
+  if (allowedUnitIds && allowedUnitIds.length > 0) {
+    filterClauses.push(inArray(packageLog.unitId, [...allowedUnitIds]));
+  }
+  const where =
+    filterClauses.length === 0
+      ? undefined
+      : filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...filterClauses);
+
+  const result = await paginate(
+    scoped,
+    packageLog,
+    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
+    { where },
+  );
+
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
