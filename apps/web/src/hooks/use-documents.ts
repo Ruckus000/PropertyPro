@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { DocumentListItem } from '@/components/documents/document-list';
 
 /**
@@ -24,10 +25,12 @@ interface UseDocumentsOptions {
 export function useDocuments({ communityId, categoryId, enabled = true }: UseDocumentsOptions) {
   return useQuery({
     queryKey: documentsKey(communityId, categoryId),
-    queryFn: async () => {
-      const params = new URLSearchParams({ communityId: String(communityId) });
-      if (categoryId != null) params.set('categoryId', String(categoryId));
-      return requestJson<DocumentListItem[]>(`/api/v1/documents?${params.toString()}`);
+    queryFn: ({ signal }) => {
+      const baseParams: Record<string, string> = {
+        communityId: String(communityId),
+      };
+      if (categoryId != null) baseParams.categoryId = String(categoryId);
+      return walkPaginated<DocumentListItem>('/api/v1/documents', baseParams, { signal });
     },
     enabled: enabled && communityId > 0,
   });

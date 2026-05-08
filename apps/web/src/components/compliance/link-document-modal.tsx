@@ -29,11 +29,21 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
       try {
         const url = search
           ? `/api/v1/documents/search?communityId=${communityId}&q=${encodeURIComponent(search)}`
-          : `/api/v1/documents?communityId=${communityId}`;
+          : `/api/v1/documents?communityId=${communityId}&pageSize=100`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("fetch failed");
-        const json = await res.json();
-        setDocuments((json.data as DocumentRow[]) ?? []);
+        const json = (await res.json()) as
+          | { data?: DocumentRow[] }
+          | { data?: { data?: DocumentRow[]; pagination?: unknown } };
+        // /api/v1/documents/search returns `{ data: DocumentRow[] }` (flat).
+        // /api/v1/documents (Plan B3) returns `{ data: { data, pagination } }`.
+        // Handle both shapes — first page only is sufficient for the
+        // initial-empty-search "recent docs" preview.
+        const innerData = (json as { data?: unknown }).data;
+        const rows = Array.isArray(innerData)
+          ? innerData
+          : (innerData as { data?: DocumentRow[] } | undefined)?.data ?? [];
+        setDocuments(rows as DocumentRow[]);
       } catch {
         setDocuments([]);
       } finally {

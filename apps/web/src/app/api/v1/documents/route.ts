@@ -1,10 +1,34 @@
+/**
+ * Documents API.
+ *
+ * GET    /api/v1/documents  — paginated documents list (Plan B3 rollout)
+ * POST   /api/v1/documents  — upload metadata for a new document
+ * DELETE /api/v1/documents  — soft-delete a document by id
+ *
+ * GET pagination (Plan B3):
+ * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * - Filters push into the SQL `where` predicate via
+ *   `buildAccessibleDocumentsFilter()` (combines source-type filter,
+ *   per-role access filter, and the optional `categoryId` match).
+ * - Order by `id` desc — the prior `getAccessibleDocuments` had no
+ *   `orderBy` so the documents list was returned in postgres heap order
+ *   (undefined). `id desc` is a strict improvement: stable, monotonic, and
+ *   matches the rest of the B3 rollout.
+ * - Response envelope is double-wrapped per the paginated-route contract:
+ *   `{ data: { data: DocumentRow[], pagination } }`.
+ *
+ * Other consumers of `getAccessibleDocuments` (mobile/documents page,
+ * /documents/drafts/[id]/document-search, /documents/[id]/versions) keep
+ * using it — they need the full filtered list and don't paginate.
+ */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
+  buildAccessibleDocumentsFilter,
   createScopedClient,
   documents,
   logAuditEvent,
-  getAccessibleDocuments,
+  paginate,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -31,6 +55,11 @@ const createDocumentSchema = z.object({
   mimeType: z.string().min(1).optional(),
 });
 
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 
@@ -51,9 +80,20 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     categoryId = parsedCategoryId;
   }
 
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
+  const parsedQuery = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
+
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
 
-  const rows = await getAccessibleDocuments(
+  const where = await buildAccessibleDocumentsFilter(
     {
       communityId: effectiveCommunityId,
       role: membership.role,
@@ -64,7 +104,20 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     categoryId != null ? eq(documents.categoryId, categoryId) : undefined,
   );
 
-  return NextResponse.json({ data: rows });
+  const scoped = createScopedClient(effectiveCommunityId);
+  const result = await paginate(
+    scoped,
+    documents,
+    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
+    { where },
+  );
+
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

@@ -88,25 +88,43 @@ export async function buildDocumentAccessFilter(
   ) as SQL;
 }
 
+/**
+ * Returns the combined SQL `where` clause for the documents-list query —
+ * source-type filter (`library`/`authored`), per-role access filter, and
+ * an optional caller-supplied `additionalFilter` (e.g. categoryId match)
+ * AND-ed together. Returned shape is suitable for passing to `paginate()`
+ * as `{ where }` when the caller wants a paginated documents list (Plan B3).
+ *
+ * Returns `undefined` only when there are no clauses at all (all-elevated
+ * role with no source-type or additional filter — practically never).
+ */
+export async function buildAccessibleDocumentsFilter(
+  context: DocumentAccessContext,
+  additionalFilter?: SQL,
+  sourceTypes?: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]>,
+): Promise<SQL | undefined> {
+  const accessFilter = await buildDocumentAccessFilter(context);
+  const sourceFilter = buildSourceTypeFilter(sourceTypes);
+
+  const combined = [sourceFilter, accessFilter, additionalFilter].filter(
+    (filter): filter is SQL => filter !== undefined,
+  );
+
+  if (combined.length === 0) return undefined;
+  if (combined.length === 1) return combined[0];
+  return and(...combined);
+}
+
 export async function getAccessibleDocuments(
   context: DocumentAccessContext,
   additionalFilter?: SQL,
   sourceTypes?: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]>,
 ): Promise<Record<string, unknown>[]> {
   const scoped = createScopedClient(context.communityId);
-  const accessFilter = await buildDocumentAccessFilter(context);
-  const sourceFilter = buildSourceTypeFilter(sourceTypes);
-
-  const combinedFilter = [sourceFilter, accessFilter, additionalFilter].filter(
-    (filter): filter is SQL => filter !== undefined,
-  );
+  const where = await buildAccessibleDocumentsFilter(context, additionalFilter, sourceTypes);
 
   // Use selectFrom which auto-applies community_id and deleted_at scoping
-  return scoped.selectFrom(
-    documents,
-    {},
-    combinedFilter.length === 1 ? combinedFilter[0] : and(...combinedFilter),
-  );
+  return scoped.selectFrom(documents, {}, where);
 }
 
 export async function getDocumentWithAccessCheck(
