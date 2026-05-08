@@ -1,8 +1,16 @@
 /**
  * Client-side fetch helpers for violations management.
+ *
+ * Plan B3 note: `listViolations` walks the canonical paginated `/api/v1/violations`
+ * envelope and JS-slices the result to the requested `page` window. The
+ * server-side cursor pagination keeps the underlying SQL fast (status / unit
+ * filter pushdown), and the JS slice preserves the existing offset-style UI
+ * contract (`{ data, meta: { total, page, limit } }`) without forcing the
+ * consumer to a cursor-based loader.
  */
 
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 export interface ViolationItem {
   id: number;
@@ -94,6 +102,12 @@ export async function listViolations(
   communityId: number,
   params?: {
     status?: ViolationStatus;
+    /**
+     * NOTE: the route does not currently filter on severity. The param is
+     * preserved here for caller-API stability; it is forwarded to the URL but
+     * has no effect on results. Tracked as a follow-up — push severity into
+     * the route's SQL `where`.
+     */
     severity?: ViolationSeverity;
     unitId?: number;
     createdAfter?: string;
@@ -102,15 +116,26 @@ export async function listViolations(
     limit?: number;
   },
 ): Promise<ListViolationsResponse> {
-  const sp = new URLSearchParams({ communityId: String(communityId) });
-  if (params?.status) sp.set('status', params.status);
-  if (params?.severity) sp.set('severity', params.severity);
-  if (params?.unitId) sp.set('unitId', String(params.unitId));
-  if (params?.createdAfter) sp.set('createdAfter', params.createdAfter);
-  if (params?.createdBefore) sp.set('createdBefore', params.createdBefore);
-  if (params?.page) sp.set('page', String(params.page));
-  if (params?.limit) sp.set('limit', String(params.limit));
-  return apiFetch<ListViolationsResponse>(`/api/v1/violations?${sp.toString()}`);
+  const baseParams: Record<string, string> = {
+    communityId: String(communityId),
+  };
+  if (params?.status) baseParams.status = params.status;
+  if (params?.severity) baseParams.severity = params.severity;
+  if (params?.unitId) baseParams.unitId = String(params.unitId);
+  if (params?.createdAfter) baseParams.createdAfter = params.createdAfter;
+  if (params?.createdBefore) baseParams.createdBefore = params.createdBefore;
+
+  const all = await walkPaginated<ViolationItem>('/api/v1/violations', baseParams);
+
+  const limit = params?.limit ?? all.length;
+  const page = params?.page ?? 1;
+  const offset = Math.max(0, (page - 1) * limit);
+  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
+
+  return {
+    data,
+    meta: { total: all.length, page, limit },
+  };
 }
 
 export async function getViolation(

@@ -173,9 +173,13 @@ describeDb('violations reporting permission matrix', () => {
       new NextRequest(apiUrl(`/api/v1/violations?communityId=${communityA.id}`)),
     );
     expect(getRes.status).toBe(200);
-    const body = await parseJson<{ data: unknown[] }>(getRes);
-    expect(Array.isArray(body.data)).toBe(true);
-    expect(body.data).toHaveLength(0);
+    // Plan B3: /api/v1/violations now returns the canonical double-wrapped
+    // paginated envelope `{ data: { data, pagination } }`.
+    const body = await parseJson<{
+      data: { data: unknown[]; pagination: unknown };
+    }>(getRes);
+    expect(Array.isArray(body.data.data)).toBe(true);
+    expect(body.data.data).toHaveLength(0);
   });
 
   it('staff can file on behalf of any unit in their community (201) and is tagged as staff on read', async () => {
@@ -199,9 +203,12 @@ describeDb('violations reporting permission matrix', () => {
     );
     expect(listRes.status).toBe(200);
     const listBody = await parseJson<{
-      data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+      data: {
+        data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+        pagination: unknown;
+      };
     }>(listRes);
-    const row = listBody.data.find((v) => v.id === violationId);
+    const row = listBody.data.data.find((v) => v.id === violationId);
     expect(row).toBeDefined();
     expect(row?.reportedByRole).toBe('staff');
   });
@@ -248,9 +255,12 @@ describeDb('violations reporting permission matrix', () => {
     );
     expect(listRes.status).toBe(200);
     const listBody = await parseJson<{
-      data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+      data: {
+        data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+        pagination: unknown;
+      };
     }>(listRes);
-    expect(listBody.data.find((v) => v.id === staffId)?.reportedByRole).toBe('staff');
+    expect(listBody.data.data.find((v) => v.id === staffId)?.reportedByRole).toBe('staff');
   });
 
   it('GET returns reportedByRole=resident for resident-filed rows and staff for staff-filed rows', async () => {
@@ -294,9 +304,12 @@ describeDb('violations reporting permission matrix', () => {
       new NextRequest(apiUrl(`/api/v1/violations?communityId=${communityA.id}`)),
     );
     const listBody = await parseJson<{
-      data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+      data: {
+        data: Array<{ id: number; reportedByRole: 'staff' | 'resident' | null }>;
+        pagination: unknown;
+      };
     }>(listRes);
-    expect(listBody.data.find((v) => v.id === residentId)?.reportedByRole).toBe('resident');
-    expect(listBody.data.find((v) => v.id === staffId)?.reportedByRole).toBe('staff');
+    expect(listBody.data.data.find((v) => v.id === residentId)?.reportedByRole).toBe('resident');
+    expect(listBody.data.data.find((v) => v.id === staffId)?.reportedByRole).toBe('staff');
   });
 });
