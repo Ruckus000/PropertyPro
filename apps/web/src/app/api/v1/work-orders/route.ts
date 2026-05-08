@@ -1,10 +1,42 @@
+/**
+ * Work Orders API.
+ *
+ * GET   /api/v1/work-orders  — paginated work-orders list (Plan B3 rollout)
+ * POST  /api/v1/work-orders  — create a new work order
+ *
+ * GET pagination (Plan B3):
+ * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * - Filters (`status`, `unitId`, resident `allowedUnitIds`) push into the SQL
+ *   `where` predicate.
+ * - Order by `id` desc — equivalent to the previous `desc(createdAt)` for
+ *   monotonic bigserial PKs.
+ * - Per-page `mapWorkOrderRow` + `deriveSlaState` post-processing applied
+ *   to the returned page.
+ * - Response envelope is double-wrapped per the paginated-route contract:
+ *   `{ data: { data: WorkOrderListItem[], pagination } }`.
+ *
+ * The client helper `useWorkOrders` then walks all pages via `walkPaginated`
+ * and JS-slices to the requested `page`+`limit` window, preserving the
+ * existing offset-style UI contract — same pattern as #228 violations.
+ *
+ * Resident-with-no-units short circuit: if a resident has zero allowed unit
+ * ids, paginate would receive `inArray(unitId, [])` (drizzle-illegal). We
+ * return an empty paginated envelope before reaching paginate.
+ */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, type WorkOrderPriority, type WorkOrderStatus } from '@propertypro/db';
+import {
+  createScopedClient,
+  paginate,
+  workOrders,
+  type WorkOrderPriority,
+  type WorkOrderStatus,
+} from '@propertypro/db';
+import { and, eq, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -17,7 +49,12 @@ import {
   requireWorkOrdersReadPermission,
   requireWorkOrdersWritePermission,
 } from '@/lib/work-orders/common';
-import { createWorkOrderForCommunity, listWorkOrdersForCommunity } from '@/lib/services/work-orders-service';
+import {
+  createWorkOrderForCommunity,
+  deriveSlaState,
+  mapWorkOrderRow,
+  type WorkOrderRecord,
+} from '@/lib/services/work-orders-service';
 
 const createWorkOrderSchema = z.object({
   communityId: z.number().int().positive(),
@@ -34,6 +71,20 @@ const createWorkOrderSchema = z.object({
 
 const listStatusSchema = z.enum(['created', 'assigned', 'in_progress', 'completed', 'closed']);
 
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
+function emptyPage(pageSize: number) {
+  return NextResponse.json({
+    data: {
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize },
+    },
+  });
+}
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -46,10 +97,6 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get('status');
   const rawUnitId = searchParams.get('unitId');
-  const rawPage = searchParams.get('page');
-  const rawLimit = searchParams.get('limit');
-  const page = rawPage ? parsePositiveInt(rawPage, 'page') : 1;
-  const limit = rawLimit ? Math.min(parsePositiveInt(rawLimit, 'limit'), 100) : 20;
 
   const parsedStatus = rawStatus ? listStatusSchema.safeParse(rawStatus) : null;
   if (rawStatus && !parsedStatus?.success) {
@@ -69,26 +116,63 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     : undefined;
 
   if (allowedUnitIds && unitId !== undefined && !allowedUnitIds.includes(unitId)) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'You can only view work orders for your own unit',
-        },
-      },
-      { status: 403 },
-    );
+    throw new ForbiddenError('You can only view work orders for your own unit');
   }
 
-  const { data, total } = await listWorkOrdersForCommunity(communityId, {
-    status,
-    unitId,
-    allowedUnitIds,
-    page,
-    limit,
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
+  const parsedQuery = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
+
+  // Resident with no allowed units: short-circuit before paginate. Drizzle
+  // forbids `inArray(col, [])`.
+  if (allowedUnitIds && allowedUnitIds.length === 0) {
+    return emptyPage(parsedQuery.data.pageSize ?? 50);
+  }
+
+  const filterClauses = [];
+  if (status !== undefined) filterClauses.push(eq(workOrders.status, status));
+  if (unitId !== undefined) filterClauses.push(eq(workOrders.unitId, unitId));
+  if (allowedUnitIds && allowedUnitIds.length > 0) {
+    filterClauses.push(inArray(workOrders.unitId, allowedUnitIds));
+  }
+  const where =
+    filterClauses.length === 0
+      ? undefined
+      : filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...filterClauses);
+
+  const result = await paginate<WorkOrderRecord>(
+    scoped,
+    workOrders,
+    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
+    { where },
+  );
+
+  // mapWorkOrderRow normalizes priority/status. deriveSlaState computes
+  // breach flags from row.createdAt + row.slaResponseHours/slaCompletionHours.
+  // Both run per-page since paginate returns one page.
+  const data = result.data.map((row) => {
+    const mapped = mapWorkOrderRow(row);
+    return {
+      ...mapped,
+      ...deriveSlaState(mapped),
+    };
   });
 
-  return NextResponse.json({ data: { data, meta: { page, limit, total } } });
+  return NextResponse.json({
+    data: {
+      data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

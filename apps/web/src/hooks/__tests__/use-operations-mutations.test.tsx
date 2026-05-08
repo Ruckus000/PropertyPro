@@ -95,7 +95,11 @@ describe('useCreateReservation', () => {
 });
 
 describe('useWorkOrders — response roundtrip', () => {
-  it('reads { data, meta } from the double-wrapped envelope', async () => {
+  it('walks the canonical paginated envelope and JS-slices to the requested page (Plan B3)', async () => {
+    // Plan B3: route emits `{ data: { data, pagination } }`. The hook walks
+    // all pages via `walkPaginated` then JS-slices to the requested
+    // page+limit window. `meta.total` is now `walked.length` (capped at
+    // MAX_PAGES * pageSize = 2000 — see #228 violations for the same pattern).
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -105,8 +109,10 @@ describe('useWorkOrders — response roundtrip', () => {
               priority: 'medium', status: 'created', slaResponseHours: null, slaCompletionHours: null,
               assignedAt: null, startedAt: null, completedAt: null, closedAt: null,
               createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              responseSlaBreached: false, completionSlaBreached: false,
             }],
-            meta: { page: 1, limit: 20, total: 42 },
+            // hasMore: false short-circuits the walk after this page.
+            pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
           },
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -115,9 +121,9 @@ describe('useWorkOrders — response roundtrip', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { result } = renderHook(() => useWorkOrders(42), { wrapper: wrapper(qc) });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // If envelope were flat, result.current.data would be an array and data.data would be undefined.
     expect(result.current.data?.data).toHaveLength(1);
-    expect(result.current.data?.meta.total).toBe(42);
+    // total reflects the walked length, not a server-side COUNT.
+    expect(result.current.data?.meta.total).toBe(1);
     expect(result.current.data?.meta.page).toBe(1);
   });
 });
