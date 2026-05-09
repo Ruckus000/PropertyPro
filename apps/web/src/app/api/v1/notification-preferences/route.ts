@@ -12,12 +12,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  notificationPreferences,
-  logAuditEvent,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -30,6 +25,11 @@ import {
 } from '@/lib/utils/email-preferences';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import {
+  getNotificationPreferencesForUser,
+  insertNotificationPreferences,
+  updateNotificationPreferences,
+} from '@/lib/services/notification-preferences-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 const emailFrequencySchema = z.enum([
@@ -72,9 +72,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(notificationPreferences);
-  const row = rows.find((r) => r['userId'] === userId);
+  const row = await getNotificationPreferencesForUser(communityId, userId);
 
   const defaults = getDefaultPreferences();
 
@@ -136,14 +134,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-
-  const existing = (
-    await scoped.queryWhere(
-      notificationPreferences,
-      eq(notificationPreferences.userId, userId),
-    )
-  )[0];
+  const existing = await getNotificationPreferencesForUser(communityId, userId);
 
   const updateValues: Record<string, unknown> = {};
   if (emailFrequency !== undefined) updateValues['emailFrequency'] = emailFrequency;
@@ -192,16 +183,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   }
 
   if (!existing) {
-    await scoped.insert(notificationPreferences, {
-      userId,
-      ...updateValues,
-    });
+    await insertNotificationPreferences(communityId, userId, updateValues);
   } else {
-    await scoped.update(
-      notificationPreferences,
-      updateValues,
-      eq(notificationPreferences.userId, userId),
-    );
+    await updateNotificationPreferences(communityId, userId, updateValues);
   }
 
   await logAuditEvent({

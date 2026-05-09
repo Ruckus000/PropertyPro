@@ -46,8 +46,14 @@ describe('p1-26 notification-preferences route', () => {
   });
 
   it('GET returns defaults when no row exists', async () => {
+    // After A3 drain #61, the GET handler uses
+    // getNotificationPreferencesForUser, which calls scoped.selectFrom
+    // instead of scoped.query + JS .find(). selectFrom returns the same
+    // empty array shape, so we mock both to return [].
+    const empty = vi.fn().mockResolvedValue([]);
     createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
+      query: empty,
+      selectFrom: empty,
     });
 
     const req = new NextRequest(
@@ -94,7 +100,8 @@ describe('p1-26 notification-preferences route', () => {
       .fn()
       .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
 
-    createScopedClientMock.mockReturnValue({ query, queryWhere, insert, update });
+    // selectFrom alias for queryWhere — see drain #61 mock-aliasing pattern.
+    createScopedClientMock.mockReturnValue({ query, queryWhere, selectFrom: queryWhere, insert, update });
 
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
@@ -153,7 +160,7 @@ describe('p1-26 notification-preferences route', () => {
       .fn()
       .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
 
-    createScopedClientMock.mockReturnValue({ query, queryWhere, insert, update: vi.fn() });
+    createScopedClientMock.mockReturnValue({ query, queryWhere, selectFrom: queryWhere, insert, update: vi.fn() });
 
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
