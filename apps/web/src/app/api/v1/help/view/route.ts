@@ -11,12 +11,12 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, helpArticleViews } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { recordArticleView } from '@/lib/services/help-views-service';
 
 const postSchema = z.object({
   communityId: z.number().int().positive(),
@@ -36,8 +36,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-  await scoped.insert(helpArticleViews, {
+  await recordArticleView({
+    communityId,
     userId,
     articleSlug,
     articleCategory,

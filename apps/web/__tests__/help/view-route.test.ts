@@ -5,27 +5,27 @@
  * - Happy path records a view (201)
  * - Validation failures surface as errors
  * - Auth + membership are required
+ *
+ * The route delegates the actual DB write to `recordArticleView` in
+ * `help-views-service`; this test mocks that service boundary.
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const {
-  scopedInsertMock,
-  createScopedClientMock,
+  recordArticleViewMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
 } = vi.hoisted(() => ({
-  scopedInsertMock: vi.fn(),
-  createScopedClientMock: vi.fn(),
+  recordArticleViewMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/db', () => ({
-  createScopedClient: createScopedClientMock,
-  helpArticleViews: { __table: 'help_article_views' },
+vi.mock('@/lib/services/help-views-service', () => ({
+  recordArticleView: recordArticleViewMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -69,14 +69,10 @@ describe('POST /api/v1/help/view', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({ role: 'owner' });
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-    });
+    recordArticleViewMock.mockResolvedValue(undefined);
   });
 
   it('records a view and returns 201', async () => {
-    scopedInsertMock.mockResolvedValue([{ id: 1 }]);
-
     const response = await POST(
       makeJsonRequest('/api/v1/help/view', {
         communityId: 1,
@@ -88,10 +84,9 @@ describe('POST /api/v1/help/view', () => {
 
     expect(response.status).toBe(201);
     expect(json.ok).toBe(true);
-    expect(scopedInsertMock).toHaveBeenCalledTimes(1);
-    const [table, data] = scopedInsertMock.mock.calls[0]!;
-    expect(table).toEqual({ __table: 'help_article_views' });
-    expect(data).toMatchObject({
+    expect(recordArticleViewMock).toHaveBeenCalledTimes(1);
+    expect(recordArticleViewMock).toHaveBeenCalledWith({
+      communityId: 1,
       userId: 'user-1',
       articleSlug: 'welcome-to-propertypro',
       articleCategory: 'getting-started',
@@ -108,7 +103,7 @@ describe('POST /api/v1/help/view', () => {
         }),
       ),
     ).rejects.toThrow(/Invalid/i);
-    expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(recordArticleViewMock).not.toHaveBeenCalled();
   });
 
   it('propagates auth errors from requireAuthenticatedUserId', async () => {
@@ -123,6 +118,6 @@ describe('POST /api/v1/help/view', () => {
         }),
       ),
     ).rejects.toThrow('Unauthenticated');
-    expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(recordArticleViewMock).not.toHaveBeenCalled();
   });
 });
