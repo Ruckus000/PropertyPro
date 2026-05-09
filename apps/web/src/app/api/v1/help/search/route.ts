@@ -9,7 +9,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { captureMessage } from '@sentry/nextjs';
-import { createScopedClient, faqs } from '@propertypro/db';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
@@ -21,6 +20,7 @@ import {
   safelyFilterArticlesByFeatures,
   searchArticles,
 } from '@/lib/services/help-article-service';
+import { searchCommunityFaqs } from '@/lib/services/faq-service';
 
 /**
  * Length cap on the `query` field sent to Sentry on a zero-result event.
@@ -86,16 +86,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   });
   const articleResults = searchArticles(allArticles, q);
 
-  const scoped = createScopedClient(communityId);
-  const faqRows = await scoped.query(faqs); // FAQs per community are small (< 100)
-  const qLower = q.toLowerCase();
-  const faqResults = faqRows
-    .filter((f) => {
-      const question = String(f['question'] ?? '').toLowerCase();
-      const answer = String(f['answer'] ?? '').toLowerCase();
-      return question.includes(qLower) || answer.includes(qLower);
-    })
-    .slice(0, 10);
+  const { hits: faqResults, totalRowCount: faqCount } = await searchCommunityFaqs(
+    communityId,
+    q,
+    10,
+  );
 
   // Telemetry: zero-result searches (queries ≥ 3 chars to avoid 2-char noise).
   // Fires only when BOTH article and FAQ results are empty — a query that
@@ -110,7 +105,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         query: q.slice(0, SEARCH_QUERY_CAPTURE_MAX_LEN),
         communityId,
         articleCount: allArticles.length,
-        faqCount: faqRows.length,
+        faqCount,
       },
     });
   }
@@ -125,11 +120,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         roles: a.roles,
         readTimeMinutes: a.readTimeMinutes,
       })),
-      faqs: faqResults.map((f) => ({
-        id: f['id'] as number,
-        question: f['question'] as string,
-        answer: f['answer'] as string,
-      })),
+      faqs: faqResults,
     },
   });
 });

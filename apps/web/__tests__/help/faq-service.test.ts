@@ -15,6 +15,7 @@ import {
   ensureFaqsExist,
   filterFaqsForRole,
   isFaqVisibleToRole,
+  searchCommunityFaqs,
 } from '../../src/lib/services/faq-service';
 
 describe('faq service helpers', () => {
@@ -81,5 +82,57 @@ describe('faq service helpers', () => {
     await ensureFaqsExist(42);
 
     expect(insert).not.toHaveBeenCalled();
+  });
+
+  describe('searchCommunityFaqs', () => {
+    const rows = [
+      { id: 1, question: 'How do I pay rent?', answer: 'Open Payments tab.' },
+      { id: 2, question: 'Where is the gym?', answer: 'Building B.' },
+      { id: 3, question: 'Pool hours?', answer: 'Open 6am-10pm.' },
+      { id: 4, question: 'Pet policy?', answer: 'Dogs and cats allowed.' },
+    ];
+
+    it('matches case-insensitively against both question and answer', async () => {
+      const query = vi.fn().mockResolvedValue(rows);
+      createScopedClientMock.mockReturnValue({ query });
+
+      const result = await searchCommunityFaqs(42, 'OPEN');
+      expect(result.hits.map((h) => h.id).sort()).toEqual([1, 3]);
+      expect(result.totalRowCount).toBe(4);
+      expect(createScopedClientMock).toHaveBeenCalledWith(42);
+    });
+
+    it('returns empty hits and total row count when no match', async () => {
+      const query = vi.fn().mockResolvedValue(rows);
+      createScopedClientMock.mockReturnValue({ query });
+
+      const result = await searchCommunityFaqs(42, 'xyzzy');
+      expect(result.hits).toEqual([]);
+      expect(result.totalRowCount).toBe(4);
+    });
+
+    it('caps hits at the limit', async () => {
+      const manyMatching = Array.from({ length: 25 }, (_, i) => ({
+        id: i + 1,
+        question: 'pool',
+        answer: 'pool',
+      }));
+      const query = vi.fn().mockResolvedValue(manyMatching);
+      createScopedClientMock.mockReturnValue({ query });
+
+      const result = await searchCommunityFaqs(42, 'pool', 5);
+      expect(result.hits).toHaveLength(5);
+      expect(result.totalRowCount).toBe(25);
+    });
+
+    it('shapes each hit as { id, question, answer }', async () => {
+      const query = vi.fn().mockResolvedValue([
+        { id: 7, question: 'Q?', answer: 'A.', extraField: 'ignored' },
+      ]);
+      createScopedClientMock.mockReturnValue({ query });
+
+      const result = await searchCommunityFaqs(42, 'Q');
+      expect(result.hits[0]).toEqual({ id: 7, question: 'Q?', answer: 'A.' });
+    });
   });
 });
