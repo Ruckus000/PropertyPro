@@ -786,6 +786,132 @@ export async function runAddToGroupProvisioning(input: AddToGroupInput): Promise
   await recalculateVolumeTier(input.billingGroupId);
 }
 
+// ---------------------------------------------------------------------------
+// Provisioning status polling helpers (used by /api/v1/auth/provisioning-status)
+// ---------------------------------------------------------------------------
+
+export interface ProvisioningJobStatusRow {
+  id: number;
+  signupRequestId: string | null;
+  communityId: number | null;
+  status: string;
+  lastSuccessfulStatus: string | null;
+}
+
+/**
+ * Fetch the status-polling projection of a provisioning_jobs row by signup
+ * request id. Returns `null` when no job has been created yet (normal during
+ * the first few polls after checkout, before the Stripe webhook fires).
+ *
+ * AUTHZ: pre-auth public endpoint — secured by the unguessable
+ * `signupRequestId` UUID. Caller MUST validate the param shape before
+ * invoking.
+ */
+export async function getProvisioningJobBySignupRequestId(
+  signupRequestId: string,
+): Promise<ProvisioningJobStatusRow | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: provisioningJobs.id,
+      signupRequestId: provisioningJobs.signupRequestId,
+      communityId: provisioningJobs.communityId,
+      status: provisioningJobs.status,
+      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
+    })
+    .from(provisioningJobs)
+    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface PendingSignupTokenRow {
+  email: string;
+  payload: Record<string, unknown> | null;
+  signupRequestId: string;
+}
+
+/**
+ * Fetch the email + payload for a pending signup, used by the post-completion
+ * magic-link generation path in the status poller. Returns `null` when no
+ * pending_signups row matches.
+ *
+ * AUTHZ: same pre-auth endpoint as `getProvisioningJobBySignupRequestId`.
+ */
+export async function getPendingSignupBySignupRequestId(
+  signupRequestId: string,
+): Promise<PendingSignupTokenRow | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      email: pendingSignups.email,
+      payload: pendingSignups.payload,
+      signupRequestId: pendingSignups.signupRequestId,
+    })
+    .from(pendingSignups)
+    .where(eq(pendingSignups.signupRequestId, signupRequestId))
+    .limit(1);
+  if (!row) return null;
+  return {
+    email: row.email,
+    payload: (row.payload ?? null) as Record<string, unknown> | null,
+    signupRequestId: row.signupRequestId,
+  };
+}
+
+/**
+ * Persist a generated magic-link token into `pending_signups.payload.loginToken`
+ * so subsequent status polls reuse the same token without re-issuing one.
+ * Caller passes the existing payload (which the helper merges into) so we
+ * don't blow away other keys.
+ */
+export async function cacheLoginTokenInPendingSignup(
+  signupRequestId: string,
+  existingPayload: Record<string, unknown>,
+  loginToken: string,
+): Promise<void> {
+  const db = createUnscopedClient();
+  await db
+    .update(pendingSignups)
+    .set({
+      payload: { ...existingPayload, loginToken },
+    })
+    .where(eq(pendingSignups.signupRequestId, signupRequestId));
+}
+
+/**
+ * Generate a fresh Supabase magic-link token for the email and persist it
+ * into `pending_signups.payload.loginToken`. Returns the token string on
+ * success, or `null` when Supabase auth-admin failed to issue one (caller
+ * should respond with a 500).
+ *
+ * Wraps the auth-admin client + cache write in one helper so the route
+ * doesn't need to import `@propertypro/db/supabase/admin` directly.
+ */
+export async function generateAndCacheLoginToken(
+  signupRequestId: string,
+  email: string,
+  existingPayload: Record<string, unknown>,
+): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  });
+
+  if (linkError || !linkData?.properties?.hashed_token) {
+    console.error(
+      '[provisioning-service] Failed to generate magic link:',
+      linkError?.message,
+    );
+    return null;
+  }
+
+  const loginToken: string = linkData.properties.hashed_token;
+  await cacheLoginTokenInPendingSignup(signupRequestId, existingPayload, loginToken);
+  return loginToken;
+}
+
 export const _testInternals = {
   resolvePendingSignupAddress,
 } as const;

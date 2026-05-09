@@ -8,11 +8,11 @@
  * magic link token (cached in pending_signups.payload) for auto-login.
  */
 import { NextResponse } from 'next/server';
-import { eq } from '@propertypro/db/filters';
-import { provisioningJobs, pendingSignups } from '@propertypro/db';
-// AUTHZ: Provisioning status polling — pre-login endpoint, queries provisioning_jobs + pending_signups
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import {
+  generateAndCacheLoginToken,
+  getPendingSignupBySignupRequestId,
+  getProvisioningJobBySignupRequestId,
+} from '@/lib/services/provisioning-service';
 
 export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
@@ -25,20 +25,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
   }
 
-  const db = createUnscopedClient();
-
   // Look up the provisioning job
-  const [job] = await db
-    .select({
-      id: provisioningJobs.id,
-      signupRequestId: provisioningJobs.signupRequestId,
-      communityId: provisioningJobs.communityId,
-      status: provisioningJobs.status,
-      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
-    })
-    .from(provisioningJobs)
-    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
-    .limit(1);
+  const job = await getProvisioningJobBySignupRequestId(signupRequestId);
 
   // No job yet — webhook hasn't fired. Normal during the first few polls.
   if (!job) {
@@ -55,15 +43,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   // Completed — generate or return cached magic link token
   if (job.status === 'completed') {
-    const [signup] = await db
-      .select({
-        email: pendingSignups.email,
-        payload: pendingSignups.payload,
-        signupRequestId: pendingSignups.signupRequestId,
-      })
-      .from(pendingSignups)
-      .where(eq(pendingSignups.signupRequestId, signupRequestId))
-      .limit(1);
+    const signup = await getPendingSignupBySignupRequestId(signupRequestId);
 
     if (!signup) {
       return NextResponse.json(
@@ -85,33 +65,18 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
 
-    // Generate fresh magic link token
-    const admin = createAdminClient();
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: signup.email,
-    });
-
-    if (linkError || !linkData?.properties?.hashed_token) {
-      console.error(
-        '[provisioning-status] Failed to generate magic link:',
-        linkError?.message,
-      );
+    // Generate fresh magic link token (and cache it for subsequent polls)
+    const loginToken = await generateAndCacheLoginToken(
+      signupRequestId,
+      signup.email,
+      payload,
+    );
+    if (!loginToken) {
       return NextResponse.json(
         { error: 'Failed to generate login token' },
         { status: 500 },
       );
     }
-
-    const loginToken: string = linkData.properties.hashed_token;
-
-    // Cache the token in pending_signups.payload so subsequent polls reuse it
-    await db
-      .update(pendingSignups)
-      .set({
-        payload: { ...payload, loginToken },
-      })
-      .where(eq(pendingSignups.signupRequestId, signupRequestId));
 
     return NextResponse.json({
       status: 'completed',
