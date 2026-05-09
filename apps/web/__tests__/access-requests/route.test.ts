@@ -20,10 +20,7 @@ const {
   verifyOtpMock,
   approveAccessRequestMock,
   denyAccessRequestMock,
-  paginateMock,
-  scopedClient,
-  createScopedClientMock,
-  accessRequestsTable,
+  paginatePendingAccessRequestsMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
@@ -33,38 +30,22 @@ const {
   verifyOtpMock: vi.fn(),
   approveAccessRequestMock: vi.fn(),
   denyAccessRequestMock: vi.fn(),
-  paginateMock: vi.fn(),
-  scopedClient: { __scoped: true },
-  createScopedClientMock: vi.fn(),
-  accessRequestsTable: { id: Symbol('access_requests.id'), status: Symbol('access_requests.status') },
+  paginatePendingAccessRequestsMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
 }));
 
-// Mock the access-request service (mutation/submit paths only — list path now
-// uses paginate() directly, mocked separately below).
+// Mock the access-request service. The list path now delegates to
+// `paginatePendingAccessRequests` (A3 Phase 2 service wrapper), so the route
+// no longer imports `@propertypro/db` directly.
 vi.mock('@/lib/services/access-request-service', () => ({
   submitAccessRequest: submitAccessRequestMock,
   verifyOtp: verifyOtpMock,
   approveAccessRequest: approveAccessRequestMock,
   denyAccessRequest: denyAccessRequestMock,
-}));
-
-// Mock @propertypro/db for the GET path's paginate() call. The route imports
-// `accessRequests` (table), `createScopedClient`, and `paginate` from here.
-vi.mock('@propertypro/db', () => ({
-  accessRequests: accessRequestsTable,
-  createScopedClient: createScopedClientMock,
-  paginate: paginateMock,
-}));
-
-// `eq` is imported from @propertypro/db/filters for the where predicate.
-// Stub it as identity-ish — the route's only use is `paginate(..., { where: eq(...) })`,
-// and we just need `where` to be defined for assertions.
-vi.mock('@propertypro/db/filters', () => ({
-  eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  paginatePendingAccessRequests: paginatePendingAccessRequestsMock,
 }));
 
 // Mock auth helpers
@@ -287,16 +268,12 @@ describe('Access Request Routes', () => {
   // =========================================================================
 
   describe('GET /api/v1/access-requests', () => {
-    beforeEach(() => {
-      createScopedClientMock.mockReturnValue(scopedClient);
-    });
-
     it('returns paginated pending requests for admin user', async () => {
       const pendingRows = [
         { id: 1, email: 'a@test.com', fullName: 'Alice', status: 'pending' },
         { id: 2, email: 'b@test.com', fullName: 'Bob', status: 'pending' },
       ];
-      paginateMock.mockResolvedValueOnce({
+      paginatePendingAccessRequestsMock.mockResolvedValueOnce({
         data: pendingRows,
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
@@ -314,23 +291,15 @@ describe('Access Request Routes', () => {
         'residents',
         'write',
       );
-      expect(createScopedClientMock).toHaveBeenCalledWith(1);
-      const [client, table, input, options] = paginateMock.mock.calls[0] as [
-        unknown,
-        unknown,
-        { cursor?: string; pageSize?: number },
-        { where?: unknown },
-      ];
-      expect(client).toBe(scopedClient);
-      expect(table).toBe(accessRequestsTable);
-      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
-      // Where predicate should filter status='pending' — captured by the
-      // identity-ish eq() mock; assert its shape rather than exact SQL.
-      expect(options.where).toEqual({ __eq: { col: accessRequestsTable.status, val: 'pending' } });
+      expect(paginatePendingAccessRequestsMock).toHaveBeenCalledWith({
+        communityId: 1,
+        cursor: undefined,
+        pageSize: undefined,
+      });
     });
 
     it('returns empty page when no pending requests', async () => {
-      paginateMock.mockResolvedValueOnce({
+      paginatePendingAccessRequestsMock.mockResolvedValueOnce({
         data: [],
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
@@ -348,7 +317,7 @@ describe('Access Request Routes', () => {
       // undefined rather than passed to Zod, which would 400 on the `min(1)`
       // / `positive()` constraints. This protects against stale clients
       // sending `?cursor=` or `?pageSize=` in URL builders.
-      paginateMock.mockResolvedValueOnce({
+      paginatePendingAccessRequestsMock.mockResolvedValueOnce({
         data: [],
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
@@ -356,17 +325,15 @@ describe('Access Request Routes', () => {
       const req = makeRequest('/api/v1/access-requests?cursor=&pageSize=');
       const response = await listGET(req);
       expect(response.status).toBe(200);
-
-      const [, , input] = paginateMock.mock.calls[0] as [
-        unknown,
-        unknown,
-        { cursor?: string; pageSize?: number },
-      ];
-      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
+      expect(paginatePendingAccessRequestsMock).toHaveBeenCalledWith({
+        communityId: 1,
+        cursor: undefined,
+        pageSize: undefined,
+      });
     });
 
-    it('forwards cursor and pageSize to paginate()', async () => {
-      paginateMock.mockResolvedValueOnce({
+    it('forwards cursor and pageSize to the service', async () => {
+      paginatePendingAccessRequestsMock.mockResolvedValueOnce({
         data: [],
         pagination: { nextCursor: 'next-opaque', hasMore: true, pageSize: 25 },
       });
@@ -381,12 +348,11 @@ describe('Access Request Routes', () => {
         hasMore: true,
         pageSize: 25,
       });
-      const [, , input] = paginateMock.mock.calls[0] as [
-        unknown,
-        unknown,
-        { cursor?: string; pageSize?: number },
-      ];
-      expect(input).toEqual({ cursor: 'abc', pageSize: 25 });
+      expect(paginatePendingAccessRequestsMock).toHaveBeenCalledWith({
+        communityId: 1,
+        cursor: 'abc',
+        pageSize: 25,
+      });
     });
   });
 
