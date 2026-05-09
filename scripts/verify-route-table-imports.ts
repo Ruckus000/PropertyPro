@@ -76,6 +76,9 @@ const ALLOWED_SYMBOLS = new Set<string>([
   'markNotificationsRead',
   'archiveNotifications',
   'countUnreadNotifications',
+  // Notification insertion helper (canonical platform helper that wraps the
+  // notifications table insert + transactional outbox; not a Drizzle table).
+  'insertNotifications',
   // Document access control helpers (Plan B3 #235 extracted these)
   'buildAccessibleDocumentsFilter',
   'buildDocumentAccessFilter',
@@ -113,7 +116,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/auth/provisioning-status/route.ts',
   'apps/web/src/app/api/v1/auth/resend-verification/route.ts',
   'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts',
-  'apps/web/src/app/api/v1/billing/upgrade-requests/route.ts',
   'apps/web/src/app/api/v1/compliance/route.ts',
   'apps/web/src/app/api/v1/contracts/route.ts',
   'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts',
