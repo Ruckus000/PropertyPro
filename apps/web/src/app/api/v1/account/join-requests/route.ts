@@ -8,10 +8,8 @@
  * - requires an authenticated user
  * - rate-limits to 5 submissions per user per day
  * - runs eligibility checks (no existing role, no pending request, no 30-day cooldown)
- * - inserts a community_join_requests row with status='pending'
- *
- * Uses the unscoped client because the request crosses the tenant boundary
- * (the user is not yet a member of the target community).
+ * - inserts a community_join_requests row with status='pending' via the
+ *   join-requests service (cross-tenant insert lives there).
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -23,10 +21,10 @@ import {
   RateLimitError,
 } from '@/lib/api/errors';
 import { checkJoinRequestEligibility } from '@/lib/join-requests/eligibility';
-// AUTHZ: Authenticated user's own join requests (own-user scoped, no community context yet)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communityJoinRequests } from '@propertypro/db';
-import { and, desc, eq } from '@propertypro/db/filters';
+import {
+  createJoinRequest,
+  listJoinRequestsForUser,
+} from '@/lib/join-requests/approve-request';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 
 const createSchema = z.object({
@@ -69,43 +67,21 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const db = createUnscopedClient();
-  const [row] = await db
-    .insert(communityJoinRequests)
-    .values({
-      userId,
-      communityId: parsed.data.communityId,
-      unitIdentifier: parsed.data.unitIdentifier,
-      residentType: parsed.data.residentType,
-    })
-    .returning({
-      id: communityJoinRequests.id,
-      status: communityJoinRequests.status,
-    });
-
-  if (!row) {
-    throw new Error('Failed to insert join request');
-  }
+  const created = await createJoinRequest({
+    userId,
+    communityId: parsed.data.communityId,
+    unitIdentifier: parsed.data.unitIdentifier,
+    residentType: parsed.data.residentType,
+  });
 
   return NextResponse.json(
-    { data: { requestId: row.id, status: row.status } },
+    { data: { requestId: created.id, status: created.status } },
     { status: 201 },
   );
 });
 
 export const GET = withErrorHandler(async () => {
   const userId = await requireAuthenticatedUserId();
-  const db = createUnscopedClient();
-
-  const rows = await db
-    .select()
-    .from(communityJoinRequests)
-    .where(
-      and(
-        eq(communityJoinRequests.userId, userId),
-      ),
-    )
-    .orderBy(desc(communityJoinRequests.createdAt));
-
+  const rows = await listJoinRequestsForUser(userId);
   return NextResponse.json({ data: rows });
 });
