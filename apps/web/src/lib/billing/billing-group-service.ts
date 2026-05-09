@@ -203,25 +203,28 @@ export async function getBillingGroupOwner(
 }
 
 /**
- * List the `subscriptionPlan` of every other (non-soft-deleted) community in
- * the same billing group. Used by the cancel-PREVIEW path to compute the
- * pricing impact of removing the target community.
+ * List the `subscriptionPlan` of every (non-soft-deleted) community in the
+ * billing group. When `excludeCommunityId` is provided, that community is
+ * skipped — used by the cancel-PREVIEW path to compute pricing for removing
+ * the target community. Without it, returns the full active set — used by
+ * the add-community pricing preview.
  */
 export async function listSiblingCommunityPlans(
   billingGroupId: number,
-  excludeCommunityId: number,
+  excludeCommunityId?: number,
 ): Promise<{ planKey: string | null }[]> {
   const db = createUnscopedClient();
+  const conditions = [
+    eq(communities.billingGroupId, billingGroupId),
+    isNull(communities.deletedAt),
+  ];
+  if (excludeCommunityId !== undefined) {
+    conditions.push(ne(communities.id, excludeCommunityId));
+  }
   return await db
     .select({ planKey: communities.subscriptionPlan })
     .from(communities)
-    .where(
-      and(
-        eq(communities.billingGroupId, billingGroupId),
-        isNull(communities.deletedAt),
-        ne(communities.id, excludeCommunityId),
-      ),
-    );
+    .where(and(...conditions));
 }
 
 export interface CommunityCancellationDetails {
