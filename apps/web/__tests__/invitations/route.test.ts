@@ -68,6 +68,12 @@ describe('p1-20 invitation auth flow', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('inviter-uuid');
     createScopedClientMock.mockReturnValue({
       query: scopedQueryMock,
+      // After A3 drain #60, helpers in `invitations-service` use
+      // `selectFrom(table, projection, eq(pk, value))` instead of
+      // `scoped.query(table)` + JS .find(). The test's mocked rows still
+      // come from `scopedQueryMock`; selectFrom delegates to the same
+      // queue so each `mockResolvedValueOnce` feeds the next helper call.
+      selectFrom: scopedQueryMock,
       insert: scopedInsertMock,
       update: scopedUpdateMock,
     });
