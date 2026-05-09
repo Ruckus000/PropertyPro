@@ -3,13 +3,9 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import {
-  createScopedClient,
-  documentCategories,
-  searchDocuments,
-} from '@propertypro/db';
-import { inArray } from '@propertypro/db/filters';
+import { searchDocuments } from '@propertypro/db';
 import { requirePermission } from '@/lib/db/access-control';
+import { getDocumentCategoryNames } from '@/lib/services/document-category-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -47,20 +43,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     ),
   );
 
-  const categoryNames = new Map<number, string>();
-  if (categoryIds.length > 0) {
-    const scoped = createScopedClient(communityId);
-    const rows = await scoped.selectFrom(
-      documentCategories,
-      { id: documentCategories.id, name: documentCategories.name },
-      inArray(documentCategories.id, categoryIds),
-    );
-    for (const row of rows) {
-      if (typeof row.id === 'number' && typeof row.name === 'string') {
-        categoryNames.set(row.id, row.name);
-      }
-    }
-  }
+  const categoryNames = await getDocumentCategoryNames(communityId, categoryIds);
 
   return NextResponse.json({
     results: data.map((r) => ({
