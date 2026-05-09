@@ -109,8 +109,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/auth/confirm-verification/route.ts'),
   // Resend signup verification email — pre-tenant state, looks up pendingSignups row
   resolve(repoRoot, 'apps/web/src/app/api/v1/auth/resend-verification/route.ts'),
-  // E-02: Account profile — user-scoped update (no community_id on users table)
-  resolve(repoRoot, 'apps/web/src/app/api/v1/account/profile/route.ts'),
+  // E-02: Account profile — user-scoped update (no community_id on users table).
+  // The unsafe-client usage moved into the user-profile-service in A3 Phase 2,
+  // so the route itself no longer needs the allowance.
+  resolve(repoRoot, 'apps/web/src/lib/services/user-profile-service.ts'),
   // E-02: Account settings page — reads user row (no community_id on users table)
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/settings/account/page.tsx'),
   // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
