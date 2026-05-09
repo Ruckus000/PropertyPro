@@ -2,6 +2,7 @@ import { addDays, format } from 'date-fns';
 import {
   arcSubmissions,
   assessmentLineItems,
+  communities,
   createScopedClient,
   documents,
   ledgerEntries,
@@ -412,6 +413,54 @@ export async function getViolationForCommunity(
     throw new NotFoundError('Violation not found');
   }
   return mapViolationRow(record);
+}
+
+export interface ViolationNoticeCommunityHeader {
+  /** Defaults to `'Community Association'` when the row is missing or `name` is null. */
+  name: string;
+  /**
+   * Comma-joined `addressLine1, city, state, zipCode` (skipping any falsy
+   * components). Empty string when the community row is missing or all
+   * address fields are unset — matches the routes' pre-A3 behavior.
+   */
+  address: string;
+  /** True when the community row was found; false when not. */
+  found: boolean;
+}
+
+/**
+ * Fetch the community-header projection used by the violation notice + hearing
+ * notice PDFs (name + composed address line). Both routes need exactly the
+ * same projection and the same defensive defaulting; this helper gives them
+ * one source of truth.
+ *
+ * Returns the typed header even when the community row is missing
+ * (`{ name: 'Community Association', address: '', found: false }`) so the
+ * notice route can short-circuit gracefully — but the hearing-notice route
+ * checks `found === false` and throws NotFoundError for stricter behavior.
+ */
+export async function getViolationNoticeCommunityHeader(
+  communityId: number,
+): Promise<ViolationNoticeCommunityHeader> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    {},
+    eq(communities.id, communityId),
+  )) as unknown as Record<string, unknown>[];
+  const community = rows[0];
+  if (!community) {
+    return { name: 'Community Association', address: '', found: false };
+  }
+  const name = (community['name'] as string | null | undefined) ?? 'Community Association';
+  const addressParts = [
+    community['addressLine1'] as string | null | undefined,
+    community['city'] as string | null | undefined,
+    community['state'] as string | null | undefined,
+    community['zipCode'] as string | null | undefined,
+  ].filter(Boolean) as string[];
+  const address = addressParts.length > 0 ? addressParts.join(', ') : '';
+  return { name, address, found: true };
 }
 
 export async function createViolationForCommunity(
