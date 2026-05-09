@@ -261,6 +261,36 @@ export async function getDeletionRequestType(
 }
 
 /**
+ * Find the active access plan id for a community, if any.
+ * "Active" = not revoked AND not yet converted (status 'active' or 'in_grace'
+ * — used by the subscribe flow to attach the plan id to the Stripe checkout
+ * metadata so the webhook can mark it converted).
+ *
+ * Returns the plan id or `null`.
+ *
+ * AUTHZ: cross-tenant unscoped read of platform-level table. Caller MUST
+ * authorize via the appropriate community-membership + permission checks
+ * before invoking.
+ */
+export async function findActiveAccessPlanIdForCommunity(
+  communityId: number,
+): Promise<number | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ id: accessPlans.id })
+    .from(accessPlans)
+    .where(
+      and(
+        eq(accessPlans.communityId, communityId),
+        isNull(accessPlans.revokedAt),
+        isNull(accessPlans.convertedAt),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Existence check on the platform-level `communities` table. Returns true
  * when a row matches `id`, false otherwise.
  *

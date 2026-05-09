@@ -11,10 +11,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { eq, and, isNull } from '@propertypro/db/filters';
-import { accessPlans, communities } from '@propertypro/db';
-// AUTHZ: Subscribe route — Stripe checkout + access plan conversion
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -25,6 +21,8 @@ import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { resolveStripePrice } from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
+import { getCommunityForCheckout } from '@/lib/billing/billing-group-service';
+import { findActiveAccessPlanIdForCommunity } from '@/lib/services/account-lifecycle-service';
 
 const subscribeSchema = z.object({
   planId: z.enum(PLAN_IDS),
@@ -45,20 +43,9 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   }
 
   const { planId } = parsed.data;
-  const db = createUnscopedClient();
 
   // Look up community for Stripe customer info + community type
-  const [community] = await db
-    .select({
-      id: communities.id,
-      name: communities.name,
-      communityType: communities.communityType,
-      stripeCustomerId: communities.stripeCustomerId,
-    })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-
+  const community = await getCommunityForCheckout(communityId);
   if (!community) {
     throw new ValidationError('Community not found', { communityId: 'Not found' });
   }
@@ -71,17 +58,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   }
 
   // Check for active access plan to include in checkout metadata
-  const [activePlan] = await db
-    .select({ id: accessPlans.id })
-    .from(accessPlans)
-    .where(
-      and(
-        eq(accessPlans.communityId, communityId),
-        isNull(accessPlans.revokedAt),
-        isNull(accessPlans.convertedAt),
-      ),
-    )
-    .limit(1);
+  const activePlanId = await findActiveAccessPlanIdForCommunity(communityId);
 
   // Resolve Stripe price from DB
   const priceId = await resolveStripePrice(planId, community.communityType, 'month');
@@ -97,12 +74,12 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
       communityId: String(communityId),
       planId,
       // If there's an active access plan, include its ID so the webhook can mark it converted
-      ...(activePlan ? { accessPlanId: String(activePlan.id) } : {}),
+      ...(activePlanId !== null ? { accessPlanId: String(activePlanId) } : {}),
     },
   };
 
   // Attach existing Stripe customer if we have one
-  if (community?.stripeCustomerId) {
+  if (community.stripeCustomerId) {
     sessionParams.customer = community.stripeCustomerId;
   }
 
