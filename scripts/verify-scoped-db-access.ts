@@ -115,9 +115,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/user-profile-service.ts'),
   // E-02: Account settings page — reads user row (no community_id on users table)
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/settings/account/page.tsx'),
-  // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
-  resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/send/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/phone/verify/confirm/route.ts'),
+  // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column).
+  // The unsafe-client usage moved into the phone-verification-service in A3 Phase 2,
+  // so the routes themselves no longer need the allowance.
+  resolve(repoRoot, 'apps/web/src/lib/services/phone-verification-service.ts'),
   // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
   resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/twilio/route.ts'),
   // Phase 2C: PM dashboard — cross-community KPI aggregation + report queries

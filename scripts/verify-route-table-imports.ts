@@ -149,8 +149,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/onboarding/apartment/route.ts',
   'apps/web/src/app/api/v1/onboarding/condo/route.ts',
   'apps/web/src/app/api/v1/packages/route.ts',
-  'apps/web/src/app/api/v1/phone/verify/confirm/route.ts',
-  'apps/web/src/app/api/v1/phone/verify/send/route.ts',
   'apps/web/src/app/api/v1/pm/bulk/announcements/route.ts',
   'apps/web/src/app/api/v1/pm/bulk/documents/route.ts',
   'apps/web/src/app/api/v1/polls/route.ts',
