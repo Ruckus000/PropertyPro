@@ -8,11 +8,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  announcements,
-  users,
-} from '@propertypro/db';
 // AUTHZ: Phase 2C: Bulk operations — cross-community announcements + document uploads
 import {
   isPmAdminInAnyCommunity,
@@ -22,12 +17,10 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import {
-  queueAnnouncementDelivery,
-  type AnnouncementAudience,
-} from '@/lib/services/announcement-delivery';
+import { type AnnouncementAudience } from '@/lib/services/announcement-delivery';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { broadcastBulkAnnouncementToCommunity } from '@/lib/pm/bulk-announcement-broadcast';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -90,35 +83,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       await assertNotDemoGrace(communityId);
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
 
-      const scoped = createScopedClient(communityId);
-
-      // Insert announcement
-      const rows = await scoped.insert(announcements, {
-        title,
-        body: sanitizedBody,
-        audience,
-        isPinned,
-        publishedBy: userId,
-      });
-      const created = rows[0] as Record<string, unknown>;
-
-      // Resolve author name
-      const authorRows = await scoped.query(users);
-      const author = authorRows.find((row) => row['id'] === userId);
-      const authorName =
-        typeof author?.['fullName'] === 'string'
-          ? (author['fullName'] as string)
-          : 'Community Team';
-
-      // Queue email delivery (non-blocking for partial failures)
-      await queueAnnouncementDelivery({
+      await broadcastBulkAnnouncementToCommunity({
         communityId,
-        announcementId: Number(created['id']),
-        audience: audience as AnnouncementAudience,
+        userId,
         title,
         body: rawBody,
+        sanitizedBody,
+        audience: audience as AnnouncementAudience,
         isPinned,
-        authorName,
       });
 
       return { communityId, communityName, status: 'sent' };
