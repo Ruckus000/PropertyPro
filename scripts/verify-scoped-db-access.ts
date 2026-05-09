@@ -211,7 +211,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/approve/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts'),
   // Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
-  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/revenue-snapshot/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/revenue-snapshot-data-service.ts'),
 ]);
 

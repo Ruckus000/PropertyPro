@@ -8,16 +8,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { captureMessage } from '@sentry/nextjs';
-import { and, desc, gt, isNull } from '@propertypro/db/filters';
-import {
-  accessPlans,
-  billingGroups,
-  communities,
-  revenueSnapshots,
-  stripePrices,
-} from '@propertypro/db';
-// AUTHZ: Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import {
@@ -25,6 +15,11 @@ import {
   computeMrrDeltaPct,
   runSanityChecks,
 } from '@/lib/services/revenue-snapshot-service';
+import {
+  getPriorSnapshotMrr,
+  insertRevenueSnapshot,
+  loadRevenueSnapshotInputs,
+} from '@/lib/services/revenue-snapshot-data-service';
 
 // DO NOT use withErrorHandler — we want explicit control over responses here.
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -34,60 +29,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = createUnscopedClient();
-
-  // Load inputs — unbounded SELECTs are fine at current scale (~250 communities).
-  // If community count exceeds ~5K, consider cursor-based pagination here.
-  const allCommunities = await db
-    .select({
-      id: communities.id,
-      subscriptionStatus: communities.subscriptionStatus,
-      subscriptionPlan: communities.subscriptionPlan,
-      communityType: communities.communityType,
-      billingGroupId: communities.billingGroupId,
-      deletedAt: communities.deletedAt,
-      isDemo: communities.isDemo,
-    })
-    .from(communities);
-
-  const prices = await db
-    .select({
-      planId: stripePrices.planId,
-      communityType: stripePrices.communityType,
-      billingInterval: stripePrices.billingInterval,
-      unitAmountCents: stripePrices.unitAmountCents,
-    })
-    .from(stripePrices);
-
-  const groups = await db
-    .select({
-      id: billingGroups.id,
-      volumeTier: billingGroups.volumeTier,
-      activeCommunityCount: billingGroups.activeCommunityCount,
-    })
-    .from(billingGroups)
-    .where(isNull(billingGroups.deletedAt));
-
   const now = new Date();
-  const activePlans = await db
-    .select({ communityId: accessPlans.communityId })
-    .from(accessPlans)
-    .where(
-      and(
-        isNull(accessPlans.revokedAt),
-        isNull(accessPlans.convertedAt),
-        gt(accessPlans.graceEndsAt, now),
-      ),
-    );
+  const inputs = await loadRevenueSnapshotInputs(now);
 
   // Compute snapshot
   let computation;
   try {
     computation = computeSnapshot({
-      communities: allCommunities,
-      prices,
-      billingGroups: groups,
-      accessPlans: activePlans,
+      communities: inputs.communities,
+      prices: inputs.prices,
+      billingGroups: inputs.billingGroups,
+      accessPlans: inputs.accessPlans,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -99,13 +51,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Fetch latest prior snapshot for delta + sanity check
-  const [prior] = await db
-    .select({ mrrCents: revenueSnapshots.mrrCents })
-    .from(revenueSnapshots)
-    .orderBy(desc(revenueSnapshots.snapshotDate), desc(revenueSnapshots.computedAt))
-    .limit(1);
-
-  const priorMrr = prior?.mrrCents ?? null;
+  const priorMrr = await getPriorSnapshotMrr();
 
   // Sanity checks
   const check = runSanityChecks({ computed: computation, priorMrrCents: priorMrr });
@@ -144,21 +90,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Insert the snapshot (append-only)
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  await db.insert(revenueSnapshots).values({
+  await insertRevenueSnapshot({
     snapshotDate: today,
-    mrrCents: computation.mrrCents,
-    potentialMrrCents: computation.potentialMrrCents,
-    activeSubscriptions: computation.activeSubscriptions,
-    trialingSubscriptions: computation.trialingSubscriptions,
-    pastDueSubscriptions: computation.pastDueSubscriptions,
-    byPlan: computation.byPlan,
-    byCommunityType: computation.byCommunityType,
-    volumeDiscountSavingsCents: computation.volumeDiscountSavingsCents,
-    freeAccessCostCents: computation.freeAccessCostCents,
-    pricesVersion: computation.pricesVersion,
-    reconciliationDriftPct: reconciliationDriftPct?.toString() ?? null,
-    communitiesSkipped: computation.communitiesSkipped,
-    mrrDeltaPct: deltaPct?.toString() ?? null,
+    computation,
+    reconciliationDriftPct,
+    deltaPct,
   });
 
   // Structured log for observability
