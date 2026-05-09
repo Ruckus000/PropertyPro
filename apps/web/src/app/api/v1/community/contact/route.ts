@@ -6,19 +6,14 @@
  *
  * Invariants:
  * - withErrorHandler wrapper (structured errors, request ID)
- * - Tenant isolation via createScopedClient(communityId)
+ * - Tenant isolation via the community-contact service (createScopedClient inside)
  * - Auth via requireAuthenticatedUserId + requireCommunityMembership
  * - Admin check for PATCH (membership.isAdmin)
- * - Audit log on updates with action 'community.contact_updated'
+ * - Audit log on updates with action 'community.contact_updated' (route concern)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  communities,
-  logAuditEvent,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
@@ -26,6 +21,10 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  getCommunityContact,
+  updateCommunityContact,
+} from '@/lib/services/community-contact-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -47,17 +46,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows[0] as Record<string, unknown> | undefined;
-
-  return NextResponse.json({
-    data: {
-      contactName: (community?.['contactName'] as string | null) ?? null,
-      contactEmail: (community?.['contactEmail'] as string | null) ?? null,
-      contactPhone: (community?.['contactPhone'] as string | null) ?? null,
-    },
-  });
+  const data = await getCommunityContact(communityId);
+  return NextResponse.json({ data });
 });
 
 export const PATCH = withErrorHandler(async (req: NextRequest) => {
@@ -76,23 +66,11 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ForbiddenError('Only admins can update contact information');
   }
 
-  const updateData: Record<string, unknown> = {};
-  if (result.data.contactName !== undefined) {
-    updateData['contactName'] = result.data.contactName;
-  }
-  if (result.data.contactEmail !== undefined) {
-    updateData['contactEmail'] = result.data.contactEmail;
-  }
-  if (result.data.contactPhone !== undefined) {
-    updateData['contactPhone'] = result.data.contactPhone;
-  }
-
-  const scoped = createScopedClient(communityId);
-  const updated = await scoped.update(
-    communities,
-    updateData,
-    eq(communities.id, communityId),
-  );
+  const { updateData, contact } = await updateCommunityContact(communityId, {
+    contactName: result.data.contactName,
+    contactEmail: result.data.contactEmail,
+    contactPhone: result.data.contactPhone,
+  });
 
   await logAuditEvent({
     userId,
@@ -103,13 +81,5 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     newValues: updateData,
   });
 
-  const row = (updated as unknown as Record<string, unknown>[])[0];
-
-  return NextResponse.json({
-    data: {
-      contactName: (row?.['contactName'] as string | null) ?? null,
-      contactEmail: (row?.['contactEmail'] as string | null) ?? null,
-      contactPhone: (row?.['contactPhone'] as string | null) ?? null,
-    },
-  });
+  return NextResponse.json({ data: contact });
 });
