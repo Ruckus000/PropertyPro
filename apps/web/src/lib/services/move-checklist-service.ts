@@ -1,6 +1,5 @@
 import { eq, and, isNull, isNotNull } from '@propertypro/db/filters';
 import {
-  ACTIONABLE_STEPS as DB_ACTIONABLE_STEPS,
   communities,
   createScopedClient,
   maintenanceRequests,
@@ -15,14 +14,6 @@ import {
   type MoveChecklist,
   users,
 } from '@propertypro/db';
-
-/**
- * Re-export of the canonical move-checklist actionable-steps catalogue so
- * route handlers don't have to import it directly from `@propertypro/db`
- * (the route-table-imports guard treats non-helper symbol imports from
- * the db package as A3 violations).
- */
-export const ACTIONABLE_STEPS = DB_ACTIONABLE_STEPS;
 
 // ─── Types ───
 

@@ -8,7 +8,6 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
 import {
-  ACTIONABLE_STEPS,
   createInspectionRequestForChecklist,
   getMoveChecklist,
   getResidentAndCommunityForWelcomeEmail,
@@ -16,6 +15,7 @@ import {
 } from '@/lib/services/move-checklist-service';
 import { createOnboardingInvitation } from '@/lib/services/onboarding-service';
 import { getBaseUrl } from '@/lib/utils/url';
+import { ACTIONABLE_STEPS } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 
 const actionSchema = z.object({

@@ -89,6 +89,13 @@ const ALLOWED_SYMBOLS = new Set<string>([
   // not Drizzle table access). Used by routes that mutate auth user_metadata
   // (e.g. profile name sync) or manage auth invitations / sessions.
   'createAdminClient',
+  // Pure data catalogue (not a table or query); used by move-checklist
+  // step-action routes to validate which step keys support which integration
+  // actions. Added 2026-05-09 (A3 drain #54) — re-exporting through a
+  // service file would force every test that mocks @propertypro/db to add
+  // it to its mock factory, vs allowing the import keeps the catalogue
+  // close to the schema.
+  'ACTIONABLE_STEPS',
 ]);
 
 // ---------------------------------------------------------------------------
