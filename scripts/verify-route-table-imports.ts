@@ -116,7 +116,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts',
   'apps/web/src/app/api/v1/demo/[slug]/self-service-upgrade/route.ts',
   'apps/web/src/app/api/v1/documents/drafts/[id]/publish/route.ts',
-  'apps/web/src/app/api/v1/documents/drafts/[id]/route.ts',
   'apps/web/src/app/api/v1/documents/drafts/route.ts',
   'apps/web/src/app/api/v1/documents/route.ts',
   'apps/web/src/app/api/v1/import-residents/route.ts',
