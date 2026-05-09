@@ -1,11 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  complianceChecklistItems,
-  createScopedClient,
-  logAuditEvent,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
@@ -24,6 +19,11 @@ import {
 } from '@/lib/utils/compliance-calculator';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import {
+  insertComplianceChecklistItems,
+  listComplianceChecklistItems,
+  updateComplianceChecklistItem,
+} from '@/lib/services/compliance-service';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
 
@@ -68,9 +68,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requireCondoCommunity(membership.communityType);
   requirePermission(membership, 'compliance', 'read');
 
-  const scoped = createScopedClient(communityId);
-
-  const rows = await scoped.query(complianceChecklistItems);
+  const rows = await listComplianceChecklistItems(communityId);
 
   const data = rows.map((row) => {
     const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
@@ -123,9 +121,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCondoCommunity(membership.communityType);
   requirePermission(membership, 'compliance', 'write');
 
-  const scoped = createScopedClient(communityId);
-
-  const existing = await scoped.query(complianceChecklistItems);
+  const existing = await listComplianceChecklistItems(communityId);
   if (existing.length > 0) {
     return NextResponse.json({ data: existing, meta: { alreadyGenerated: true } });
   }
@@ -154,17 +150,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }));
 
   try {
-    await scoped.insert(complianceChecklistItems, rows);
+    await insertComplianceChecklistItems(communityId, rows);
   } catch (error) {
     if (!isUniqueViolation(error)) {
       throw error;
     }
 
-    const raced = await scoped.query(complianceChecklistItems);
+    const raced = await listComplianceChecklistItems(communityId);
     return NextResponse.json({ data: raced, meta: { alreadyGenerated: true } });
   }
 
-  const inserted = await scoped.query(complianceChecklistItems);
+  const inserted = await listComplianceChecklistItems(communityId);
   if (inserted.length < template.length) {
     console.warn(
       `[compliance] Expected ${template.length} checklist items for community ${communityId}, `
@@ -229,8 +225,6 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   requireCondoCommunity(membership.communityType);
   requirePermission(membership, 'compliance', 'write');
 
-  const scoped = createScopedClient(communityId);
-
   // Build the update payload based on the action
   let updateData: Record<string, unknown>;
   switch (patchAction) {
@@ -262,13 +256,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       break;
   }
 
-  const updated = await scoped.update(
-    complianceChecklistItems,
-    updateData,
-    eq(complianceChecklistItems.id, id),
-  );
-
-  const row = updated[0];
+  const row = await updateComplianceChecklistItem(communityId, id, updateData);
   if (!row) {
     throw new ValidationError('Checklist item not found or does not belong to this community');
   }

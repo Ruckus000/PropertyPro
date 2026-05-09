@@ -1,0 +1,63 @@
+/**
+ * Compliance Service
+ *
+ * Tenant-scoped reads + writes for the `compliance_checklist_items` table
+ * backing /api/v1/compliance (GET list / POST generate-from-template /
+ * PATCH per-item action). Compliance is condo/HOA-only — caller MUST gate
+ * via `requireCondoCommunity(membership.communityType)` BEFORE invoking.
+ *
+ * Companion to:
+ *   - apps/web/src/app/api/v1/compliance/route.ts
+ */
+import {
+  complianceChecklistItems,
+  createScopedClient,
+} from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
+
+/**
+ * List every checklist item in the community. Compliance lists are small
+ * (one row per template item — typically 10–25), so a full-table fetch
+ * is the correct shape for the GET endpoint.
+ */
+export async function listComplianceChecklistItems(
+  communityId: number,
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  return (await scoped.query(complianceChecklistItems)) as Array<Record<string, unknown>>;
+}
+
+/**
+ * Insert the initial set of checklist items generated from the
+ * compliance template. Caller MUST have already verified no items
+ * exist (via `listComplianceChecklistItems`); the returned promise
+ * propagates unique-violation errors (`error.code === '23505'`) so the
+ * route can detect a race and re-fetch the existing rows.
+ */
+export async function insertComplianceChecklistItems(
+  communityId: number,
+  rows: Array<Record<string, unknown>>,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.insert(complianceChecklistItems, rows);
+}
+
+/**
+ * Apply a single per-item action's update. Returns the updated row (with
+ * scoped-client tenant injection still applied) or `null` if the row
+ * doesn't exist in this community. Caller composes the audit log + status
+ * derivation on top.
+ */
+export async function updateComplianceChecklistItem(
+  communityId: number,
+  itemId: number,
+  values: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const scoped = createScopedClient(communityId);
+  const updated = (await scoped.update(
+    complianceChecklistItems,
+    values,
+    eq(complianceChecklistItems.id, itemId),
+  )) as Array<Record<string, unknown>>;
+  return updated[0] ?? null;
+}
