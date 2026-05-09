@@ -1,7 +1,7 @@
 // AUTHZ: Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
-import { eq, and, isNull, ne, sql, inArray } from '@propertypro/db/filters';
+import { eq, and, isNull, lt, ne, sql, inArray } from '@propertypro/db/filters';
 import { AppError } from '../api/errors';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
@@ -325,6 +325,31 @@ export async function softDeleteCommunityForCancellation(
       cancellationCapturedAt: now,
     })
     .where(eq(communities.id, communityId));
+}
+
+/**
+ * Find billing groups stuck in coupon-sync failure or pending for more than
+ * the given threshold. Used by the coupon-sync-retry cron to recover from
+ * transient Stripe failures.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret before invoking.
+ */
+export async function findStuckCouponSyncBillingGroups(params: {
+  stuckSinceBefore: Date;
+  limit?: number;
+}): Promise<{ id: number }[]> {
+  const db = createUnscopedClient();
+  return await db
+    .select({ id: billingGroups.id })
+    .from(billingGroups)
+    .where(
+      and(
+        inArray(billingGroups.couponSyncStatus, ['failed', 'pending']),
+        lt(billingGroups.updatedAt, params.stuckSinceBefore),
+        isNull(billingGroups.deletedAt),
+      ),
+    )
+    .limit(params.limit ?? 50);
 }
 
 export interface CreateBillingGroupInput {

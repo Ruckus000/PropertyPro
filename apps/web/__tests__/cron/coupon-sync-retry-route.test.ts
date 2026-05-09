@@ -1,36 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const { recalculateVolumeTierMock, createUnscopedClientMock } = vi.hoisted(() => ({
+const { recalculateVolumeTierMock, findStuckCouponSyncBillingGroupsMock } = vi.hoisted(() => ({
   recalculateVolumeTierMock: vi.fn(),
-  createUnscopedClientMock: vi.fn(() => ({
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => [],
-        }),
-      }),
-    }),
-  })),
-}));
-
-vi.mock('@propertypro/db', () => ({
-  billingGroups: {},
-}));
-
-vi.mock('@propertypro/db/filters', () => ({
-  and: vi.fn(),
-  lt: vi.fn(),
-  inArray: vi.fn(),
-  isNull: vi.fn(),
-}));
-
-vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: createUnscopedClientMock,
+  findStuckCouponSyncBillingGroupsMock: vi.fn(async () => []),
 }));
 
 vi.mock('@/lib/billing/billing-group-service', () => ({
   recalculateVolumeTier: recalculateVolumeTierMock,
+  findStuckCouponSyncBillingGroups: findStuckCouponSyncBillingGroupsMock,
 }));
 
 import { POST } from '../../src/app/api/v1/internal/coupon-sync-retry/route';
