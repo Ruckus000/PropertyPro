@@ -1,54 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import {
-  communities,
-  createScopedClient,
-  logAuditEvent,
-  notificationPreferences,
-  units,
-  userRoles,
-  users,
-} from "@propertypro/db";
+import { logAuditEvent } from "@propertypro/db";
 import { withErrorHandler } from "@/lib/api/error-handler";
-import { NotFoundError, ValidationError } from "@/lib/api/errors";
+import { ValidationError } from "@/lib/api/errors";
 import { formatZodErrors } from "@/lib/api/zod/error-formatter";
 import { validateResidentCsv } from "@/lib/utils/csv-validator";
 import { validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { CommunityRole, CommunityType, NewCommunityRole, PresetKey } from "@propertypro/shared";
-import { getPresetPermissions, PRESET_METADATA, isPresetKey } from "@propertypro/shared";
+import type { CommunityRole, NewCommunityRole, PresetKey } from "@propertypro/shared";
+import { getPresetPermissions, PRESET_METADATA } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
-import { requireCommunityType } from "@/lib/utils/community-validators";
 import { listCommunitiesForUser } from "@/lib/api/user-communities";
 import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
+import { getCommunityTypeForOnboarding } from "@/lib/services/onboarding-service";
+import {
+  insertNotificationPreferencesForImport,
+  insertUserForImport,
+  insertUserRoleForImport,
+  loadUnitNumberMapForImport,
+  loadUserEmailMapForImport,
+  loadUsersWithExistingRoleForImport,
+} from "@/lib/services/import-residents-service";
 
 const importSchema = z.object({
   communityId: z.number().int().positive(),
   csv: z.string().min(1, "CSV text is required"),
   dryRun: z.boolean().optional().default(false),
 });
-
-async function getCommunityType(communityId: number): Promise<CommunityType> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row["id"] === communityId);
-
-  if (!community) {
-    throw new NotFoundError(`Community ${communityId} not found`);
-  }
-
-  return requireCommunityType(
-    community["communityType"],
-    `import-residents.getCommunityType(${communityId})`,
-  );
-}
-
-function getInsertedStringId(row: Record<string, unknown> | undefined): string | null {
-  const id = row?.["id"];
-  return typeof id === "string" ? id : null;
-}
 
 interface MappedRole {
   role: NewCommunityRole;
@@ -94,7 +74,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const { csv, dryRun } = parsed.data;
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'residents', 'write');
-  const scoped = createScopedClient(communityId);
 
   // Parse and validate CSV
   const parsedCsv = validateResidentCsv(csv);
@@ -112,32 +91,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Proceed with import
-  const communityType = await getCommunityType(communityId);
-  const unitRows = await scoped.query(units);
-  const unitByNumber = new Map<string, number>();
-  for (const row of unitRows) {
-    const number = (row["unitNumber"] as string | undefined)?.toLowerCase();
-    if (number) {
-      unitByNumber.set(number, row["id"] as number);
-    }
-  }
-
-  const allUserRows = await scoped.query(users);
-  const userByEmail = new Map<string, string>();
-  for (const row of allUserRows) {
-    const email = (row["email"] as string | undefined)?.toLowerCase();
-    const id = row["id"];
-    if (email && typeof id === "string") {
-      userByEmail.set(email, id);
-    }
-  }
-
-  const existingRoles = await scoped.query(userRoles);
-  const userHasRole = new Set<string>();
-  for (const existingRole of existingRoles) {
-    const id = existingRole["userId"];
-    if (typeof id === "string") userHasRole.add(id);
-  }
+  const communityType = await getCommunityTypeForOnboarding(communityId);
+  const unitByNumber = await loadUnitNumberMapForImport(communityId);
+  const userByEmail = await loadUserEmailMapForImport(communityId);
+  const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
 
   const errors = [...parsedCsv.errors];
   const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: CommunityRole }> = [];
@@ -171,14 +128,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     let userId = userByEmail.get(email);
     if (!userId) {
       const newUserId = crypto.randomUUID();
-      const insertedUsers = await scoped.insert(users, {
+      const insertedUserId = await insertUserForImport(communityId, {
         id: newUserId,
         email,
         fullName: name,
-        phone: null,
       });
 
-      const insertedUserId = getInsertedStringId(insertedUsers[0]);
       if (!insertedUserId) {
         errors.push({ rowNumber: row.rowNumber, column: "email", message: `Failed to create user for '${email}'` });
         skippedCount++;
@@ -227,7 +182,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         ? getPresetPermissions(mapped.presetKey, communityType)
         : null;
 
-    await scoped.insert(userRoles, {
+    await insertUserRoleForImport(communityId, {
       userId,
       role: mapped.role,
       unitId,
@@ -237,7 +192,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       displayTitle: mapped.displayTitle,
     });
 
-    await scoped.insert(notificationPreferences, { userId });
+    await insertNotificationPreferencesForImport(communityId, userId);
 
     userHasRole.add(userId);
     importedCount++;
