@@ -6,17 +6,15 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq, isNull } from '@propertypro/db/filters';
-import { accessPlans, communities } from '@propertypro/db';
-// AUTHZ: Admin access-plans routes — platform-level CRUD on access_plans table
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
 import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import {
+  communityExistsAdmin,
   computeAccessPlanStatus,
   grantFreeAccess,
+  listAccessPlansWithStatus,
 } from '@/lib/services/account-lifecycle-service';
 
 export { handleOptions as OPTIONS };
@@ -41,28 +39,19 @@ export const GET = withErrorHandler(async (req: NextRequest): Promise<NextRespon
   void adminUserId; // used only for auth guard
   const origin = req.headers.get('origin');
 
-  const db = createUnscopedClient();
   const url = new URL(req.url);
   const communityIdParam = url.searchParams.get('communityId');
 
-  let rows;
+  let data;
   if (communityIdParam) {
     const communityId = Number(communityIdParam);
     if (Number.isNaN(communityId) || communityId <= 0) {
       throw new ValidationError('communityId must be a positive integer');
     }
-    rows = await db
-      .select()
-      .from(accessPlans)
-      .where(eq(accessPlans.communityId, communityId));
+    data = await listAccessPlansWithStatus({ communityId });
   } else {
-    rows = await db.select().from(accessPlans);
+    data = await listAccessPlansWithStatus();
   }
-
-  const data = rows.map((plan) => ({
-    ...plan,
-    status: computeAccessPlanStatus(plan),
-  }));
 
   return NextResponse.json({ data }, { headers: corsHeaders(origin) });
 });
@@ -89,14 +78,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   const { communityId, durationMonths, gracePeriodDays, notes } = parsed.data;
 
   // Verify community exists
-  const db = createUnscopedClient();
-  const [community] = await db
-    .select({ id: communities.id })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-
-  if (!community) {
+  if (!(await communityExistsAdmin(communityId))) {
     throw new ValidationError('Community not found', { communityId: 'Community does not exist' });
   }
 
