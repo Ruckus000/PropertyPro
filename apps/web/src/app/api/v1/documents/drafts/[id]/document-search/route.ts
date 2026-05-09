@@ -9,14 +9,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  documentCategories,
-  documents,
-  createScopedClient,
-  documentDrafts,
-  getAccessibleDocuments,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { getAccessibleDocuments } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -24,6 +17,8 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
+import { listAllDocumentCategoryNames } from '@/lib/services/document-category-service';
+import { getDocumentDraftAuthorship } from '@/lib/services/document-draft-service';
 
 export const runtime = 'nodejs';
 
@@ -63,15 +58,9 @@ export const GET = withErrorHandler(
 
     // Ensure the draft exists in this community and the caller can edit it
     // (so we don't expose this picker as a side-channel).
-    const scoped = createScopedClient(communityId);
-    const draftRows = (await scoped.selectFrom(
-      documentDrafts,
-      {},
-      eq(documentDrafts.id, draftId),
-    )) as unknown as Array<Record<string, unknown>>;
-    const draft = draftRows[0];
-    if (!draft || draft['deletedAt']) throw new NotFoundError('Draft not found');
-    const isAuthor = draft['authorId'] === userId;
+    const draft = await getDocumentDraftAuthorship(communityId, draftId);
+    if (!draft || draft.deletedAt) throw new NotFoundError('Draft not found');
+    const isAuthor = draft.authorId === userId;
     if (!isAuthor && !membership.isAdmin) {
       throw new ForbiddenError('Not authorized for this draft');
     }
@@ -88,15 +77,7 @@ export const GET = withErrorHandler(
     const limit = parsed.data.limit ?? 20;
 
     // Resolve category names for display.
-    const categoryRows = (await scoped.selectFrom(
-      documentCategories,
-      {},
-    )) as unknown as Array<Record<string, unknown>>;
-    const categoryById = new Map<number, string>();
-    for (const c of categoryRows) {
-      const id = Number(c['id']);
-      if (Number.isFinite(id)) categoryById.set(id, String(c['name'] ?? ''));
-    }
+    const categoryById = await listAllDocumentCategoryNames(communityId);
 
     const filtered = (q.length === 0
       ? allRows

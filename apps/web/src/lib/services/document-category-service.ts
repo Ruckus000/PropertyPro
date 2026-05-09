@@ -67,6 +67,30 @@ export async function paginateDocumentCategories(params: {
 }
 
 /**
+ * List EVERY category name in the community keyed by id. Used by callers
+ * that need a complete lookup table (e.g. document picker UIs) and don't
+ * have a pre-narrowed id set to filter on.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership.
+ */
+export async function listAllDocumentCategoryNames(
+  communityId: number,
+): Promise<Map<number, string>> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(documentCategories, {
+    id: documentCategories.id,
+    name: documentCategories.name,
+  })) as unknown as Array<{ id: unknown; name: unknown }>;
+  const result = new Map<number, string>();
+  for (const row of rows) {
+    const id = Number(row.id);
+    if (Number.isFinite(id)) result.set(id, String(row.name ?? ''));
+  }
+  return result;
+}
+
+/**
  * Bulk-lookup category names by id within a community. Returns a
  * `Map<id, name>` so callers can render display names without
  * post-fetch filtering. Empty input → empty map (no DB round-trip).
