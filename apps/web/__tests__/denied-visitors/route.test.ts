@@ -1,20 +1,19 @@
 /**
- * Unit tests for `/api/v1/visitors/denied` GET — paginate() integration (Plan B3).
+ * Unit tests for `/api/v1/visitors/denied` GET — paginate() integration via
+ * the package-visitor-service wrapper (Plan B3 + A3 Phase 2 service drain).
  *
  * Covers:
- * - paginate() called with the correct table + scoped client
- * - `active` filter pushed into the SQL `where` predicate (true / false / absent)
- * - cursor + pageSize forwarded to paginate()
+ * - paginateDeniedVisitors called with the correct community + opts
+ * - `active=true` / `active=false` / unknown / absent pushes the right
+ *   `onlyActive` value into the service call
+ * - cursor + pageSize forwarded
  * - Empty-string `?cursor=` / `?pageSize=` treated as missing (B3 lesson #5)
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const {
-  paginateMock,
-  scopedClient,
-  createScopedClientMock,
-  deniedVisitorsTable,
+  paginateDeniedVisitorsMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requireVisitorLoggingEnabledMock,
@@ -22,33 +21,13 @@ const {
   requireStaffOperatorMock,
   parseCommunityIdFromQueryMock,
 } = vi.hoisted(() => ({
-  paginateMock: vi.fn(),
-  scopedClient: { __scoped: true },
-  createScopedClientMock: vi.fn(),
-  deniedVisitorsTable: {
-    id: Symbol('denied_visitors.id'),
-    isActive: Symbol('denied_visitors.is_active'),
-  },
+  paginateDeniedVisitorsMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requireVisitorLoggingEnabledMock: vi.fn(),
   requireVisitorsReadPermissionMock: vi.fn(),
   requireStaffOperatorMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
-}));
-
-vi.mock('@propertypro/db', () => ({
-  deniedVisitors: deniedVisitorsTable,
-  createScopedClient: createScopedClientMock,
-  paginate: paginateMock,
-}));
-
-vi.mock('@propertypro/db/filters', () => ({
-  eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
-}));
-
-vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: vi.fn(() => ({})),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -73,6 +52,7 @@ vi.mock('@/lib/logistics/common', () => ({
 
 vi.mock('@/lib/services/package-visitor-service', () => ({
   createDeniedVisitor: vi.fn(),
+  paginateDeniedVisitors: paginateDeniedVisitorsMock,
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
@@ -121,12 +101,11 @@ beforeEach(() => {
   requireVisitorLoggingEnabledMock.mockResolvedValue(undefined);
   requireVisitorsReadPermissionMock.mockReturnValue(undefined);
   requireStaffOperatorMock.mockReturnValue(undefined);
-  createScopedClientMock.mockReturnValue(scopedClient);
 });
 
-describe('GET /api/v1/visitors/denied — paginate() integration', () => {
-  it('returns paginated rows with no `where` when no `active` param is passed', async () => {
-    paginateMock.mockResolvedValueOnce({
+describe('GET /api/v1/visitors/denied — paginateDeniedVisitors integration', () => {
+  it('calls the service with no `onlyActive` when no `active` param is passed', async () => {
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [{ id: 1, fullName: 'A', isActive: true }],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
@@ -140,20 +119,16 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
     expect(json.data.data).toHaveLength(1);
     expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
 
-    const [client, table, input, options] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      { cursor?: string; pageSize?: number },
-      { where?: unknown },
-    ];
-    expect(client).toBe(scopedClient);
-    expect(table).toBe(deniedVisitorsTable);
-    expect(input).toEqual({ cursor: undefined, pageSize: undefined });
-    expect(options.where).toBeUndefined();
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith({
+      communityId: COMMUNITY_ID,
+      cursor: undefined,
+      pageSize: undefined,
+      onlyActive: undefined,
+    });
   });
 
-  it('pushes `active=true` into the where predicate', async () => {
-    paginateMock.mockResolvedValueOnce({
+  it('passes `onlyActive: true` when ?active=true', async () => {
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
@@ -162,19 +137,13 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
       makeRequest(`/api/v1/visitors/denied?communityId=${COMMUNITY_ID}&active=true`),
     );
 
-    const [, , , options] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      unknown,
-      { where: unknown },
-    ];
-    expect(options.where).toEqual({
-      __eq: { col: deniedVisitorsTable.isActive, val: true },
-    });
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ onlyActive: true }),
+    );
   });
 
-  it('pushes `active=false` into the where predicate', async () => {
-    paginateMock.mockResolvedValueOnce({
+  it('passes `onlyActive: false` when ?active=false', async () => {
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
@@ -183,19 +152,13 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
       makeRequest(`/api/v1/visitors/denied?communityId=${COMMUNITY_ID}&active=false`),
     );
 
-    const [, , , options] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      unknown,
-      { where: unknown },
-    ];
-    expect(options.where).toEqual({
-      __eq: { col: deniedVisitorsTable.isActive, val: false },
-    });
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ onlyActive: false }),
+    );
   });
 
-  it('treats unknown `active` values as absent (no where predicate)', async () => {
-    paginateMock.mockResolvedValueOnce({
+  it('treats unknown `active` values as absent (no `onlyActive` filter)', async () => {
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
@@ -204,19 +167,15 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
       makeRequest(`/api/v1/visitors/denied?communityId=${COMMUNITY_ID}&active=garbage`),
     );
 
-    const [, , , options] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      unknown,
-      { where: unknown },
-    ];
     // `active` only accepts the literal strings 'true' / 'false'. Anything
-    // else (including 'garbage') falls back to undefined → no where predicate.
-    expect(options.where).toBeUndefined();
+    // else (including 'garbage') falls back to undefined.
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ onlyActive: undefined }),
+    );
   });
 
-  it('forwards cursor and pageSize to paginate()', async () => {
-    paginateMock.mockResolvedValueOnce({
+  it('forwards cursor and pageSize to the service', async () => {
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [],
       pagination: { nextCursor: 'next-opaque', hasMore: true, pageSize: 25 },
     });
@@ -234,17 +193,16 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
       hasMore: true,
       pageSize: 25,
     });
-
-    const [, , input] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      { cursor?: string; pageSize?: number },
-    ];
-    expect(input).toEqual({ cursor: 'abc', pageSize: 25 });
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith({
+      communityId: COMMUNITY_ID,
+      cursor: 'abc',
+      pageSize: 25,
+      onlyActive: undefined,
+    });
   });
 
   it('treats empty-string ?cursor= and ?pageSize= as missing (B3 lesson #5)', async () => {
-    paginateMock.mockResolvedValueOnce({
+    paginateDeniedVisitorsMock.mockResolvedValueOnce({
       data: [],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
@@ -254,11 +212,11 @@ describe('GET /api/v1/visitors/denied — paginate() integration', () => {
     );
     expect(response.status).toBe(200);
 
-    const [, , input] = paginateMock.mock.calls[0] as [
-      unknown,
-      unknown,
-      { cursor?: string; pageSize?: number },
-    ];
-    expect(input).toEqual({ cursor: undefined, pageSize: undefined });
+    expect(paginateDeniedVisitorsMock).toHaveBeenCalledWith({
+      communityId: COMMUNITY_ID,
+      cursor: undefined,
+      pageSize: undefined,
+      onlyActive: undefined,
+    });
   });
 });

@@ -4,8 +4,9 @@
  * GET   /api/v1/visitors/denied  — paginated denied-visitor list (Plan B3 rollout)
  * POST  /api/v1/visitors/denied  — create a new denied-visitor entry
  *
- * GET pagination (Plan B3):
- * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * GET pagination (Plan B3, A3 service wrapper):
+ * - Cursor-based via the canonical `paginate()` helper, called from
+ *   `paginateDeniedVisitors` in package-visitor-service.
  * - The optional `active` filter pushes into the SQL `where` predicate.
  * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
  *   the previous `desc(createdAt)` sort. Same-instant inserts may break ties
@@ -19,8 +20,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, deniedVisitors, paginate } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -34,7 +33,10 @@ import {
   requireVisitorsReadPermission,
   requireVisitorsWritePermission,
 } from '@/lib/logistics/common';
-import { createDeniedVisitor } from '@/lib/services/package-visitor-service';
+import {
+  createDeniedVisitor,
+  paginateDeniedVisitors,
+} from '@/lib/services/package-visitor-service';
 
 const createDeniedSchema = z.object({
   communityId: z.number().int().positive(),
@@ -74,16 +76,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  const where =
-    onlyActive !== undefined ? eq(deniedVisitors.isActive, onlyActive) : undefined;
-
-  const scoped = createScopedClient(communityId);
-  const result = await paginate(
-    scoped,
-    deniedVisitors,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+  const result = await paginateDeniedVisitors({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    onlyActive,
+  });
 
   return NextResponse.json({
     data: {
