@@ -6,10 +6,13 @@
  * helpers here.
  */
 import {
+  communities,
   createScopedClient,
   documentDrafts,
   documents,
+  meetingDocuments,
   meetings,
+  users,
 } from '@propertypro/db';
 import { and, eq, isNull } from '@propertypro/db/filters';
 
@@ -204,4 +207,78 @@ export async function getAuthoredDocumentForReedit(
     eq(documents.id, documentId),
   )) as unknown as Array<AuthoredDocumentForReedit>;
   return rows[0] ?? null;
+}
+
+export interface CommunityForDocumentPublish {
+  name: string | null;
+  branding: { logoPath?: string } | null;
+  logoPath: string | null;
+}
+
+/**
+ * Fetch the minimal community projection needed by the print template
+ * (name, branding/logoPath fallback chain). Returns `null` when no row
+ * matches, though for `publish` flows the membership check upstream
+ * effectively guarantees existence.
+ */
+export async function getCommunityForDocumentPublish(
+  communityId: number,
+): Promise<CommunityForDocumentPublish | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    {
+      name: communities.name,
+      branding: communities.branding,
+      logoPath: communities.logoPath,
+    },
+    eq(communities.id, communityId),
+  )) as unknown as Array<CommunityForDocumentPublish>;
+  return rows[0] ?? null;
+}
+
+export interface AuthorDisplayName {
+  fullName: string | null;
+}
+
+/**
+ * Fetch the actor's display name for embedding in the print template.
+ * Returns `null` if no row matches.
+ *
+ * Note: the prior route-side implementation tried to read `firstName` /
+ * `lastName` columns that don't exist in the `users` schema (only
+ * `fullName` does). That meant author name was always null in published
+ * documents pre-A3-drain-#49. This helper returns `fullName` instead,
+ * which fixes the long-standing bug as a side effect of the drain.
+ *
+ * AUTHZ: `users` is a global table — caller MUST have already established
+ * the actor has a legitimate presence in the community via
+ * `requireCommunityMembership`.
+ */
+export async function getAuthorDisplayName(
+  communityId: number,
+  authorId: string,
+): Promise<AuthorDisplayName | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    users,
+    { fullName: users.fullName },
+    eq(users.id, authorId),
+  )) as unknown as Array<AuthorDisplayName>;
+  return rows[0] ?? null;
+}
+
+/**
+ * Insert a `meeting_documents` link row joining a published document to
+ * its source meeting. Idempotency is the caller's responsibility (or the
+ * insert can be retried; pre-existing rows will throw uniqueness errors
+ * which the caller should catch — see the publish flow for the pattern).
+ */
+export async function linkPublishedDocumentToMeeting(
+  communityId: number,
+  meetingId: number,
+  documentId: number,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.insert(meetingDocuments, { meetingId, documentId });
 }
