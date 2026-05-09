@@ -16,13 +16,12 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, helpArticleViews } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { listViewedArticleSlugs } from '@/lib/services/help-views-service';
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -41,15 +40,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(
-    helpArticleViews,
-    { articleSlug: helpArticleViews.articleSlug },
-    eq(helpArticleViews.userId, userId),
-  )) as Array<{ articleSlug: string }>;
-
-  // De-dupe in JS — `help_article_views` is append-only by design.
-  const slugs = Array.from(new Set(rows.map((row) => row.articleSlug)));
+  const slugs = await listViewedArticleSlugs(communityId, userId);
 
   return NextResponse.json({ data: { slugs } });
 });
