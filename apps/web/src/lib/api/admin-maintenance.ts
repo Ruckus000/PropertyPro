@@ -6,7 +6,7 @@
  * requested `page` window. Same pattern as #228 violations, #236 work-orders.
  */
 import type { MaintenanceRequestItem } from './maintenance-requests';
-import { walkPaginated } from './walk-paginated';
+import { walkAndSlice } from './walk-paginated';
 
 export type { MaintenanceRequestItem };
 
@@ -51,20 +51,11 @@ export async function listAllRequests(
   if (params?.priority) baseParams.priority = params.priority;
   if (params?.assignedToId) baseParams.assignedToId = params.assignedToId;
 
-  const all = await walkPaginated<MaintenanceRequestItem>(
+  return walkAndSlice<MaintenanceRequestItem>(
     '/api/v1/maintenance-requests',
     baseParams,
+    { page: params?.page, limit: params?.limit },
   );
-
-  const limit = params?.limit ?? all.length;
-  const page = params?.page ?? 1;
-  const offset = Math.max(0, (page - 1) * limit);
-  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
-
-  return {
-    data,
-    meta: { total: all.length, page, limit },
-  };
 }
 
 export async function updateRequestStatus(
