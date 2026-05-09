@@ -8,15 +8,15 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-// AUTHZ: Phase 1B: Phone OTP verification — queries/updates users table (no community_id column)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { phoneE164Schema, maskPhone } from '@/lib/utils/phone';
+import {
+  getUserOtpState,
+  markOtpSent,
+} from '@/lib/services/phone-verification-service';
 
 const VERIFY_COOLDOWN_MS = 60_000;
 
@@ -28,14 +28,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 
   // Check durable cooldown from DB
-  const db = createUnscopedClient();
-  const [user] = await db
-    .select({ otpLastSentAt: users.otpLastSentAt })
-    .from(users)
-    .where(eq(users.id, userId));
+  const { otpLastSentAt } = await getUserOtpState(userId);
 
-  if (user?.otpLastSentAt) {
-    const elapsed = Date.now() - user.otpLastSentAt.getTime();
+  if (otpLastSentAt) {
+    const elapsed = Date.now() - otpLastSentAt.getTime();
     if (elapsed < VERIFY_COOLDOWN_MS) {
       return NextResponse.json(
         {
@@ -94,10 +90,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
 
     // Persist cooldown timestamp in DB (durable across serverless instances)
-    await db
-      .update(users)
-      .set({ otpLastSentAt: new Date(), updatedAt: new Date() })
-      .where(eq(users.id, userId));
+    await markOtpSent(userId);
 
     return NextResponse.json({ sent: true, phone: maskPhone(phone) });
   } catch {

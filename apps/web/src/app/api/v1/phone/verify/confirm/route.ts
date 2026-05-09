@@ -8,15 +8,16 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-// AUTHZ: Phone OTP confirmation updates the users table, which has no community_id column; user-scoped only.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { phoneE164Schema, maskPhone } from '@/lib/utils/phone';
+import {
+  getUserOtpState,
+  markOtpFailed,
+  markPhoneVerified,
+} from '@/lib/services/phone-verification-service';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60_000;
@@ -28,23 +29,16 @@ const confirmOtpSchema = z.object({
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
-  const db = createUnscopedClient();
 
   // Check durable lockout from DB
-  const [user] = await db
-    .select({
-      otpFailedAttempts: users.otpFailedAttempts,
-      otpLockedUntil: users.otpLockedUntil,
-    })
-    .from(users)
-    .where(eq(users.id, userId));
+  const { otpFailedAttempts, otpLockedUntil } = await getUserOtpState(userId);
 
   const now = Date.now();
-  if (user?.otpLockedUntil && user.otpLockedUntil.getTime() > now) {
+  if (otpLockedUntil && otpLockedUntil.getTime() > now) {
     return NextResponse.json(
       {
         error: 'Too many attempts. Try again later.',
-        retryAfter: Math.ceil((user.otpLockedUntil.getTime() - now) / 1000),
+        retryAfter: Math.ceil((otpLockedUntil.getTime() - now) / 1000),
       },
       { status: 429 },
     );
@@ -91,21 +85,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     if (!response.ok || data.status !== 'approved') {
       // Increment failed attempts in DB (durable across serverless instances)
-      const currentCount = (user?.otpFailedAttempts ?? 0) + 1;
+      const currentCount = (otpFailedAttempts ?? 0) + 1;
       if (currentCount >= MAX_ATTEMPTS) {
-        await db
-          .update(users)
-          .set({
-            otpFailedAttempts: 0,
-            otpLockedUntil: new Date(Date.now() + LOCKOUT_MS),
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, userId));
+        await markOtpFailed(userId, {
+          newAttemptCount: currentCount,
+          lockoutUntil: new Date(Date.now() + LOCKOUT_MS),
+        });
       } else {
-        await db
-          .update(users)
-          .set({ otpFailedAttempts: currentCount, updatedAt: new Date() })
-          .where(eq(users.id, userId));
+        await markOtpFailed(userId, { newAttemptCount: currentCount });
       }
 
       return NextResponse.json(
@@ -115,16 +102,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
 
     // Update user's phone, phoneVerifiedAt, and reset OTP rate-limit state
-    await db
-      .update(users)
-      .set({
-        phone,
-        phoneVerifiedAt: new Date(),
-        otpFailedAttempts: 0,
-        otpLockedUntil: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
+    await markPhoneVerified(userId, phone);
 
     return NextResponse.json({ verified: true, phone: maskPhone(phone) });
   } catch {
