@@ -13,8 +13,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   insertNotifications,
-  userRoles,
-  createScopedClient,
   type InsertNotificationRow,
 } from '@propertypro/db';
 import {
@@ -29,6 +27,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ForbiddenError } from '@/lib/api/errors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { listBillingCapableUserIds } from '@/lib/services/billing-upgrade-requests-service';
 
 const PLAN_ID_VALUES = Object.keys(PLAN_FEATURES) as PlanId[];
 
@@ -36,9 +35,6 @@ const bodySchema = z.object({
   featureKey: z.string().min(1).max(64).nullable().optional(),
   requestedPlan: z.enum(PLAN_ID_VALUES as [PlanId, ...PlanId[]]).nullable().optional(),
 });
-
-/** Manager presets that get treated as billing admins. Mirrors canManageBilling(). */
-const BILLING_ADMIN_PRESETS = new Set(['board_president', 'cam']);
 
 export const POST = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
   const userId = await requireAuthenticatedUserId();
@@ -66,30 +62,10 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
 
   const { featureKey, requestedPlan } = parsed.data;
 
-  // Find all billing-capable users in this community.
-  //   - role = 'pm_admin' → always
-  //   - role = 'manager' AND presetKey IN ('board_president', 'cam')
-  const scoped = createScopedClient(communityId);
-  const candidateRows = (await scoped.selectFrom(userRoles, {})) as unknown as Record<
-    string,
-    unknown
-  >[];
+  // Find all billing-capable users in this community (excluding the requester).
+  const recipientIds = await listBillingCapableUserIds(communityId, userId);
 
-  const recipientIds = new Set<string>();
-  for (const row of candidateRows) {
-    const role = String(row['role']);
-    const presetKey = typeof row['presetKey'] === 'string' ? row['presetKey'] : '';
-    const recipientId = typeof row['userId'] === 'string' ? row['userId'] : null;
-    if (!recipientId) continue;
-    if (recipientId === userId) continue; // don't notify the requester
-    if (role === 'pm_admin') {
-      recipientIds.add(recipientId);
-    } else if (role === 'manager' && BILLING_ADMIN_PRESETS.has(presetKey)) {
-      recipientIds.add(recipientId);
-    }
-  }
-
-  if (recipientIds.size === 0) {
+  if (recipientIds.length === 0) {
     // Nothing to do — but treat as success so the requester sees confirmation.
     return NextResponse.json({ ok: true, notified: 0 });
   }
@@ -103,7 +79,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   const featureLabel = featureKey ? humanizeFeatureKey(featureKey) : 'a premium feature';
 
   const sourceId = `${userId}:${featureKey ?? 'unknown'}:${Math.floor(Date.now() / 1000)}`;
-  const rows: InsertNotificationRow[] = [...recipientIds].map((recipientId) => ({
+  const rows: InsertNotificationRow[] = recipientIds.map((recipientId) => ({
     communityId,
     userId: recipientId,
     category: 'system',
