@@ -6,20 +6,17 @@
  *
  * Invariants:
  * - withErrorHandler wrapper for structured errors
- * - Use createScopedClient for tenant isolation on all queries
+ * - Tenant lookups + writes go through `invitations-service` (A3 drain #60)
  * - Log audit events for invitation creation and consumption
+ *
+ * Pre-A3-drain-#60 the route did 5 separate `scoped.query(table)` + JS
+ * `.find()` lookups (community, user, user-role, invitation-by-token,
+ * accept-time user-by-id). Helpers in invitations-service replace those
+ * with targeted `selectFrom(..., eq(pk, value))` lookups.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  invitations as invitationsTable,
-  logAuditEvent,
-  userRoles,
-  users,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -28,6 +25,15 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  createInvitation,
+  createSupabaseAuthUserFromInvitation,
+  findInvitationByToken,
+  getCommunityNameForInvitation,
+  getUserForInvitation,
+  getUserRoleForInvitation,
+  markInvitationConsumed,
+} from '@/lib/services/invitations-service';
 
 const createInvitationSchema = z.object({
   communityId: z.number().int().positive(),
@@ -76,45 +82,41 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   await assertNotDemoGrace(communityId);
   const { userId, ttlDays } = parsed.data;
   await requireCommunityMembership(communityId, actorUserId);
-  const scoped = createScopedClient(communityId);
 
   // Load community for branding
-  const communityRows = await scoped.query(communities);
-  const community = communityRows.find((row) => row['id'] === communityId);
+  const community = await getCommunityNameForInvitation(communityId);
   if (!community) {
     throw new NotFoundError(`Community ${communityId} not found`);
   }
 
   // Load user and role within this community
-  const userRows = await scoped.query(users);
-  const user = userRows.find((row) => row['id'] === userId);
+  const user = await getUserForInvitation(communityId, userId);
   if (!user) {
     throw new NotFoundError(`User ${userId} not found`);
   }
 
-  const roleRows = await scoped.query(userRoles);
-  const roleRow = roleRows.find((row) => row['userId'] === userId);
-  const role = (roleRow?.['role'] as string | undefined) ?? 'resident';
+  const role = (await getUserRoleForInvitation(communityId, userId)) ?? 'resident';
 
   const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
   const expiresAt = addDays(new Date(), ttlDays ?? 7);
 
-  await scoped.insert(invitationsTable, {
+  await createInvitation({
+    communityId,
     userId,
-    token,
     invitedBy: actorUserId,
+    token,
     expiresAt,
   });
 
   const inviteUrl = `${getBaseUrl()}/auth/accept-invite?token=${encodeURIComponent(token)}&communityId=${communityId}`;
 
   await sendEmail({
-    to: user['email'] as string,
-    subject: `You're invited to ${community['name'] as string} on PropertyPro`,
+    to: user.email,
+    subject: `You're invited to ${community.name} on PropertyPro`,
     category: 'transactional',
     react: createElement(InvitationEmail, {
-      branding: { communityName: community['name'] as string },
-      inviteeName: ((user['fullName'] as string) ?? 'there'),
+      branding: { communityName: community.name },
+      inviteeName: user.fullName ?? 'there',
       inviterName: req.headers.get('x-user-full-name') || req.headers.get('x-user-email') || 'Your administrator',
       role,
       inviteUrl,
@@ -150,24 +152,23 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
   await assertNotDemoGrace(communityId);
   const { token, password } = parsed.data;
-  const scoped = createScopedClient(communityId);
 
-  const invitationRows = await scoped.query(invitationsTable);
-  const invitation = invitationRows.find((row) => row['token'] === token);
+  const invitation = await findInvitationByToken(communityId, token);
 
   if (!invitation) {
     throw new NotFoundError('Invitation not found');
   }
 
-  const consumedAt = invitation['consumedAt'] as string | null;
-  if (consumedAt) {
+  if (invitation.consumedAt) {
     return NextResponse.json(
       { error: { code: 'TOKEN_USED', message: 'This invitation link has already been used.' } },
       { status: 400 },
     );
   }
 
-  const expiresAt = new Date(invitation['expiresAt'] as string);
+  const expiresAt = invitation.expiresAt instanceof Date
+    ? invitation.expiresAt
+    : new Date(String(invitation.expiresAt));
   if (Date.now() >= expiresAt.getTime()) {
     return NextResponse.json(
       { error: { code: 'TOKEN_EXPIRED', message: 'This invitation link has expired.' } },
@@ -175,40 +176,28 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  const userId = invitation['userId'] as string;
+  const userId = invitation.userId;
 
   // Load the user's email for account creation
-  const userRows = await scoped.query(users);
-  const user = userRows.find((row) => row['id'] === userId);
+  const user = await getUserForInvitation(communityId, userId);
   if (!user) {
     throw new NotFoundError(`User ${userId} not found`);
   }
 
-  const email = user['email'] as string;
-
   // Create Supabase auth user via admin client. Note: this does not sign in.
   // Client-side form will sign in after success, using returned email.
-  const { createAdminClient } = await import('@propertypro/db/supabase/admin');
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.createUser({
-    email,
+  const result = await createSupabaseAuthUserFromInvitation({
+    email: user.email,
     password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: user['fullName'] as string,
-      external_user_id: userId,
-    },
+    fullName: user.fullName,
+    externalUserId: userId,
   });
 
-  if (error) {
+  if (!result.ok) {
     throw new ValidationError('Failed to create user');
   }
 
-  await scoped.update(
-    invitationsTable,
-    { consumedAt: new Date() },
-    eq(invitationsTable.token, token),
-  );
+  await markInvitationConsumed(communityId, token, new Date());
 
   await logAuditEvent({
     userId,
@@ -219,5 +208,5 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     newValues: { consumedAt: new Date().toISOString() },
   });
 
-  return NextResponse.json({ data: { success: true, email } });
+  return NextResponse.json({ data: { success: true, email: user.email } });
 });
