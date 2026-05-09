@@ -4,11 +4,12 @@ import {
   forumThreads,
   listDeletedForumRepliesForThread,
   logAuditEvent,
+  paginate,
   polls,
   pollVotes,
   type PollType,
 } from '@propertypro/db';
-import { and, asc, desc, eq } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gt, isNull, or } from '@propertypro/db/filters';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   BadRequestError,
@@ -644,4 +645,63 @@ export async function deleteForumThreadForCommunity(
     oldValues: existing,
     metadata: { requestId: requestId ?? null },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Polls list helpers (used by /api/v1/polls GET)
+// ---------------------------------------------------------------------------
+
+export interface PaginatedPolls {
+  data: PollRecord[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of polls in a community. Filter pushdown:
+ * - `isActive` (default `true`) → `eq(polls.isActive, isActive)`
+ * - `includeEnded=false` (default) → `or(isNull(polls.endsAt), gt(polls.endsAt, now))`
+ *   to drop polls whose deadline has elapsed.
+ *
+ * Time cutoff is captured by the caller and passed in as `now` so the
+ * route can fix it once per request (consistent across same-request
+ * usage). Helper applies the cutoff verbatim.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership and `requirePollReadPermission`/
+ * `requirePollsEnabled` gates.
+ */
+export async function paginatePollsForCommunity(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  isActive?: boolean;
+  includeEnded?: boolean;
+  /** Cutoff for the includeEnded filter; required when includeEnded === false. */
+  now?: Date;
+}): Promise<PaginatedPolls> {
+  const isActive = params.isActive ?? true;
+  const includeEnded = params.includeEnded ?? false;
+
+  const filterClauses = [eq(polls.isActive, isActive)];
+  if (!includeEnded) {
+    const now = params.now ?? new Date();
+    filterClauses.push(or(isNull(polls.endsAt), gt(polls.endsAt, now))!);
+  }
+  const where = filterClauses.length === 1 ? filterClauses[0] : and(...filterClauses);
+
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate<PollRecord>(
+    scoped,
+    polls,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+  return {
+    data: result.data.map(mapPollRow),
+    pagination: result.pagination,
+  };
 }
