@@ -7,9 +7,9 @@
  *
  * Security:
  * - Rate-limited by IP (30 req/min) to deter scraping.
- * - Intentionally queries across all communities via the unsafe client,
- *   but projects only public columns. Street addresses, contact info,
- *   billing data, and admin identities are NEVER returned.
+ * - Cross-tenant search + public projection live in
+ *   `community-search-service` so the unsafe-client surface is encapsulated
+ *   behind a single AUTHZ-documented entry point.
  * - Member count is rounded to the nearest 10 to avoid exact head-count leaks.
  */
 import { NextResponse, type NextRequest } from 'next/server';
@@ -17,10 +17,7 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, RateLimitError } from '@/lib/api/errors';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
-// AUTHZ: Public community search: discovery endpoint intentionally queries across all communities, returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities } from '@propertypro/db';
-import { and, ilike, isNull, sql } from '@propertypro/db/filters';
+import { searchPublicCommunities } from '@/lib/services/community-search-service';
 
 const querySchema = z.object({
   q: z.string().trim().min(2).max(100),
@@ -62,46 +59,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid search query');
   }
 
-  const db = createUnscopedClient();
+  const data = await searchPublicCommunities({
+    q: parsed.data.q,
+    city: parsed.data.city,
+  });
 
-  // Escape LIKE wildcards so users can't craft a query that matches all rows
-  // (e.g. "%" or "_"). Backslash is the default LIKE escape char in Postgres.
-  const escapeLike = (s: string) =>
-    s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-
-  const conditions = [
-    ilike(communities.name, `%${escapeLike(parsed.data.q)}%`),
-    isNull(communities.deletedAt),
-  ];
-  if (parsed.data.city) {
-    conditions.push(ilike(communities.city, `%${escapeLike(parsed.data.city)}%`));
-  }
-
-  const rows = await db
-    .select({
-      id: communities.id,
-      name: communities.name,
-      city: communities.city,
-      state: communities.state,
-      communityType: communities.communityType,
-      memberCount: sql<number>`(
-        SELECT COUNT(*)::int FROM user_roles ur
-        WHERE ur.community_id = ${communities.id}
-      )`,
-    })
-    .from(communities)
-    .where(and(...conditions))
-    .limit(20);
-
-  // Round member count to nearest 10 for privacy
-  const results = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    city: r.city,
-    state: r.state,
-    communityType: r.communityType,
-    memberCount: Math.floor(r.memberCount / 10) * 10,
-  }));
-
-  return NextResponse.json({ data: results });
+  return NextResponse.json({ data });
 });

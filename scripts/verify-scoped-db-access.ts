@@ -206,7 +206,7 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/join-requests/approve-request.ts'),
   // Public community search: discovery endpoint intentionally queries across all communities,
   // returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
-  resolve(repoRoot, 'apps/web/src/app/api/v1/public/communities/search/route.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/community-search-service.ts'),
   // Authenticated user's own join requests (own-user scoped, no community context yet)
   resolve(repoRoot, 'apps/web/src/app/api/v1/account/join-requests/route.ts'),
   // Admin approve/deny endpoints: cross-community service dispatched after permission check
