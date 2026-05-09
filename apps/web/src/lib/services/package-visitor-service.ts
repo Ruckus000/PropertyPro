@@ -5,6 +5,7 @@ import {
   deniedVisitors,
   communities,
   createScopedClient,
+  paginate,
   logAuditEvent,
   userRoles,
   type PackageLogStatus,
@@ -698,6 +699,35 @@ export async function listMyVisitorsForCommunity(
   });
 
   return rows.filter((row) => row.hostUserId === actorUserId || allowedUnitIds.includes(row.hostUnitId));
+}
+
+/**
+ * Paginated list of denied-visitor entries for the staff route. Uses the
+ * canonical `paginate()` helper. The optional `onlyActive` filter pushes
+ * `isActive = true|false` into the SQL `where` predicate.
+ *
+ * Caller MUST authorize via `requireStaffOperator(membership)` +
+ * `requireVisitorsReadPermission` + `requireVisitorLoggingEnabled` before
+ * invoking — denied visitors is a staff-only list.
+ */
+export async function paginateDeniedVisitors(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  onlyActive?: boolean;
+}) {
+  const scoped = createScopedClient(params.communityId);
+  return await paginate(
+    scoped,
+    deniedVisitors,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    {
+      where:
+        params.onlyActive !== undefined
+          ? eq(deniedVisitors.isActive, params.onlyActive)
+          : undefined,
+    },
+  );
 }
 
 /**
