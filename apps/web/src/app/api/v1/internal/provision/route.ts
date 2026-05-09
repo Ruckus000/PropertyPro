@@ -10,14 +10,14 @@
  * Auth: Bearer token matching PROVISIONING_RETRY_SECRET env var.
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq } from '@propertypro/db/filters';
-import { provisioningJobs } from '@propertypro/db';
-// AUTHZ: Internal cron/admin route — runs unauthenticated against system tables, not user-facing.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireCronSecret } from '@/lib/api/cron-auth';
-import { runProvisioning } from '@/lib/services/provisioning-service';
+import {
+  findProvisioningJobBySignupRequestId,
+  getProvisioningJobSummaryById,
+  runProvisioning,
+} from '@/lib/services/provisioning-service';
 import { z } from 'zod';
 
 const bodySchema = z.object({
@@ -34,17 +34,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const { signupRequestId } = parsed.data;
 
-  const db = createUnscopedClient();
-  const [job] = await db
-    .select({
-      id: provisioningJobs.id,
-      status: provisioningJobs.status,
-      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
-      retryCount: provisioningJobs.retryCount,
-    })
-    .from(provisioningJobs)
-    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
-    .limit(1);
+  const job = await findProvisioningJobBySignupRequestId(signupRequestId);
 
   if (!job) {
     return NextResponse.json(
@@ -56,16 +46,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   await runProvisioning(job.id);
 
   // Return the refreshed job status after run.
-  const [updated] = await db
-    .select({
-      id: provisioningJobs.id,
-      status: provisioningJobs.status,
-      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
-      retryCount: provisioningJobs.retryCount,
-    })
-    .from(provisioningJobs)
-    .where(eq(provisioningJobs.id, job.id))
-    .limit(1);
+  const updated = await getProvisioningJobSummaryById(job.id);
 
   return NextResponse.json({ data: updated });
 });

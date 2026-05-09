@@ -67,7 +67,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/pm/create-community.ts'),
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
   resolve(repoRoot, 'apps/web/src/lib/services/provisioning-service.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/provision/route.ts'),
   // Provisioning status polling — pre-login endpoint, queries provisioning_jobs + pending_signups.
   // The unsafe-client usage moved into provisioning-service in A3 Phase 2,
   // so the route itself no longer needs the allowance.
