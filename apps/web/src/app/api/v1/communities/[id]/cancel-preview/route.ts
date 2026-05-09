@@ -4,10 +4,11 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { calculatePricingImpact } from '@/lib/billing/pricing-preview';
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
-// AUTHZ: Cancel preview — queries communities in a billing group; authorized by billing group ownership
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities, billingGroups } from '@propertypro/db';
-import { eq, and, isNull, ne } from '@propertypro/db/filters';
+import {
+  getBillingGroupOwner,
+  getCommunityForCancelPreview,
+  listSiblingCommunityPlans,
+} from '@/lib/billing/billing-group-service';
 
 export const GET = withErrorHandler(
   async (_req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
@@ -15,18 +16,7 @@ export const GET = withErrorHandler(
     const params = await ctx.params;
     const communityId = Number(params.id);
 
-    const db = createUnscopedClient();
-
-    const [target] = await db
-      .select({
-        id: communities.id,
-        billingGroupId: communities.billingGroupId,
-        subscriptionPlan: communities.subscriptionPlan,
-      })
-      .from(communities)
-      .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
-      .limit(1);
-
+    const target = await getCommunityForCancelPreview(communityId);
     if (!target) throw new NotFoundError('Community not found');
     if (!target.billingGroupId) {
       return NextResponse.json({
@@ -39,26 +29,12 @@ export const GET = withErrorHandler(
       });
     }
 
-    const [group] = await db
-      .select()
-      .from(billingGroups)
-      .where(eq(billingGroups.id, target.billingGroupId))
-      .limit(1);
-
-    if (!group || group.ownerUserId !== userId) {
+    const ownerUserId = await getBillingGroupOwner(target.billingGroupId);
+    if (ownerUserId === null || ownerUserId !== userId) {
       throw new ForbiddenError('You do not own this billing group');
     }
 
-    const remaining = await db
-      .select({ planKey: communities.subscriptionPlan })
-      .from(communities)
-      .where(
-        and(
-          eq(communities.billingGroupId, target.billingGroupId),
-          isNull(communities.deletedAt),
-          ne(communities.id, communityId),
-        ),
-      );
+    const remaining = await listSiblingCommunityPlans(target.billingGroupId, communityId);
 
     const remainingBasePrices = remaining.map((c) =>
       c.planKey && c.planKey in PLAN_MONTHLY_PRICES_USD

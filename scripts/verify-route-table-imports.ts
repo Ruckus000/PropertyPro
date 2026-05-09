@@ -114,8 +114,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/auth/resend-verification/route.ts',
   'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts',
   'apps/web/src/app/api/v1/billing/upgrade-requests/route.ts',
-  'apps/web/src/app/api/v1/communities/[id]/cancel-preview/route.ts',
-  'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts',
   'apps/web/src/app/api/v1/compliance/route.ts',
   'apps/web/src/app/api/v1/contracts/route.ts',
   'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts',
