@@ -81,6 +81,11 @@ const {
 vi.mock('@propertypro/db', () => ({
   provisioningJobs: provisioningJobsTable,
   pendingSignups: pendingSignupsTable,
+  // The provisioning-service helper used by the route imports createAdminClient
+  // from `@propertypro/db` (re-exported), so we mock it here too. The
+  // `@propertypro/db/supabase/admin` mock below is kept for any direct
+  // consumers that import from the deeper path.
+  createAdminClient: createAdminClientMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -253,8 +258,11 @@ describe('provisioning-status route', () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toMatch(/login token/i);
+    // The error log moved into provisioning-service in A3 Phase 2 — the
+    // route delegates magic-link generation to `generateAndCacheLoginToken`,
+    // which logs with the service-level prefix.
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[provisioning-status]'),
+      expect.stringContaining('[provisioning-service]'),
       expect.any(String),
     );
   });
