@@ -19,27 +19,19 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  documentCategories,
-  paginate,
-} from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { paginateDocumentCategories } from '@/lib/services/document-category-service';
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
-
-function toSlug(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -63,28 +55,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
   await requireCommunityMembership(communityId, userId);
 
-  const scoped = createScopedClient(communityId);
-  const result = await paginate(scoped, documentCategories, {
+  const result = await paginateDocumentCategories({
+    communityId,
     cursor: parseResult.data.cursor,
     pageSize: parseResult.data.pageSize,
   });
 
-  // Map raw rows (typed as Record<string, unknown>) to the public response
-  // shape, adding the derived `slug`.
-  const categories = result.data.map((row) => {
-    const name = row['name'] as string;
-    return {
-      id: row['id'] as number,
-      name,
-      slug: toSlug(name),
-      description: (row['description'] as string | null) ?? null,
-      isSystem: row['isSystem'] as boolean,
-    };
-  });
-
   return NextResponse.json({
     data: {
-      data: categories,
+      data: result.data,
       pagination: result.pagination,
     },
   });
