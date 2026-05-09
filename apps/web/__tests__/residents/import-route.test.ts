@@ -67,6 +67,12 @@ describe('p1-19 import-residents route', () => {
 
     createScopedClientMock.mockReturnValue({
       query: scopedQueryMock,
+      // After A3 drain #64, the route uses getCommunityTypeForOnboarding
+      // (drain #52) which calls scoped.selectFrom for the one-row community
+      // type lookup. Alias to scopedQueryMock so the test's
+      // mockResolvedValueOnce queue feeds it the same way it fed the prior
+      // scoped.query(communities) call.
+      selectFrom: scopedQueryMock,
       insert: scopedInsertMock,
     });
   });
