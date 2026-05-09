@@ -175,7 +175,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Change-plan route — Stripe subscription update for in-app upgrades
   resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/change-plan/route.ts'),
   // Account lifecycle cron — cross-community deletion + notification processing
-  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts'),
   // Coupon sync retry cron — billing group tier recalculation and Stripe discount sync
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts'),
   // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
