@@ -18,6 +18,7 @@ import {
   esignSubmissions,
   esignTemplates,
   logAuditEvent,
+  users,
 } from '@propertypro/db';
 import { and, eq, gte, inArray, isNull, lt, or } from '@propertypro/db/filters';
 // AUTHZ: Public e-sign links are authorized by possession of submissionExternalId + signer slug and must resolve across tenants before any community context exists.
@@ -853,6 +854,27 @@ export async function listMyPendingSigners(
   // Sort by createdAt descending, limit to 10
   results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   return results.slice(0, 10);
+}
+
+/**
+ * Convenience wrapper for the `/api/v1/esign/my-pending` route: looks up the
+ * actor's email from the users table, then delegates to
+ * `listMyPendingSigners`. Lets the route avoid importing the `users` table
+ * directly (Plan A3 third-boundary-guard compliance).
+ *
+ * Returns empty array if the user has no email on file (rare; a few legacy
+ * accounts predate email-required onboarding).
+ */
+export async function listMyPendingForActor(
+  communityId: number,
+  actorUserId: string,
+): Promise<MyPendingSignerRecord[]> {
+  const scoped = createScopedClient(communityId);
+  const userRows = await scoped.query(users);
+  const user = userRows.find((row) => row['id'] === actorUserId);
+  const userEmail = typeof user?.['email'] === 'string' ? (user['email'] as string) : '';
+
+  return listMyPendingSigners(communityId, actorUserId, userEmail);
 }
 
 export async function getSubmission(
