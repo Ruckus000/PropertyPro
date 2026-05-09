@@ -5,42 +5,22 @@
  *
  * User requests, checks, or cancels their own account deletion.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { desc } from '@propertypro/db/filters';
+import { NextResponse } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import {
-  requestUserDeletion,
   cancelUserDeletion,
+  findCoolingDeletionRequestForUser,
+  getLatestUserDeletionRequest,
+  requestUserDeletion,
 } from '@/lib/services/account-lifecycle-service';
-import { eq, and } from '@propertypro/db/filters';
-import { accountDeletionRequests } from '@propertypro/db';
-// AUTHZ: User-facing deletion routes — cross-community deletion workflows
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 
 // GET — check active deletion request
 export const GET = withErrorHandler(async (): Promise<NextResponse> => {
   const userId = await requireAuthenticatedUserId();
-  const db = createUnscopedClient();
-
-  const [activeRequest] = await db
-    .select({
-      id: accountDeletionRequests.id,
-      status: accountDeletionRequests.status,
-      coolingEndsAt: accountDeletionRequests.coolingEndsAt,
-      createdAt: accountDeletionRequests.createdAt,
-    })
-    .from(accountDeletionRequests)
-    .where(
-      and(
-        eq(accountDeletionRequests.userId, userId),
-        eq(accountDeletionRequests.requestType, 'user'),
-      ),
-    )
-    .orderBy(desc(accountDeletionRequests.createdAt))
-    .limit(1);
+  const activeRequest = await getLatestUserDeletionRequest(userId);
 
   if (!activeRequest || activeRequest.status === 'cancelled' || activeRequest.status === 'recovered') {
     return NextResponse.json({ data: null });
@@ -61,24 +41,11 @@ export const POST = withErrorHandler(async (): Promise<NextResponse> => {
 export const DELETE = withErrorHandler(async (): Promise<NextResponse> => {
   const userId = await requireAuthenticatedUserId();
 
-  // Find the user's active cooling request
-  const db = createUnscopedClient();
-  const [activeRequest] = await db
-    .select({ id: accountDeletionRequests.id })
-    .from(accountDeletionRequests)
-    .where(
-      and(
-        eq(accountDeletionRequests.userId, userId),
-        eq(accountDeletionRequests.requestType, 'user'),
-        eq(accountDeletionRequests.status, 'cooling'),
-      ),
-    )
-    .limit(1);
-
-  if (!activeRequest) {
+  const activeRequestId = await findCoolingDeletionRequestForUser(userId);
+  if (activeRequestId === null) {
     throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
   }
 
-  await cancelUserDeletion(activeRequest.id, userId);
+  await cancelUserDeletion(activeRequestId, userId);
   return NextResponse.json({ data: { cancelled: true } });
 });

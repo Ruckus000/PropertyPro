@@ -18,7 +18,7 @@
  *   soft_deleted -> recovered
  */
 import { addDays, addMonths } from 'date-fns';
-import { eq, and, isNull, ne } from '@propertypro/db/filters';
+import { eq, and, desc, isNull, ne } from '@propertypro/db/filters';
 import {
   accessPlans,
   communities,
@@ -146,6 +146,71 @@ export async function listDeletionRequests(
     return await db.select().from(accountDeletionRequests).where(conditions[0]!);
   }
   return await db.select().from(accountDeletionRequests).where(and(...conditions));
+}
+
+export interface UserActiveDeletionRequest {
+  id: number;
+  status: string;
+  coolingEndsAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * Return the user's most recent `request_type='user'` deletion request,
+ * regardless of status — or `null` if none exists. The caller is responsible
+ * for filtering out terminal statuses (`cancelled` / `recovered`) when
+ * surfacing "is there an active request?" to the UI; this matches the
+ * pre-A3 route's behavior.
+ *
+ * AUTHZ: cross-tenant read of platform-level table; safe for the user to
+ * query their own row by `userId`.
+ */
+export async function getLatestUserDeletionRequest(
+  userId: string,
+): Promise<UserActiveDeletionRequest | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: accountDeletionRequests.id,
+      status: accountDeletionRequests.status,
+      coolingEndsAt: accountDeletionRequests.coolingEndsAt,
+      createdAt: accountDeletionRequests.createdAt,
+    })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.userId, userId),
+        eq(accountDeletionRequests.requestType, 'user'),
+      ),
+    )
+    .orderBy(desc(accountDeletionRequests.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Find the user's active `cooling` deletion request, if any. Returns the
+ * request id or `null`. Used by the cancel-deletion path.
+ *
+ * AUTHZ: cross-tenant read of platform-level table; safe for the user to
+ * query their own row by `userId`.
+ */
+export async function findCoolingDeletionRequestForUser(
+  userId: string,
+): Promise<number | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ id: accountDeletionRequests.id })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.userId, userId),
+        eq(accountDeletionRequests.requestType, 'user'),
+        eq(accountDeletionRequests.status, 'cooling'),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /**
