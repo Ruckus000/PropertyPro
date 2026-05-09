@@ -14,6 +14,7 @@ import {
   logAuditEvent,
   notificationPreferences,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
@@ -21,6 +22,38 @@ import { getPresetPermissions, PRESET_METADATA } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { requireCommunityType } from '@/lib/utils/community-validators';
+
+/**
+ * Look up a community's `communityType` by id (single-row projection).
+ * Returns the typed `CommunityType` enum or throws `NotFoundError` if no
+ * row matches.
+ *
+ * Replaces the prior route-side anti-pattern of `scoped.query(communities)`
+ * (full table fetch + JS .find()) — same class as drain #244's
+ * `listMyPendingForActor` pre-fix.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified actor's
+ * community membership.
+ */
+export async function getCommunityTypeForOnboarding(
+  communityId: number,
+): Promise<CommunityType> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    { communityType: communities.communityType },
+    eq(communities.id, communityId),
+  )) as unknown as Array<{ communityType: unknown }>;
+  const row = rows[0];
+  if (!row) {
+    throw new NotFoundError(`Community ${communityId} not found`);
+  }
+  return requireCommunityType(
+    row.communityType,
+    `onboarding-service.getCommunityTypeForOnboarding(${communityId})`,
+  );
+}
 
 /**
  * Create a resident (user + role) in a community.

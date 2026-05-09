@@ -10,11 +10,10 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { communities, createScopedClient, logAuditEvent } from '@propertypro/db';
-import { NEW_COMMUNITY_ROLES, PRESET_KEYS, type NewCommunityRole, type CommunityType, type PresetKey } from '@propertypro/shared';
+import { logAuditEvent } from '@propertypro/db';
+import { NEW_COMMUNITY_ROLES, PRESET_KEYS, type NewCommunityRole, type PresetKey } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
-import { NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -22,10 +21,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { requireCommunityType } from '@/lib/utils/community-validators';
 import {
   createOnboardingResident,
   createOnboardingInvitation,
+  getCommunityTypeForOnboarding,
 } from '@/lib/services/onboarding-service';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
@@ -41,18 +40,6 @@ const createAndInviteSchema = z.object({
   ttlDays: z.number().int().positive().default(7),
   sendInvitation: z.boolean().optional().default(true),
 });
-
-async function getCommunityType(communityId: number): Promise<CommunityType> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row['id'] === communityId);
-
-  if (!community) {
-    throw new NotFoundError(`Community ${communityId} not found`);
-  }
-
-  return requireCommunityType(community['communityType'], `residents/invite.getCommunityType(${communityId})`);
-}
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const body: unknown = await req.json();
@@ -91,7 +78,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('presetKey is required when role is "manager"');
   }
 
-  const communityType = await getCommunityType(communityId);
+  const communityType = await getCommunityTypeForOnboarding(communityId);
 
   if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
     throw new ValidationError('Owners are not allowed in apartment communities');
