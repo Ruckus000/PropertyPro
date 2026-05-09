@@ -8,7 +8,7 @@ import {
 } from '@/lib/api/admin-maintenance';
 import { listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
-import { walkPaginated } from '@/lib/api/walk-paginated';
+import { walkAndSlice } from '@/lib/api/walk-paginated';
 
 export interface OperationsListItem {
   id: number;
@@ -216,30 +216,22 @@ export function useWorkOrders(
 
   return useQuery({
     queryKey: WORK_ORDER_KEYS.list(communityId, { ...params, page, limit }),
-    queryFn: async ({ signal }): Promise<WorkOrderListResponse> => {
+    queryFn: ({ signal }): Promise<WorkOrderListResponse> => {
       // Plan B3: route emits the canonical paginated envelope; consumer
-      // walks all pages, then JS-slices to the requested `page`+`limit`
-      // window to preserve the existing offset-style UI contract. Same
-      // pattern as #228 violations.
+      // walks all pages then JS-slices to the requested `page`+`limit`
+      // window. Shared `walkAndSlice` helper handles the slice math
+      // (same pattern as #228 violations + #237 maintenance-requests).
       const baseParams: Record<string, string> = {
         communityId: String(communityId),
       };
       if (params?.status) baseParams.status = params.status;
       if (params?.unitId) baseParams.unitId = String(params.unitId);
 
-      const all = await walkPaginated<WorkOrderListItem>(
-        '/api/v1/work-orders',
-        baseParams,
-        { signal },
-      );
-
-      const offset = Math.max(0, (page - 1) * limit);
-      const data = limit > 0 ? all.slice(offset, offset + limit) : all;
-
-      return {
-        data,
-        meta: { page, limit, total: all.length },
-      };
+      return walkAndSlice<WorkOrderListItem>('/api/v1/work-orders', baseParams, {
+        page,
+        limit,
+        signal,
+      });
     },
     enabled: enabled && communityId > 0,
     staleTime: 60_000,

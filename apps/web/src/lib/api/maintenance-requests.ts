@@ -6,7 +6,7 @@
  * requested `page` window. Same pattern as `listAllRequests` and #228
  * violations / #236 work-orders.
  */
-import { walkPaginated } from './walk-paginated';
+import { walkAndSlice } from './walk-paginated';
 
 export interface PhotoEntry {
   url: string;
@@ -83,20 +83,11 @@ export async function listMyRequests(
   };
   if (params?.status) baseParams.status = params.status;
 
-  const all = await walkPaginated<MaintenanceRequestItem>(
+  return walkAndSlice<MaintenanceRequestItem>(
     '/api/v1/maintenance-requests',
     baseParams,
+    { page: params?.page, limit: params?.limit },
   );
-
-  const limit = params?.limit ?? all.length;
-  const page = params?.page ?? 1;
-  const offset = Math.max(0, (page - 1) * limit);
-  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
-
-  return {
-    data,
-    meta: { total: all.length, page, limit },
-  };
 }
 
 export async function getRequest(

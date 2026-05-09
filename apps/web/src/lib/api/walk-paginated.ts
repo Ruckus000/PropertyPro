@@ -94,3 +94,84 @@ export async function walkPaginated<T>(
 
   return collected;
 }
+
+/**
+ * Offset-style page-window result envelope. Matches the legacy `{ data, meta }`
+ * shape returned by client API helpers like `listViolations`, `listAllRequests`,
+ * `listMyRequests`, and the `useWorkOrders` queryFn (Plan B3 walk-and-slice
+ * pattern: #228, #236, #237).
+ */
+export interface SlicedMeta {
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface SlicedResponse<T> {
+  data: T[];
+  meta: SlicedMeta;
+}
+
+export interface WalkAndSliceOptions {
+  /** 1-indexed page number. Defaults to 1. */
+  page?: number;
+  /**
+   * Page size for the JS slice. When omitted, the slice covers the full walked
+   * list (effectively "show all"). When 0, also returns the full list — the
+   * `limit > 0` guard in the slice math is defensive against a caller passing
+   * `limit: 0` from a UI control.
+   */
+  limit?: number;
+  /** Forwarded to `walkPaginated`. */
+  signal?: AbortSignal;
+  /** Forwarded to `walkPaginated`. */
+  maxPages?: number;
+  /** Forwarded to `walkPaginated`. Defaults to '100'. */
+  pageSize?: string;
+}
+
+/**
+ * Walk a paginated `/api/v1/*` endpoint, then JS-slice the result to the
+ * requested `page`+`limit` window. Preserves the legacy offset-style
+ * `{ data, meta: { total, page, limit } }` consumer contract while letting the
+ * underlying route emit the canonical paginated envelope (Plan B3).
+ *
+ * `meta.total` reflects the full walked length, capped at
+ * {@link walkPaginated}'s `MAX_PAGES * pageSize` (default 2000 rows). For
+ * communities whose row count exceeds the cap, `meta.total` undercounts.
+ *
+ * Use this from any consumer that paginates server-side (page/limit URL
+ * params) but wants the server to return one canonical paginated envelope per
+ * request. Used by `listViolations` (#228), `useWorkOrders` (#236),
+ * `listAllRequests` + `listMyRequests` (#237).
+ *
+ * @example
+ * ```ts
+ * return walkAndSlice<ViolationItem>(
+ *   '/api/v1/violations',
+ *   baseParams,
+ *   { page: params?.page, limit: params?.limit, signal },
+ * );
+ * ```
+ */
+export async function walkAndSlice<T>(
+  baseUrl: string,
+  baseParams: Record<string, string>,
+  options: WalkAndSliceOptions = {},
+): Promise<SlicedResponse<T>> {
+  const all = await walkPaginated<T>(baseUrl, baseParams, {
+    signal: options.signal,
+    maxPages: options.maxPages,
+    pageSize: options.pageSize,
+  });
+
+  const limit = options.limit ?? all.length;
+  const page = options.page ?? 1;
+  const offset = Math.max(0, (page - 1) * limit);
+  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
+
+  return {
+    data,
+    meta: { total: all.length, page, limit },
+  };
+}

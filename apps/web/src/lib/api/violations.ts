@@ -10,7 +10,7 @@
  */
 
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
-import { walkPaginated } from '@/lib/api/walk-paginated';
+import { walkAndSlice } from '@/lib/api/walk-paginated';
 
 export interface ViolationItem {
   id: number;
@@ -127,17 +127,11 @@ export async function listViolations(
   if (params?.createdAfter) baseParams.createdAfter = params.createdAfter;
   if (params?.createdBefore) baseParams.createdBefore = params.createdBefore;
 
-  const all = await walkPaginated<ViolationItem>('/api/v1/violations', baseParams, { signal });
-
-  const limit = params?.limit ?? all.length;
-  const page = params?.page ?? 1;
-  const offset = Math.max(0, (page - 1) * limit);
-  const data = limit > 0 ? all.slice(offset, offset + limit) : all;
-
-  return {
-    data,
-    meta: { total: all.length, page, limit },
-  };
+  return walkAndSlice<ViolationItem>('/api/v1/violations', baseParams, {
+    page: params?.page,
+    limit: params?.limit,
+    signal,
+  });
 }
 
 export async function getViolation(
