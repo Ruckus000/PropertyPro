@@ -29,6 +29,7 @@ const {
   maintenanceRequestsTableMock,
   maintenanceCommentsTableMock,
   unitsTableMock,
+  paginateMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
@@ -42,6 +43,13 @@ const {
   maintenanceRequestsTableMock: { id: Symbol('maintenanceRequests.id'), submittedById: Symbol('maintenanceRequests.submittedById'), status: Symbol('maintenanceRequests.status'), category: Symbol('maintenanceRequests.category'), priority: Symbol('maintenanceRequests.priority'), assignedToId: Symbol('maintenanceRequests.assignedToId') },
   maintenanceCommentsTableMock: { requestId: Symbol('maintenanceComments.requestId') },
   unitsTableMock: { id: Symbol('units.id') },
+  // Plan B3: route GET now uses paginate() instead of scoped.selectFrom for
+  // the request-rows fetch. Default to empty page; tests that need rows set
+  // `paginateMock.mockResolvedValueOnce(...)` directly.
+  paginateMock: vi.fn().mockResolvedValue({
+    data: [],
+    pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+  }),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
@@ -60,6 +68,7 @@ vi.mock('@propertypro/db', () => ({
   maintenanceRequests: maintenanceRequestsTableMock,
   maintenanceComments: maintenanceCommentsTableMock,
   units: unitsTableMock,
+  paginate: paginateMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -190,6 +199,13 @@ describe('maintenance requests route', () => {
     requirePermissionMock.mockImplementation(() => {});
     getFeaturesForCommunityMock.mockReturnValue({ hasMaintenanceRequests: true });
     createScopedClientMock.mockReturnValue(makeDefaultScopedClient());
+    // Plan B3 default: paginate returns empty page so feature-gate tests +
+    // POST tests don't need to set this themselves. Tests that exercise
+    // GET data shape override via `paginateMock.mockResolvedValueOnce(...)`.
+    paginateMock.mockResolvedValue({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -263,24 +279,29 @@ describe('maintenance requests route', () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-        if (table === maintenanceRequestsTableMock) return makeChainableBuilder([requestRow]);
-        if (table === maintenanceCommentsTableMock) return makeChainableBuilder([]);
-        return makeChainableBuilder([]);
+      // Plan B3: paginate() drives request-row fetch; selectFrom() is now
+      // only used for the per-page comment fetch.
+      paginateMock.mockResolvedValueOnce({
+        data: [requestRow],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests?communityId=42');
       const res = await GET(req);
       expect(res.status).toBe(200);
       expect(createScopedClientMock).toHaveBeenCalledWith(42);
 
-      const json = (await res.json()) as { data: unknown[]; meta: { total: number; page: number; limit: number } };
-      expect(json.meta).toBeDefined();
-      expect(typeof json.meta.total).toBe('number');
-      expect(typeof json.meta.page).toBe('number');
-      expect(typeof json.meta.limit).toBe('number');
-      expect(Array.isArray(json.data)).toBe(true);
+      // Plan B3: response is the canonical double-wrapped paginated envelope
+      // `{ data: { data, pagination } }`. The helper layer (`listAllRequests`
+      // / `listMyRequests`) walks pages and synthesizes the legacy
+      // `{ data, meta }` shape for consumers — but the route itself emits
+      // the canonical envelope.
+      const json = (await res.json()) as {
+        data: { data: unknown[]; pagination: { pageSize: number } };
+      };
+      expect(Array.isArray(json.data.data)).toBe(true);
+      expect(json.data.pagination).toBeDefined();
+      expect(typeof json.data.pagination.pageSize).toBe('number');
     });
   });
 
@@ -345,8 +366,12 @@ describe('maintenance requests route', () => {
       const internalComment = { id: 1, requestId: 20, userId: 'admin-1', text: 'Admin note', isInternal: true, createdAt: new Date().toISOString() };
       const publicComment = { id: 2, requestId: 20, userId: 'admin-1', text: 'Public note', isInternal: false, createdAt: new Date().toISOString() };
 
+      // Plan B3: paginate() drives request rows; selectFrom() only for comments.
+      paginateMock.mockResolvedValueOnce({
+        data: [requestRow],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
       const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-        if (table === maintenanceRequestsTableMock) return makeChainableBuilder([requestRow]);
         if (table === maintenanceCommentsTableMock) return makeChainableBuilder([internalComment, publicComment]);
         return makeChainableBuilder([]);
       });
@@ -356,8 +381,10 @@ describe('maintenance requests route', () => {
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ comments: Array<Record<string, unknown>> }> };
-      const comments = json.data[0].comments;
+      const json = (await res.json()) as {
+        data: { data: Array<{ comments: Array<Record<string, unknown>> }>; pagination: unknown };
+      };
+      const comments = json.data.data[0].comments;
       // isInternal field must not be emitted to resident callers (defense-in-depth
       // on top of the filter that drops isInternal=true comments).
       expect(comments).toHaveLength(1);
@@ -380,8 +407,11 @@ describe('maintenance requests route', () => {
       };
       const internalComment = { id: 3, requestId: 21, userId: 'admin-1', text: 'Internal note', isInternal: true, createdAt: new Date().toISOString() };
 
+      paginateMock.mockResolvedValueOnce({
+        data: [requestRow],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
       const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-        if (table === maintenanceRequestsTableMock) return makeChainableBuilder([requestRow]);
         if (table === maintenanceCommentsTableMock) return makeChainableBuilder([internalComment]);
         return makeChainableBuilder([]);
       });
@@ -391,9 +421,11 @@ describe('maintenance requests route', () => {
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ comments: Array<{ isInternal: boolean }> }> };
-      expect(json.data[0].comments).toHaveLength(1);
-      expect(json.data[0].comments[0].isInternal).toBe(true);
+      const json = (await res.json()) as {
+        data: { data: Array<{ comments: Array<{ isInternal: boolean }> }>; pagination: unknown };
+      };
+      expect(json.data.data[0].comments).toHaveLength(1);
+      expect(json.data.data[0].comments[0].isInternal).toBe(true);
     });
   });
 
@@ -417,19 +449,19 @@ describe('maintenance requests route', () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-        if (table === maintenanceRequestsTableMock) return makeChainableBuilder([requestRow]);
-        if (table === maintenanceCommentsTableMock) return makeChainableBuilder([]);
-        return makeChainableBuilder([]);
+      paginateMock.mockResolvedValueOnce({
+        data: [requestRow],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests?communityId=42');
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ status: string }> };
-      expect(json.data[0].status).toBe('submitted');
+      const json = (await res.json()) as {
+        data: { data: Array<{ status: string }>; pagination: unknown };
+      };
+      expect(json.data.data[0].status).toBe('submitted');
     });
 
     it("normalizes priority 'normal' to 'medium'", async () => {
@@ -447,19 +479,19 @@ describe('maintenance requests route', () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const selectFrom = vi.fn().mockImplementation((table: unknown) => {
-        if (table === maintenanceRequestsTableMock) return makeChainableBuilder([requestRow]);
-        if (table === maintenanceCommentsTableMock) return makeChainableBuilder([]);
-        return makeChainableBuilder([]);
+      paginateMock.mockResolvedValueOnce({
+        data: [requestRow],
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
-      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom }));
 
       const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests?communityId=42');
       const res = await GET(req);
       expect(res.status).toBe(200);
 
-      const json = (await res.json()) as { data: Array<{ priority: string }> };
-      expect(json.data[0].priority).toBe('medium');
+      const json = (await res.json()) as {
+        data: { data: Array<{ priority: string }>; pagination: unknown };
+      };
+      expect(json.data.data[0].priority).toBe('medium');
     });
   });
 
