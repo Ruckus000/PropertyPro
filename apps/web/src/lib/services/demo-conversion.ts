@@ -335,3 +335,65 @@ async function ensureFoundingUser(
     `[demo-conversion] founding user created: ${userId} for community ${communityId}`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Demo auto-login helpers (used by /api/v1/auth/demo-login)
+// ---------------------------------------------------------------------------
+
+export interface DemoInstanceForLogin {
+  id: number;
+  authTokenSecret: string | null;
+  seededCommunityId: number | null;
+  demoResidentEmail: string | null;
+  demoBoardEmail: string | null;
+}
+
+/**
+ * Fetch the demo instance row needed to authenticate a demo-login token:
+ * the encrypted HMAC secret + the seeded community + the demo user emails.
+ * Returns `null` when the demo id doesn't match a row.
+ *
+ * AUTHZ: pre-tenant token-authenticated endpoint — caller validates the
+ * HMAC token signature against the returned secret BEFORE trusting the
+ * row's contents.
+ */
+export async function getDemoInstanceForLogin(
+  demoId: number,
+): Promise<DemoInstanceForLogin | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: demoInstances.id,
+      authTokenSecret: demoInstances.authTokenSecret,
+      seededCommunityId: demoInstances.seededCommunityId,
+      demoResidentEmail: demoInstances.demoResidentEmail,
+      demoBoardEmail: demoInstances.demoBoardEmail,
+    })
+    .from(demoInstances)
+    .where(eq(demoInstances.id, demoId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Look up `communities.demoExpiresAt` for the seeded demo community. Returns
+ * the expiry timestamp, `null` when no row matches, or `undefined` when the
+ * row exists but has no expiry set (treated as "never expires" by the
+ * caller).
+ *
+ * AUTHZ: cross-tenant unscoped read — caller MUST have already validated
+ * the demo HMAC token + resolved the community id from the verified demo
+ * instance row.
+ */
+export async function getDemoCommunityExpiry(
+  communityId: number,
+): Promise<Date | null | undefined> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ demoExpiresAt: communities.demoExpiresAt })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  if (!row) return null;
+  return row.demoExpiresAt ?? undefined;
+}

@@ -13,12 +13,12 @@ import {
   extractDemoIdFromToken,
   validateDemoToken,
 } from '@propertypro/shared/server';
-import { communities, demoInstances } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-// AUTHZ: Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';
+import {
+  getDemoCommunityExpiry,
+  getDemoInstanceForLogin,
+} from '@/lib/services/demo-conversion';
 
 const PRODUCTION_DOMAIN = 'getpropertypro.com';
 
@@ -148,18 +148,12 @@ export async function GET(request: Request) {
     return loginError(trustedBaseUrl, 'invalid_token');
   }
 
-  // 2. Look up demo instance to get the HMAC secret (service_role access via unscoped client)
-  const db = createUnscopedClient();
-  const rows = await db
-    .select()
-    .from(demoInstances)
-    .where(eq(demoInstances.id, demoId))
-    .limit(1);
+  // 2. Look up demo instance to get the HMAC secret (service_role access via service helper)
+  const instance = await getDemoInstanceForLogin(demoId);
 
   // To prevent demo instance enumeration, use a dummy secret whenever the real
   // secret cannot be resolved (missing row or decrypt failure). Signature checks
   // still run timing-safe and return the same external error.
-  const instance = rows[0];
   const encryptedSecret = instance?.authTokenSecret;
   const isEncryptedSecret = encryptedSecret?.startsWith('enc:v1:') ?? false;
   const encryptionKeyHex = process.env.DEMO_TOKEN_ENCRYPTION_KEY_HEX;
@@ -182,13 +176,8 @@ export async function GET(request: Request) {
 
   // 3b. Check if the demo's community has expired
   if (instance.seededCommunityId) {
-    const [community] = await db
-      .select({ demoExpiresAt: communities.demoExpiresAt })
-      .from(communities)
-      .where(eq(communities.id, instance.seededCommunityId))
-      .limit(1);
-
-    if (community?.demoExpiresAt && new Date(community.demoExpiresAt) < new Date()) {
+    const demoExpiresAt = await getDemoCommunityExpiry(instance.seededCommunityId);
+    if (demoExpiresAt && new Date(demoExpiresAt) < new Date()) {
       return loginError(trustedBaseUrl, 'demo_expired');
     }
   }

@@ -95,8 +95,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/notifications/all/route.ts'),
   // Invitation acceptance — creates Supabase auth user via admin client (service_role)
   resolve(repoRoot, 'apps/web/src/app/api/v1/invitations/route.ts'),
-  // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session
-  resolve(repoRoot, 'apps/web/src/app/api/v1/auth/demo-login/route.ts'),
+  // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session.
+  // The unsafe-client usage moved into demo-conversion service in A3 Phase 2,
+  // so the route itself no longer needs the allowance.
   // Transparency public route: slug resolution and opt-in lookup before tenant scoping
   resolve(repoRoot, 'apps/web/src/app/api/v1/transparency/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/(public)/[subdomain]/transparency/page.tsx'),
