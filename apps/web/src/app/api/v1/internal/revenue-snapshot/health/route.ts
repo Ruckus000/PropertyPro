@@ -7,20 +7,12 @@
  * No auth — health probes must be reachable by monitors.
  */
 import { NextResponse } from 'next/server';
-import { desc } from '@propertypro/db/filters';
-import { revenueSnapshots } from '@propertypro/db';
-// AUTHZ: Internal cron/admin route — runs unauthenticated against system tables, not user-facing.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { getLatestRevenueSnapshotForHealth } from '@/lib/services/revenue-snapshot-data-service';
 
 const STALE_THRESHOLD_MS = 26 * 60 * 60 * 1000;
 
 export async function GET() {
-  const db = createUnscopedClient();
-  const [latest] = await db
-    .select({ computedAt: revenueSnapshots.computedAt })
-    .from(revenueSnapshots)
-    .orderBy(desc(revenueSnapshots.computedAt))
-    .limit(1);
+  const latest = await getLatestRevenueSnapshotForHealth();
 
   if (!latest) {
     return NextResponse.json(
