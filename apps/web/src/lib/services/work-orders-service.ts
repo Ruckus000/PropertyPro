@@ -4,6 +4,7 @@ import {
   complianceAuditLog,
   createScopedClient,
   logAuditEvent,
+  paginate,
   vendors,
   workOrders,
   type AmenityBookingRules,
@@ -889,4 +890,82 @@ export async function listReservationsForCommunity(
   const total = countResult[0]?.count ?? 0;
 
   return { data: rows.map(mapReservationRow), total };
+}
+
+// ---------------------------------------------------------------------------
+// Work-order list helpers (used by /api/v1/work-orders GET)
+// ---------------------------------------------------------------------------
+
+export interface PaginatedWorkOrders {
+  data: WorkOrderRecord[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of work orders in a community. Filter pushdown:
+ * - `status` → `eq(workOrders.status, status)`
+ * - `unitId` → `eq(workOrders.unitId, unitId)`
+ * - `allowedUnitIds` → `inArray(workOrders.unitId, allowedUnitIds)`
+ *
+ * Resident-with-no-units short-circuit: drizzle forbids `inArray(col, [])`,
+ * so when `allowedUnitIds` is an empty array (resident with zero units)
+ * the helper returns an empty paginated envelope rather than calling
+ * paginate.
+ *
+ * Rows are mapped through `mapWorkOrderRow` (the caller still has to apply
+ * `deriveSlaState` separately because that returns a derived shape, not a
+ * row mutation).
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership, work-orders feature gate, and
+ * `work_orders:read` permission. For resident roles, `allowedUnitIds`
+ * MUST be passed.
+ */
+export async function paginateWorkOrdersForCommunity(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  status?: WorkOrderStatus;
+  unitId?: number;
+  allowedUnitIds?: number[];
+}): Promise<PaginatedWorkOrders> {
+  if (params.allowedUnitIds && params.allowedUnitIds.length === 0) {
+    return {
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: params.pageSize ?? 50 },
+    };
+  }
+
+  const filterClauses = [];
+  if (params.status !== undefined) {
+    filterClauses.push(eq(workOrders.status, params.status));
+  }
+  if (params.unitId !== undefined) {
+    filterClauses.push(eq(workOrders.unitId, params.unitId));
+  }
+  if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+    filterClauses.push(inArray(workOrders.unitId, params.allowedUnitIds));
+  }
+  const where =
+    filterClauses.length === 0
+      ? undefined
+      : filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...filterClauses);
+
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate<WorkOrderRecord>(
+    scoped,
+    workOrders,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+  return {
+    data: result.data.map(mapWorkOrderRow),
+    pagination: result.pagination,
+  };
 }
