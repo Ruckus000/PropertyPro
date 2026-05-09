@@ -6,25 +6,22 @@
  * Invariants:
  * - withErrorHandler wrapper (structured errors, request ID)
  * - Auth via requireAuthenticatedUserId (user-scoped, no community context)
- * - Users table is NOT tenant-scoped — uses createUnscopedClient
- * - Syncs full_name to Supabase user_metadata via admin client
- * - Audit log with action 'profile.updated'
+ * - Users table is NOT tenant-scoped — service uses createUnscopedClient
+ * - Syncs full_name to Supabase user_metadata via admin client (route concern)
+ * - No audit log: profile updates are user-scoped, not community-scoped, and
+ *   the compliance_audit_log table requires a community FK. Profile changes
+ *   are tracked in Supabase user_metadata.
  *
  * Authorization contract: The authenticated user can only update their own row.
  * No community membership is required — this is a user-level operation.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createAdminClient,
-  users,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-// AUTHZ: E-02: Account profile — user-scoped update (no community_id on users table)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { createAdminClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { updateUserProfile } from '@/lib/services/user-profile-service';
 
 const patchSchema = z.object({
   fullName: z.string().min(1, 'Name is required').max(200).optional(),
@@ -45,23 +42,10 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('No fields to update');
   }
 
-  const updateValues: Record<string, unknown> = {
-    updatedAt: new Date(),
-  };
-
-  if (fullName !== undefined) {
-    updateValues['fullName'] = fullName;
-  }
-  if (phone !== undefined) {
-    updateValues['phone'] = phone;
-  }
-
-  // Users table has no community_id — use unscoped client
-  const db = createUnscopedClient();
-  await db
-    .update(users)
-    .set(updateValues)
-    .where(eq(users.id, userId));
+  const { updatedAt, changedFields } = await updateUserProfile(userId, {
+    fullName,
+    phone,
+  });
 
   // Sync full_name to Supabase user_metadata for auth display
   if (fullName) {
@@ -71,11 +55,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  // Note: profile updates are user-scoped, not community-scoped.
-  // The compliance_audit_log table requires a community FK, so we skip
-  // audit logging here. Profile changes are tracked in Supabase user_metadata.
-
   return NextResponse.json({
-    data: { userId, ...updateValues },
+    data: { userId, updatedAt, ...changedFields },
   });
 });
