@@ -267,6 +267,44 @@ export async function getCommunityForCheckout(
   return (row as CheckoutCommunity | undefined) ?? null;
 }
 
+export interface ChangePlanCommunity {
+  id: number;
+  communityType: CommunityType;
+  stripeSubscriptionId: string | null;
+  subscriptionPlan: string | null;
+  subscriptionStatus: string | null;
+}
+
+/**
+ * Fetch the minimal community projection the change-plan flow needs:
+ * id, communityType (for plan-availability gate), stripeSubscriptionId
+ * (target of the Stripe update), and subscriptionPlan + subscriptionStatus
+ * (for the no-op + downgrade gates). Returns `null` when the community
+ * doesn't exist.
+ *
+ * AUTHZ: cross-tenant lookup of platform-level `communities` table. Caller
+ * MUST verify the actor's `requirePermission(membership, 'settings', 'write')`
+ * AND `requireFreshReauth(userId)` before invoking — change-plan is a
+ * billing mutation.
+ */
+export async function getCommunityForChangePlan(
+  communityId: number,
+): Promise<ChangePlanCommunity | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: communities.id,
+      communityType: communities.communityType,
+      stripeSubscriptionId: communities.stripeSubscriptionId,
+      subscriptionPlan: communities.subscriptionPlan,
+      subscriptionStatus: communities.subscriptionStatus,
+    })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return (row as ChangePlanCommunity | undefined) ?? null;
+}
+
 /**
  * Soft-delete a community and capture the cancellation reason/note. Sets
  * `deletedAt` and `cancellationCapturedAt` to the same `new Date()` value

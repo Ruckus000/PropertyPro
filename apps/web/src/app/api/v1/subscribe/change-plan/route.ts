@@ -11,10 +11,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { eq } from '@propertypro/db/filters';
-import { communities } from '@propertypro/db';
-// AUTHZ: Change-plan route — Stripe subscription update for in-app upgrades
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS, comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -30,6 +26,7 @@ import {
 } from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
+import { getCommunityForChangePlan } from '@/lib/billing/billing-group-service';
 
 const changePlanSchema = z.object({
   planId: z.enum(PLAN_IDS),
@@ -52,19 +49,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   }
   const { planId, billingInterval } = parsed.data;
 
-  const db = createUnscopedClient();
-  const [community] = await db
-    .select({
-      id: communities.id,
-      communityType: communities.communityType,
-      stripeSubscriptionId: communities.stripeSubscriptionId,
-      subscriptionPlan: communities.subscriptionPlan,
-      subscriptionStatus: communities.subscriptionStatus,
-    })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-
+  const community = await getCommunityForChangePlan(communityId);
   if (!community) {
     throw new ValidationError('Community not found', { communityId: 'Not found' });
   }
