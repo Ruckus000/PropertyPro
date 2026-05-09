@@ -14,11 +14,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
-// AUTHZ: O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { pendingSignups } from '@propertypro/db';
-import { and, eq } from '@propertypro/db/filters';
+import {
+  getPendingSignupForVerification,
+  getSupabaseEmailVerificationStatus,
+  markPendingSignupEmailVerifiedIfPending,
+} from '@/lib/services/provisioning-service';
 
 const confirmVerificationSchema = z.object({
   signupRequestId: z.string().min(1).max(128).trim(),
@@ -41,21 +41,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const body = parsed.data;
 
-  const db = createUnscopedClient();
-
-  const rows = await db
-    .select({
-      id: pendingSignups.id,
-      signupRequestId: pendingSignups.signupRequestId,
-      authUserId: pendingSignups.authUserId,
-      status: pendingSignups.status,
-      expiresAt: pendingSignups.expiresAt,
-    })
-    .from(pendingSignups)
-    .where(eq(pendingSignups.signupRequestId, body.signupRequestId))
-    .limit(1);
-
-  const signup = rows[0];
+  const signup = await getPendingSignupForVerification(body.signupRequestId);
 
   if (!signup) {
     throw new ValidationError('Signup request not found');
@@ -86,60 +72,41 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  const admin = createAdminClient();
-  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(
-    signup.authUserId,
-  );
-
-  if (authError || !authUser?.user) {
+  const verification = await getSupabaseEmailVerificationStatus(signup.authUserId);
+  if (!verification.ok) {
     console.error(JSON.stringify({
       event: 'confirm_verification.auth_lookup_failed',
       signupRequestId: signup.signupRequestId,
       authUserId: signup.authUserId,
-      error: authError?.message ?? 'User not found',
+      error: verification.error,
     }));
     throw new ValidationError('Unable to verify email status. Please try again.');
   }
 
-  if (!authUser.user.email_confirmed_at) {
+  if (!verification.emailConfirmedAt) {
     throw new ValidationError(
       'Email has not been verified yet. Please click the verification link in your email.',
     );
   }
 
-  // Transition to email_verified with status guard to prevent TOCTOU race
-  const updatedRows = await db
-    .update(pendingSignups)
-    .set({
-      status: 'email_verified',
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(pendingSignups.signupRequestId, body.signupRequestId),
-        eq(pendingSignups.status, 'pending_verification'),
-      ),
-    )
-    .returning({ id: pendingSignups.id });
+  // Transition to email_verified with status guard to prevent TOCTOU race.
+  // On race (0 rows updated), the service re-reads the current status so we
+  // can return success when another concurrent request already advanced the
+  // row to email_verified or checkout_started.
+  const transition = await markPendingSignupEmailVerifiedIfPending(body.signupRequestId);
 
-  // If 0 rows updated, another request may have raced us
-  if (updatedRows.length === 0) {
-    // Re-read to check if it was already verified (idempotent success)
-    const recheck = await db
-      .select({ status: pendingSignups.status })
-      .from(pendingSignups)
-      .where(eq(pendingSignups.signupRequestId, body.signupRequestId))
-      .limit(1);
-
-    const currentStatus = recheck[0]?.status;
-    if (currentStatus === 'email_verified' || currentStatus === 'checkout_started') {
+  if (!transition.updated) {
+    if (
+      transition.currentStatus === 'email_verified' ||
+      transition.currentStatus === 'checkout_started'
+    ) {
       return NextResponse.json({
         data: { success: true, signupRequestId: signup.signupRequestId },
       });
     }
 
     throw new ValidationError(
-      `Status transition failed — current status is "${currentStatus ?? 'unknown'}"`,
+      `Status transition failed — current status is "${transition.currentStatus ?? 'unknown'}"`,
     );
   }
 

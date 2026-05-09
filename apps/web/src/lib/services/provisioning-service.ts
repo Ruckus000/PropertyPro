@@ -912,6 +912,119 @@ export async function generateAndCacheLoginToken(
   return loginToken;
 }
 
+// ---------------------------------------------------------------------------
+// Email verification confirmation helpers (used by /api/v1/auth/confirm-verification)
+// ---------------------------------------------------------------------------
+
+export interface PendingSignupForVerification {
+  id: bigint;
+  signupRequestId: string;
+  authUserId: string | null;
+  status: string;
+  expiresAt: Date | null;
+}
+
+/**
+ * Fetch the projection needed by the email-verification confirmation flow.
+ * Returns `null` when the signup request id doesn't match a row.
+ *
+ * AUTHZ: pre-tenant pre-auth public endpoint — secured by the unguessable
+ * `signupRequestId`. Caller validates payload shape before invoking.
+ */
+export async function getPendingSignupForVerification(
+  signupRequestId: string,
+): Promise<PendingSignupForVerification | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: pendingSignups.id,
+      signupRequestId: pendingSignups.signupRequestId,
+      authUserId: pendingSignups.authUserId,
+      status: pendingSignups.status,
+      expiresAt: pendingSignups.expiresAt,
+    })
+    .from(pendingSignups)
+    .where(eq(pendingSignups.signupRequestId, signupRequestId))
+    .limit(1);
+  return row ?? null;
+}
+
+export type SupabaseEmailVerificationResult =
+  | { ok: true; emailConfirmedAt: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Look up the Supabase auth user by id and return whether their email is
+ * confirmed. Wraps the auth-admin call so the route doesn't need to import
+ * `@propertypro/db/supabase/admin` directly.
+ */
+export async function getSupabaseEmailVerificationStatus(
+  authUserId: string,
+): Promise<SupabaseEmailVerificationResult> {
+  const admin = createAdminClient();
+  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(
+    authUserId,
+  );
+  if (authError || !authUser?.user) {
+    return { ok: false, error: authError?.message ?? 'User not found' };
+  }
+  return {
+    ok: true,
+    emailConfirmedAt: (authUser.user.email_confirmed_at as string | null) ?? null,
+  };
+}
+
+export interface MarkEmailVerifiedResult {
+  /** True when this call performed the transition (1 row updated). */
+  updated: boolean;
+  /**
+   * Current status after the attempted transition. When `updated=true`, this
+   * is `'email_verified'`. When `updated=false`, this is whatever the row
+   * currently holds (or `null` if it disappeared, which would be a bug).
+   */
+  currentStatus: string | null;
+}
+
+/**
+ * Attempt to transition a pending_signups row from `pending_verification` to
+ * `email_verified`. Uses a CAS-style WHERE predicate to prevent TOCTOU
+ * races: only updates when the row is currently `pending_verification`.
+ *
+ * On race (0 rows updated), re-reads the row's status so the caller can
+ * decide whether the loser branch is still a successful idempotent outcome
+ * (`email_verified` / `checkout_started`) or a hard error (any other status).
+ */
+export async function markPendingSignupEmailVerifiedIfPending(
+  signupRequestId: string,
+): Promise<MarkEmailVerifiedResult> {
+  const db = createUnscopedClient();
+  const updatedRows = await db
+    .update(pendingSignups)
+    .set({
+      status: 'email_verified',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(pendingSignups.signupRequestId, signupRequestId),
+        eq(pendingSignups.status, 'pending_verification'),
+      ),
+    )
+    .returning({ id: pendingSignups.id });
+
+  if (updatedRows.length > 0) {
+    return { updated: true, currentStatus: 'email_verified' };
+  }
+
+  // Race: re-read the row's status so the caller can branch on it.
+  const recheck = await db
+    .select({ status: pendingSignups.status })
+    .from(pendingSignups)
+    .where(eq(pendingSignups.signupRequestId, signupRequestId))
+    .limit(1);
+  return { updated: false, currentStatus: recheck[0]?.status ?? null };
+}
+
 export const _testInternals = {
   resolvePendingSignupAddress,
 } as const;
