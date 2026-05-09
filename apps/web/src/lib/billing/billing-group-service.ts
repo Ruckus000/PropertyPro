@@ -6,6 +6,7 @@ import { AppError } from '../api/errors';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
+import type { CommunityType } from '@propertypro/shared';
 
 export interface RecalculateResult {
   billingGroupId: number;
@@ -230,6 +231,40 @@ export async function listSiblingCommunityPlans(
 export interface CommunityCancellationDetails {
   reason: string;
   note: string | null;
+}
+
+export interface CheckoutCommunity {
+  id: number;
+  name: string;
+  communityType: CommunityType;
+  stripeCustomerId: string | null;
+}
+
+/**
+ * Fetch the minimal community projection the Stripe-checkout flow needs:
+ * id, name, communityType (for plan-availability gate), and the existing
+ * stripeCustomerId (to attach to the session if present). Returns `null`
+ * when the community doesn't exist.
+ *
+ * AUTHZ: cross-tenant lookup of platform-level `communities` table. Caller
+ * MUST verify the actor's `requirePermission(membership, 'settings', 'write')`
+ * before invoking — the helper itself does no authorization.
+ */
+export async function getCommunityForCheckout(
+  communityId: number,
+): Promise<CheckoutCommunity | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: communities.id,
+      name: communities.name,
+      communityType: communities.communityType,
+      stripeCustomerId: communities.stripeCustomerId,
+    })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return (row as CheckoutCommunity | undefined) ?? null;
 }
 
 /**
