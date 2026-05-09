@@ -3,6 +3,7 @@ import {
   packageLog,
   visitorLog,
   deniedVisitors,
+  communities,
   createScopedClient,
   logAuditEvent,
   userRoles,
@@ -697,6 +698,46 @@ export async function listMyVisitorsForCommunity(
   });
 
   return rows.filter((row) => row.hostUserId === actorUserId || allowedUnitIds.includes(row.hostUnitId));
+}
+
+/**
+ * Whether residents may revoke visitor passes they registered. Reads
+ * `communities.communitySettings.allowResidentVisitorRevoke` (boolean,
+ * default false). Used by the visitor-revoke route's resident-path
+ * authorization check.
+ */
+export async function isResidentVisitorRevokeEnabled(
+  communityId: number,
+): Promise<boolean> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    {},
+    eq(communities.id, communityId),
+  )) as Record<string, unknown>[];
+  const community = rows[0];
+  const settings = community?.['communitySettings'] as Record<string, unknown> | undefined;
+  return settings?.['allowResidentVisitorRevoke'] === true;
+}
+
+/**
+ * Look up the host (registering resident) of a non-deleted visitor pass.
+ * Returns the `hostUserId` or `null` when the pass doesn't exist or has
+ * been soft-deleted. Used by the visitor-revoke route's resident-path
+ * ownership check.
+ */
+export async function getVisitorHostUserId(
+  communityId: number,
+  visitorId: number,
+): Promise<string | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom(
+    visitorLog,
+    { hostUserId: visitorLog.hostUserId },
+    and(eq(visitorLog.id, visitorId), isNull(visitorLog.deletedAt)),
+  );
+  const row = rows[0] as { hostUserId: string | null } | undefined;
+  return row?.hostUserId ?? null;
 }
 
 export async function revokeVisitorForCommunity(
