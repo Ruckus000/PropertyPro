@@ -9,6 +9,7 @@ import {
   logAuditEvent,
   paginate,
   postLedgerEntry,
+  units,
   violationFines,
   violations,
 } from '@propertypro/db';
@@ -1089,4 +1090,117 @@ export async function paginateArcSubmissionsForCommunity(params: {
     data: result.data.map(mapArcRow),
     pagination: result.pagination,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Violations list helpers (used by /api/v1/violations GET + POST)
+// ---------------------------------------------------------------------------
+
+import { hydrateReportedByRole, type WithReportedByRole } from '@/lib/violations/hydrate-reporter-role';
+
+export interface PaginatedViolations {
+  data: WithReportedByRole<ViolationRecord>[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of violations in a community. Filter pushdown:
+ * - `status` → `eq(violations.status, status)`
+ * - `severity` → `eq(violations.severity, severity)`
+ * - `unitId` → `eq(violations.unitId, unitId)`
+ * - `allowedUnitIds` → `inArray(violations.unitId, allowedUnitIds)`
+ * - `createdAfter` → `gte(violations.createdAt, parsed)`
+ * - `createdBefore` → `lte(violations.createdAt, parsed)`
+ *
+ * Resident-with-no-units short-circuit: drizzle forbids `inArray(col, [])`,
+ * so when `allowedUnitIds` is empty we return an empty paginated envelope.
+ *
+ * Rows are mapped through `mapViolationRow` then decorated with the
+ * reporter's role via `hydrateReportedByRole` (one extra round-trip per
+ * page; no per-row N+1).
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership, violations feature gate, and `violations:read`
+ * permission. For resident roles, `allowedUnitIds` MUST be passed.
+ */
+export async function paginateViolationsForCommunity(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  status?: ViolationStatus;
+  severity?: ViolationSeverity;
+  unitId?: number;
+  allowedUnitIds?: number[];
+  createdAfter?: string;
+  createdBefore?: string;
+}): Promise<PaginatedViolations> {
+  if (params.allowedUnitIds && params.allowedUnitIds.length === 0) {
+    return {
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: params.pageSize ?? 50 },
+    };
+  }
+
+  const filterClauses = [];
+  if (params.status !== undefined) {
+    filterClauses.push(eq(violations.status, params.status));
+  }
+  if (params.severity !== undefined) {
+    filterClauses.push(eq(violations.severity, params.severity));
+  }
+  if (params.unitId !== undefined) {
+    filterClauses.push(eq(violations.unitId, params.unitId));
+  }
+  if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+    filterClauses.push(inArray(violations.unitId, params.allowedUnitIds));
+  }
+  if (params.createdAfter) {
+    filterClauses.push(gte(violations.createdAt, new Date(params.createdAfter)));
+  }
+  if (params.createdBefore) {
+    filterClauses.push(lte(violations.createdAt, new Date(params.createdBefore)));
+  }
+  const where =
+    filterClauses.length === 0
+      ? undefined
+      : filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...filterClauses);
+
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate<ViolationRecord>(
+    scoped,
+    violations,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+
+  const mapped = result.data.map(mapViolationRow);
+  const hydrated = await hydrateReportedByRole(scoped, mapped);
+  return {
+    data: hydrated,
+    pagination: result.pagination,
+  };
+}
+
+/**
+ * Confirm `unitId` exists in the community. Returns true/false; does not
+ * throw. Replaces the route's prior inline `scoped.selectFrom(units, ...)`
+ * call so the route doesn't need to import the `units` table.
+ */
+export async function unitExistsInCommunity(
+  communityId: number,
+  unitId: number,
+): Promise<boolean> {
+  const scoped = createScopedClient(communityId);
+  const matches = await scoped.selectFrom<{ id: number }>(
+    units,
+    { id: units.id },
+    eq(units.id, unitId),
+  );
+  return matches.length > 0;
 }
