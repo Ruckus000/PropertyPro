@@ -13,9 +13,11 @@ import {
   requireVisitorsWritePermission,
   isResidentRole,
 } from '@/lib/logistics/common';
-import { revokeVisitorForCommunity } from '@/lib/services/package-visitor-service';
-import { communities, visitorLog, createScopedClient } from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import {
+  getVisitorHostUserId,
+  isResidentVisitorRevokeEnabled,
+  revokeVisitorForCommunity,
+} from '@/lib/services/package-visitor-service';
 
 const revokeSchema = z.object({
   communityId: z.number().int().positive(),
@@ -48,29 +50,14 @@ export const POST = withErrorHandler(
         throw new ValidationError('Reason is required for staff revocations');
       }
     } else if (isResidentRole(membership.role)) {
-      const scoped = createScopedClient(communityId);
-      const communityRows = await scoped.selectFrom(
-        communities,
-        {},
-        eq(communities.id, communityId),
-      );
-      const community = communityRows[0] as Record<string, unknown> | undefined;
-      const settings = community?.communitySettings as Record<string, unknown> | undefined;
-
-      if (!settings?.allowResidentVisitorRevoke) {
+      if (!(await isResidentVisitorRevokeEnabled(communityId))) {
         throw new ForbiddenError(
           'Resident visitor pass revocation is not enabled for this community',
         );
       }
 
-      const visitorRows = await scoped.selectFrom(
-        visitorLog,
-        {},
-        and(eq(visitorLog.id, visitorId), isNull(visitorLog.deletedAt)),
-      );
-      const visitor = visitorRows[0];
-
-      if (!visitor || visitor.hostUserId !== actorUserId) {
+      const hostUserId = await getVisitorHostUserId(communityId, visitorId);
+      if (hostUserId === null || hostUserId !== actorUserId) {
         throw new ForbiddenError('You can only revoke passes you registered');
       }
     } else {
