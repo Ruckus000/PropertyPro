@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { communities, createScopedClient, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -9,7 +8,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { ValidationError } from '@/lib/api/errors';
 import { requireFinanceAdminWrite, requireFinanceEnabled } from '@/lib/finance/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { getCommunityFeePolicy } from '@/lib/services/finance-service';
+import {
+  getCommunityFeePolicy,
+  setCommunityFeePolicy,
+} from '@/lib/services/finance-service';
 
 const getSchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -57,18 +59,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   await requireFinanceEnabled(membership);
   requireFinanceAdminWrite(membership);
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
-  const community = rows[0] as Record<string, unknown> | undefined;
-  const currentSettings = (community?.communitySettings as Record<string, unknown>) ?? {};
-  const oldPolicy = currentSettings.paymentFeePolicy ?? 'association_absorbs';
-
-  const updatedSettings = { ...currentSettings, paymentFeePolicy: feePolicy };
-  await scoped.update(
-    communities,
-    { communitySettings: updatedSettings },
-    eq(communities.id, communityId),
-  );
+  const { oldPolicy } = await setCommunityFeePolicy(communityId, feePolicy);
 
   await logAuditEvent({
     userId: actorUserId,

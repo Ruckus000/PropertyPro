@@ -637,6 +637,48 @@ export async function getCommunityFeePolicy(communityId: number): Promise<Paymen
   return DEFAULT_FEE_POLICY;
 }
 
+export interface SetCommunityFeePolicyResult {
+  /**
+   * The fee policy that was active before this update — defaults to
+   * `'association_absorbs'` if `communitySettings.paymentFeePolicy` was
+   * unset (matches the route's pre-A3 fallback). Useful for `oldValues`
+   * in audit logs.
+   */
+  oldPolicy: string;
+  /** The new policy now persisted in `communitySettings`. */
+  newPolicy: PaymentFeePolicy;
+}
+
+/**
+ * Read-modify-write the community's `communitySettings.paymentFeePolicy`,
+ * preserving every other field in `communitySettings`. Returns the
+ * pre-update value so the route can include it in `audit.oldValues`.
+ *
+ * Concurrency: settings is a JSONB column, and this is a read-modify-write
+ * — concurrent updates to *other* settings keys could be lost. Acceptable
+ * per the original route's behavior; not changed here.
+ */
+export async function setCommunityFeePolicy(
+  communityId: number,
+  newPolicy: PaymentFeePolicy,
+): Promise<SetCommunityFeePolicyResult> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
+  const community = rows[0] as Record<string, unknown> | undefined;
+  const currentSettings = (community?.communitySettings as Record<string, unknown>) ?? {};
+  const oldPolicy =
+    (currentSettings['paymentFeePolicy'] as string | undefined) ?? 'association_absorbs';
+
+  const updatedSettings = { ...currentSettings, paymentFeePolicy: newPolicy };
+  await scoped.update(
+    communities,
+    { communitySettings: updatedSettings },
+    eq(communities.id, communityId),
+  );
+
+  return { oldPolicy, newPolicy };
+}
+
 async function getAssessmentPayableById(
   communityId: number,
   payableId: number,
