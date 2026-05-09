@@ -79,3 +79,48 @@ export async function ensureFaqsExist(communityId: number): Promise<void> {
 
   await scoped.insert(faqs, buildDefaultFaqRows());
 }
+
+export interface FaqSearchHit {
+  id: number;
+  question: string;
+  answer: string;
+}
+
+export interface SearchCommunityFaqsResult {
+  /** Hits, capped at `limit`. */
+  hits: FaqSearchHit[];
+  /** Total FAQ row count for this community (pre-filter). Useful for telemetry. */
+  totalRowCount: number;
+}
+
+/**
+ * Substring search over a community's FAQs. JS-side because per-community FAQ
+ * corpora are small (<100 rows); pushing the predicate into SQL would not
+ * materially change perf and would lose the existing case-insensitive
+ * `includes()` semantics.
+ *
+ * Returns `totalRowCount` so callers (e.g. the help search route's zero-result
+ * Sentry telemetry) can report context without re-querying.
+ */
+export async function searchCommunityFaqs(
+  communityId: number,
+  query: string,
+  limit = 10,
+): Promise<SearchCommunityFaqsResult> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(faqs);
+  const qLower = query.toLowerCase();
+  const hits = rows
+    .filter((f) => {
+      const question = String(f['question'] ?? '').toLowerCase();
+      const answer = String(f['answer'] ?? '').toLowerCase();
+      return question.includes(qLower) || answer.includes(qLower);
+    })
+    .slice(0, limit)
+    .map((f) => ({
+      id: f['id'] as number,
+      question: f['question'] as string,
+      answer: f['answer'] as string,
+    }));
+  return { hits, totalRowCount: rows.length };
+}

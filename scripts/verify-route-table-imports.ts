@@ -140,7 +140,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/faqs/[id]/route.ts',
   'apps/web/src/app/api/v1/faqs/reorder/route.ts',
   'apps/web/src/app/api/v1/faqs/route.ts',
-  'apps/web/src/app/api/v1/help/search/route.ts',
   'apps/web/src/app/api/v1/import-residents/route.ts',
   'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts',
   'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts',
