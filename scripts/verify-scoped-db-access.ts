@@ -183,7 +183,7 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Coupon sync retry cron — billing group tier recalculation and Stripe discount sync
   resolve(repoRoot, 'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts'),
   // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
-  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/visitor-cron-service.ts'),
   // Support access consent — uses createAdminClient for cross-community consent/log queries
   resolve(repoRoot, 'apps/web/src/app/api/v1/settings/support-access/route.ts'),
   // Support impersonation middleware — validates active support sessions with service-role access

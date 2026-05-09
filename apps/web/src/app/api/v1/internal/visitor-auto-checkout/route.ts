@@ -3,42 +3,26 @@
  *
  * Hourly cron: auto-checkout visitors whose expected duration has elapsed.
  *
- * Authorization contract: this route uses `createUnscopedClient()` because it
- * must scan and update overdue checked-in visitor records across all
- * communities. Write scope is intentionally limited to `checked_out_at` and
- * `updated_at` on `visitor_log`.
+ * Authorization contract: this route's cross-community UPDATE is wrapped by
+ * `autoCheckoutOverdueVisitors` in `visitor-cron-service`. Write scope is
+ * intentionally limited to `checked_out_at` and `updated_at` on `visitor_log`.
  *
  * Schedule: 0 * * * * (vercel.json)
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { logAuditEvent, visitorLog } from '@propertypro/db';
-import { and, isNotNull, isNull, sql } from '@propertypro/db/filters';
-// AUTHZ: Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
+import { autoCheckoutOverdueVisitors } from '@/lib/services/visitor-cron-service';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.VISITOR_AUTO_CHECKOUT_CRON_SECRET);
 
-  const db = createUnscopedClient();
   const errors: string[] = [];
 
   try {
+    const overdue = await autoCheckoutOverdueVisitors();
     const now = new Date();
-    const overdue = await db
-      .update(visitorLog)
-      .set({ checkedOutAt: now, updatedAt: now })
-      .where(
-        and(
-          isNotNull(visitorLog.checkedInAt),
-          isNull(visitorLog.checkedOutAt),
-          isNull(visitorLog.deletedAt),
-          isNotNull(visitorLog.expectedDurationMinutes),
-          sql`${visitorLog.checkedInAt} + (${visitorLog.expectedDurationMinutes} * INTERVAL '1 minute') <= NOW()`,
-        ),
-      )
-      .returning({ id: visitorLog.id, communityId: visitorLog.communityId });
 
     // Emit a single bulk audit event per community
     const byCommunity = new Map<number, number[]>();
