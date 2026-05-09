@@ -10,10 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { validateSmsWebhookSignature } from '@/lib/services/sms/sms-service';
 import { mapTwilioStatus } from '@/lib/services/sms/twilio-provider';
 import { updateRecipientSmsStatusByIds } from '@/lib/services/emergency-broadcast-service';
-import { emergencyBroadcastRecipients } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
-// AUTHZ: Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { findRecipientByTwilioSid } from '@/lib/services/twilio-webhook-service';
 
 /**
  * Parse form-encoded body from Twilio webhook.
@@ -57,20 +54,8 @@ export async function POST(req: NextRequest) {
 
     const normalizedStatus = mapTwilioStatus(messageStatus);
 
-    // Cross-tenant SID lookup — we don't know community_id from the webhook,
-    // so use unscoped client to find the recipient by the indexed sms_provider_sid column.
-    const db = createUnscopedClient();
-    const recipientRows = await db
-      .select({
-        broadcastId: emergencyBroadcastRecipients.broadcastId,
-        communityId: emergencyBroadcastRecipients.communityId,
-        userId: emergencyBroadcastRecipients.userId,
-      })
-      .from(emergencyBroadcastRecipients)
-      .where(eq(emergencyBroadcastRecipients.smsProviderSid, messageSid))
-      .limit(1);
-
-    const recipient = recipientRows[0];
+    // Cross-tenant SID lookup — we don't know community_id from the webhook.
+    const recipient = await findRecipientByTwilioSid(messageSid);
     if (!recipient) {
       console.warn('[twilio-webhook] Received status callback for unknown MessageSid:', {
         messageSid,

@@ -165,7 +165,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/visitors/[id]/revoke/route.ts',
   'apps/web/src/app/api/v1/visitors/denied/route.ts',
   'apps/web/src/app/api/v1/webhooks/stripe/route.ts',
-  'apps/web/src/app/api/v1/webhooks/twilio/route.ts',
   'apps/web/src/app/api/v1/work-orders/route.ts',
 ]);
 

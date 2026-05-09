@@ -119,8 +119,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // The unsafe-client usage moved into the phone-verification-service in A3 Phase 2,
   // so the routes themselves no longer need the allowance.
   resolve(repoRoot, 'apps/web/src/lib/services/phone-verification-service.ts'),
-  // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook)
-  resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/twilio/route.ts'),
+  // Phase 1B: Twilio webhook — cross-tenant SID lookup (no community_id from webhook).
+  // The unsafe-client usage moved into the twilio-webhook-service in A3 Phase 2,
+  // so the route itself no longer needs the allowance.
+  resolve(repoRoot, 'apps/web/src/lib/services/twilio-webhook-service.ts'),
   // Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/dashboard/summary/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/reports/[reportType]/route.ts'),
