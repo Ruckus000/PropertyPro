@@ -5,8 +5,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, documentDrafts, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -16,6 +15,11 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { sanitizeAuthoredHtml } from '@/lib/utils/sanitize-authored-html';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  getDocumentDraftById,
+  softDeleteDocumentDraft,
+  updateDocumentDraft,
+} from '@/lib/services/document-draft-service';
 
 export const runtime = 'nodejs';
 
@@ -48,16 +52,6 @@ function getCommunityIdFromQuery(req: NextRequest): number {
   return parsed.data.communityId;
 }
 
-async function loadDraft(communityId: number, draftId: number) {
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(
-    documentDrafts,
-    {},
-    eq(documentDrafts.id, draftId),
-  )) as unknown as Array<Record<string, unknown>>;
-  return rows[0] ?? null;
-}
-
 function ensureCanAccessDraft(
   draft: Record<string, unknown>,
   userId: string,
@@ -78,7 +72,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
 
-    const draft = await loadDraft(communityId, draftId);
+    const draft = await getDocumentDraftById(communityId, draftId);
     if (!draft || draft['deletedAt']) throw new NotFoundError('Draft not found');
     ensureCanAccessDraft(draft, userId, membership);
 
@@ -105,7 +99,7 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
 
-    const existing = await loadDraft(communityId, draftId);
+    const existing = await getDocumentDraftById(communityId, draftId);
     if (!existing || existing['deletedAt']) throw new NotFoundError('Draft not found');
     ensureCanAccessDraft(existing, userId, membership);
 
@@ -121,12 +115,7 @@ export const PATCH = withErrorHandler(
       update['letterheadOptions'] = data.letterheadOptions;
     }
 
-    const scoped = createScopedClient(communityId);
-    const updatedRows = (await scoped.update(
-      documentDrafts,
-      update,
-      eq(documentDrafts.id, draftId),
-    )) as unknown as Array<Record<string, unknown>>;
+    const updatedRows = await updateDocumentDraft(communityId, draftId, update);
 
     return NextResponse.json({ data: updatedRows[0] ?? existing });
   },
@@ -141,16 +130,11 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
 
-    const existing = await loadDraft(communityId, draftId);
+    const existing = await getDocumentDraftById(communityId, draftId);
     if (!existing || existing['deletedAt']) throw new NotFoundError('Draft not found');
     ensureCanAccessDraft(existing, userId, membership);
 
-    const scoped = createScopedClient(communityId);
-    await scoped.update(
-      documentDrafts,
-      { deletedAt: new Date() },
-      eq(documentDrafts.id, draftId),
-    );
+    await softDeleteDocumentDraft(communityId, draftId);
 
     await logAuditEvent({
       userId,
