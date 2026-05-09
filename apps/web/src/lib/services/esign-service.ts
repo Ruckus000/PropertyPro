@@ -862,17 +862,27 @@ export async function listMyPendingSigners(
  * `listMyPendingSigners`. Lets the route avoid importing the `users` table
  * directly (Plan A3 third-boundary-guard compliance).
  *
- * Returns empty array if the user has no email on file (rare; a few legacy
- * accounts predate email-required onboarding).
+ * The email lookup falls through to an empty string if the user has no
+ * email on file (rare — a few legacy accounts predate email-required
+ * onboarding). `listMyPendingSigners` then matches no signer rows on email
+ * and returns the userId-only matches (or empty if none).
  */
 export async function listMyPendingForActor(
   communityId: number,
   actorUserId: string,
 ): Promise<MyPendingSignerRecord[]> {
   const scoped = createScopedClient(communityId);
-  const userRows = await scoped.query(users);
-  const user = userRows.find((row) => row['id'] === actorUserId);
-  const userEmail = typeof user?.['email'] === 'string' ? (user['email'] as string) : '';
+  // Targeted single-row lookup (eq on PK + limit 1). Pre-#244 this was
+  // `scoped.query(users)` + JS `.find()` — a global-table scan that loaded
+  // every user in the platform into memory just to read one email.
+  const userRows = await scoped
+    .selectFrom<{ id: string; email: string | null }>(
+      users,
+      {},
+      eq(users.id, actorUserId),
+    )
+    .limit(1);
+  const userEmail = typeof userRows[0]?.email === 'string' ? userRows[0].email : '';
 
   return listMyPendingSigners(communityId, actorUserId, userEmail);
 }
