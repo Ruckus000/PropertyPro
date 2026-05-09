@@ -13,10 +13,7 @@ import sharp from 'sharp';
 import {
   createAdminClient,
   createPresignedDownloadUrl,
-  createScopedClient,
-  documentDrafts,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -25,6 +22,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { getDocumentDraftAuthorship } from '@/lib/services/document-draft-service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -61,15 +59,9 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
 
-    const scoped = createScopedClient(communityId);
-    const draftRows = (await scoped.selectFrom(
-      documentDrafts,
-      {},
-      eq(documentDrafts.id, draftId),
-    )) as unknown as Array<Record<string, unknown>>;
-    const draft = draftRows[0];
-    if (!draft || draft['deletedAt']) throw new NotFoundError('Draft not found');
-    const isAuthor = draft['authorId'] === userId;
+    const draft = await getDocumentDraftAuthorship(communityId, draftId);
+    if (!draft || draft.deletedAt) throw new NotFoundError('Draft not found');
+    const isAuthor = draft.authorId === userId;
     if (!isAuthor && !membership.isAdmin) {
       throw new ForbiddenError('Not authorized to upload to this draft');
     }
