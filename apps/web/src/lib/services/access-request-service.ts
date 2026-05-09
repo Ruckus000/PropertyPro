@@ -10,6 +10,7 @@ import { createElement } from 'react';
 
 import {
   createScopedClient,
+  paginate,
   accessRequests,
   users,
   userRoles,
@@ -455,4 +456,27 @@ export async function listPendingRequests(
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(accessRequests);
   return rows.filter((r) => r['status'] === 'pending');
+}
+
+/**
+ * Paginated list of pending access requests for the GET admin route. Uses the
+ * canonical `paginate()` helper with the `status='pending'` filter pushed into
+ * the SQL `where` predicate (Plan A2 / B3 #223 — keeps the route's existing
+ * cursor + canonical envelope semantics).
+ *
+ * Caller MUST authorize via `requirePermission(membership, 'residents', 'write')`
+ * before invoking.
+ */
+export async function paginatePendingAccessRequests(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+}) {
+  const scoped = createScopedClient(params.communityId);
+  return await paginate(
+    scoped,
+    accessRequests,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where: eq(accessRequests.status, 'pending') },
+  );
 }

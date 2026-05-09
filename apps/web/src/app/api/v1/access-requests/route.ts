@@ -9,9 +9,10 @@
  * - GET requires an authenticated admin with residents.write permission
  * - withErrorHandler for structured errors
  *
- * GET pagination (Plan B3 rollout):
- * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
- * - The `status='pending'` filter is pushed into the SQL `where` predicate
+ * GET pagination (Plan B3 rollout, A3 service wrapper):
+ * - Cursor-based via the canonical `paginate()` helper, called from
+ *   `paginatePendingAccessRequests` in access-request-service. The
+ *   `status='pending'` filter is pushed into the SQL `where` predicate
  *   instead of the previous in-memory filter on a full-table fetch — this
  *   removes an O(N) anti-pattern that scaled with total access-request volume,
  *   not just the pending subset.
@@ -20,15 +21,16 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { accessRequests, createScopedClient, paginate } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { submitAccessRequest } from '@/lib/services/access-request-service';
+import {
+  paginatePendingAccessRequests,
+  submitAccessRequest,
+} from '@/lib/services/access-request-service';
 
 const submitSchema = z.object({
   communityId: z.number().int().positive(),
@@ -85,13 +87,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  const scoped = createScopedClient(membership.communityId);
-  const result = await paginate(
-    scoped,
-    accessRequests,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where: eq(accessRequests.status, 'pending') },
-  );
+  const result = await paginatePendingAccessRequests({
+    communityId: membership.communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
 
   return NextResponse.json({
     data: {

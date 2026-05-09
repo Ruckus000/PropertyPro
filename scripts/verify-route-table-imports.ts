@@ -105,7 +105,6 @@ const ALLOWED_SYMBOLS = new Set<string>([
 // ---------------------------------------------------------------------------
 
 const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
-  'apps/web/src/app/api/v1/access-requests/route.ts',
   'apps/web/src/app/api/v1/announcements/route.ts',
   'apps/web/src/app/api/v1/arc/route.ts',
   'apps/web/src/app/api/v1/audit-trail/route.ts',
