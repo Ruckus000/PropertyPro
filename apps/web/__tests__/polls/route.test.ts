@@ -84,6 +84,46 @@ vi.mock('@/lib/polls/common', () => ({
 vi.mock('@/lib/services/polls-service', () => ({
   createPollForCommunity: vi.fn(),
   mapPollRow: mapPollRowMock,
+  // After A3 drain #45, the route imports `paginatePollsForCommunity` from
+  // the service. Delegate to the underlying `paginate` mock with the same
+  // where-clause construction the real helper performs so the existing
+  // assertions on `paginateMock.mock.calls[0]` stay valid.
+  paginatePollsForCommunity: async (params: {
+    communityId: number;
+    cursor?: string;
+    pageSize?: number;
+    isActive?: boolean;
+    includeEnded?: boolean;
+    now?: Date;
+  }) => {
+    const { eq, isNull, gt, or, and } = await import('@propertypro/db/filters');
+    const isActive = params.isActive ?? true;
+    const includeEnded = params.includeEnded ?? false;
+    const filterClauses: unknown[] = [eq(pollsTable.isActive as never, isActive as never)];
+    if (!includeEnded) {
+      const now = params.now ?? new Date();
+      filterClauses.push(
+        or(
+          isNull(pollsTable.endsAt as never),
+          gt(pollsTable.endsAt as never, now as never),
+        )!,
+      );
+    }
+    const where =
+      filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...(filterClauses as never[]));
+    const result = await paginateMock(
+      createScopedClientMock(params.communityId),
+      pollsTable,
+      { cursor: params.cursor, pageSize: params.pageSize },
+      { where },
+    );
+    return {
+      data: (result.data as Record<string, unknown>[]).map((r) => mapPollRowMock(r)),
+      pagination: result.pagination,
+    };
+  },
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({

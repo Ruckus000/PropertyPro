@@ -5,28 +5,25 @@
  * POST  /api/v1/polls  — create a new poll
  *
  * GET pagination (Plan B3):
- * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
- * - Filters push into the SQL `where` predicate:
- *   - `isActive` (default `true`) → `eq(polls.isActive, value)`
- *   - `includeEnded=false` (default) → `or(isNull(polls.endsAt), gt(polls.endsAt, now))`,
- *     replacing the previous JS-side post-fetch filter on `endsAt`.
+ * - Cursor-based via the canonical `paginate()` helper, wrapped behind
+ *   `paginatePollsForCommunity()` on `polls-service` so the route doesn't
+ *   import the table or scoped client directly.
+ * - Filters push into the SQL `where` predicate inside the helper:
+ *   - `isActive` (default `true`)
+ *   - `includeEnded=false` (default) → `or(isNull(polls.endsAt), gt(polls.endsAt, now))`
  * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
  *   the previous `desc(createdAt)` sort. Same-instant inserts may break ties
  *   differently; rare edge case.
  * - Response envelope is double-wrapped per the paginated-route contract:
  *   `{ data: { data: PollRecord[], pagination } }`.
  *
- * Time-dependent `endsAt` filter: `now` is captured once per request. Across
- * a multi-page walk by a consumer, the cutoff is fresh per page (paginate is
- * called per page from the route, but the route's `now` is fixed within a
- * single GET). Polls expiring mid-walk drop out of subsequent pages — this
- * matches the prior semantics where the per-request `now` cut off the JS
- * filter as well.
+ * Time-dependent `endsAt` filter: `now` is captured once per request and
+ * passed to the helper. Polls expiring mid-walk drop out of subsequent
+ * pages — this matches the prior semantics where the per-request `now` cut
+ * off the JS filter as well.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, paginate, polls } from '@propertypro/db';
-import { and, eq, gt, isNull, or } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -42,8 +39,7 @@ import {
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createPollForCommunity,
-  mapPollRow,
-  type PollRecord,
+  paginatePollsForCommunity,
 } from '@/lib/services/polls-service';
 
 const createPollSchema = z.object({
@@ -90,25 +86,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  const filterClauses = [eq(polls.isActive, isActive)];
-  if (!includeEnded) {
-    // Match prior JS filter: row.endsAt === null || row.endsAt > now.
-    const now = new Date();
-    filterClauses.push(or(isNull(polls.endsAt), gt(polls.endsAt, now))!);
-  }
-  const where = filterClauses.length === 1 ? filterClauses[0] : and(...filterClauses);
-
-  const scoped = createScopedClient(communityId);
-  const result = await paginate<PollRecord>(
-    scoped,
-    polls,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+  const result = await paginatePollsForCommunity({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    isActive,
+    includeEnded,
+    now: new Date(),
+  });
 
   return NextResponse.json({
     data: {
-      data: result.data.map(mapPollRow),
+      data: result.data,
       pagination: result.pagination,
     },
   });
