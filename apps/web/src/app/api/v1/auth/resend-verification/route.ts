@@ -13,14 +13,14 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
-// AUTHZ: Resend signup verification email — pre-tenant state, looks up pendingSignups row
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { pendingSignups } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 import { SignupVerificationEmail } from '@propertypro/email';
+import {
+  generateVerificationActionLink,
+  getPendingSignupForResend,
+  markVerificationEmailSent,
+} from '@/lib/services/provisioning-service';
 
 const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -44,25 +44,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const { signupRequestId } = parsed.data;
-  const db = createUnscopedClient();
 
-  const rows = await db
-    .select({
-      id: pendingSignups.id,
-      signupRequestId: pendingSignups.signupRequestId,
-      authUserId: pendingSignups.authUserId,
-      email: pendingSignups.email,
-      primaryContactName: pendingSignups.primaryContactName,
-      communityName: pendingSignups.communityName,
-      status: pendingSignups.status,
-      expiresAt: pendingSignups.expiresAt,
-      verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
-    })
-    .from(pendingSignups)
-    .where(eq(pendingSignups.signupRequestId, signupRequestId))
-    .limit(1);
-
-  const signup = rows[0];
+  const signup = await getPendingSignupForResend(signupRequestId);
 
   if (!signup) {
     return NextResponse.json(
@@ -124,26 +107,18 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Generate a fresh verification link
-  const admin = createAdminClient();
   const verificationRedirectUrl = buildVerificationRedirectUrl(signup.signupRequestId);
-
-  const linkResult = await admin.auth.admin.generateLink({
-    type: 'magiclink',
+  const linkResult = await generateVerificationActionLink({
+    signupRequestId: signup.signupRequestId,
     email: signup.email,
-    options: {
-      redirectTo: verificationRedirectUrl,
-      data: {
-        signup_request_id: signup.signupRequestId,
-      },
-    },
+    redirectTo: verificationRedirectUrl,
   });
 
-  const actionLink = linkResult.data?.properties?.action_link;
-  if (linkResult.error || !actionLink) {
+  if (!linkResult.ok) {
     console.error(JSON.stringify({
       event: 'resend_verification.link_generation_failed',
       signupRequestId: signup.signupRequestId,
-      error: linkResult.error?.message ?? 'No action link returned',
+      error: linkResult.error,
     }));
     return NextResponse.json(
       { error: { message: 'Unable to generate verification link. Please try again.' } },
@@ -160,9 +135,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       category: 'transactional',
       react: createElement(SignupVerificationEmail, {
         branding: { communityName: 'PropertyPro Florida' },
-        primaryContactName: signup.primaryContactName,
-        communityName: signup.communityName,
-        verificationLink: actionLink,
+        primaryContactName: signup.primaryContactName ?? 'there',
+        communityName: signup.communityName ?? 'your community',
+        verificationLink: linkResult.actionLink,
       }),
     });
     messageId = result.id;
@@ -179,14 +154,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Update the sent timestamp
-  await db
-    .update(pendingSignups)
-    .set({
-      verificationEmailSentAt: new Date(),
-      verificationEmailId: messageId,
-      updatedAt: new Date(),
-    })
-    .where(eq(pendingSignups.id, signup.id));
+  await markVerificationEmailSent(signup.id, messageId);
 
   console.info(JSON.stringify({
     event: 'resend_verification.sent',

@@ -1025,6 +1025,108 @@ export async function markPendingSignupEmailVerifiedIfPending(
   return { updated: false, currentStatus: recheck[0]?.status ?? null };
 }
 
+// ---------------------------------------------------------------------------
+// Resend verification email helpers (used by /api/v1/auth/resend-verification)
+// ---------------------------------------------------------------------------
+
+export interface PendingSignupForResend {
+  id: bigint;
+  signupRequestId: string;
+  authUserId: string | null;
+  email: string;
+  primaryContactName: string | null;
+  communityName: string | null;
+  status: string;
+  expiresAt: Date | null;
+  verificationEmailSentAt: Date | null;
+}
+
+/**
+ * Fetch the projection needed by the resend-verification flow. Returns
+ * `null` when no row matches the signup request id.
+ *
+ * AUTHZ: pre-tenant pre-auth public endpoint — secured by the unguessable
+ * `signupRequestId` UUID. Caller validates payload shape before invoking.
+ */
+export async function getPendingSignupForResend(
+  signupRequestId: string,
+): Promise<PendingSignupForResend | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: pendingSignups.id,
+      signupRequestId: pendingSignups.signupRequestId,
+      authUserId: pendingSignups.authUserId,
+      email: pendingSignups.email,
+      primaryContactName: pendingSignups.primaryContactName,
+      communityName: pendingSignups.communityName,
+      status: pendingSignups.status,
+      expiresAt: pendingSignups.expiresAt,
+      verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
+    })
+    .from(pendingSignups)
+    .where(eq(pendingSignups.signupRequestId, signupRequestId))
+    .limit(1);
+  return row ?? null;
+}
+
+export type SupabaseVerificationLinkResult =
+  | { ok: true; actionLink: string }
+  | { ok: false; error: string };
+
+/**
+ * Generate a Supabase magic-link "action_link" suitable for embedding into a
+ * verification email body. Returns the URL string on success or an error
+ * message on failure (caller should respond with 500 + log).
+ *
+ * Wraps the auth-admin client so the route doesn't need to import
+ * `@propertypro/db/supabase/admin` directly.
+ */
+export async function generateVerificationActionLink(params: {
+  signupRequestId: string;
+  email: string;
+  redirectTo: string;
+}): Promise<SupabaseVerificationLinkResult> {
+  const admin = createAdminClient();
+  const linkResult = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: params.email,
+    options: {
+      redirectTo: params.redirectTo,
+      data: { signup_request_id: params.signupRequestId },
+    },
+  });
+  const actionLink = linkResult.data?.properties?.action_link;
+  if (linkResult.error || !actionLink) {
+    return {
+      ok: false,
+      error: linkResult.error?.message ?? 'No action link returned',
+    };
+  }
+  return { ok: true, actionLink };
+}
+
+/**
+ * Persist the verification-email send metadata
+ * (`verificationEmailSentAt = now`, `verificationEmailId = messageId`,
+ * `updatedAt = now`) for cooldown tracking and observability.
+ */
+export async function markVerificationEmailSent(
+  pendingSignupId: bigint,
+  messageId: string,
+): Promise<void> {
+  const now = new Date();
+  const db = createUnscopedClient();
+  await db
+    .update(pendingSignups)
+    .set({
+      verificationEmailSentAt: now,
+      verificationEmailId: messageId,
+      updatedAt: now,
+    })
+    .where(eq(pendingSignups.id, pendingSignupId));
+}
+
 export const _testInternals = {
   resolvePendingSignupAddress,
 } as const;

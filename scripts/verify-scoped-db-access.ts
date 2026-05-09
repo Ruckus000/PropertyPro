@@ -109,8 +109,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin.
   // The unsafe-client + auth-admin usage moved into provisioning-service in
   // A3 Phase 2, so the route itself no longer needs the allowance.
-  // Resend signup verification email — pre-tenant state, looks up pendingSignups row
-  resolve(repoRoot, 'apps/web/src/app/api/v1/auth/resend-verification/route.ts'),
+  // Resend signup verification email — pre-tenant state, looks up pendingSignups row.
+  // The unsafe-client + auth-admin usage moved into provisioning-service in
+  // A3 Phase 2, so the route itself no longer needs the allowance.
   // E-02: Account profile — user-scoped update (no community_id on users table).
   // The unsafe-client usage moved into the user-profile-service in A3 Phase 2,
   // so the route itself no longer needs the allowance.
