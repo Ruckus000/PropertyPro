@@ -1,38 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
-// AUTHZ: Internal cron/admin route — runs unauthenticated against system tables, not user-facing.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances, communities, accessRequests } from '@propertypro/db';
-import { eq, and, isNull, lt, gt, inArray, sql } from '@propertypro/db/filters';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
+import {
+  banDemoAuthUser,
+  expireStaleAccessRequests,
+  findDemosEnteringGrace,
+  findExpiredDemos,
+  softDeleteExpiredDemo,
+} from '@/lib/services/demo-conversion';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.DEMO_EXPIRY_CRON_SECRET);
 
-  const db = createUnscopedClient();
   const now = new Date();
 
   // ── Step 1: Detect demos entering grace period ──
-  // Demos where trial has ended but demo hasn't expired yet
-  const enteringGrace = await db
-    .select({
-      communityId: communities.id,
-      demoInstanceId: demoInstances.id,
-      trialEndsAt: communities.trialEndsAt,
-    })
-    .from(communities)
-    .innerJoin(demoInstances, eq(demoInstances.seededCommunityId, communities.id))
-    .where(
-      and(
-        eq(communities.isDemo, true),
-        lt(communities.trialEndsAt, now),
-        gt(communities.demoExpiresAt, now),
-        isNull(communities.deletedAt),
-        isNull(demoInstances.deletedAt),
-      ),
-    );
+  const enteringGrace = await findDemosEnteringGrace(now);
 
   for (const row of enteringGrace) {
     await emitConversionEvent({
@@ -50,49 +34,25 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // ── Step 2: Expire demos past demo_expires_at ──
-  const expired = await db
-    .select({
-      communityId: communities.id,
-      demoInstanceId: demoInstances.id,
-      demoResidentUserId: demoInstances.demoResidentUserId,
-      demoBoardUserId: demoInstances.demoBoardUserId,
-    })
-    .from(communities)
-    .innerJoin(demoInstances, eq(demoInstances.seededCommunityId, communities.id))
-    .where(
-      and(
-        eq(communities.isDemo, true),
-        lt(communities.demoExpiresAt, now),
-        isNull(communities.deletedAt),
-        isNull(demoInstances.deletedAt),
-      ),
-    );
-
-  const admin = createAdminClient();
+  const expired = await findExpiredDemos(now);
   let count = 0;
 
   for (const row of expired) {
-    // Soft-delete the community
-    await db
-      .update(communities)
-      .set({ deletedAt: now })
-      .where(and(eq(communities.id, row.communityId), isNull(communities.deletedAt)));
-
-    // Soft-delete the demo instance
-    await db
-      .update(demoInstances)
-      .set({ deletedAt: now })
-      .where(and(eq(demoInstances.id, row.demoInstanceId), isNull(demoInstances.deletedAt)));
+    await softDeleteExpiredDemo({
+      communityId: row.communityId,
+      demoInstanceId: row.demoInstanceId,
+      now,
+    });
 
     // Ban demo auth users
     const userIds = [row.demoResidentUserId, row.demoBoardUserId].filter(Boolean);
     for (const userId of userIds) {
-      try {
-        await admin.auth.admin.updateUserById(userId!, { ban_duration: '876600h' });
+      const result = await banDemoAuthUser(userId!);
+      if (result.ok) {
         console.info(`[expire-demos] banned demo user ${userId}`);
-      } catch (err) {
+      } else {
         // Non-fatal: demo user may have already been deleted or banned
-        console.warn(`[expire-demos] failed to ban demo user ${userId}:`, err);
+        console.warn(`[expire-demos] failed to ban demo user ${userId}: ${result.error}`);
       }
     }
 
@@ -113,19 +73,15 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // ── Step 3: Expire stale access requests older than 30 days ──
-  const expiredRequests = await db
-    .update(accessRequests)
-    .set({ status: 'expired', updatedAt: now })
-    .where(
-      and(
-        inArray(accessRequests.status, ['pending_verification', 'pending']),
-        lt(accessRequests.createdAt, sql`now() - interval '30 days'`),
-        isNull(accessRequests.deletedAt),
-      ),
-    )
-    .returning({ id: accessRequests.id });
+  const expiredRequests = await expireStaleAccessRequests(now);
 
   console.info(`[expire-demos] expired ${expiredRequests.length} stale access requests`);
 
-  return NextResponse.json({ data: { expired: count, graceDetected: enteringGrace.length, expiredRequests: expiredRequests.length } });
+  return NextResponse.json({
+    data: {
+      expired: count,
+      graceDetected: enteringGrace.length,
+      expiredRequests: expiredRequests.length,
+    },
+  });
 });

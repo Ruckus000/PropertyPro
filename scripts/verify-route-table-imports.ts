@@ -125,7 +125,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/emergency-broadcasts/route.ts',
   'apps/web/src/app/api/v1/import-residents/route.ts',
   'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts',
-  'apps/web/src/app/api/v1/internal/expire-demos/route.ts',
   'apps/web/src/app/api/v1/internal/provision/route.ts',
   'apps/web/src/app/api/v1/internal/readiness/route.ts',
   'apps/web/src/app/api/v1/internal/revenue-snapshot/health/route.ts',
