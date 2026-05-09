@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  logAuditEvent,
-} from '@propertypro/db';
+import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -12,7 +8,11 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
-import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
+import {
+  ensureTransparencyChecklistInitialized,
+  getTransparencySettings,
+  setTransparencySettings,
+} from '@/lib/services/transparency-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdQuerySchema = z.coerce.number().int().positive();
@@ -44,24 +44,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   requirePermission(membership, 'settings', 'read');
 
-  const scoped = createScopedClient(communityId);
-  const communityRows = await scoped.query(communities);
-  const community = communityRows.find((row) => row['id'] === communityId);
-  if (!community) {
+  const settings = await getTransparencySettings(communityId);
+  if (!settings) {
     throw new NotFoundError('Community not found');
   }
 
-  const acknowledgedAt = community['transparencyAcknowledgedAt'];
-
   return NextResponse.json({
     data: {
-      enabled: community['transparencyEnabled'] === true,
-      acknowledgedAt:
-        acknowledgedAt instanceof Date
-          ? acknowledgedAt.toISOString()
-          : typeof acknowledgedAt === 'string'
-            ? acknowledgedAt
-            : null,
+      enabled: settings.enabled,
+      acknowledgedAt: settings.acknowledgedAt
+        ? settings.acknowledgedAt.toISOString()
+        : null,
     },
   });
 });
@@ -86,26 +79,12 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   requirePermission(membership, 'settings', 'write');
 
-  const scoped = createScopedClient(communityId);
-  const communityRows = await scoped.query(communities);
-  const community = communityRows.find((row) => row['id'] === communityId);
-  if (!community) {
+  const current = await getTransparencySettings(communityId);
+  if (!current) {
     throw new NotFoundError('Community not found');
   }
 
-  const currentlyEnabled = community['transparencyEnabled'] === true;
-  const acknowledgedAtValue = community['transparencyAcknowledgedAt'];
-  const existingAcknowledgedAt =
-    acknowledgedAtValue instanceof Date
-      ? acknowledgedAtValue
-      : typeof acknowledgedAtValue === 'string'
-        ? new Date(acknowledgedAtValue)
-        : null;
-
-  let acknowledgedAt =
-    existingAcknowledgedAt && !Number.isNaN(existingAcknowledgedAt.getTime())
-      ? existingAcknowledgedAt
-      : null;
+  let acknowledgedAt = current.acknowledgedAt;
 
   if (parsedBody.data.enabled) {
     const checklistRows = await ensureTransparencyChecklistInitialized(
@@ -125,9 +104,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  await scoped.update(communities, {
-    transparencyEnabled: parsedBody.data.enabled,
-    transparencyAcknowledgedAt: acknowledgedAt,
+  await setTransparencySettings(communityId, {
+    enabled: parsedBody.data.enabled,
+    acknowledgedAt,
   });
 
   await logAuditEvent({
@@ -137,8 +116,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     resourceId: String(communityId),
     communityId,
     oldValues: {
-      enabled: currentlyEnabled,
-      acknowledgedAt: existingAcknowledgedAt ? existingAcknowledgedAt.toISOString() : null,
+      enabled: current.enabled,
+      acknowledgedAt: current.acknowledgedAt ? current.acknowledgedAt.toISOString() : null,
     },
     newValues: {
       enabled: parsedBody.data.enabled,

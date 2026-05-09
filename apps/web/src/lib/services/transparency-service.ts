@@ -472,3 +472,61 @@ export async function getTransparencyPageData(
 
   return transparencyPageDataSchema.parse(payload);
 }
+
+export interface TransparencySettings {
+  enabled: boolean;
+  /** Always normalized to a `Date` if set; `null` if never acknowledged. */
+  acknowledgedAt: Date | null;
+}
+
+/**
+ * Coerce a `transparencyAcknowledgedAt` column value (which can come back
+ * as a `Date` or as an ISO string depending on the driver) into a `Date | null`.
+ * Returns `null` for invalid date strings — same defensive behavior as the
+ * pre-A3 inline parsing in `/api/v1/transparency/settings`.
+ */
+function coerceAcknowledgedAt(raw: unknown): Date | null {
+  if (raw instanceof Date) return raw;
+  if (typeof raw === 'string') {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+/**
+ * Read the community's transparency settings. Returns `null` when no
+ * community row matches the id (so the route can throw NotFoundError).
+ */
+export async function getTransparencySettings(
+  communityId: number,
+): Promise<TransparencySettings | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.query(communities);
+  const community = rows.find((row) => row['id'] === communityId);
+  if (!community) return null;
+  return {
+    enabled: community['transparencyEnabled'] === true,
+    acknowledgedAt: coerceAcknowledgedAt(community['transparencyAcknowledgedAt']),
+  };
+}
+
+/**
+ * Persist `enabled` + `acknowledgedAt` on the community row. Caller is
+ * responsible for fetching the prior settings via `getTransparencySettings`
+ * if it needs them (e.g. for `audit.oldValues`) — that lets us avoid an
+ * extra SELECT here.
+ *
+ * Note: only updates the transparency-related columns. Mirrors the pre-A3
+ * route's `scoped.update(communities, { transparencyEnabled, ... })` shape.
+ */
+export async function setTransparencySettings(
+  communityId: number,
+  next: TransparencySettings,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.update(communities, {
+    transparencyEnabled: next.enabled,
+    transparencyAcknowledgedAt: next.acknowledgedAt,
+  });
+}
