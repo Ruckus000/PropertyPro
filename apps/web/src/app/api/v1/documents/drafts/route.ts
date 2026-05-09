@@ -5,14 +5,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  documentDrafts,
-  documents,
-  meetings,
-  logAuditEvent,
-} from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -23,6 +16,12 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { sanitizeAuthoredHtml } from '@/lib/utils/sanitize-authored-html';
+import {
+  createDocumentDraft,
+  getAuthoredDocumentForReedit,
+  getMeetingForDraftSeed,
+  listMyActiveDocumentDrafts,
+} from '@/lib/services/document-draft-service';
 
 export const runtime = 'nodejs';
 
@@ -53,20 +52,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'documents', 'write');
 
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(
-    documentDrafts,
-    {},
-    and(eq(documentDrafts.authorId, userId), isNull(documentDrafts.deletedAt)),
-  )) as unknown as Array<Record<string, unknown>>;
-
-  // Sort newest-edited first; small lists, sorting in JS is cheaper than
-  // adding a dynamic builder dance.
-  rows.sort((a, b) => {
-    const av = new Date(String(a['lastEditedAt'] ?? a['updatedAt'] ?? 0)).getTime();
-    const bv = new Date(String(b['lastEditedAt'] ?? b['updatedAt'] ?? 0)).getTime();
-    return bv - av;
-  });
+  const rows = await listMyActiveDocumentDrafts(communityId, userId);
 
   return NextResponse.json({ data: rows });
 });
@@ -87,26 +73,19 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(communityId);
 
-  const scoped = createScopedClient(communityId);
-
   // Validate cross-table references stay within this community.
   let title = data.title ?? 'Untitled';
-  let initialBody = data.initialBodyHtml ? sanitizeAuthoredHtml(data.initialBodyHtml) : '';
+  const initialBody = data.initialBodyHtml ? sanitizeAuthoredHtml(data.initialBodyHtml) : '';
 
   if (data.targetMeetingId != null) {
-    const meetingRows = (await scoped.selectFrom(
-      meetings,
-      {},
-      eq(meetings.id, data.targetMeetingId),
-    )) as unknown as Array<Record<string, unknown>>;
-    const meeting = meetingRows[0];
+    const meeting = await getMeetingForDraftSeed(communityId, data.targetMeetingId);
     if (!meeting) throw new NotFoundError('Meeting not found in this community');
     if (!data.title) {
-      const start = meeting['startsAt'] instanceof Date
-        ? meeting['startsAt']
-        : new Date(String(meeting['startsAt'] ?? Date.now()));
+      const start = meeting.startsAt instanceof Date
+        ? meeting.startsAt
+        : new Date(String(meeting.startsAt ?? Date.now()));
       const dateLabel = start.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-      title = `Minutes — ${String(meeting['title'] ?? 'Meeting')} — ${dateLabel}`;
+      title = `Minutes — ${String(meeting.title ?? 'Meeting')} — ${dateLabel}`;
     }
   }
 
@@ -114,33 +93,26 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     // Re-edit flow: confirm the source document is in this community and is
     // an authored document. Body is loaded by the editor via a separate
     // round-trip from storage (the helper that performs that lives in PR 4).
-    const docRows = (await scoped.selectFrom(
-      documents,
-      {},
-      eq(documents.id, data.sourceDocumentId),
-    )) as unknown as Array<Record<string, unknown>>;
-    const doc = docRows[0];
+    const doc = await getAuthoredDocumentForReedit(communityId, data.sourceDocumentId);
     if (!doc) throw new NotFoundError('Source document not found in this community');
-    if (doc['sourceType'] !== 'authored') {
+    if (doc.sourceType !== 'authored') {
       throw new ValidationError('Only authored documents can be re-edited');
     }
     if (!data.title) {
-      title = String(doc['title'] ?? 'Untitled');
+      title = String(doc.title ?? 'Untitled');
     }
   }
 
-  const insertedRows = (await scoped.insert(documentDrafts, {
+  const created = await createDocumentDraft(communityId, {
     authorId: userId,
     title,
     bodyHtml: initialBody,
     targetCategoryId: data.targetCategoryId ?? null,
     targetMeetingId: data.targetMeetingId ?? null,
     sourceDocumentId: data.sourceDocumentId ?? null,
-    lastEditorId: userId,
     lastEditedAt: new Date(),
-  })) as unknown as Array<Record<string, unknown>>;
+  });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ForbiddenError('Failed to create draft');
   }
