@@ -15,20 +15,9 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  documents,
-  documentDrafts,
-  meetings,
-  meetingDocuments,
-  users,
-  logAuditEvent,
-  createPresignedDownloadUrl,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent, createPresignedDownloadUrl } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { AppError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -40,6 +29,14 @@ import { sanitizeAuthoredHtml } from '@/lib/utils/sanitize-authored-html';
 import { renderAuthoredHtml } from '@/lib/documents/render-authored-html';
 import { renderHtmlToPdf } from '@/lib/documents/render-pdf';
 import { createAuthoredDocument } from '@/lib/documents/create-authored-document';
+import {
+  getAuthorDisplayName,
+  getCommunityForDocumentPublish,
+  getDocumentDraftById,
+  getMeetingForDraftSeed,
+  linkPublishedDocumentToMeeting,
+  softDeleteDocumentDraft,
+} from '@/lib/services/document-draft-service';
 
 // Chromium needs a real Node runtime, more memory, and a longer timeout.
 export const runtime = 'nodejs';
@@ -79,15 +76,8 @@ export const POST = withErrorHandler(
     requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
 
-    const scoped = createScopedClient(communityId);
-
     // 1. Load draft.
-    const draftRows = (await scoped.selectFrom(
-      documentDrafts,
-      {},
-      eq(documentDrafts.id, draftId),
-    )) as unknown as Array<Record<string, unknown>>;
-    const draft = draftRows[0];
+    const draft = await getDocumentDraftById(communityId, draftId);
     if (!draft || draft['deletedAt']) throw new NotFoundError('Draft not found');
     const isAuthor = draft['authorId'] === userId;
     if (!isAuthor && !membership.isAdmin) {
@@ -116,17 +106,14 @@ export const POST = withErrorHandler(
     const safeBody = sanitizeAuthoredHtml(rawBodyHtml);
 
     // Resolve community + author display data for the print template.
-    const [communityRows, authorRows] = await Promise.all([
-      scoped.selectFrom(communities, {}, eq(communities.id, communityId)),
-      scoped.selectFrom(users, {}, eq(users.id, String(draft['authorId']))),
+    const [community, author] = await Promise.all([
+      getCommunityForDocumentPublish(communityId),
+      getAuthorDisplayName(communityId, String(draft['authorId'])),
     ]);
-    const community = (communityRows as Array<Record<string, unknown>>)[0];
-    const author = (authorRows as Array<Record<string, unknown>>)[0];
     if (!community) throw new NotFoundError('Community record not found');
 
-    const communityName = String(community['name'] ?? '');
-    const branding = (community['branding'] ?? null) as { logoPath?: string } | null;
-    const logoPath = (branding?.logoPath ?? community['logoPath'] ?? null) as string | null;
+    const communityName = String(community.name ?? '');
+    const logoPath = (community.branding?.logoPath ?? community.logoPath ?? null) as string | null;
     let communityLogoUrl: string | null = null;
     if (logoPath) {
       try {
@@ -137,9 +124,11 @@ export const POST = withErrorHandler(
       }
     }
 
-    const authorName = author
-      ? [author['firstName'], author['lastName']].filter(Boolean).join(' ').trim() || null
-      : null;
+    // NOTE: pre-A3-drain-#49 the route read author.firstName / author.lastName
+    // — fields that don't exist on the users schema (only fullName does), so
+    // authorName was always null. The drain fixed this by switching to
+    // `getAuthorDisplayName` which projects users.fullName.
+    const authorName = author?.fullName?.trim() || null;
 
     // 3. Build print HTML.
     const generatedAt = new Date();
@@ -179,17 +168,10 @@ export const POST = withErrorHandler(
 
     // 7. Link the published doc to the meeting it was authored from.
     if (targetMeetingId != null) {
-      const meetingRows = (await scoped.selectFrom(
-        meetings,
-        {},
-        eq(meetings.id, targetMeetingId),
-      )) as unknown as Array<Record<string, unknown>>;
-      if (meetingRows[0]) {
+      const meeting = await getMeetingForDraftSeed(communityId, targetMeetingId);
+      if (meeting) {
         try {
-          await scoped.insert(meetingDocuments, {
-            meetingId: targetMeetingId,
-            documentId,
-          });
+          await linkPublishedDocumentToMeeting(communityId, targetMeetingId, documentId);
         } catch (err) {
           // Non-fatal: the publish succeeded, the link can be added later.
           // eslint-disable-next-line no-console
@@ -225,11 +207,7 @@ export const POST = withErrorHandler(
     });
 
     // 9. Soft-delete the draft.
-    await scoped.update(
-      documentDrafts,
-      { deletedAt: new Date() },
-      eq(documentDrafts.id, draftId),
-    );
+    await softDeleteDocumentDraft(communityId, draftId);
 
     return NextResponse.json(
       {
