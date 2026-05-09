@@ -4,15 +4,11 @@
  * Auth: platform admin (platform_admin_users row)
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq } from '@propertypro/db/filters';
-import { accessPlans } from '@propertypro/db';
-// AUTHZ: Platform-admin route — operates on platform-level tables (no community_id scoping).
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
 import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
-import { computeAccessPlanStatus } from '@/lib/services/account-lifecycle-service';
+import { listAccessPlansWithStatus } from '@/lib/services/account-lifecycle-service';
 
 export { handleOptions as OPTIONS };
 
@@ -31,16 +27,7 @@ export const GET = withErrorHandler(
       throw new ValidationError('Invalid community ID');
     }
 
-    const db = createUnscopedClient();
-    const rows = await db
-      .select()
-      .from(accessPlans)
-      .where(eq(accessPlans.communityId, communityId));
-
-    const data = rows.map((plan) => ({
-      ...plan,
-      status: computeAccessPlanStatus(plan),
-    }));
+    const data = await listAccessPlansWithStatus({ communityId });
 
     return NextResponse.json({ data }, { headers: corsHeaders(origin) });
   },

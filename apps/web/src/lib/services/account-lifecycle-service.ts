@@ -78,6 +78,48 @@ export function computeAccessPlanStatus(plan: {
 }
 
 // ---------------------------------------------------------------------------
+// Free Access — Listing (admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * List access plans, optionally filtered by community. Returns each row with
+ * a computed `status` field — callers should not re-derive status separately.
+ *
+ * Admin/platform-scoped read: uses the unscoped client because access_plans
+ * is a platform-level table. Callers MUST authorize via `requirePlatformAdmin`
+ * before invoking.
+ */
+export async function listAccessPlansWithStatus(
+  options: { communityId?: number } = {},
+): Promise<Array<AccessPlan & { status: AccessPlanStatus }>> {
+  const db = createUnscopedClient();
+  const rows = options.communityId !== undefined
+    ? await db
+        .select()
+        .from(accessPlans)
+        .where(eq(accessPlans.communityId, options.communityId))
+    : await db.select().from(accessPlans);
+  return rows.map((plan) => ({ ...plan, status: computeAccessPlanStatus(plan) }));
+}
+
+/**
+ * Existence check on the platform-level `communities` table. Returns true
+ * when a row matches `id`, false otherwise.
+ *
+ * Admin/platform read: uses the unscoped client. Callers MUST authorize via
+ * `requirePlatformAdmin` before invoking.
+ */
+export async function communityExistsAdmin(communityId: number): Promise<boolean> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ id: communities.id })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
 // Free Access — Grant
 // ---------------------------------------------------------------------------
 
