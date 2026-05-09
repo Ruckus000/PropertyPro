@@ -34,12 +34,6 @@
  *   paginate contract — stale cursors from old clients shouldn't 400).
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import {
-  createScopedClient,
-  complianceAuditLog,
-  paginate,
-} from '@propertypro/db';
-import { and, desc, eq, gte, lte } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -48,6 +42,11 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
+import {
+  fetchAuditTrailForCsvExport,
+  paginateAuditTrail,
+  type AuditTrailFilters,
+} from '@/lib/services/audit-trail-service';
 
 /** Maximum rows for CSV export to prevent OOM on large datasets. */
 const MAX_CSV_ROWS = 10_000;
@@ -175,44 +174,22 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   // --- Build DB-level WHERE clause from filters (cursor predicate is built by paginate) ---
-  const conditions: ReturnType<typeof eq>[] = [];
-
-  const actionFilter = searchParams.get('action');
-  if (actionFilter) {
-    conditions.push(eq(complianceAuditLog.action, actionFilter));
-  }
-
-  const userIdFilter = searchParams.get('userId');
-  if (userIdFilter) {
-    conditions.push(eq(complianceAuditLog.userId, userIdFilter));
-  }
-
-  const startDate = searchParams.get('startDate');
-  if (startDate) {
-    const start = new Date(startDate);
-    start.setUTCHours(0, 0, 0, 0);
-    conditions.push(gte(complianceAuditLog.createdAt, start));
-  }
-
-  const endDate = searchParams.get('endDate');
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setUTCHours(23, 59, 59, 999);
-    conditions.push(lte(complianceAuditLog.createdAt, end));
-  }
-
-  const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
-
-  const scoped = createScopedClient(communityId);
+  const filters: AuditTrailFilters = {
+    action: searchParams.get('action'),
+    userId: searchParams.get('userId'),
+    startDate: searchParams.get('startDate'),
+    endDate: searchParams.get('endDate'),
+  };
 
   // --- CSV Export: fetch all matching rows from DB (no cursor pagination) ---
   const format = searchParams.get('format');
   if (format === 'csv') {
-    const csvRawRows = await scoped
-      .selectFrom(complianceAuditLog, {}, additionalWhere)
-      .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id))
-      .limit(MAX_CSV_ROWS);
-    const auditRows = (csvRawRows as unknown as Record<string, unknown>[]).map(coerceAuditRow);
+    const csvRawRows = await fetchAuditTrailForCsvExport({
+      communityId,
+      filters,
+      limit: MAX_CSV_ROWS,
+    });
+    const auditRows = csvRawRows.map(coerceAuditRow);
 
     const csvHeaders = [
       { key: 'id', label: 'ID' },
@@ -249,9 +226,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   // --- Paginated JSON path: delegate to paginate() ---
-  const result = await paginate(scoped, complianceAuditLog, { cursor, pageSize }, {
-    where: additionalWhere,
-  });
+  const result = await paginateAuditTrail({ communityId, cursor, pageSize, filters });
   const auditRows = (result.data as unknown as Record<string, unknown>[]).map(coerceAuditRow);
 
   // Redact sensitive keys in metadata, oldValues, and newValues
