@@ -6,21 +6,26 @@
  *
  * Invariants:
  * - withErrorHandler wrapper (structured errors, request ID)
- * - Tenant isolation via createScopedClient(communityId)
+ * - Tenant isolation via the faq-service (createScopedClient inside)
  * - Auth via requireAuthenticatedUserId + requireCommunityMembership
  * - Lazy-seeds default FAQs on first GET via ensureFaqsExist
- * - Audit log on mutations
+ * - Audit log on mutations (route concern, not service concern)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, faqs, logAuditEvent } from '@propertypro/db';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { ensureFaqsExist, filterFaqsForRole } from '@/lib/services/faq-service';
+import {
+  createFaq,
+  ensureFaqsExist,
+  filterFaqsForRole,
+  listFaqs,
+} from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
@@ -45,8 +50,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   // Lazy-seed default FAQs if none exist
   await ensureFaqsExist(communityId);
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(faqs);
+  const rows = await listFaqs(communityId);
   const visibleFaqs = filterFaqsForRole(rows, membership.role);
 
   return NextResponse.json({ data: visibleFaqs });
@@ -69,29 +73,16 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ForbiddenError('Only admins can create FAQs');
   }
 
-  const scoped = createScopedClient(communityId);
-
-  // Calculate next sort_order
-  const existing = await scoped.query(faqs);
-  const maxSort = existing.reduce(
-    (max, row) => Math.max(max, (row['sortOrder'] as number) ?? 0),
-    -1,
-  );
-
-  const inserted = await scoped.insert(faqs, {
-    question,
-    answer,
-    sortOrder: maxSort + 1,
-  });
+  const { row, sortOrder } = await createFaq(communityId, { question, answer });
 
   await logAuditEvent({
     userId,
     action: 'faq.created',
     resourceType: 'faq',
-    resourceId: String(inserted[0]?.['id'] ?? 'unknown'),
+    resourceId: String((row as Record<string, unknown>)?.['id'] ?? 'unknown'),
     communityId,
-    newValues: { question, answer, sortOrder: maxSort + 1 },
+    newValues: { question, answer, sortOrder },
   });
 
-  return NextResponse.json({ data: inserted[0] }, { status: 201 });
+  return NextResponse.json({ data: row }, { status: 201 });
 });

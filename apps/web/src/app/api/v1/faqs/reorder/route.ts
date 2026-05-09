@@ -5,22 +5,22 @@
  *
  * Invariants:
  * - withErrorHandler wrapper (structured errors, request ID)
- * - Tenant isolation via createScopedClient(communityId)
+ * - Tenant isolation via the faq-service (createScopedClient inside)
  * - Auth via requireAuthenticatedUserId + requireCommunityMembership
  * - Admin-only
  * - Validates all IDs exist and belong to the community
- * - Audit log on reorder
+ * - Audit log on reorder (route concern)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, faqs, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { reorderFaqs } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const reorderSchema = z.object({
@@ -51,26 +51,9 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Duplicate FAQ IDs in reorder list');
   }
 
-  // Fetch all active FAQs for this community
-  const scoped = createScopedClient(communityId);
-  const activeFaqs = await scoped.query(faqs);
-  const activeIds = new Set(activeFaqs.map((f) => f['id'] as number));
-
-  // Validate all provided IDs exist in active FAQs
-  for (const id of ids) {
-    if (!activeIds.has(id)) {
-      throw new ValidationError(`FAQ with id ${id} not found or not active in this community`);
-    }
-  }
-
-  // Update sort_order for each FAQ
-  for (let i = 0; i < ids.length; i++) {
-    await scoped.update(
-      faqs,
-      { sortOrder: i, updatedAt: new Date() },
-      eq(faqs.id, ids[i]!),
-    );
-  }
+  await reorderFaqs(communityId, ids, (id) => {
+    throw new ValidationError(`FAQ with id ${id} not found or not active in this community`);
+  });
 
   await logAuditEvent({
     userId,

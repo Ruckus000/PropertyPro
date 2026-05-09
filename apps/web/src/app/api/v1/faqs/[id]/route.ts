@@ -6,15 +6,14 @@
  *
  * Invariants:
  * - withErrorHandler wrapper (structured errors, request ID)
- * - Tenant isolation via createScopedClient(communityId)
+ * - Tenant isolation via the faq-service (createScopedClient inside)
  * - Auth via requireAuthenticatedUserId + requireCommunityMembership
  * - Admin-only mutations
- * - Audit log on all changes
+ * - Audit log on all changes (route concern)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { createScopedClient, faqs, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
@@ -22,6 +21,7 @@ import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { softDeleteFaq, updateFaq } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
@@ -57,15 +57,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: RouteCo
     throw new ForbiddenError('Only admins can update FAQs');
   }
 
-  // Build update object from provided fields
-  const updateData: Record<string, unknown> = { updatedAt: new Date() };
-  if (question !== undefined) updateData['question'] = question;
-  if (answer !== undefined) updateData['answer'] = answer;
-
-  const scoped = createScopedClient(communityId);
-  const updated = await scoped.update(faqs, updateData, eq(faqs.id, id));
-
-  if (!updated.length) {
+  const updated = await updateFaq(communityId, id, { question, answer });
+  if (!updated) {
     throw new NotFoundError('FAQ not found');
   }
 
@@ -75,10 +68,10 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: RouteCo
     resourceType: 'faq',
     resourceId: String(id),
     communityId,
-    newValues: updateData,
+    newValues: updated.updateData,
   });
 
-  return NextResponse.json({ data: updated[0] });
+  return NextResponse.json({ data: updated.row });
 });
 
 export const DELETE = withErrorHandler(async (req: NextRequest, context?: RouteContext) => {
@@ -103,10 +96,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: RouteC
     throw new ForbiddenError('Only admins can delete FAQs');
   }
 
-  const scoped = createScopedClient(communityId);
-  const deleted = await scoped.update(faqs, { deletedAt: new Date() }, eq(faqs.id, id));
-
-  if (!deleted.length) {
+  const ok = await softDeleteFaq(communityId, id);
+  if (!ok) {
     throw new NotFoundError('FAQ not found');
   }
 
