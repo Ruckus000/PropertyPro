@@ -3,40 +3,35 @@
  *
  * Scope:
  * - GET returns the current user's rating (or null)
- * - POST creates (201) when no row exists, updates (200) on re-submit
- * - POST recovers from a concurrent unique-violation by falling through to UPDATE
+ * - POST returns 201 when the service reports `created`, 200 when it
+ *   reports an update
+ * - Service-level errors propagate through the route
  * - Validation and auth failures surface as errors (caller's error handler converts to HTTP)
+ *
+ * The route delegates DB access to `help-feedback-service` (Plan A3 Phase 2);
+ * the unique-violation upsert lives there. These tests mock the service
+ * boundary, not `@propertypro/db`.
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const {
-  scopedInsertMock,
-  scopedUpdateMock,
-  scopedSelectFromMock,
-  createScopedClientMock,
+  getMyArticleFeedbackMock,
+  upsertArticleFeedbackMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
 } = vi.hoisted(() => ({
-  scopedInsertMock: vi.fn(),
-  scopedUpdateMock: vi.fn(),
-  scopedSelectFromMock: vi.fn(),
-  createScopedClientMock: vi.fn(),
+  getMyArticleFeedbackMock: vi.fn(),
+  upsertArticleFeedbackMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/db', () => ({
-  createScopedClient: createScopedClientMock,
-  helpArticleFeedback: { __table: 'help_article_feedback' },
-  helpArticleViews: { __table: 'help_article_views' },
-}));
-
-vi.mock('@propertypro/db/filters', () => ({
-  and: (...parts: unknown[]) => ({ __type: 'and', parts }),
-  eq: (col: unknown, value: unknown) => ({ __type: 'eq', col, value }),
+vi.mock('@/lib/services/help-feedback-service', () => ({
+  getMyArticleFeedback: getMyArticleFeedbackMock,
+  upsertArticleFeedback: upsertArticleFeedbackMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -62,6 +57,10 @@ vi.mock('@/lib/api/errors/ValidationError', () => ({
       this.name = 'ValidationError';
     }
   },
+}));
+
+vi.mock('@sentry/nextjs', () => ({
+  captureMessage: vi.fn(),
 }));
 
 import { GET, POST } from '../../src/app/api/v1/help/feedback/route';
@@ -91,31 +90,35 @@ describe('POST /api/v1/help/feedback', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({ role: 'owner' });
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-      update: scopedUpdateMock,
-      selectFrom: scopedSelectFromMock,
-    });
   });
 
-  it('creates a feedback row (201) when no prior row exists', async () => {
-    scopedInsertMock.mockResolvedValue([{ id: 1, rating: 1, comment: null }]);
+  it('returns 201 when the service reports the row was created', async () => {
+    upsertArticleFeedbackMock.mockResolvedValue({
+      row: { id: 1, rating: 1, comment: null },
+      created: true,
+    });
 
     const response = await POST(makeJsonRequest('/api/v1/help/feedback', validPost));
     const json = await response.json();
 
     expect(response.status).toBe(201);
     expect(json.data).toMatchObject({ id: 1, rating: 1 });
-    expect(scopedInsertMock).toHaveBeenCalledTimes(1);
-    expect(scopedUpdateMock).not.toHaveBeenCalled();
+    expect(upsertArticleFeedbackMock).toHaveBeenCalledTimes(1);
+    expect(upsertArticleFeedbackMock).toHaveBeenCalledWith({
+      communityId: 1,
+      userId: 'user-1',
+      articleSlug: 'welcome-to-propertypro',
+      articleCategory: 'getting-started',
+      rating: 1,
+      comment: null,
+    });
   });
 
-  it('updates (200) when INSERT trips the unique constraint', async () => {
-    scopedInsertMock.mockRejectedValueOnce({
-      code: '23505',
-      message: 'duplicate key value violates unique constraint',
+  it('returns 200 when the service reports an existing row was updated', async () => {
+    upsertArticleFeedbackMock.mockResolvedValue({
+      row: { id: 1, rating: -1, comment: 'too short' },
+      created: false,
     });
-    scopedUpdateMock.mockResolvedValue([{ id: 1, rating: -1, comment: 'too short' }]);
 
     const response = await POST(
       makeJsonRequest('/api/v1/help/feedback', {
@@ -128,29 +131,17 @@ describe('POST /api/v1/help/feedback', () => {
 
     expect(response.status).toBe(200);
     expect(json.data).toMatchObject({ id: 1, rating: -1, comment: 'too short' });
-    expect(scopedInsertMock).toHaveBeenCalledTimes(1);
-    expect(scopedUpdateMock).toHaveBeenCalledTimes(1);
+    expect(upsertArticleFeedbackMock).toHaveBeenCalledWith(
+      expect.objectContaining({ rating: -1, comment: 'too short' }),
+    );
   });
 
-  it('rethrows non-unique errors instead of silently falling back to UPDATE', async () => {
-    scopedInsertMock.mockRejectedValueOnce(new Error('connection refused'));
+  it('propagates non-unique service errors to the caller', async () => {
+    upsertArticleFeedbackMock.mockRejectedValueOnce(new Error('connection refused'));
 
     await expect(
       POST(makeJsonRequest('/api/v1/help/feedback', validPost)),
     ).rejects.toThrow('connection refused');
-    expect(scopedUpdateMock).not.toHaveBeenCalled();
-  });
-
-  it('also recognizes unique violations wrapped in a PostgresError cause chain', async () => {
-    scopedInsertMock.mockRejectedValueOnce({
-      message: 'Failed query: insert ...',
-      cause: { code: '23505' },
-    });
-    scopedUpdateMock.mockResolvedValue([{ id: 1, rating: 1, comment: null }]);
-
-    const response = await POST(makeJsonRequest('/api/v1/help/feedback', validPost));
-    expect(response.status).toBe(200);
-    expect(scopedUpdateMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects invalid payloads with a ValidationError', async () => {
@@ -164,7 +155,7 @@ describe('POST /api/v1/help/feedback', () => {
         }),
       ),
     ).rejects.toThrow(/Invalid/i);
-    expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(upsertArticleFeedbackMock).not.toHaveBeenCalled();
   });
 });
 
@@ -174,17 +165,14 @@ describe('GET /api/v1/help/feedback', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({ role: 'owner' });
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
-    createScopedClientMock.mockReturnValue({
-      insert: scopedInsertMock,
-      update: scopedUpdateMock,
-      selectFrom: scopedSelectFromMock,
-    });
   });
 
   it('returns the current rating when one exists', async () => {
-    scopedSelectFromMock.mockResolvedValue([
-      { rating: 1, comment: 'nice', updatedAt: new Date('2026-04-19') },
-    ]);
+    getMyArticleFeedbackMock.mockResolvedValue({
+      rating: 1,
+      comment: 'nice',
+      updatedAt: new Date('2026-04-19'),
+    });
 
     const response = await GET(
       makeGetRequest('/api/v1/help/feedback?communityId=1&articleSlug=welcome-to-propertypro'),
@@ -193,10 +181,15 @@ describe('GET /api/v1/help/feedback', () => {
 
     expect(response.status).toBe(200);
     expect(json.data).toMatchObject({ rating: 1, comment: 'nice' });
+    expect(getMyArticleFeedbackMock).toHaveBeenCalledWith(
+      1,
+      'user-1',
+      'welcome-to-propertypro',
+    );
   });
 
   it('returns null data when no prior rating exists', async () => {
-    scopedSelectFromMock.mockResolvedValue([]);
+    getMyArticleFeedbackMock.mockResolvedValue(null);
 
     const response = await GET(
       makeGetRequest('/api/v1/help/feedback?communityId=1&articleSlug=welcome-to-propertypro'),
