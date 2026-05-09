@@ -1,6 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { communities, createScopedClient } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -11,7 +9,10 @@ import {
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
-import { getViolationForCommunity } from '@/lib/services/violations-service';
+import {
+  getViolationForCommunity,
+  getViolationNoticeCommunityHeader,
+} from '@/lib/services/violations-service';
 import { generateViolationNoticePdf } from '@/lib/utils/violation-notice-pdf';
 
 /**
@@ -33,33 +34,18 @@ export const GET = withErrorHandler(
 
     const violation = await getViolationForCommunity(communityId, id);
 
-    // Get community details for the notice header
-    const scoped = createScopedClient(communityId);
-    const communityRows = await scoped.selectFrom(
-      communities,
-      {},
-      eq(communities.id, communityId),
-    );
-    const community = (communityRows as unknown as Record<string, unknown>[])[0];
-
-    const communityName = (community?.name as string) ?? 'Community Association';
-    const addressParts = [
-      community?.addressLine1 as string,
-      community?.city as string,
-      community?.state as string,
-      community?.zipCode as string,
-    ].filter(Boolean);
-    const communityAddress = addressParts.length > 0
-      ? addressParts.join(', ')
-      : '';
+    // Get community details for the notice header. Pre-A3 the violation-notice
+    // path silently fell back to defaults when the row was missing; preserve
+    // that behavior by ignoring `header.found` here.
+    const header = await getViolationNoticeCommunityHeader(communityId);
 
     const noticeDate = violation.noticeDate
       ?? new Date().toISOString().slice(0, 10);
 
     const pdfBytes = generateViolationNoticePdf({
       violationId: violation.id,
-      communityName,
-      communityAddress,
+      communityName: header.name,
+      communityAddress: header.address,
       unitNumber: String(violation.unitId),
       ownerName: null, // Owner name resolution deferred — would require user join
       category: violation.category,

@@ -1,6 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { communities, createScopedClient } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -12,7 +10,10 @@ import {
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
-import { getViolationForCommunity } from '@/lib/services/violations-service';
+import {
+  getViolationForCommunity,
+  getViolationNoticeCommunityHeader,
+} from '@/lib/services/violations-service';
 import { generateHearingNoticePdf } from '@/lib/utils/violation-notice-pdf';
 
 /**
@@ -38,36 +39,20 @@ export const GET = withErrorHandler(
       throw new ValidationError('No hearing date set for this violation');
     }
 
-    // Get community details for the notice header
-    const scoped = createScopedClient(communityId);
-    const communityRows = await scoped.selectFrom(
-      communities,
-      {},
-      eq(communities.id, communityId),
-    );
-    const community = (communityRows as unknown as Record<string, unknown>[])[0];
-
-    if (!community) {
+    // Get community details for the notice header. Hearing-notice path is
+    // strict: throws NotFoundError when the community row is missing
+    // (matches pre-A3 behavior — the violation-notice path was lenient).
+    const header = await getViolationNoticeCommunityHeader(communityId);
+    if (!header.found) {
       throw new NotFoundError('Community not found');
     }
-
-    const communityName = (community.name as string) ?? 'Community Association';
-    const addressParts = [
-      community.addressLine1 as string,
-      community.city as string,
-      community.state as string,
-      community.zipCode as string,
-    ].filter(Boolean);
-    const communityAddress = addressParts.length > 0
-      ? addressParts.join(', ')
-      : '';
 
     const noticeDate = new Date().toISOString().slice(0, 10);
 
     const pdfBytes = generateHearingNoticePdf({
       violationId: violation.id,
-      communityName,
-      communityAddress,
+      communityName: header.name,
+      communityAddress: header.address,
       unitNumber: String(violation.unitId),
       ownerName: null,
       category: violation.category,
