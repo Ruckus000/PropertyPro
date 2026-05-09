@@ -63,6 +63,65 @@ export async function listPendingJoinRequestsForCommunity(
     .orderBy(desc(communityJoinRequests.createdAt));
 }
 
+export interface CreateJoinRequestInput {
+  userId: string;
+  communityId: number;
+  unitIdentifier: string;
+  residentType: 'owner' | 'tenant';
+}
+
+export interface CreatedJoinRequest {
+  id: number;
+  status: string;
+}
+
+/**
+ * Insert a new community join request for a user. Cross-tenant by design:
+ * the user is not yet a member of the target community, so a scoped client
+ * wouldn't have permission. Caller MUST already have:
+ * - validated the input shape
+ * - run `checkJoinRequestEligibility` (no existing role / pending request /
+ *   30-day cooldown)
+ * - enforced its own rate limit
+ *
+ * Throws if the insert returns no row (very unlikely; treated as a server
+ * error by the caller, mirroring the route's pre-A3 behavior).
+ */
+export async function createJoinRequest(
+  input: CreateJoinRequestInput,
+): Promise<CreatedJoinRequest> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .insert(communityJoinRequests)
+    .values({
+      userId: input.userId,
+      communityId: input.communityId,
+      unitIdentifier: input.unitIdentifier,
+      residentType: input.residentType,
+    })
+    .returning({
+      id: communityJoinRequests.id,
+      status: communityJoinRequests.status,
+    });
+  if (!row) {
+    throw new Error('Failed to insert join request');
+  }
+  return { id: row.id, status: row.status };
+}
+
+/**
+ * List a user's own join requests across all communities, newest first.
+ * Cross-tenant by design — see file-level AUTHZ comment.
+ */
+export async function listJoinRequestsForUser(userId: string) {
+  const db = createUnscopedClient();
+  return await db
+    .select()
+    .from(communityJoinRequests)
+    .where(and(eq(communityJoinRequests.userId, userId)))
+    .orderBy(desc(communityJoinRequests.createdAt));
+}
+
 /**
  * Cross-tenant lookup of a single join request's `communityId`. Used by
  * approve/deny routes to verify the request belongs to the reviewer's
