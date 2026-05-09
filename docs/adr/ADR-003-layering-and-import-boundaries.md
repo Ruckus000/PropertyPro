@@ -89,7 +89,7 @@ These rules are policy from this ADR forward but not yet CI-enforced. Will be fo
 
 - Route handlers must export a `contract` constant (Zod request + response schema, declared permission, paginated flag).
 - Hooks must use generated client types from the contract registry, not hand-written response types.
-- List endpoints must paginate via the canonical helper and return `{ data, pagination }`.
+- List endpoints must paginate via the canonical helper and return the double-wrapped envelope `{ data: { data: T[], pagination } }` (route side) so that `requestJson<{data, pagination}>` unwraps the outer `data` field on the consumer side. See `.claude/rules/api-patterns.md` for the full route shape + filter pushdown + test mock patterns.
 - New hooks must use `requestJson` (current adoption: ~50% of hooks).
 
 ## Decision Drivers
