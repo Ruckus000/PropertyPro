@@ -11,10 +11,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { eq, and, isNull } from '@propertypro/db/filters';
-import { demoInstances, communities } from '@propertypro/db';
-// AUTHZ: Demo lifecycle — cross-tenant fixture setup before tenant binding.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_IDS } from '@propertypro/shared';
 import { computeDemoStatus } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -25,6 +21,7 @@ import { resolveStripePrice } from '@/lib/services/stripe-service';
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 import { createServerClient } from '@/lib/supabase/server';
+import { getDemoInstanceForUpgrade } from '@/lib/services/demo-conversion';
 
 // ---------------------------------------------------------------------------
 // Request validation
@@ -69,30 +66,7 @@ export const POST = withErrorHandler(
     const { planId, customerEmail, customerName } = parsed.data;
 
     // 2. Look up demo by slug
-    const db = createUnscopedClient();
-    const [demo] = await db
-      .select({
-        id: demoInstances.id,
-        communityId: demoInstances.seededCommunityId,
-        communityName: communities.name,
-        communityType: communities.communityType,
-        isDemo: communities.isDemo,
-        trialEndsAt: communities.trialEndsAt,
-        demoExpiresAt: communities.demoExpiresAt,
-        deletedAt: communities.deletedAt,
-        demoResidentUserId: demoInstances.demoResidentUserId,
-        demoBoardUserId: demoInstances.demoBoardUserId,
-      })
-      .from(demoInstances)
-      .innerJoin(communities, eq(demoInstances.seededCommunityId, communities.id))
-      .where(
-        and(
-          eq(demoInstances.slug, slug),
-          isNull(demoInstances.deletedAt),
-        ),
-      )
-      .limit(1);
-
+    const demo = await getDemoInstanceForUpgrade(slug);
     if (!demo || !demo.communityId) {
       throw new NotFoundError('Demo not found');
     }

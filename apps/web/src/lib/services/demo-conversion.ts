@@ -595,3 +595,53 @@ export async function getDemoInstanceForEntry(
     .limit(1);
   return rows[0] ?? null;
 }
+
+export interface DemoInstanceForUpgrade {
+  id: number;
+  communityId: number | null;
+  communityName: string | null;
+  communityType: CommunityType;
+  isDemo: boolean | null;
+  trialEndsAt: Date | null;
+  demoExpiresAt: Date | null;
+  deletedAt: Date | null;
+  demoResidentUserId: string | null;
+  demoBoardUserId: string | null;
+}
+
+/**
+ * Look up the demo instance + community for the self-service-upgrade flow.
+ * Excludes soft-deleted demos but NOT soft-deleted communities — the route
+ * uses the `deletedAt` field as a status input to `computeDemoStatus`.
+ *
+ * AUTHZ: caller MUST validate the requesting user is one of the demo's
+ * board/resident user ids before exposing the row's downstream fields.
+ */
+export async function getDemoInstanceForUpgrade(
+  slug: string,
+): Promise<DemoInstanceForUpgrade | null> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({
+      id: demoInstances.id,
+      communityId: demoInstances.seededCommunityId,
+      communityName: communities.name,
+      communityType: communities.communityType,
+      isDemo: communities.isDemo,
+      trialEndsAt: communities.trialEndsAt,
+      demoExpiresAt: communities.demoExpiresAt,
+      deletedAt: communities.deletedAt,
+      demoResidentUserId: demoInstances.demoResidentUserId,
+      demoBoardUserId: demoInstances.demoBoardUserId,
+    })
+    .from(demoInstances)
+    .innerJoin(communities, eq(demoInstances.seededCommunityId, communities.id))
+    .where(
+      and(
+        eq(demoInstances.slug, slug),
+        isNull(demoInstances.deletedAt),
+      ),
+    )
+    .limit(1);
+  return (rows[0] as DemoInstanceForUpgrade | undefined) ?? null;
+}
