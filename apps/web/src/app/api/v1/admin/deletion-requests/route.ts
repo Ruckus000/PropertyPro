@@ -8,19 +8,26 @@
  * Auth: platform admin (platform_admin_users row)
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq, and } from '@propertypro/db/filters';
-import { accountDeletionRequests } from '@propertypro/db';
-// AUTHZ: Admin deletion-requests routes — platform-level deletion workflow management
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
 import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import {
+  listDeletionRequests,
+  type DeletionRequestStatus,
+  type DeletionRequestType,
+} from '@/lib/services/account-lifecycle-service';
 
 export { handleOptions as OPTIONS };
 
-const VALID_STATUSES = new Set(['cooling', 'soft_deleted', 'purged', 'cancelled', 'recovered']);
-const VALID_TYPES = new Set(['user', 'community']);
+const VALID_STATUSES = new Set<DeletionRequestStatus>([
+  'cooling',
+  'soft_deleted',
+  'purged',
+  'cancelled',
+  'recovered',
+]);
+const VALID_TYPES = new Set<DeletionRequestType>(['user', 'community']);
 
 export const GET = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
   const adminUserId = await requirePlatformAdmin();
@@ -31,31 +38,22 @@ export const GET = withErrorHandler(async (req: NextRequest): Promise<NextRespon
   const statusParam = url.searchParams.get('status');
   const typeParam = url.searchParams.get('type');
 
-  if (statusParam && !VALID_STATUSES.has(statusParam)) {
+  if (statusParam && !VALID_STATUSES.has(statusParam as DeletionRequestStatus)) {
     throw new ValidationError('Invalid status filter', {
       status: `Must be one of: ${[...VALID_STATUSES].join(', ')}`,
     });
   }
 
-  if (typeParam && !VALID_TYPES.has(typeParam)) {
+  if (typeParam && !VALID_TYPES.has(typeParam as DeletionRequestType)) {
     throw new ValidationError('Invalid type filter', {
       type: 'Must be one of: user, community',
     });
   }
 
-  const db = createUnscopedClient();
-  const conditions = [];
-  if (statusParam) conditions.push(eq(accountDeletionRequests.status, statusParam));
-  if (typeParam) conditions.push(eq(accountDeletionRequests.requestType, typeParam));
-
-  let rows;
-  if (conditions.length === 0) {
-    rows = await db.select().from(accountDeletionRequests);
-  } else if (conditions.length === 1) {
-    rows = await db.select().from(accountDeletionRequests).where(conditions[0]!);
-  } else {
-    rows = await db.select().from(accountDeletionRequests).where(and(...conditions));
-  }
+  const rows = await listDeletionRequests({
+    status: statusParam ? (statusParam as DeletionRequestStatus) : undefined,
+    requestType: typeParam ? (typeParam as DeletionRequestType) : undefined,
+  });
 
   return NextResponse.json({ data: rows }, { headers: corsHeaders(origin) });
 });

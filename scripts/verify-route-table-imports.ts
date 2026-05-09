@@ -105,8 +105,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/account/delete/route.ts',
   'apps/web/src/app/api/v1/account/join-requests/route.ts',
   'apps/web/src/app/api/v1/account/profile/route.ts',
-  'apps/web/src/app/api/v1/admin/deletion-requests/[id]/recover/route.ts',
-  'apps/web/src/app/api/v1/admin/deletion-requests/route.ts',
   'apps/web/src/app/api/v1/admin/join-requests/[id]/approve/route.ts',
   'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts',
   'apps/web/src/app/api/v1/admin/join-requests/route.ts',
