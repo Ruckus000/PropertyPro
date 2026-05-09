@@ -22,6 +22,7 @@ import {
   logAuditEvent,
   maintenanceRequests,
   maintenanceComments,
+  paginate,
   units,
 } from '@propertypro/db';
 import { eq, and, inArray } from '@propertypro/db/filters';
@@ -106,12 +107,29 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const isResident = membership.role === 'resident';
   const isStaff = membership.isAdmin;
 
-  const page = Math.max(1, Number(searchParams.get('page') ?? '1'));
-  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') ?? '20')));
+  // Plan B3: paginate() with cursor-based pagination + walkPaginated+JS-slice
+  // adapter in the client helpers. The previous offset+limit+total semantics
+  // are preserved via the helper layer (`listAllRequests` / `listMyRequests`)
+  // — same pattern as #228 violations and #236 work-orders.
   const statusFilter = searchParams.get('status');
   const categoryFilter = searchParams.get('category');
   const priorityFilter = searchParams.get('priority');
   const assignedToIdFilter = searchParams.get('assignedToId');
+
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
+  const listQuerySchema = z.object({
+    cursor: z.string().min(1).max(256).optional(),
+    pageSize: z.coerce.number().int().positive().optional(),
+  });
+  const parsedQuery = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
 
   const scoped = createScopedClient(communityId);
 
@@ -123,22 +141,22 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (priorityFilter) conditions.push(eq(maintenanceRequests.priority, priorityFilter as 'low' | 'normal' | 'high' | 'urgent'));
   if (isStaff && assignedToIdFilter) conditions.push(eq(maintenanceRequests.assignedToId, assignedToIdFilter));
 
-  const additionalWhere = conditions.length > 0 ? and(...conditions) : undefined;
-  const dbOffset = (page - 1) * limit;
+  const where =
+    conditions.length === 0
+      ? undefined
+      : conditions.length === 1
+        ? conditions[0]
+        : and(...conditions);
 
-  // Run count (ID-only) and paginated full-row fetch in parallel — avoids fetching all rows into memory
-  type IdRow = { id: number };
-  type DynBuilder = { limit(n: number): { offset(n: number): Promise<Record<string, unknown>[]> } };
-  const [countRows, paged] = await Promise.all([
-    scoped.selectFrom(maintenanceRequests, { id: maintenanceRequests.id }, additionalWhere) as unknown as Promise<IdRow[]>,
-    (scoped.selectFrom(maintenanceRequests, {}, additionalWhere) as unknown as DynBuilder)
-      .limit(limit)
-      .offset(dbOffset),
-  ]);
-  const total = (countRows as IdRow[]).length;
+  const result = await paginate(
+    scoped,
+    maintenanceRequests,
+    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
+    { where },
+  );
 
-  // Fetch comments only for this page's request IDs (not all community comments)
-  const pagedIds = paged.map((r) => r['id'] as number);
+  // Fetch comments only for this page's request IDs (not all community comments).
+  const pagedIds = result.data.map((r) => (r as Record<string, unknown>)['id'] as number);
   const commentsByRequestId = new Map<number, Record<string, unknown>[]>();
   if (pagedIds.length > 0) {
     const commentRows = await scoped.selectFrom(
@@ -154,7 +172,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  const data = paged.map((r) => {
+  const data = (result.data as Record<string, unknown>[]).map((r) => {
     const requestId = r['id'] as number;
     const comments = (commentsByRequestId.get(requestId) ?? []).filter((c) => {
       if (isResident) return !c['isInternal'];
@@ -163,7 +181,12 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     return formatRequest(r, comments, isResident);
   });
 
-  return NextResponse.json({ data, meta: { total, page, limit } });
+  return NextResponse.json({
+    data: {
+      data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
