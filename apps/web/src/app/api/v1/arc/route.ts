@@ -23,13 +23,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  arcSubmissions,
-  createScopedClient,
-  paginate,
-  type ArcSubmissionStatus,
-} from '@propertypro/db';
-import { and, eq, inArray } from '@propertypro/db/filters';
+import { createScopedClient, type ArcSubmissionStatus } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -44,8 +38,7 @@ import {
   requireArcSubmitterRole } from '@/lib/violations/common';
 import {
   createArcSubmissionForCommunity,
-  mapArcRow,
-  type ArcSubmissionRecord,
+  paginateArcSubmissionsForCommunity,
 } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
@@ -67,15 +60,6 @@ const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
-
-function emptyPage(pageSize: number) {
-  return NextResponse.json({
-    data: {
-      data: [],
-      pagination: { nextCursor: null, hasMore: false, pageSize },
-    },
-  });
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -119,35 +103,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  // Resident with no allowed units: short-circuit before paginate. Drizzle
-  // forbids `inArray(col, [])` and the prior service returned `[]` directly.
-  if (residentUnitIds && residentUnitIds.length === 0) {
-    return emptyPage(parsedQuery.data.pageSize ?? 50);
-  }
-
-  const filterClauses = [];
-  if (status !== undefined) filterClauses.push(eq(arcSubmissions.status, status));
-  if (unitId !== undefined) filterClauses.push(eq(arcSubmissions.unitId, unitId));
-  if (residentUnitIds && residentUnitIds.length > 0) {
-    filterClauses.push(inArray(arcSubmissions.unitId, residentUnitIds));
-  }
-  const where =
-    filterClauses.length === 0
-      ? undefined
-      : filterClauses.length === 1
-        ? filterClauses[0]
-        : and(...filterClauses);
-
-  const result = await paginate<ArcSubmissionRecord>(
-    scoped,
-    arcSubmissions,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+  const result = await paginateArcSubmissionsForCommunity({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    status,
+    unitId,
+    allowedUnitIds: residentUnitIds,
+  });
 
   return NextResponse.json({
     data: {
-      data: result.data.map(mapArcRow),
+      data: result.data,
       pagination: result.pagination,
     },
   });

@@ -88,6 +88,51 @@ vi.mock('@/lib/violations/common', () => ({
 vi.mock('@/lib/services/violations-service', () => ({
   createArcSubmissionForCommunity: vi.fn(),
   mapArcRow: mapArcRowMock,
+  // After A3 drain #57, the route imports `paginateArcSubmissionsForCommunity`
+  // from the service. Delegate to the underlying `paginateMock` with the
+  // same where + short-circuit semantics so all 8 GET assertions stay valid.
+  paginateArcSubmissionsForCommunity: async (params: {
+    communityId: number;
+    cursor?: string;
+    pageSize?: number;
+    status?: string;
+    unitId?: number;
+    allowedUnitIds?: number[];
+  }) => {
+    if (params.allowedUnitIds && params.allowedUnitIds.length === 0) {
+      return {
+        data: [],
+        pagination: { nextCursor: null, hasMore: false, pageSize: params.pageSize ?? 50 },
+      };
+    }
+    const { eq, and, inArray } = await import('@propertypro/db/filters');
+    const clauses: unknown[] = [];
+    if (params.status !== undefined) {
+      clauses.push(eq(arcSubmissionsTable.status as never, params.status as never));
+    }
+    if (params.unitId !== undefined) {
+      clauses.push(eq(arcSubmissionsTable.unitId as never, params.unitId as never));
+    }
+    if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+      clauses.push(inArray(arcSubmissionsTable.unitId as never, params.allowedUnitIds as never));
+    }
+    const where =
+      clauses.length === 0
+        ? undefined
+        : clauses.length === 1
+          ? clauses[0]
+          : and(...(clauses as never[]));
+    const result = await paginateMock(
+      createScopedClientMock(params.communityId),
+      arcSubmissionsTable,
+      { cursor: params.cursor, pageSize: params.pageSize },
+      { where },
+    );
+    return {
+      data: (result.data as Record<string, unknown>[]).map((r) => mapArcRowMock(r)),
+      pagination: result.pagination,
+    };
+  },
 }));
 
 vi.mock('@/lib/db/access-control', () => ({

@@ -7,6 +7,7 @@ import {
   documents,
   ledgerEntries,
   logAuditEvent,
+  paginate,
   postLedgerEntry,
   violationFines,
   violations,
@@ -1012,4 +1013,80 @@ export async function markMatchingViolationFinePaid(
   });
 
   return match.id;
+}
+
+// ---------------------------------------------------------------------------
+// ARC list helpers (used by /api/v1/arc GET)
+// ---------------------------------------------------------------------------
+
+export interface PaginatedArcSubmissions {
+  data: ArcSubmissionRecord[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of ARC submissions in a community. Filter pushdown:
+ * - `status` → `eq(arcSubmissions.status, status)`
+ * - `unitId` → `eq(arcSubmissions.unitId, unitId)`
+ * - `allowedUnitIds` → `inArray(arcSubmissions.unitId, allowedUnitIds)`
+ *
+ * Resident-with-no-units short-circuit: drizzle forbids `inArray(col, [])`,
+ * so when `allowedUnitIds` is an empty array (resident with zero units)
+ * the helper returns an empty paginated envelope rather than calling
+ * paginate. Caller should still pre-check this case to skip the SQL
+ * round-trip entirely if possible.
+ *
+ * Rows are mapped through `mapArcRow` so callers don't have to.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership, ARC feature gate, and `arc_submissions:read`
+ * permission. For resident roles, `allowedUnitIds` MUST be passed.
+ */
+export async function paginateArcSubmissionsForCommunity(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  status?: ArcSubmissionStatus;
+  unitId?: number;
+  allowedUnitIds?: number[];
+}): Promise<PaginatedArcSubmissions> {
+  if (params.allowedUnitIds && params.allowedUnitIds.length === 0) {
+    return {
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: params.pageSize ?? 50 },
+    };
+  }
+
+  const filterClauses = [];
+  if (params.status !== undefined) {
+    filterClauses.push(eq(arcSubmissions.status, params.status));
+  }
+  if (params.unitId !== undefined) {
+    filterClauses.push(eq(arcSubmissions.unitId, params.unitId));
+  }
+  if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+    filterClauses.push(inArray(arcSubmissions.unitId, params.allowedUnitIds));
+  }
+  const where =
+    filterClauses.length === 0
+      ? undefined
+      : filterClauses.length === 1
+        ? filterClauses[0]
+        : and(...filterClauses);
+
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate<ArcSubmissionRecord>(
+    scoped,
+    arcSubmissions,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+  return {
+    data: result.data.map(mapArcRow),
+    pagination: result.pagination,
+  };
 }
