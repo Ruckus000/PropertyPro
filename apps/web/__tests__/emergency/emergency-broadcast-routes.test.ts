@@ -6,7 +6,10 @@ const {
   requireCommunityMembershipMock,
   requirePermissionMock,
   resolveEffectiveCommunityIdMock,
-  listBroadcastsMock,
+  paginateMock,
+  scopedClient,
+  createScopedClientMock,
+  emergencyBroadcastsTable,
   createBroadcastMock,
   executeBroadcastMock,
   cancelBroadcastMock,
@@ -15,7 +18,14 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
-  listBroadcastsMock: vi.fn(),
+  // Plan B3: route GET now uses paginate() instead of listBroadcasts.
+  paginateMock: vi.fn().mockResolvedValue({
+    data: [],
+    pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+  }),
+  scopedClient: { __scoped: true },
+  createScopedClientMock: vi.fn(),
+  emergencyBroadcastsTable: { id: Symbol('emergency_broadcasts.id') },
   createBroadcastMock: vi.fn(),
   executeBroadcastMock: vi.fn(),
   cancelBroadcastMock: vi.fn(),
@@ -38,10 +48,19 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/services/emergency-broadcast-service', () => ({
-  listBroadcasts: listBroadcastsMock,
   createBroadcast: createBroadcastMock,
   executeBroadcast: executeBroadcastMock,
   cancelBroadcast: cancelBroadcastMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
+  createScopedClient: createScopedClientMock,
+  emergencyBroadcasts: emergencyBroadcastsTable,
+  paginate: paginateMock,
+}));
+
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: vi.fn(() => ({})),
 }));
 
 // Suppress Sentry in test
@@ -86,12 +105,16 @@ describe('Emergency Broadcast Routes', () => {
   // ── GET /api/v1/emergency-broadcasts ────────────────────────────────────
 
   describe('GET /api/v1/emergency-broadcasts', () => {
-    it('returns paginated list of broadcasts', async () => {
+    it('returns paginated list of broadcasts (Plan B3 envelope)', async () => {
       const broadcasts = [
         { id: 1, title: 'Fire drill', severity: 'emergency' },
         { id: 2, title: 'Water shutoff', severity: 'urgent' },
       ];
-      listBroadcastsMock.mockResolvedValue({ broadcasts, total: 2 });
+      paginateMock.mockResolvedValueOnce({
+        data: broadcasts,
+        pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+      });
+      createScopedClientMock.mockReturnValue(scopedClient);
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/emergency-broadcasts?communityId=100',
@@ -101,12 +124,20 @@ describe('Emergency Broadcast Routes', () => {
 
       expect(res.status).toBe(200);
       expect(json).toEqual({
-        data: broadcasts,
-        total: 2,
-        limit: 20,
-        offset: 0,
+        data: {
+          data: broadcasts,
+          pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+        },
       });
-      expect(listBroadcastsMock).toHaveBeenCalledWith(100, 20, 0);
+
+      const [client, table, input] = paginateMock.mock.calls[0] as [
+        unknown,
+        unknown,
+        { cursor?: string; pageSize?: number },
+      ];
+      expect(client).toBe(scopedClient);
+      expect(table).toBe(emergencyBroadcastsTable);
+      expect(input).toEqual({ cursor: undefined, pageSize: undefined });
     });
 
     it('returns error when communityId query param missing', async () => {

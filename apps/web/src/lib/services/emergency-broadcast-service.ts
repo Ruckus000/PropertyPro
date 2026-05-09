@@ -611,25 +611,6 @@ export async function getBroadcastWithReport(
   };
 }
 
-/**
- * List broadcasts for a community (paginated, newest first).
- */
-export async function listBroadcasts(
-  communityId: number,
-  limit = 20,
-  offset = 0,
-): Promise<{ broadcasts: EmergencyBroadcast[]; total: number }> {
-  const scoped = createScopedClient(communityId);
-  const allRows = await scoped
-    .selectFrom<EmergencyBroadcast>(emergencyBroadcasts, {})
-    .orderBy(desc(emergencyBroadcasts.initiatedAt));
-
-  return {
-    broadcasts: allRows.slice(offset, offset + limit),
-    total: allRows.length,
-  };
-}
-
 // ── Recipient resolution ────────────────────────────────────────────────────
 
 /**

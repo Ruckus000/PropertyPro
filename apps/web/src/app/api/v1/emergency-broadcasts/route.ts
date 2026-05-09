@@ -1,13 +1,32 @@
 /**
  * Emergency Broadcasts API — list + create.
  *
- * GET  /api/v1/emergency-broadcasts — List broadcasts (paginated)
+ * GET  /api/v1/emergency-broadcasts — paginated list (Plan B3 rollout)
  * POST /api/v1/emergency-broadcasts — Create broadcast draft + resolve recipients
  *
  * Emergency broadcasts bypass subscription guard (life-safety over revenue).
+ *
+ * GET pagination (Plan B3):
+ * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * - Order by `id` desc — equivalent to the previous `desc(initiatedAt)` since
+ *   `initiated_at` is `defaultNow()` at insert time (monotonic with bigserial id).
+ * - Response envelope is double-wrapped per the paginated-route contract:
+ *   `{ data: { data: EmergencyBroadcast[], pagination } }`.
+ *
+ * **Bug fix**: the prior service `listBroadcasts` loaded ALL broadcasts into
+ * memory before JS-slicing to the requested page (no SQL LIMIT/OFFSET). And
+ * the consumer hook `useEmergencyBroadcasts` didn't pass a page param, so
+ * communities with >20 historical broadcasts could never see the rest. The
+ * hook now walks all pages via `walkPaginated` (capped at MAX_PAGES *
+ * pageSize = 2000), so the full history is available.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import {
+  createScopedClient,
+  emergencyBroadcasts,
+  paginate,
+} from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -16,11 +35,13 @@ import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { UnprocessableEntityError } from '@/lib/api/errors/UnprocessableEntityError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import {
-  createBroadcast,
-  listBroadcasts,
-} from '@/lib/services/emergency-broadcast-service';
+import { createBroadcast } from '@/lib/services/emergency-broadcast-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -55,16 +76,29 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'emergency_broadcasts', 'read');
 
-  const limit = Math.min(Number(searchParams.get('limit')) || 20, 100);
-  const offset = Math.max(Number(searchParams.get('offset')) || 0, 0);
+  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
+  // are treated as missing rather than passed to Zod, which would 400 on the
+  // `min(1)` / `positive()` constraints.
+  const parsedQuery = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
 
-  const result = await listBroadcasts(communityId, limit, offset);
+  const scoped = createScopedClient(communityId);
+  const result = await paginate(
+    scoped,
+    emergencyBroadcasts,
+    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
+  );
 
   return NextResponse.json({
-    data: result.broadcasts,
-    total: result.total,
-    limit,
-    offset,
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
   });
 });
 

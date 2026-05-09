@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -89,12 +90,17 @@ const KEYS = {
 export function useEmergencyBroadcasts(communityId: number) {
   return useQuery({
     queryKey: KEYS.list(communityId),
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/emergency-broadcasts?communityId=${communityId}`);
-      if (!res.ok) throw new Error('Failed to load broadcasts');
-      const json = await res.json();
-      return json.data as BroadcastSummary[];
-    },
+    queryFn: ({ signal }) =>
+      // Plan B3: route emits the canonical paginated envelope; consumer walks
+      // all pages to render the full broadcast history. Capped at MAX_PAGES *
+      // pageSize = 2000. **Bug fix**: previous implementation only fetched
+      // the first 20 broadcasts (no page param sent to the route, route
+      // defaulted to limit=20).
+      walkPaginated<BroadcastSummary>(
+        '/api/v1/emergency-broadcasts',
+        { communityId: String(communityId) },
+        { signal },
+      ),
     enabled: communityId > 0,
   });
 }
