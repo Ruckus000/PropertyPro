@@ -1,6 +1,8 @@
 import { eq, and, isNull, isNotNull } from '@propertypro/db/filters';
 import {
+  communities,
   createScopedClient,
+  maintenanceRequests,
   moveChecklists,
   logAuditEvent,
   type MoveChecklistType,
@@ -10,6 +12,7 @@ import {
   MOVE_OUT_STEPS,
   STEP_LABELS,
   type MoveChecklist,
+  users,
 } from '@propertypro/db';
 
 // ─── Types ───
@@ -214,4 +217,88 @@ export async function completeChecklist(
   });
 
   return updatedRows[0] as unknown as MoveChecklist;
+}
+
+// ---------------------------------------------------------------------------
+// Step-action helpers (used by /api/v1/move-checklists/[id]/steps/[stepKey]/action)
+// ---------------------------------------------------------------------------
+
+export interface ChecklistWelcomeEmailContext {
+  resident: { email: string; fullName: string | null };
+  community: { name: string };
+}
+
+/**
+ * Load the resident + community fragments needed to render and send a
+ * welcome email when the move-in checklist's `send_welcome` action fires.
+ * Returns `null` if either row is missing (route treats that as silent
+ * no-op rather than failing the action — the checklist step still
+ * advances).
+ *
+ * AUTHZ: tenant-scoped — caller MUST verify community membership and
+ * admin role BEFORE invoking. Both lookups go through `selectFrom` with
+ * a primary-key `eq` filter (one row each).
+ */
+export async function getResidentAndCommunityForWelcomeEmail(
+  communityId: number,
+  residentId: string,
+): Promise<ChecklistWelcomeEmailContext | null> {
+  const scoped = createScopedClient(communityId);
+  const [userRows, communityRows] = await Promise.all([
+    scoped.selectFrom(
+      users,
+      { email: users.email, fullName: users.fullName },
+      eq(users.id, residentId),
+    ),
+    scoped.selectFrom(
+      communities,
+      { name: communities.name },
+      eq(communities.id, communityId),
+    ),
+  ]);
+  const resident = userRows[0] as { email?: unknown; fullName?: unknown } | undefined;
+  const community = communityRows[0] as { name?: unknown } | undefined;
+  if (!resident || !community) return null;
+  if (typeof resident.email !== 'string') return null;
+  if (typeof community.name !== 'string') return null;
+  return {
+    resident: {
+      email: resident.email,
+      fullName: typeof resident.fullName === 'string' ? resident.fullName : null,
+    },
+    community: { name: community.name },
+  };
+}
+
+export interface InspectionRequestForChecklist {
+  unitId: number;
+  submittedById: string;
+  /** Either 'move_in' or 'move_out' — drives the title text. */
+  type: 'move_in' | 'move_out';
+}
+
+/**
+ * Insert a `maintenance_requests` row of category `inspection` linked to
+ * the checklist's unit. Returns the newly-inserted row's id (caller uses
+ * it to write `linkedEntityId` on the checklist step).
+ */
+export async function createInspectionRequestForChecklist(
+  communityId: number,
+  input: InspectionRequestForChecklist,
+): Promise<{ id: number } | null> {
+  const title = input.type === 'move_in' ? 'Move-In Inspection' : 'Move-Out Inspection';
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.insert(maintenanceRequests, {
+    communityId,
+    unitId: input.unitId,
+    submittedById: input.submittedById,
+    title,
+    description: `Scheduled ${title.toLowerCase()} for unit.`,
+    category: 'inspection',
+    priority: 'normal',
+    status: 'open',
+  });
+  const row = rows[0] as { id?: unknown } | undefined;
+  if (!row || typeof row.id !== 'number') return null;
+  return { id: row.id };
 }

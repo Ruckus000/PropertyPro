@@ -89,6 +89,13 @@ const ALLOWED_SYMBOLS = new Set<string>([
   // not Drizzle table access). Used by routes that mutate auth user_metadata
   // (e.g. profile name sync) or manage auth invitations / sessions.
   'createAdminClient',
+  // Pure data catalogue (not a table or query); used by move-checklist
+  // step-action routes to validate which step keys support which integration
+  // actions. Added 2026-05-09 (A3 drain #54) — re-exporting through a
+  // service file would force every test that mocks @propertypro/db to add
+  // it to its mock factory, vs allowing the import keeps the catalogue
+  // close to the schema.
+  'ACTIONABLE_STEPS',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -122,7 +129,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts',
   'apps/web/src/app/api/v1/maintenance-requests/route.ts',
   'apps/web/src/app/api/v1/meetings/route.ts',
-  'apps/web/src/app/api/v1/move-checklists/[id]/steps/[stepKey]/action/route.ts',
   'apps/web/src/app/api/v1/notification-preferences/route.ts',
   'apps/web/src/app/api/v1/notifications/all/route.ts',
   'apps/web/src/app/api/v1/onboarding/apartment/route.ts',

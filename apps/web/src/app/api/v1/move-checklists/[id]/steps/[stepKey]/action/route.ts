@@ -8,13 +8,14 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
 import {
+  createInspectionRequestForChecklist,
   getMoveChecklist,
+  getResidentAndCommunityForWelcomeEmail,
   updateChecklistStep,
 } from '@/lib/services/move-checklist-service';
 import { createOnboardingInvitation } from '@/lib/services/onboarding-service';
 import { getBaseUrl } from '@/lib/utils/url';
-import { ACTIONABLE_STEPS, createScopedClient, users, communities, maintenanceRequests } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { ACTIONABLE_STEPS } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 
 const actionSchema = z.object({
@@ -59,28 +60,24 @@ export const POST = withErrorHandler(
     }
 
     // Dispatch integration action
-    const scoped = createScopedClient(communityId);
-
     switch (action) {
       case 'send_welcome': {
         // Load resident and community for the welcome email
-        const [userRows, communityRows] = await Promise.all([
-          scoped.selectFrom(users, {}, eq(users.id, checklist.residentId)),
-          scoped.selectFrom(communities, {}, eq(communities.id, communityId)),
-        ]);
-        const resident = userRows[0];
-        const community = communityRows[0];
+        const ctx = await getResidentAndCommunityForWelcomeEmail(
+          communityId,
+          checklist.residentId,
+        );
 
-        if (resident && community) {
+        if (ctx) {
           const loginUrl = `${getBaseUrl()}/auth/login`;
           await sendEmail({
-            to: (resident as Record<string, unknown>).email as string,
-            subject: `Welcome to ${(community as Record<string, unknown>).name as string}`,
+            to: ctx.resident.email,
+            subject: `Welcome to ${ctx.community.name}`,
             category: 'transactional',
             react: createElement(WelcomeEmail, {
-              branding: { communityName: (community as Record<string, unknown>).name as string },
-              primaryContactName: ((resident as Record<string, unknown>).fullName as string) ?? 'Resident',
-              communityName: (community as Record<string, unknown>).name as string,
+              branding: { communityName: ctx.community.name },
+              primaryContactName: ctx.resident.fullName ?? 'Resident',
+              communityName: ctx.community.name,
               loginUrl,
             }),
           });
@@ -129,22 +126,11 @@ export const POST = withErrorHandler(
 
       case 'create_inspection': {
         // Create a maintenance request of category 'inspection'
-        const title = checklist.type === 'move_in'
-          ? 'Move-In Inspection'
-          : 'Move-Out Inspection';
-
-        const rows = await scoped.insert(maintenanceRequests, {
-          communityId,
+        const request = await createInspectionRequestForChecklist(communityId, {
           unitId: checklist.unitId,
           submittedById: userId,
-          title,
-          description: `Scheduled ${title.toLowerCase()} for unit.`,
-          category: 'inspection',
-          priority: 'normal',
-          status: 'open',
+          type: checklist.type,
         });
-
-        const request = rows[0];
         if (!request) {
           throw new Error('Failed to create inspection request');
         }
@@ -156,7 +142,7 @@ export const POST = withErrorHandler(
           {
             completed: true,
             linkedEntityType: 'maintenance_request',
-            linkedEntityId: (request as Record<string, unknown>).id as number,
+            linkedEntityId: request.id,
           },
           userId,
         );
