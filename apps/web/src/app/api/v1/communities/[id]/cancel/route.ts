@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
-// AUTHZ: Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities, billingGroups } from '@propertypro/db';
-import { eq, and, isNull } from '@propertypro/db/filters';
 import { getStripeClient } from '@/lib/services/stripe-service';
-import { recalculateVolumeTier } from '@/lib/billing/billing-group-service';
+import {
+  getBillingGroupOwner,
+  getCommunityForCancel,
+  recalculateVolumeTier,
+  softDeleteCommunityForCancellation,
+} from '@/lib/billing/billing-group-service';
 import { cancellationReasonSchema } from '@propertypro/shared';
 
 const cancelBodySchema = z.object({
@@ -44,31 +45,14 @@ export const POST = withErrorHandler(
     }
     const { reason, note } = parsed.data;
 
-    const db = createUnscopedClient();
-
-    const [community] = await db
-      .select({
-        id: communities.id,
-        name: communities.name,
-        billingGroupId: communities.billingGroupId,
-        stripeSubscriptionId: communities.stripeSubscriptionId,
-      })
-      .from(communities)
-      .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
-      .limit(1);
-
+    const community = await getCommunityForCancel(communityId);
     if (!community) throw new NotFoundError('Community not found');
     if (!community.billingGroupId) {
       throw new ForbiddenError('Community is not linked to a billing group');
     }
 
-    const [group] = await db
-      .select({ id: billingGroups.id, ownerUserId: billingGroups.ownerUserId })
-      .from(billingGroups)
-      .where(eq(billingGroups.id, community.billingGroupId))
-      .limit(1);
-
-    if (!group || group.ownerUserId !== userId) {
+    const ownerUserId = await getBillingGroupOwner(community.billingGroupId);
+    if (ownerUserId === null || ownerUserId !== userId) {
       throw new ForbiddenError('You do not own this billing group');
     }
 
@@ -84,16 +68,10 @@ export const POST = withErrorHandler(
       }
     }
 
-    // Soft-delete the community.
-    await db
-      .update(communities)
-      .set({
-        deletedAt: new Date(),
-        cancellationReason: reason,
-        cancellationNote: note ?? null,
-        cancellationCapturedAt: new Date(),
-      })
-      .where(eq(communities.id, communityId));
+    await softDeleteCommunityForCancellation(communityId, {
+      reason,
+      note: note ?? null,
+    });
 
     // Recalculate volume tier — may downgrade and notify admins.
     await recalculateVolumeTier(community.billingGroupId, {

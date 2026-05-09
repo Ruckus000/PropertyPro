@@ -1,7 +1,7 @@
 // AUTHZ: Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
-import { eq, and, isNull, sql, inArray } from '@propertypro/db/filters';
+import { eq, and, isNull, ne, sql, inArray } from '@propertypro/db/filters';
 import { AppError } from '../api/errors';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
@@ -119,6 +119,136 @@ export async function recalculateVolumeTier(
   }
 
   return { billingGroupId, previousTier, newTier, activeCount: count, tierChanged };
+}
+
+// ---------------------------------------------------------------------------
+// Cancel-flow helpers (A3 Phase 2 drain — used by /api/v1/communities/[id]/cancel
+// and /api/v1/communities/[id]/cancel-preview).
+//
+// AUTHZ: each helper is cross-tenant by design (queries the platform-level
+// billing_groups + communities tables). Callers MUST authorize via
+// `requireAuthenticatedUserId` AND verify the resolved billing-group's
+// `ownerUserId === userId` BEFORE issuing any mutation.
+// ---------------------------------------------------------------------------
+
+export interface CancelPreviewCommunity {
+  id: number;
+  billingGroupId: number | null;
+  subscriptionPlan: string | null;
+}
+
+/**
+ * Fetch the minimal community projection the cancel-PREVIEW path needs.
+ * Returns `null` if the community doesn't exist or is already soft-deleted.
+ */
+export async function getCommunityForCancelPreview(
+  communityId: number,
+): Promise<CancelPreviewCommunity | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: communities.id,
+      billingGroupId: communities.billingGroupId,
+      subscriptionPlan: communities.subscriptionPlan,
+    })
+    .from(communities)
+    .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface CancelCommunity {
+  id: number;
+  name: string;
+  billingGroupId: number | null;
+  stripeSubscriptionId: string | null;
+}
+
+/**
+ * Fetch the minimal community projection the cancel-MUTATION path needs.
+ * Returns `null` if the community doesn't exist or is already soft-deleted.
+ */
+export async function getCommunityForCancel(
+  communityId: number,
+): Promise<CancelCommunity | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: communities.id,
+      name: communities.name,
+      billingGroupId: communities.billingGroupId,
+      stripeSubscriptionId: communities.stripeSubscriptionId,
+    })
+    .from(communities)
+    .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Look up the `ownerUserId` of a billing group. Returns `null` when no row
+ * matches. Used by both cancel paths to verify the actor owns the group
+ * before doing anything destructive.
+ */
+export async function getBillingGroupOwner(
+  billingGroupId: number,
+): Promise<string | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ id: billingGroups.id, ownerUserId: billingGroups.ownerUserId })
+    .from(billingGroups)
+    .where(eq(billingGroups.id, billingGroupId))
+    .limit(1);
+  return row?.ownerUserId ?? null;
+}
+
+/**
+ * List the `subscriptionPlan` of every other (non-soft-deleted) community in
+ * the same billing group. Used by the cancel-PREVIEW path to compute the
+ * pricing impact of removing the target community.
+ */
+export async function listSiblingCommunityPlans(
+  billingGroupId: number,
+  excludeCommunityId: number,
+): Promise<{ planKey: string | null }[]> {
+  const db = createUnscopedClient();
+  return await db
+    .select({ planKey: communities.subscriptionPlan })
+    .from(communities)
+    .where(
+      and(
+        eq(communities.billingGroupId, billingGroupId),
+        isNull(communities.deletedAt),
+        ne(communities.id, excludeCommunityId),
+      ),
+    );
+}
+
+export interface CommunityCancellationDetails {
+  reason: string;
+  note: string | null;
+}
+
+/**
+ * Soft-delete a community and capture the cancellation reason/note. Sets
+ * `deletedAt` and `cancellationCapturedAt` to the same `new Date()` value
+ * (matches pre-A3 behavior).
+ */
+export async function softDeleteCommunityForCancellation(
+  communityId: number,
+  details: CommunityCancellationDetails,
+): Promise<void> {
+  const now = new Date();
+  const db = createUnscopedClient();
+  await db
+    .update(communities)
+    .set({
+      deletedAt: now,
+      cancellationReason: details.reason,
+      cancellationNote: details.note,
+      cancellationCapturedAt: now,
+    })
+    .where(eq(communities.id, communityId));
 }
 
 export interface CreateBillingGroupInput {
