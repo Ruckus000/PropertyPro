@@ -19,12 +19,9 @@
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-// AUTHZ: Demo lifecycle — cross-tenant fixture setup before tenant binding.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { demoInstances, communities } from '@propertypro/db';
-import { eq, and, isNull } from '@propertypro/db/filters';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
+import { getDemoInstanceForEntry } from '@/lib/services/demo-conversion';
 
 const RoleSchema = z.object({
   role: z.enum(['board', 'resident']),
@@ -70,30 +67,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const { role } = parsed;
 
   // 2. Look up demo instance by slug, joined with community
-  const db = createUnscopedClient();
-  const rows = await db
-    .select({
-      id: demoInstances.id,
-      seededCommunityId: demoInstances.seededCommunityId,
-      demoResidentEmail: demoInstances.demoResidentEmail,
-      demoBoardEmail: demoInstances.demoBoardEmail,
-      demoResidentUserId: demoInstances.demoResidentUserId,
-      demoBoardUserId: demoInstances.demoBoardUserId,
-      isDemo: communities.isDemo,
-      demoExpiresAt: communities.demoExpiresAt,
-    })
-    .from(demoInstances)
-    .innerJoin(communities, eq(communities.id, demoInstances.seededCommunityId))
-    .where(
-      and(
-        eq(demoInstances.slug, slug),
-        isNull(demoInstances.deletedAt),
-        isNull(communities.deletedAt),
-      ),
-    )
-    .limit(1);
-
-  const instance = rows[0];
+  const instance = await getDemoInstanceForEntry(slug);
 
   // 3. Validate instance exists, is a demo community, and has not expired
   if (!instance || !instance.isDemo) {

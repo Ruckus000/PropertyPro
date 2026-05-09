@@ -142,7 +142,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/demo/detect-demo-info.ts'),
   // Demo lifecycle: landing page, entry, conversion, expiry cron, session helper
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/page.tsx'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/demo/[slug]/self-service-upgrade/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/upgrade/page.tsx'),
