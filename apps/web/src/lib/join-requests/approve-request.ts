@@ -10,11 +10,84 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   communityJoinRequests,
+  createScopedClient,
   userRoles,
   insertNotifications,
 } from '@propertypro/db';
-import { and, eq } from '@propertypro/db/filters';
+import { and, desc, eq } from '@propertypro/db/filters';
 import { NotFoundError, ConflictError } from '@/lib/api/errors';
+
+export interface PendingJoinRequestRow {
+  id: number;
+  userId: string;
+  communityId: number;
+  unitIdentifier: string;
+  residentType: string;
+  status: string;
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  reviewNotes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  [key: string]: unknown;
+}
+
+/**
+ * List pending join requests for a community, newest first. Tenant-scoped:
+ * caller MUST have already verified the actor's residents.write permission
+ * in this community. Returns the same row shape the GET admin endpoint
+ * surfaces.
+ */
+export async function listPendingJoinRequestsForCommunity(
+  communityId: number,
+): Promise<PendingJoinRequestRow[]> {
+  const db = createScopedClient(communityId);
+  return await db
+    .selectFrom<PendingJoinRequestRow>(
+      communityJoinRequests,
+      {
+        id: communityJoinRequests.id,
+        userId: communityJoinRequests.userId,
+        communityId: communityJoinRequests.communityId,
+        unitIdentifier: communityJoinRequests.unitIdentifier,
+        residentType: communityJoinRequests.residentType,
+        status: communityJoinRequests.status,
+        reviewedBy: communityJoinRequests.reviewedBy,
+        reviewedAt: communityJoinRequests.reviewedAt,
+        reviewNotes: communityJoinRequests.reviewNotes,
+        createdAt: communityJoinRequests.createdAt,
+        updatedAt: communityJoinRequests.updatedAt,
+      },
+      and(eq(communityJoinRequests.status, 'pending')),
+    )
+    .orderBy(desc(communityJoinRequests.createdAt));
+}
+
+/**
+ * Cross-tenant lookup of a single join request's `communityId`. Used by
+ * approve/deny routes to verify the request belongs to the reviewer's
+ * community before mutating. Returns `null` when no row matches.
+ *
+ * AUTHZ: cross-tenant unscoped read; the request may not yet be associated
+ * with any user_role, so a scoped client wouldn't see it. Callers MUST
+ * compare the returned communityId against the reviewer's verified
+ * `requirePermission(membership, 'residents', 'write')` community.
+ */
+export async function getJoinRequestCommunityId(
+  requestId: number,
+): Promise<number | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: communityJoinRequests.id,
+      communityId: communityJoinRequests.communityId,
+    })
+    .from(communityJoinRequests)
+    .where(eq(communityJoinRequests.id, requestId))
+    .limit(1);
+  if (!row) return null;
+  return row.communityId;
+}
 
 export interface ApproveInput {
   requestId: number;

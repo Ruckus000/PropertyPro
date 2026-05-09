@@ -15,11 +15,11 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
-import { approveJoinRequest } from '@/lib/join-requests/approve-request';
-// AUTHZ: Admin approve/deny endpoints: cross-community service dispatched after permission check
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communityJoinRequests, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import {
+  approveJoinRequest,
+  getJoinRequestCommunityId,
+} from '@/lib/join-requests/approve-request';
+import { logAuditEvent } from '@propertypro/db';
 
 const bodySchema = z.object({ notes: z.string().max(500).optional() });
 
@@ -43,18 +43,9 @@ export const POST = withErrorHandler(
     }
 
     // Verify the request belongs to the admin's community before mutating
-    const db = createUnscopedClient();
-    const [existing] = await db
-      .select({
-        id: communityJoinRequests.id,
-        communityId: communityJoinRequests.communityId,
-      })
-      .from(communityJoinRequests)
-      .where(eq(communityJoinRequests.id, requestId))
-      .limit(1);
-
-    if (!existing) throw new NotFoundError('Join request not found');
-    if (existing.communityId !== communityId) {
+    const requestCommunityId = await getJoinRequestCommunityId(requestId);
+    if (requestCommunityId === null) throw new NotFoundError('Join request not found');
+    if (requestCommunityId !== communityId) {
       throw new ForbiddenError('Request belongs to a different community');
     }
 
