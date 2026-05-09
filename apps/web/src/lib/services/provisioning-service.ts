@@ -1127,6 +1127,66 @@ export async function markVerificationEmailSent(
     .where(eq(pendingSignups.id, pendingSignupId));
 }
 
+// ---------------------------------------------------------------------------
+// Provisioning retry helpers (used by /api/v1/internal/provision)
+// ---------------------------------------------------------------------------
+
+export interface ProvisioningJobSummary {
+  id: number;
+  status: string;
+  lastSuccessfulStatus: string | null;
+  retryCount: number | null;
+}
+
+/**
+ * Look up a provisioning job by its `signupRequestId`. Returns the minimal
+ * summary projection used by the internal retry endpoint, or `null` when no
+ * row matches.
+ *
+ * AUTHZ: cron/admin-only — caller MUST validate the provisioning-retry
+ * secret BEFORE invoking.
+ */
+export async function findProvisioningJobBySignupRequestId(
+  signupRequestId: string,
+): Promise<ProvisioningJobSummary | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: provisioningJobs.id,
+      status: provisioningJobs.status,
+      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
+      retryCount: provisioningJobs.retryCount,
+    })
+    .from(provisioningJobs)
+    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Re-fetch the same minimal summary projection by primary key. Used after
+ * `runProvisioning` so the caller can return the post-run state.
+ *
+ * AUTHZ: cron/admin-only — caller MUST validate the provisioning-retry
+ * secret BEFORE invoking.
+ */
+export async function getProvisioningJobSummaryById(
+  jobId: number,
+): Promise<ProvisioningJobSummary | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      id: provisioningJobs.id,
+      status: provisioningJobs.status,
+      lastSuccessfulStatus: provisioningJobs.lastSuccessfulStatus,
+      retryCount: provisioningJobs.retryCount,
+    })
+    .from(provisioningJobs)
+    .where(eq(provisioningJobs.id, jobId))
+    .limit(1);
+  return row ?? null;
+}
+
 export const _testInternals = {
   resolvePendingSignupAddress,
 } as const;
