@@ -10,11 +10,14 @@ import {
   insertNotifications,
   logAuditEvent,
   notificationPreferences,
+  notifications,
+  paginate,
   userRoles,
   users,
   type InsertNotificationRow,
   type NotificationCategory,
 } from '@propertypro/db';
+import { and, eq, isNull } from '@propertypro/db/filters';
 import {
   ComplianceAlertEmail,
   DocumentPostedEmail,
@@ -865,4 +868,55 @@ export async function createNotificationsForEvent(
   }
 
   return { created, skipped: allRecipients.length - eligible.length };
+}
+
+// ---------------------------------------------------------------------------
+// In-app notification list helpers (used by /api/v1/notifications)
+// ---------------------------------------------------------------------------
+
+export interface PaginatedNotifications {
+  data: Record<string, unknown>[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of in-app notifications for a single user within a
+ * community. Excludes archived rows; soft-deleted rows are filtered by the
+ * scoped client. Optional `category` and `unreadOnly` filter further.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership and that the actor's id matches `userId`.
+ */
+export async function paginateNotificationsForUser(params: {
+  communityId: number;
+  userId: string;
+  cursor?: string;
+  pageSize?: number;
+  category?: NotificationCategory;
+  unreadOnly?: boolean;
+}): Promise<PaginatedNotifications> {
+  const conditions = [
+    eq(notifications.userId, params.userId),
+    isNull(notifications.archivedAt),
+  ];
+  if (params.category != null) {
+    conditions.push(eq(notifications.category, params.category));
+  }
+  if (params.unreadOnly) {
+    conditions.push(isNull(notifications.readAt));
+  }
+  const where = and(...conditions);
+
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate(
+    scoped,
+    notifications,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+  return { data: result.data, pagination: result.pagination };
 }

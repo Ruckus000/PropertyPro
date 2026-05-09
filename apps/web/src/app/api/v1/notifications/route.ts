@@ -27,18 +27,13 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  notifications,
-  paginate,
-  type NotificationCategory,
-} from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import { type NotificationCategory } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { paginateNotificationsForUser } from '@/lib/services/notification-service';
 
 const VALID_CATEGORIES = [
   'announcement',
@@ -87,23 +82,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   await requireCommunityMembership(communityId, userId);
 
-  // Build the where predicate: user-scoped within this community, excluding
-  // archived rows. The scoped client already filters by communityId and
-  // deletedAt; we add userId + archivedAt + optional category/unread_only.
-  const conditions = [
-    eq(notifications.userId, userId),
-    isNull(notifications.archivedAt),
-  ];
-  if (category != null) {
-    conditions.push(eq(notifications.category, category as NotificationCategory));
-  }
-  if (unread_only) {
-    conditions.push(isNull(notifications.readAt));
-  }
-  const where = and(...conditions);
-
-  const scoped = createScopedClient(communityId);
-  const result = await paginate(scoped, notifications, { cursor, pageSize: limit }, { where });
+  const result = await paginateNotificationsForUser({
+    communityId,
+    userId,
+    cursor,
+    pageSize: limit,
+    category: category as NotificationCategory | undefined,
+    unreadOnly: unread_only,
+  });
 
   return NextResponse.json({
     data: {
