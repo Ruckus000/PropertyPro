@@ -27,12 +27,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   createScopedClient,
-  paginate,
-  workOrders,
   type WorkOrderPriority,
   type WorkOrderStatus,
 } from '@propertypro/db';
-import { and, eq, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -52,8 +49,7 @@ import {
 import {
   createWorkOrderForCommunity,
   deriveSlaState,
-  mapWorkOrderRow,
-  type WorkOrderRecord,
+  paginateWorkOrdersForCommunity,
 } from '@/lib/services/work-orders-service';
 
 const createWorkOrderSchema = z.object({
@@ -75,15 +71,6 @@ const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
-
-function emptyPage(pageSize: number) {
-  return NextResponse.json({
-    data: {
-      data: [],
-      pagination: { nextCursor: null, hasMore: false, pageSize },
-    },
-  });
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -130,42 +117,23 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  // Resident with no allowed units: short-circuit before paginate. Drizzle
-  // forbids `inArray(col, [])`.
-  if (allowedUnitIds && allowedUnitIds.length === 0) {
-    return emptyPage(parsedQuery.data.pageSize ?? 50);
-  }
-
-  const filterClauses = [];
-  if (status !== undefined) filterClauses.push(eq(workOrders.status, status));
-  if (unitId !== undefined) filterClauses.push(eq(workOrders.unitId, unitId));
-  if (allowedUnitIds && allowedUnitIds.length > 0) {
-    filterClauses.push(inArray(workOrders.unitId, allowedUnitIds));
-  }
-  const where =
-    filterClauses.length === 0
-      ? undefined
-      : filterClauses.length === 1
-        ? filterClauses[0]
-        : and(...filterClauses);
-
-  const result = await paginate<WorkOrderRecord>(
-    scoped,
-    workOrders,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
-
-  // mapWorkOrderRow normalizes priority/status. deriveSlaState computes
-  // breach flags from row.createdAt + row.slaResponseHours/slaCompletionHours.
-  // Both run per-page since paginate returns one page.
-  const data = result.data.map((row) => {
-    const mapped = mapWorkOrderRow(row);
-    return {
-      ...mapped,
-      ...deriveSlaState(mapped),
-    };
+  const result = await paginateWorkOrdersForCommunity({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    status,
+    unitId,
+    allowedUnitIds,
   });
+
+  // mapWorkOrderRow already applied inside paginateWorkOrdersForCommunity.
+  // deriveSlaState computes breach flags from row.createdAt +
+  // row.slaResponseHours/slaCompletionHours and returns a derived shape,
+  // not a row mutation — applied per-page route-side.
+  const data = result.data.map((row) => ({
+    ...row,
+    ...deriveSlaState(row),
+  }));
 
   return NextResponse.json({
     data: {
