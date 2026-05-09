@@ -7,7 +7,9 @@
  * Emergency broadcasts bypass subscription guard (life-safety over revenue).
  *
  * GET pagination (Plan B3):
- * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
+ * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`,
+ *   wrapped behind `paginateEmergencyBroadcasts()` on the service so the
+ *   route doesn't need to import the table or scoped client directly.
  * - Order by `id` desc — equivalent to the previous `desc(initiatedAt)` since
  *   `initiated_at` is `defaultNow()` at insert time (monotonic with bigserial id).
  * - Response envelope is double-wrapped per the paginated-route contract:
@@ -22,11 +24,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  emergencyBroadcasts,
-  paginate,
-} from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -35,7 +32,10 @@ import { requirePermission } from '@/lib/db/access-control';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { UnprocessableEntityError } from '@/lib/api/errors/UnprocessableEntityError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { createBroadcast } from '@/lib/services/emergency-broadcast-service';
+import {
+  createBroadcast,
+  paginateEmergencyBroadcasts,
+} from '@/lib/services/emergency-broadcast-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const listQuerySchema = z.object({
@@ -87,12 +87,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  const scoped = createScopedClient(communityId);
-  const result = await paginate(
-    scoped,
-    emergencyBroadcasts,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-  );
+  const result = await paginateEmergencyBroadcasts({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
 
   return NextResponse.json({
     data: {

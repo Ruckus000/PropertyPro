@@ -20,6 +20,7 @@ import {
   emergencyBroadcasts,
   logAuditEvent,
   notificationPreferences,
+  paginate,
   userRoles,
   users,
 } from '@propertypro/db';
@@ -701,4 +702,37 @@ export async function resolveEmergencyRecipients(
   }
 
   return recipients;
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast list helpers (used by /api/v1/emergency-broadcasts GET)
+// ---------------------------------------------------------------------------
+
+export interface PaginatedEmergencyBroadcasts {
+  data: Record<string, unknown>[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    pageSize: number;
+  };
+}
+
+/**
+ * Cursor-paginated list of emergency broadcasts in a community. Order is
+ * `id desc` (equivalent to `initiatedAt desc` for monotonic bigserial).
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership and `emergency_broadcasts:read` permission.
+ */
+export async function paginateEmergencyBroadcasts(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+}): Promise<PaginatedEmergencyBroadcasts> {
+  const scoped = createScopedClient(params.communityId);
+  const result = await paginate(scoped, emergencyBroadcasts, {
+    cursor: params.cursor,
+    pageSize: params.pageSize,
+  });
+  return { data: result.data, pagination: result.pagination };
 }

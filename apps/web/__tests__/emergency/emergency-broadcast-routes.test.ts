@@ -51,6 +51,21 @@ vi.mock('@/lib/services/emergency-broadcast-service', () => ({
   createBroadcast: createBroadcastMock,
   executeBroadcast: executeBroadcastMock,
   cancelBroadcast: cancelBroadcastMock,
+  // After A3 drain #42 the route imports `paginateEmergencyBroadcasts` from
+  // the service. Helper delegates to the underlying `paginate` mock so the
+  // existing GET tests don't need to switch mock surfaces.
+  paginateEmergencyBroadcasts: async (params: {
+    communityId: number;
+    cursor?: string;
+    pageSize?: number;
+  }) => {
+    const result = await paginateMock(
+      createScopedClientMock(params.communityId),
+      emergencyBroadcastsTable,
+      { cursor: params.cursor, pageSize: params.pageSize },
+    );
+    return { data: result.data, pagination: result.pagination };
+  },
 }));
 
 vi.mock('@propertypro/db', () => ({
