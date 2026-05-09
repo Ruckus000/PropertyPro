@@ -102,6 +102,72 @@ export async function listAccessPlansWithStatus(
   return rows.map((plan) => ({ ...plan, status: computeAccessPlanStatus(plan) }));
 }
 
+// ---------------------------------------------------------------------------
+// Deletion Requests — Listing + Lookup (admin)
+// ---------------------------------------------------------------------------
+
+export type DeletionRequestStatus =
+  | 'cooling'
+  | 'soft_deleted'
+  | 'purged'
+  | 'cancelled'
+  | 'recovered';
+
+export type DeletionRequestType = 'user' | 'community';
+
+export interface ListDeletionRequestsOptions {
+  status?: DeletionRequestStatus;
+  requestType?: DeletionRequestType;
+}
+
+/**
+ * List account-deletion requests, optionally filtered by status and/or type.
+ *
+ * Admin/platform-scoped read: uses the unscoped client because
+ * `account_deletion_requests` is a platform-level table. Callers MUST
+ * authorize via `requirePlatformAdmin` before invoking.
+ */
+export async function listDeletionRequests(
+  options: ListDeletionRequestsOptions = {},
+) {
+  const db = createUnscopedClient();
+  const conditions = [];
+  if (options.status !== undefined) {
+    conditions.push(eq(accountDeletionRequests.status, options.status));
+  }
+  if (options.requestType !== undefined) {
+    conditions.push(eq(accountDeletionRequests.requestType, options.requestType));
+  }
+
+  if (conditions.length === 0) {
+    return await db.select().from(accountDeletionRequests);
+  }
+  if (conditions.length === 1) {
+    return await db.select().from(accountDeletionRequests).where(conditions[0]!);
+  }
+  return await db.select().from(accountDeletionRequests).where(and(...conditions));
+}
+
+/**
+ * Look up the `requestType` of a single deletion request. Returns `null`
+ * when the id doesn't match a row (so the caller can throw NotFoundError).
+ *
+ * Admin/platform read: uses the unscoped client. Callers MUST authorize via
+ * `requirePlatformAdmin` before invoking.
+ */
+export async function getDeletionRequestType(
+  requestId: number,
+): Promise<DeletionRequestType | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ requestType: accountDeletionRequests.requestType })
+    .from(accountDeletionRequests)
+    .where(eq(accountDeletionRequests.id, requestId))
+    .limit(1);
+  if (!row) return null;
+  return row.requestType as DeletionRequestType;
+}
+
 /**
  * Existence check on the platform-level `communities` table. Returns true
  * when a row matches `id`, false otherwise.
