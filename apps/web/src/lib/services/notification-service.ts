@@ -17,7 +17,7 @@ import {
   type InsertNotificationRow,
   type NotificationCategory,
 } from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import { and, desc, eq, isNull, lt, sql } from '@propertypro/db/filters';
 import {
   ComplianceAlertEmail,
   DocumentPostedEmail,
@@ -919,4 +919,95 @@ export async function paginateNotificationsForUser(params: {
     { where },
   );
   return { data: result.data, pagination: result.pagination };
+}
+
+// ---------------------------------------------------------------------------
+// Cross-community notification feed helpers (used by /api/v1/notifications/all)
+// ---------------------------------------------------------------------------
+
+export interface CrossCommunityNotificationListItem {
+  [key: string]: unknown;
+  id: number;
+  category: string;
+  title: string;
+  body: string | null;
+  actionUrl: string | null;
+  sourceType: string;
+  sourceId: string;
+  priority: string;
+  readAt: Date | null;
+  createdAt: Date;
+  communityId: number;
+}
+
+/**
+ * List + unread-count one community's slice of the cross-community feed.
+ * Uses numeric `lt(id)` cursor (NOT paginate's opaque cursor) because the
+ * feed merges across communities and needs a globally-comparable cursor;
+ * see drain #222 notes for the format split.
+ *
+ * The route does the cross-community orchestration (`Promise.all` over
+ * communities, merge, sort, page-cap), the unread-count summing, and the
+ * result projection — this helper just owns the per-community SQL.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified `userId` is
+ * a member of `communityId` (typically via `findUserCommunitiesUnscoped`).
+ */
+export async function listCrossCommunityNotificationsForUser(params: {
+  communityId: number;
+  userId: string;
+  /** Numeric `id` cursor — fetch rows with `id < cursor`. */
+  cursor?: number;
+  /** Page-size CAP (route requests `limit + 1` to detect hasMore). */
+  limitPlusOne: number;
+  unreadOnly?: boolean;
+}): Promise<{
+  list: CrossCommunityNotificationListItem[];
+  unread: number;
+}> {
+  const { communityId, userId, cursor, limitPlusOne, unreadOnly } = params;
+  const scoped = createScopedClient(communityId);
+
+  const listFilters = [
+    eq(notifications.userId, userId),
+    isNull(notifications.archivedAt),
+  ];
+  if (cursor != null) listFilters.push(lt(notifications.id, cursor));
+  if (unreadOnly) listFilters.push(isNull(notifications.readAt));
+
+  const listPromise = scoped
+    .selectFrom<CrossCommunityNotificationListItem>(
+      notifications,
+      {
+        id: notifications.id,
+        category: notifications.category,
+        title: notifications.title,
+        body: notifications.body,
+        actionUrl: notifications.actionUrl,
+        sourceType: notifications.sourceType,
+        sourceId: notifications.sourceId,
+        priority: notifications.priority,
+        readAt: notifications.readAt,
+        createdAt: notifications.createdAt,
+        communityId: notifications.communityId,
+      },
+      and(...listFilters),
+    )
+    .orderBy(desc(notifications.id))
+    .limit(limitPlusOne);
+
+  const countPromise = scoped
+    .selectFrom<{ count: number }>(
+      notifications,
+      { count: sql<number>`count(*)::int` },
+      and(
+        eq(notifications.userId, userId),
+        isNull(notifications.readAt),
+        isNull(notifications.archivedAt),
+      ),
+    )
+    .then((rows) => rows[0]?.count ?? 0);
+
+  const [list, unread] = await Promise.all([listPromise, countPromise]);
+  return { list, unread };
 }
