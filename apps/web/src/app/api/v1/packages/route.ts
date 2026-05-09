@@ -21,13 +21,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  packageLog,
-  paginate,
-  type PackageLogStatus,
-} from '@propertypro/db';
-import { and, eq, inArray } from '@propertypro/db/filters';
+import { createScopedClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -44,7 +38,11 @@ import {
   requirePackagesWritePermission,
   requireStaffOperator,
 } from '@/lib/logistics/common';
-import { createPackageForCommunity } from '@/lib/services/package-visitor-service';
+import {
+  createPackageForCommunity,
+  paginatePackageLog,
+  type PackageLogStatus,
+} from '@/lib/services/package-visitor-service';
 import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
 
 const createPackageSchema = z.object({
@@ -112,25 +110,14 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  const filterClauses = [];
-  if (unitId !== undefined) filterClauses.push(eq(packageLog.unitId, unitId));
-  if (status !== undefined) filterClauses.push(eq(packageLog.status, status));
-  if (allowedUnitIds && allowedUnitIds.length > 0) {
-    filterClauses.push(inArray(packageLog.unitId, [...allowedUnitIds]));
-  }
-  const where =
-    filterClauses.length === 0
-      ? undefined
-      : filterClauses.length === 1
-        ? filterClauses[0]
-        : and(...filterClauses);
-
-  const result = await paginate(
-    scoped,
-    packageLog,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+  const result = await paginatePackageLog({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    status,
+    unitId,
+    allowedUnitIds,
+  });
 
   return NextResponse.json({
     data: {

@@ -115,6 +115,44 @@ vi.mock('@/lib/finance/common', () => ({
 
 vi.mock('@/lib/services/package-visitor-service', () => ({
   createPackageForCommunity: vi.fn(),
+  // After A3 drain #56, the route imports `paginatePackageLog` from the
+  // service. Delegate to the underlying `paginateMock` with the same
+  // where construction the real helper performs so all 7 GET assertions
+  // on `paginateMock.mock.calls[0]` continue to work.
+  paginatePackageLog: async (params: {
+    communityId: number;
+    cursor?: string;
+    pageSize?: number;
+    status?: string;
+    unitId?: number;
+    allowedUnitIds?: readonly number[];
+  }) => {
+    const { eq, and, inArray } = await import('@propertypro/db/filters');
+    const clauses: unknown[] = [];
+    if (params.unitId !== undefined) {
+      clauses.push(eq(packageLogTable.unitId as never, params.unitId as never));
+    }
+    if (params.status !== undefined) {
+      clauses.push(eq(packageLogTable.status as never, params.status as never));
+    }
+    if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+      clauses.push(
+        inArray(packageLogTable.unitId as never, [...params.allowedUnitIds] as never),
+      );
+    }
+    const where =
+      clauses.length === 0
+        ? undefined
+        : clauses.length === 1
+          ? clauses[0]
+          : and(...(clauses as never[]));
+    return await paginateMock(
+      createScopedClientMock(params.communityId),
+      packageLogTable,
+      { cursor: params.cursor, pageSize: params.pageSize },
+      { where },
+    );
+  },
 }));
 
 vi.mock('@/lib/services/units-lookup', () => ({

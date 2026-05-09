@@ -132,7 +132,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/notification-preferences/route.ts',
   'apps/web/src/app/api/v1/onboarding/apartment/route.ts',
   'apps/web/src/app/api/v1/onboarding/condo/route.ts',
-  'apps/web/src/app/api/v1/packages/route.ts',
   'apps/web/src/app/api/v1/residents/route.ts',
   'apps/web/src/app/api/v1/units/route.ts',
   'apps/web/src/app/api/v1/violations/route.ts',

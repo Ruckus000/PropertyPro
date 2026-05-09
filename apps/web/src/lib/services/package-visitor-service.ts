@@ -702,6 +702,43 @@ export async function listMyVisitorsForCommunity(
 }
 
 /**
+ * Paginated list of package-log rows for a community. Builds the where via
+ * the existing `buildPackageWhereClause` helper so the optional `unitId`,
+ * `status`, and `allowedUnitIds` filter inputs are applied consistently
+ * with the (now-removed) route-side variant. Order is `id desc` per the
+ * canonical paginate contract.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership and `requirePackagesReadPermission` /
+ * `requirePackageLoggingEnabled` gates. For resident roles, caller MUST
+ * pass `allowedUnitIds` (the resident's own units) so the paginate where
+ * is constrained — otherwise residents would see all units' packages.
+ */
+export async function paginatePackageLog(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+  status?: PackageLogStatus;
+  unitId?: number;
+  allowedUnitIds?: readonly number[];
+}) {
+  const where = buildPackageWhereClause({
+    unitId: params.unitId,
+    status: params.status,
+    allowedUnitIds: params.allowedUnitIds,
+  });
+  const scoped = createScopedClient(params.communityId);
+  return await paginate(
+    scoped,
+    packageLog,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+}
+
+export type { PackageLogStatus };
+
+/**
  * Paginated list of denied-visitor entries for the staff route. Uses the
  * canonical `paginate()` helper. The optional `onlyActive` filter pushes
  * `isActive = true|false` into the SQL `where` predicate.
