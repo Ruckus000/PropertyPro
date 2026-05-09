@@ -104,6 +104,62 @@ vi.mock('@/lib/violations/hydrate-reporter-role', () => ({
 vi.mock('@/lib/services/violations-service', () => ({
   createViolationForCommunity: vi.fn(),
   mapViolationRow: mapViolationRowMock,
+  // After A3 drain #65 the route imports paginateViolationsForCommunity
+  // and unitExistsInCommunity from the service. Delegate-style mocks
+  // mirror the helpers' behavior so existing assertions on
+  // paginateMock.mock.calls[0] / hydrateReportedByRoleMock continue
+  // to work.
+  paginateViolationsForCommunity: async (params: {
+    communityId: number;
+    cursor?: string;
+    pageSize?: number;
+    status?: string;
+    severity?: string;
+    unitId?: number;
+    allowedUnitIds?: number[];
+    createdAfter?: string;
+    createdBefore?: string;
+  }) => {
+    if (params.allowedUnitIds && params.allowedUnitIds.length === 0) {
+      return {
+        data: [],
+        pagination: { nextCursor: null, hasMore: false, pageSize: params.pageSize ?? 50 },
+      };
+    }
+    const { eq, and, inArray, gte, lte } = await import('@propertypro/db/filters');
+    const clauses: unknown[] = [];
+    if (params.status !== undefined) clauses.push(eq(violationsTable.status as never, params.status as never));
+    if (params.severity !== undefined) clauses.push(eq(violationsTable.severity as never, params.severity as never));
+    if (params.unitId !== undefined) clauses.push(eq(violationsTable.unitId as never, params.unitId as never));
+    if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
+      clauses.push(inArray(violationsTable.unitId as never, params.allowedUnitIds as never));
+    }
+    if (params.createdAfter) {
+      clauses.push(gte(violationsTable.createdAt as never, new Date(params.createdAfter) as never));
+    }
+    if (params.createdBefore) {
+      clauses.push(lte(violationsTable.createdAt as never, new Date(params.createdBefore) as never));
+    }
+    const where =
+      clauses.length === 0
+        ? undefined
+        : clauses.length === 1
+          ? clauses[0]
+          : and(...(clauses as never[]));
+    const result = await paginateMock(
+      createScopedClientMock(params.communityId),
+      violationsTable,
+      { cursor: params.cursor, pageSize: params.pageSize },
+      { where },
+    );
+    const mapped = (result.data as Record<string, unknown>[]).map((r) => mapViolationRowMock(r));
+    const hydrated = await hydrateReportedByRoleMock(
+      createScopedClientMock(params.communityId),
+      mapped,
+    );
+    return { data: hydrated, pagination: result.pagination };
+  },
+  unitExistsInCommunity: async () => true,
 }));
 
 vi.mock('@/lib/db/access-control', () => ({

@@ -26,13 +26,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   createScopedClient,
-  paginate,
-  units,
-  violations,
   type ViolationSeverity,
   type ViolationStatus,
 } from '@propertypro/db';
-import { and, eq, gte, inArray, lte } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -42,12 +38,11 @@ import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finan
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { getActorUnitIds, isResidentRole, requireViolationsEnabled } from '@/lib/violations/common';
-import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import { requirePermission } from '@/lib/db/access-control';
 import {
   createViolationForCommunity,
-  mapViolationRow,
-  type ViolationRecord,
+  paginateViolationsForCommunity,
+  unitExistsInCommunity,
 } from '@/lib/services/violations-service';
 
 const createViolationSchema = z.object({
@@ -74,15 +69,6 @@ const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
-
-function emptyPage(pageSize: number) {
-  return NextResponse.json({
-    data: {
-      data: [],
-      pagination: { nextCursor: null, hasMore: false, pageSize },
-    },
-  });
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -152,48 +138,21 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Invalid query parameters');
   }
 
-  // Resident with no allowed units: short-circuit before paginate. Drizzle
-  // forbids `inArray(col, [])` and the prior service returned `[]` directly.
-  if (residentUnitIds && residentUnitIds.length === 0) {
-    return emptyPage(parsedQuery.data.pageSize ?? 50);
-  }
-
-  const filterClauses = [];
-  if (status !== undefined) filterClauses.push(eq(violations.status, status));
-  if (severity !== undefined) filterClauses.push(eq(violations.severity, severity));
-  if (unitId !== undefined) filterClauses.push(eq(violations.unitId, unitId));
-  if (residentUnitIds && residentUnitIds.length > 0) {
-    filterClauses.push(inArray(violations.unitId, residentUnitIds));
-  }
-  if (createdAfter) {
-    filterClauses.push(gte(violations.createdAt, new Date(createdAfter)));
-  }
-  if (createdBefore) {
-    filterClauses.push(lte(violations.createdAt, new Date(createdBefore)));
-  }
-  const where =
-    filterClauses.length === 0
-      ? undefined
-      : filterClauses.length === 1
-        ? filterClauses[0]
-        : and(...filterClauses);
-
-  const result = await paginate<ViolationRecord>(
-    scoped,
-    violations,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
-
-  // mapViolationRow normalizes the row (status/severity assertion, evidence
-  // array fallback). hydrateReportedByRole decorates each row with the
-  // reporter's role — both run per-page since paginate returns one page.
-  const mapped = result.data.map(mapViolationRow);
-  const hydrated = await hydrateReportedByRole(scoped, mapped);
+  const result = await paginateViolationsForCommunity({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    status,
+    severity,
+    unitId,
+    allowedUnitIds: residentUnitIds,
+    createdAfter,
+    createdBefore,
+  });
 
   return NextResponse.json({
     data: {
-      data: hydrated,
+      data: result.data,
       pagination: result.pagination,
     },
   });
@@ -240,14 +199,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
   } else {
     // Staff path: validate target unit belongs to this scoped community.
-    // createScopedClient injects community_id + deletedAt IS NULL, so a unitId
-    // from another tenant returns zero rows here and surfaces as NotFound.
-    const matches = await scoped.selectFrom<{ id: number }>(
-      units,
-      { id: units.id },
-      eq(units.id, parseResult.data.unitId),
-    );
-    if (matches.length === 0) {
+    const exists = await unitExistsInCommunity(communityId, parseResult.data.unitId);
+    if (!exists) {
       throw new NotFoundError(`Unit ${parseResult.data.unitId} not found in this community`);
     }
   }
