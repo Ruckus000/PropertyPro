@@ -542,3 +542,56 @@ export async function expireStaleAccessRequests(
     )
     .returning({ id: accessRequests.id });
 }
+
+// ---------------------------------------------------------------------------
+// Demo entry helpers (used by /api/v1/demo/[slug]/enter)
+// ---------------------------------------------------------------------------
+
+export interface DemoInstanceForEntry {
+  id: number;
+  seededCommunityId: number | null;
+  demoResidentEmail: string | null;
+  demoBoardEmail: string | null;
+  demoResidentUserId: string | null;
+  demoBoardUserId: string | null;
+  isDemo: boolean | null;
+  demoExpiresAt: Date | null;
+}
+
+/**
+ * Look up the demo instance + its seeded community by slug, projecting only
+ * the columns the entry route consumes (auth emails, target user ids,
+ * is-demo flag, expiry timestamp). Soft-deleted demos and soft-deleted
+ * communities are excluded. Returns `null` if no row matches.
+ *
+ * AUTHZ: pre-tenant token-authenticated endpoint — slug knowledge is the
+ * auth credential. Caller is responsible for rate-limiting (handled by
+ * middleware in production).
+ */
+export async function getDemoInstanceForEntry(
+  slug: string,
+): Promise<DemoInstanceForEntry | null> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({
+      id: demoInstances.id,
+      seededCommunityId: demoInstances.seededCommunityId,
+      demoResidentEmail: demoInstances.demoResidentEmail,
+      demoBoardEmail: demoInstances.demoBoardEmail,
+      demoResidentUserId: demoInstances.demoResidentUserId,
+      demoBoardUserId: demoInstances.demoBoardUserId,
+      isDemo: communities.isDemo,
+      demoExpiresAt: communities.demoExpiresAt,
+    })
+    .from(demoInstances)
+    .innerJoin(communities, eq(communities.id, demoInstances.seededCommunityId))
+    .where(
+      and(
+        eq(demoInstances.slug, slug),
+        isNull(demoInstances.deletedAt),
+        isNull(communities.deletedAt),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
