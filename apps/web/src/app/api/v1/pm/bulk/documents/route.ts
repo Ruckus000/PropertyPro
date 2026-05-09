@@ -12,10 +12,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  documents,
-} from '@propertypro/db';
 // AUTHZ: PM portfolio route — cross-community aggregation by design.
 import {
   isPmAdminInAnyCommunity,
@@ -26,6 +22,7 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { insertBulkDocumentsForCommunity } from '@/lib/pm/bulk-document-upload';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -92,28 +89,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     communityIds.map(async (communityId): Promise<DocumentResult> => {
       await assertNotDemoGrace(communityId);
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
-      const scoped = createScopedClient(communityId);
-      let createdCount = 0;
-
-      for (const doc of docPayloads) {
-        await scoped.insert(documents, {
-          title: doc.fileName,
-          description: doc.description ?? null,
-          categoryId: doc.categoryId ?? null,
-          filePath: doc.storagePath,
-          fileName: doc.fileName,
-          fileSize: 0, // Size not tracked in bulk — already uploaded
-          mimeType: 'application/octet-stream',
-          uploadedBy: userId,
-        });
-        createdCount++;
-      }
+      const { created } = await insertBulkDocumentsForCommunity({
+        communityId,
+        uploadedBy: userId,
+        docs: docPayloads,
+      });
 
       return {
         communityId,
         communityName,
         status: 'created',
-        documentsCreated: createdCount,
+        documentsCreated: created,
       };
     }),
   );
