@@ -12,8 +12,14 @@
  * on a checkout.session.completed event.
  */
 import type Stripe from 'stripe';
-import { and, eq, isNull } from '@propertypro/db/filters';
-import { communities, demoInstances, users, userRoles } from '@propertypro/db';
+import { and, eq, gt, inArray, isNull, lt, sql } from '@propertypro/db/filters';
+import {
+  accessRequests,
+  communities,
+  demoInstances,
+  users,
+  userRoles,
+} from '@propertypro/db';
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -396,4 +402,143 @@ export async function getDemoCommunityExpiry(
     .limit(1);
   if (!row) return null;
   return row.demoExpiresAt ?? undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Demo expiry cron helpers (used by /api/v1/internal/expire-demos)
+// ---------------------------------------------------------------------------
+
+export interface DemoEnteringGraceRow {
+  communityId: number;
+  demoInstanceId: number;
+  trialEndsAt: Date | null;
+}
+
+/**
+ * Find demos whose trial period has ended but whose demo grace window has
+ * not yet elapsed — these need a one-shot `grace_started` conversion event.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
+ */
+export async function findDemosEnteringGrace(
+  now: Date,
+): Promise<DemoEnteringGraceRow[]> {
+  const db = createUnscopedClient();
+  return await db
+    .select({
+      communityId: communities.id,
+      demoInstanceId: demoInstances.id,
+      trialEndsAt: communities.trialEndsAt,
+    })
+    .from(communities)
+    .innerJoin(demoInstances, eq(demoInstances.seededCommunityId, communities.id))
+    .where(
+      and(
+        eq(communities.isDemo, true),
+        lt(communities.trialEndsAt, now),
+        gt(communities.demoExpiresAt, now),
+        isNull(communities.deletedAt),
+        isNull(demoInstances.deletedAt),
+      ),
+    );
+}
+
+export interface ExpiredDemoRow {
+  communityId: number;
+  demoInstanceId: number;
+  demoResidentUserId: string | null;
+  demoBoardUserId: string | null;
+}
+
+/**
+ * Find demos whose grace window has fully elapsed — these need to be
+ * soft-deleted and their auth users banned.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
+ */
+export async function findExpiredDemos(now: Date): Promise<ExpiredDemoRow[]> {
+  const db = createUnscopedClient();
+  return await db
+    .select({
+      communityId: communities.id,
+      demoInstanceId: demoInstances.id,
+      demoResidentUserId: demoInstances.demoResidentUserId,
+      demoBoardUserId: demoInstances.demoBoardUserId,
+    })
+    .from(communities)
+    .innerJoin(demoInstances, eq(demoInstances.seededCommunityId, communities.id))
+    .where(
+      and(
+        eq(communities.isDemo, true),
+        lt(communities.demoExpiresAt, now),
+        isNull(communities.deletedAt),
+        isNull(demoInstances.deletedAt),
+      ),
+    );
+}
+
+/**
+ * Soft-delete a community + its demo instance in one logical step. Both
+ * updates are guarded against double-soft-delete via `isNull(deletedAt)`.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
+ */
+export async function softDeleteExpiredDemo(params: {
+  communityId: number;
+  demoInstanceId: number;
+  now: Date;
+}): Promise<void> {
+  const { communityId, demoInstanceId, now } = params;
+  const db = createUnscopedClient();
+  await db
+    .update(communities)
+    .set({ deletedAt: now })
+    .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)));
+  await db
+    .update(demoInstances)
+    .set({ deletedAt: now })
+    .where(and(eq(demoInstances.id, demoInstanceId), isNull(demoInstances.deletedAt)));
+}
+
+/**
+ * Permanently ban a demo Supabase auth user (876600h ≈ 100 years). Returns
+ * a discriminated union so the caller can log the error context without
+ * aborting the rest of the cron loop.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
+ */
+export async function banDemoAuthUser(
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const admin = createAdminClient();
+    await admin.auth.admin.updateUserById(userId, { ban_duration: '876600h' });
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * Bulk-expire access requests still in `pending`/`pending_verification`
+ * after 30 days. Returns the affected ids.
+ *
+ * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
+ */
+export async function expireStaleAccessRequests(
+  now: Date,
+): Promise<{ id: number }[]> {
+  const db = createUnscopedClient();
+  return await db
+    .update(accessRequests)
+    .set({ status: 'expired', updatedAt: now })
+    .where(
+      and(
+        inArray(accessRequests.status, ['pending_verification', 'pending']),
+        lt(accessRequests.createdAt, sql`now() - interval '30 days'`),
+        isNull(accessRequests.deletedAt),
+      ),
+    )
+    .returning({ id: accessRequests.id });
 }
