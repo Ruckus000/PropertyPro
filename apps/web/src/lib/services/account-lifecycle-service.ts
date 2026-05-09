@@ -18,11 +18,12 @@
  *   soft_deleted -> recovered
  */
 import { addDays, addMonths } from 'date-fns';
-import { eq, and, desc, isNull, ne } from '@propertypro/db/filters';
+import { eq, and, desc, inArray, isNull, isNotNull, lt, ne } from '@propertypro/db/filters';
 import {
   accessPlans,
   communities,
   users,
+  userRoles,
   accountDeletionRequests,
   logAuditEvent,
 } from '@propertypro/db';
@@ -787,4 +788,136 @@ export async function purgeCommunityData(requestId: number) {
     .returning();
 
   return updated!;
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle cron helpers (used by /api/v1/internal/account-lifecycle POST)
+// ---------------------------------------------------------------------------
+
+export interface LifecycleDeletionTransitionRow {
+  id: number;
+  requestType: 'user' | 'community';
+}
+
+/**
+ * Find all `cooling`-status deletion requests whose `coolingEndsAt` has
+ * passed. Used by the daily cron to advance them to `soft_deleted`.
+ */
+export async function findCoolingExpiredDeletionRequests(
+  now: Date,
+): Promise<LifecycleDeletionTransitionRow[]> {
+  const db = createUnscopedClient();
+  return (await db
+    .select({
+      id: accountDeletionRequests.id,
+      requestType: accountDeletionRequests.requestType,
+    })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.status, 'cooling'),
+        lt(accountDeletionRequests.coolingEndsAt, now),
+      ),
+    )) as LifecycleDeletionTransitionRow[];
+}
+
+/**
+ * Find all `soft_deleted`-status deletion requests whose `scheduledPurgeAt`
+ * has passed and that have not already been purged. Used by the daily cron
+ * to advance them to permanent purge.
+ */
+export async function findPurgeReadyDeletionRequests(
+  now: Date,
+): Promise<LifecycleDeletionTransitionRow[]> {
+  const db = createUnscopedClient();
+  return (await db
+    .select({
+      id: accountDeletionRequests.id,
+      requestType: accountDeletionRequests.requestType,
+    })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.status, 'soft_deleted'),
+        isNotNull(accountDeletionRequests.scheduledPurgeAt),
+        lt(accountDeletionRequests.scheduledPurgeAt, now),
+        isNull(accountDeletionRequests.purgedAt),
+      ),
+    )) as LifecycleDeletionTransitionRow[];
+}
+
+/**
+ * List every active access plan (not revoked, not converted). Cron uses
+ * this as the input to per-plan expiry-notification dispatch.
+ */
+export async function listActiveAccessPlansForLifecycleCron(): Promise<AccessPlan[]> {
+  const db = createUnscopedClient();
+  return (await db
+    .select()
+    .from(accessPlans)
+    .where(
+      and(
+        isNull(accessPlans.revokedAt),
+        isNull(accessPlans.convertedAt),
+      ),
+    )) as AccessPlan[];
+}
+
+/**
+ * Mark a notification-sent timestamp on an access plan, idempotently. Field
+ * is one of `email14dSentAt`, `email7dSentAt`, `emailExpiredSentAt`.
+ */
+export async function markAccessPlanNotificationSent(
+  planId: number,
+  field: 'email14dSentAt' | 'email7dSentAt' | 'emailExpiredSentAt',
+  sentAt: Date,
+): Promise<void> {
+  const db = createUnscopedClient();
+  await db
+    .update(accessPlans)
+    .set({ [field]: sentAt })
+    .where(eq(accessPlans.id, planId));
+}
+
+export interface LifecycleAdminRecipient {
+  email: string;
+  fullName: string;
+}
+
+const LIFECYCLE_ADMIN_ROLES = ['manager', 'pm_admin'] as const;
+
+/**
+ * Resolve the recipient list for lifecycle email notifications: every
+ * `manager` or `pm_admin` in the community.
+ */
+export async function lookupLifecycleAdminRecipients(
+  communityId: number,
+): Promise<LifecycleAdminRecipient[]> {
+  const db = createUnscopedClient();
+  return (await db
+    .select({ email: users.email, fullName: users.fullName })
+    .from(userRoles)
+    .innerJoin(users, eq(userRoles.userId, users.id))
+    .where(
+      and(
+        eq(userRoles.communityId, communityId),
+        inArray(userRoles.role, [...LIFECYCLE_ADMIN_ROLES]),
+      ),
+    )) as LifecycleAdminRecipient[];
+}
+
+/**
+ * Look up a community's name for the lifecycle email subject/branding.
+ * Returns the configured fallback `'Your Community'` when no row matches.
+ */
+export async function getCommunityNameForLifecycleEmail(
+  communityId: number,
+): Promise<string> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ name: communities.name })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return row?.name ?? 'Your Community';
 }

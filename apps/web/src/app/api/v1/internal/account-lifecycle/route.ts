@@ -6,14 +6,14 @@
  * 2. Deletion purge (6-month purge window expired)
  * 3. Free access expiry notifications (14d, 7d, expired)
  *
+ * All cross-tenant DB ops live in account-lifecycle-service (A3 drain #63);
+ * the route is now pure orchestration: cron-secret check, per-row dispatch
+ * across the 3 phases, error capture, summary aggregation.
+ *
  * Auth: cron secret (ACCOUNT_LIFECYCLE_CRON_SECRET)
  */
 import { createElement } from 'react';
 import { NextResponse, type NextRequest } from 'next/server';
-import { eq, and, lt, isNull, isNotNull, inArray } from '@propertypro/db/filters';
-import { accessPlans, accountDeletionRequests, communities, users, userRoles } from '@propertypro/db';
-// AUTHZ: Account lifecycle cron — cross-community deletion + notification processing
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
@@ -22,50 +22,22 @@ import {
   FreeAccessExpiredEmail,
 } from '@propertypro/email';
 import {
-  executeUserSoftDelete,
-  executeCommunitySoftDelete,
-  purgeUserPII,
-  purgeCommunityData,
   computeAccessPlanStatus,
+  executeCommunitySoftDelete,
+  executeUserSoftDelete,
+  findCoolingExpiredDeletionRequests,
+  findPurgeReadyDeletionRequests,
+  getCommunityNameForLifecycleEmail,
+  listActiveAccessPlansForLifecycleCron,
+  lookupLifecycleAdminRecipients,
+  markAccessPlanNotificationSent,
+  purgeCommunityData,
+  purgeUserPII,
 } from '@/lib/services/account-lifecycle-service';
-
-// ---------------------------------------------------------------------------
-// Admin recipient lookup (same pattern as payment-alert-scheduler)
-// ---------------------------------------------------------------------------
-
-// V2 role enum values for community admins who should receive lifecycle notifications
-const LIFECYCLE_ADMIN_ROLES = ['manager', 'pm_admin'] as const;
-
-interface AdminRecipient { email: string; fullName: string; }
-
-async function lookupCommunityAdmins(communityId: number): Promise<AdminRecipient[]> {
-  const db = createUnscopedClient();
-  return db
-    .select({ email: users.email, fullName: users.fullName })
-    .from(userRoles)
-    .innerJoin(users, eq(userRoles.userId, users.id))
-    .where(
-      and(
-        eq(userRoles.communityId, communityId),
-        inArray(userRoles.role, [...LIFECYCLE_ADMIN_ROLES]),
-      ),
-    );
-}
-
-async function getCommunityName(communityId: number): Promise<string> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({ name: communities.name })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-  return row?.name ?? 'Your Community';
-}
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET);
 
-  const db = createUnscopedClient();
   const now = new Date();
   const summary = {
     softDeleted: { users: 0, communities: 0 },
@@ -77,15 +49,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // -------------------------------------------------------------------------
   // 1. Cooling → soft-delete
   // -------------------------------------------------------------------------
-  const coolingExpired = await db
-    .select({ id: accountDeletionRequests.id, requestType: accountDeletionRequests.requestType })
-    .from(accountDeletionRequests)
-    .where(
-      and(
-        eq(accountDeletionRequests.status, 'cooling'),
-        lt(accountDeletionRequests.coolingEndsAt, now),
-      ),
-    );
+  const coolingExpired = await findCoolingExpiredDeletionRequests(now);
 
   for (const req of coolingExpired) {
     try {
@@ -104,17 +68,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // -------------------------------------------------------------------------
   // 2. Soft-deleted → purge
   // -------------------------------------------------------------------------
-  const purgeReady = await db
-    .select({ id: accountDeletionRequests.id, requestType: accountDeletionRequests.requestType })
-    .from(accountDeletionRequests)
-    .where(
-      and(
-        eq(accountDeletionRequests.status, 'soft_deleted'),
-        isNotNull(accountDeletionRequests.scheduledPurgeAt),
-        lt(accountDeletionRequests.scheduledPurgeAt, now),
-        isNull(accountDeletionRequests.purgedAt),
-      ),
-    );
+  const purgeReady = await findPurgeReadyDeletionRequests(now);
 
   for (const req of purgeReady) {
     try {
@@ -133,16 +87,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // -------------------------------------------------------------------------
   // 3. Free access expiry notifications
   // -------------------------------------------------------------------------
-  // Find plans needing notifications (active, not revoked/converted)
-  const activePlans = await db
-    .select()
-    .from(accessPlans)
-    .where(
-      and(
-        isNull(accessPlans.revokedAt),
-        isNull(accessPlans.convertedAt),
-      ),
-    );
+  const activePlans = await listActiveAccessPlansForLifecycleCron();
 
   for (const plan of activePlans) {
     const status = computeAccessPlanStatus(plan);
@@ -153,12 +98,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // 14-day warning
     if (daysUntilExpiry <= 14 && daysUntilExpiry > 7 && !plan.email14dSentAt) {
-      await db
-        .update(accessPlans)
-        .set({ email14dSentAt: now })
-        .where(eq(accessPlans.id, plan.id));
-      const recipients = await lookupCommunityAdmins(plan.communityId);
-      const communityName = await getCommunityName(plan.communityId);
+      await markAccessPlanNotificationSent(plan.id, 'email14dSentAt', now);
+      const recipients = await lookupLifecycleAdminRecipients(plan.communityId);
+      const communityName = await getCommunityNameForLifecycleEmail(plan.communityId);
       await Promise.allSettled(
         recipients.map((r) =>
           sendEmail({
@@ -180,12 +122,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // 7-day warning
     if (daysUntilExpiry <= 7 && daysUntilExpiry > 0 && !plan.email7dSentAt) {
-      await db
-        .update(accessPlans)
-        .set({ email7dSentAt: now })
-        .where(eq(accessPlans.id, plan.id));
-      const recipients = await lookupCommunityAdmins(plan.communityId);
-      const communityName = await getCommunityName(plan.communityId);
+      await markAccessPlanNotificationSent(plan.id, 'email7dSentAt', now);
+      const recipients = await lookupLifecycleAdminRecipients(plan.communityId);
+      const communityName = await getCommunityNameForLifecycleEmail(plan.communityId);
       await Promise.allSettled(
         recipients.map((r) =>
           sendEmail({
@@ -207,12 +146,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
     // Expired notification (now in grace period)
     if (status === 'in_grace' && !plan.emailExpiredSentAt) {
-      await db
-        .update(accessPlans)
-        .set({ emailExpiredSentAt: now })
-        .where(eq(accessPlans.id, plan.id));
-      const recipients = await lookupCommunityAdmins(plan.communityId);
-      const communityName = await getCommunityName(plan.communityId);
+      await markAccessPlanNotificationSent(plan.id, 'emailExpiredSentAt', now);
+      const recipients = await lookupLifecycleAdminRecipients(plan.communityId);
+      const communityName = await getCommunityNameForLifecycleEmail(plan.communityId);
       const graceEndsAt = new Date(plan.graceEndsAt);
       const graceDaysRemaining = Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
       await Promise.allSettled(
