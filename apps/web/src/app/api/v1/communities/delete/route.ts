@@ -12,13 +12,10 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import {
-  requestCommunityDeletion,
+  findCoolingCommunityDeletionRequest,
   interveneCommunityDeletion,
+  requestCommunityDeletion,
 } from '@/lib/services/account-lifecycle-service';
-import { eq, and } from '@propertypro/db/filters';
-import { accountDeletionRequests } from '@propertypro/db';
-// AUTHZ: Community deletion writes to account_deletion_requests, a platform-level table without community_id scoping (lifecycle workflow spans multiple communities).
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
 
 // POST — request community deletion
@@ -39,24 +36,12 @@ export const DELETE = withErrorHandler(async (req: NextRequest): Promise<NextRes
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'settings', 'write');
 
-  const db = createUnscopedClient();
-  const [activeRequest] = await db
-    .select({ id: accountDeletionRequests.id })
-    .from(accountDeletionRequests)
-    .where(
-      and(
-        eq(accountDeletionRequests.communityId, communityId),
-        eq(accountDeletionRequests.requestType, 'community'),
-        eq(accountDeletionRequests.status, 'cooling'),
-      ),
-    )
-    .limit(1);
-
-  if (!activeRequest) {
+  const activeRequestId = await findCoolingCommunityDeletionRequest(communityId);
+  if (activeRequestId === null) {
     throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
   }
 
-  await interveneCommunityDeletion(activeRequest.id, {
+  await interveneCommunityDeletion(activeRequestId, {
     adminUserId: userId,
     notes: 'Cancelled by community administrator',
   });

@@ -189,6 +189,33 @@ export async function getLatestUserDeletionRequest(
 }
 
 /**
+ * Find the active `cooling` community-deletion request for a community,
+ * if any. Returns the request id or `null`. Used by the community-cancel
+ * deletion path.
+ *
+ * AUTHZ: cross-tenant read of platform-level table; safe because the lookup
+ * is scoped by `communityId` (the caller has already verified
+ * `requirePermission(membership, 'settings', 'write')`).
+ */
+export async function findCoolingCommunityDeletionRequest(
+  communityId: number,
+): Promise<number | null> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({ id: accountDeletionRequests.id })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.communityId, communityId),
+        eq(accountDeletionRequests.requestType, 'community'),
+        eq(accountDeletionRequests.status, 'cooling'),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Find the user's active `cooling` deletion request, if any. Returns the
  * request id or `null`. Used by the cancel-deletion path.
  *
