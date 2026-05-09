@@ -1,46 +1,17 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import {
-  createScopedClient,
-  documentCategories,
-  documents,
-  meetingDocuments,
-  meetings,
-} from '@propertypro/db';
-import { asc, eq, inArray } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requirePermission } from '@/lib/db/access-control';
+import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import {
-  serializeMeetingResponse,
-  type MeetingResponseRecord,
-} from '@/lib/meetings/meeting-response';
-
-interface MeetingDocumentLinkRow {
-  [key: string]: unknown;
-  documentId: number;
-  attachedAt: Date;
-}
-
-interface MeetingDocumentRow {
-  [key: string]: unknown;
-  id: number;
-  title: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  categoryId: number | null;
-}
-
-interface DocumentCategoryRow {
-  [key: string]: unknown;
-  id: number;
-  name: string;
-}
-
-// parseCommunityIdFromQuery imported from @/lib/finance/request
+  getMeetingDetail,
+  listMeetingAttachedDocuments,
+  listMeetingDocumentLinks,
+} from '@/lib/services/meeting-service';
+import { getDocumentCategoryNames } from '@/lib/services/document-category-service';
 
 export const GET = withErrorHandler(
   async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -56,53 +27,14 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'meetings', 'read');
 
-    const scoped = createScopedClient(communityId);
-    const meetingRows = await scoped.selectFrom<MeetingResponseRecord>(
-      meetings,
-      {
-        id: meetings.id,
-        title: meetings.title,
-        meetingType: meetings.meetingType,
-        startsAt: meetings.startsAt,
-        endsAt: meetings.endsAt,
-        location: meetings.location,
-        noticePostedAt: meetings.noticePostedAt,
-        minutesApprovedAt: meetings.minutesApprovedAt,
-      },
-      eq(meetings.id, meetingId),
-    );
-    const meeting = meetingRows[0];
-
+    const meeting = await getMeetingDetail(communityId, meetingId);
     if (!meeting) {
       throw new NotFoundError('Meeting not found');
     }
 
-    const linkRows = await scoped
-      .selectFrom<MeetingDocumentLinkRow>(
-        meetingDocuments,
-        {
-          documentId: meetingDocuments.documentId,
-          attachedAt: meetingDocuments.attachedAt,
-        },
-        eq(meetingDocuments.meetingId, meetingId),
-      )
-      .orderBy(asc(meetingDocuments.attachedAt), asc(meetingDocuments.documentId));
-
+    const linkRows = await listMeetingDocumentLinks(communityId, meetingId);
     const documentIds = linkRows.map((row) => row.documentId);
-    const documentRows = documentIds.length === 0
-      ? []
-      : await scoped.selectFrom<MeetingDocumentRow>(
-          documents,
-          {
-            id: documents.id,
-            title: documents.title,
-            fileName: documents.fileName,
-            fileSize: documents.fileSize,
-            mimeType: documents.mimeType,
-            categoryId: documents.categoryId,
-          },
-          inArray(documents.id, documentIds),
-        );
+    const documentRows = await listMeetingAttachedDocuments(communityId, documentIds);
 
     const categoryIds = [
       ...new Set(
@@ -111,19 +43,9 @@ export const GET = withErrorHandler(
           .filter((value): value is number => typeof value === 'number'),
       ),
     ];
-    const categoryRows = categoryIds.length === 0
-      ? []
-      : await scoped.selectFrom<DocumentCategoryRow>(
-          documentCategories,
-          {
-            id: documentCategories.id,
-            name: documentCategories.name,
-          },
-          inArray(documentCategories.id, categoryIds),
-        );
+    const categoryNameById = await getDocumentCategoryNames(communityId, categoryIds);
 
     const documentById = new Map(documentRows.map((row) => [row.id, row]));
-    const categoryNameById = new Map(categoryRows.map((row) => [row.id, row.name]));
 
     return NextResponse.json({
       data: {

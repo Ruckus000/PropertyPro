@@ -123,7 +123,6 @@ const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
   'apps/web/src/app/api/v1/leases/route.ts',
   'apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts',
   'apps/web/src/app/api/v1/maintenance-requests/route.ts',
-  'apps/web/src/app/api/v1/meetings/[id]/route.ts',
   'apps/web/src/app/api/v1/meetings/route.ts',
   'apps/web/src/app/api/v1/move-checklists/[id]/steps/[stepKey]/action/route.ts',
   'apps/web/src/app/api/v1/notification-preferences/route.ts',
