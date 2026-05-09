@@ -23,14 +23,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  buildAccessibleDocumentsFilter,
-  createScopedClient,
-  documents,
-  logAuditEvent,
-  paginate,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -43,6 +36,11 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import {
+  getDocumentForDeletionAudit,
+  paginateAccessibleDocuments,
+  softDeleteDocument,
+} from '@/lib/services/documents-service';
 
 const createDocumentSchema = z.object({
   communityId: z.number().int().positive(),
@@ -93,24 +91,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
 
-  const where = await buildAccessibleDocumentsFilter(
-    {
+  const result = await paginateAccessibleDocuments({
+    filter: {
       communityId: effectiveCommunityId,
       role: membership.role,
       communityType: membership.communityType,
       isUnitOwner: membership.isUnitOwner,
       permissions: membership.permissions,
     },
-    categoryId != null ? eq(documents.categoryId, categoryId) : undefined,
-  );
-
-  const scoped = createScopedClient(effectiveCommunityId);
-  const result = await paginate(
-    scoped,
-    documents,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+    categoryId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
 
   return NextResponse.json({
     data: {
@@ -192,18 +184,15 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
   await requireActiveSubscriptionForMutation(communityId);
 
-  const scoped = createScopedClient(communityId);
-
   // First, get the document to capture old values for audit
-  const existingDocs = await scoped.query(documents);
-  const docToDelete = existingDocs.find((d) => d['id'] === id);
+  const docToDelete = await getDocumentForDeletionAudit(communityId, id);
 
   if (!docToDelete) {
     throw new ValidationError('Document not found');
   }
 
   // Perform soft delete
-  const deletedRows = await scoped.softDelete(documents, eq(documents.id, id));
+  const deletedRows = await softDeleteDocument(communityId, id);
 
   if (deletedRows.length === 0) {
     throw new ValidationError('Failed to delete document');
@@ -216,10 +205,10 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
     resourceId: String(id),
     communityId,
     oldValues: {
-      title: docToDelete['title'],
-      categoryId: docToDelete['categoryId'],
-      filePath: docToDelete['filePath'],
-      fileName: docToDelete['fileName'],
+      title: docToDelete.title,
+      categoryId: docToDelete.categoryId,
+      filePath: docToDelete.filePath,
+      fileName: docToDelete.fileName,
     },
   });
 

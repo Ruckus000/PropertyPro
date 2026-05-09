@@ -125,6 +125,10 @@ function resetRouteMocks() {
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
     query: scopedQueryMock,
+    // After A3 drain #62, getDocumentForDeletionAudit uses scoped.selectFrom
+    // instead of scoped.query + JS .find(). Alias selectFrom to the same
+    // queryMock so existing test rows feed through unchanged.
+    selectFrom: scopedQueryMock,
     softDelete: scopedSoftDeleteMock,
   });
 }
