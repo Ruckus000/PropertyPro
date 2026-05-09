@@ -2,28 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const {
-  createScopedClientMock,
   logAuditEventMock,
-  queryMock,
-  updateMock,
-  communitiesTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   ensureTransparencyChecklistInitializedMock,
+  getTransparencySettingsMock,
+  setTransparencySettingsMock,
 } = vi.hoisted(() => ({
-  createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  queryMock: vi.fn(),
-  updateMock: vi.fn(),
-  communitiesTable: Symbol('communities'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   ensureTransparencyChecklistInitializedMock: vi.fn(),
+  getTransparencySettingsMock: vi.fn(),
+  setTransparencySettingsMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
-  communities: communitiesTable,
-  createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
 }));
 
@@ -37,6 +31,8 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 vi.mock('@/lib/services/transparency-service', () => ({
   ensureTransparencyChecklistInitialized: ensureTransparencyChecklistInitializedMock,
+  getTransparencySettings: getTransparencySettingsMock,
+  setTransparencySettings: setTransparencySettingsMock,
 }));
 
 
@@ -66,20 +62,11 @@ describe('transparency settings route', () => {
       communityType: 'condo_718',
     });
 
-    queryMock.mockResolvedValue([
-      {
-        id: 42,
-        slug: 'sunset-condos',
-        transparencyEnabled: false,
-        transparencyAcknowledgedAt: null,
-      },
-    ]);
-    updateMock.mockResolvedValue([]);
-
-    createScopedClientMock.mockReturnValue({
-      query: queryMock,
-      update: updateMock,
+    getTransparencySettingsMock.mockResolvedValue({
+      enabled: false,
+      acknowledgedAt: null,
     });
+    setTransparencySettingsMock.mockResolvedValue(undefined);
 
     ensureTransparencyChecklistInitializedMock.mockResolvedValue([
       {
@@ -97,13 +84,10 @@ describe('transparency settings route', () => {
       communityType: 'condo_718',
     });
 
-    queryMock.mockResolvedValueOnce([
-      {
-        id: 42,
-        transparencyEnabled: true,
-        transparencyAcknowledgedAt: new Date('2026-03-07T12:00:00.000Z'),
-      },
-    ]);
+    getTransparencySettingsMock.mockResolvedValueOnce({
+      enabled: true,
+      acknowledgedAt: new Date('2026-03-07T12:00:00.000Z'),
+    });
 
     const res = await GET(new NextRequest('http://localhost:3000/api/v1/transparency/settings?communityId=42'));
 
@@ -157,7 +141,7 @@ describe('transparency settings route', () => {
     );
 
     expect(res.status).toBe(403);
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(setTransparencySettingsMock).not.toHaveBeenCalled();
   });
 
   it('PATCH enables transparency, initializes checklist, and logs audit event', async () => {
@@ -171,11 +155,9 @@ describe('transparency settings route', () => {
 
     expect(res.status).toBe(200);
     expect(ensureTransparencyChecklistInitializedMock).toHaveBeenCalledWith(42, 'condo_718');
-    expect(updateMock).toHaveBeenCalledWith(
-      communitiesTable,
-      expect.objectContaining({
-        transparencyEnabled: true,
-      }),
+    expect(setTransparencySettingsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ enabled: true }),
     );
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -196,7 +178,7 @@ describe('transparency settings route', () => {
     );
 
     expect(res.status).toBe(400);
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(setTransparencySettingsMock).not.toHaveBeenCalled();
   });
 
   it('PATCH rejects enablement when checklist is still uninitialized', async () => {
@@ -211,6 +193,6 @@ describe('transparency settings route', () => {
     );
 
     expect(res.status).toBe(400);
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(setTransparencySettingsMock).not.toHaveBeenCalled();
   });
 });
