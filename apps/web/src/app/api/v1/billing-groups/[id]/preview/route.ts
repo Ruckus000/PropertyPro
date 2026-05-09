@@ -4,12 +4,11 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { calculatePricingImpact } from '@/lib/billing/pricing-preview';
-import { getBillingGroupByOwner } from '@/lib/billing/billing-group-service';
+import {
+  getBillingGroupByOwner,
+  listSiblingCommunityPlans,
+} from '@/lib/billing/billing-group-service';
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
-// AUTHZ: Pricing preview — queries all communities in a billing group; authorized by billing group ownership
-import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { communities } from '@propertypro/db';
-import { eq, and, isNull } from '@propertypro/db/filters';
 
 const querySchema = z.object({
   planId: z.enum(['essentials', 'professional', 'operations_plus']),
@@ -36,13 +35,7 @@ export const GET = withErrorHandler(
       throw new ValidationError('Invalid query', { issues: parsed.error.issues });
     }
 
-    const db = createUnscopedClient();
-    const existing = await db
-      .select({
-        planKey: communities.subscriptionPlan,
-      })
-      .from(communities)
-      .where(and(eq(communities.billingGroupId, billingGroupId), isNull(communities.deletedAt)));
+    const existing = await listSiblingCommunityPlans(billingGroupId);
 
     const existingBasePrices = existing.map((c) =>
       c.planKey && c.planKey in PLAN_MONTHLY_PRICES_USD
