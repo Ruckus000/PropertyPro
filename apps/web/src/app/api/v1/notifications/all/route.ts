@@ -7,6 +7,11 @@
  * RLS-enforced `createScopedClient` boundary is preserved for every row we
  * return. Results are merged in-memory by notification id (descending).
  *
+ * Per-community list+count moved into `listCrossCommunityNotificationsForUser`
+ * on `notification-service` (A3 drain #55). The route still owns the
+ * cross-community orchestration: dedup of communities, parallel fetch,
+ * merge-sort by id, page-cap with `hasMore` + numeric cursor, unread sum.
+ *
  * Response shape:
  *   data: {
  *     notifications: CrossNotification[],
@@ -21,34 +26,13 @@ import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 // AUTHZ: Cross-community notifications — aggregated feed across all communities the user belongs to.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
-import { createScopedClient, notifications } from '@propertypro/db';
-import { and, desc, eq, isNull, lt, sql } from '@propertypro/db/filters';
+import { listCrossCommunityNotificationsForUser } from '@/lib/services/notification-service';
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.coerce.number().int().positive().optional(),
   unreadOnly: z.enum(['true', 'false']).optional(),
 });
-
-type Row = Record<string, unknown>;
-
-interface NotificationListRow {
-  id: number;
-  category: string;
-  title: string;
-  body: string | null;
-  actionUrl: string | null;
-  sourceType: string;
-  sourceId: string;
-  priority: string;
-  readAt: Date | null;
-  createdAt: Date;
-  communityId: number;
-}
-
-interface CountRow {
-  count: number;
-}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
@@ -89,53 +73,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   // Per-community list + unread-count queries run through the scoped client so
   // the RLS-enforced community_id boundary is preserved for every row.
   const perCommunity = await Promise.all(
-    communityIds.map(async (communityId) => {
-      const scoped = createScopedClient(communityId);
-
-      const listFilters = [
-        eq(notifications.userId, userId),
-        isNull(notifications.archivedAt),
-      ];
-      if (cursor != null) listFilters.push(lt(notifications.id, cursor));
-      if (unreadOnly === 'true') listFilters.push(isNull(notifications.readAt));
-
-      const listPromise = scoped
-        .selectFrom<Row>(
-          notifications,
-          {
-            id: notifications.id,
-            category: notifications.category,
-            title: notifications.title,
-            body: notifications.body,
-            actionUrl: notifications.actionUrl,
-            sourceType: notifications.sourceType,
-            sourceId: notifications.sourceId,
-            priority: notifications.priority,
-            readAt: notifications.readAt,
-            createdAt: notifications.createdAt,
-            communityId: notifications.communityId,
-          },
-          and(...listFilters),
-        )
-        .orderBy(desc(notifications.id))
-        .limit(limit + 1)
-        .then((rows) => rows as unknown as NotificationListRow[]);
-
-      const countPromise = scoped
-        .selectFrom<Row>(
-          notifications,
-          { count: sql<number>`count(*)::int` },
-          and(
-            eq(notifications.userId, userId),
-            isNull(notifications.readAt),
-            isNull(notifications.archivedAt),
-          ),
-        )
-        .then((rows) => (rows as unknown as CountRow[])[0]?.count ?? 0);
-
-      const [list, unread] = await Promise.all([listPromise, countPromise]);
-      return { list, unread };
-    }),
+    communityIds.map((communityId) =>
+      listCrossCommunityNotificationsForUser({
+        communityId,
+        userId,
+        cursor,
+        limitPlusOne: limit + 1,
+        unreadOnly: unreadOnly === 'true',
+      }),
+    ),
   );
 
   // Merge + sort by id desc globally, then take the page.
