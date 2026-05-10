@@ -1,14 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  documents,
-  logAuditEvent,
-  meetingDocuments,
-  meetings,
-} from '@propertypro/db';
-import { and, asc, eq, gte, lt } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { BadRequestError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -21,11 +13,19 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseOptionalCalendarDateRange } from '@/lib/calendar/date-range';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
-import {
-  serializeMeetingResponse,
-  type MeetingResponseRecord,
-} from '@/lib/meetings/meeting-response';
+import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
+import {
+  attachMeetingDocument,
+  createMeetingForCommunity,
+  detachMeetingDocument,
+  getMeetingCommunityTimezone,
+  getMeetingDetail,
+  getMeetingDocumentTargets,
+  listMeetingsForCommunity,
+  softDeleteMeetingForCommunity,
+  updateMeetingForCommunity,
+} from '@/lib/services/meeting-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
@@ -89,17 +89,6 @@ const detachDocSchema = z.object({
   documentId: z.number().int().positive(),
 });
 
-const meetingColumns = {
-  id: meetings.id,
-  title: meetings.title,
-  meetingType: meetings.meetingType,
-  startsAt: meetings.startsAt,
-  endsAt: meetings.endsAt,
-  location: meetings.location,
-  noticePostedAt: meetings.noticePostedAt,
-  minutesApprovedAt: meetings.minutesApprovedAt,
-} as const;
-
 function parseCommunityIdFromBody(
   req: NextRequest,
   body: Record<string, unknown>,
@@ -121,19 +110,6 @@ function assertMeetingWindow(startsAt: string, endsAt?: string | null): void {
   }
 }
 
-async function findMeetingById(
-  communityId: number,
-  meetingId: number,
-): Promise<MeetingResponseRecord | null> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<MeetingResponseRecord>(
-    meetings,
-    meetingColumns,
-    eq(meetings.id, meetingId),
-  );
-  return rows[0] ?? null;
-}
-
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -142,17 +118,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const { searchParams } = new URL(req.url);
   const range = parseOptionalCalendarDateRange(searchParams, membership.timezone);
-  const scoped = createScopedClient(communityId);
-  const whereClause = range
-    ? and(
-        gte(meetings.startsAt, range.startUtc),
-        lt(meetings.startsAt, range.endUtcExclusive),
-      )
-    : undefined;
-
-  const rows = await scoped
-    .selectFrom<MeetingResponseRecord>(meetings, meetingColumns, whereClause)
-    .orderBy(asc(meetings.startsAt), asc(meetings.id));
+  const rows = await listMeetingsForCommunity(communityId, range ?? undefined);
 
   return NextResponse.json({
     data: rows.map((meeting) => serializeMeetingResponse(meeting, membership.communityType)),
@@ -200,9 +166,7 @@ async function handleCreate(
   }
 
   const { communityId, title, meetingType, startsAt, endsAt, location } = parsed.data;
-  const scoped = createScopedClient(communityId);
-
-  const [created] = await scoped.insert(meetings, {
+  const createdMeetingId = await createMeetingForCommunity(communityId, {
     title,
     meetingType,
     startsAt: new Date(startsAt),
@@ -210,18 +174,14 @@ async function handleCreate(
     location,
   });
 
-  const [createdMeeting, communityRows] = await Promise.all([
-    findMeetingById(communityId, Number(created?.id)),
-    scoped.selectFrom<{ timezone: string }>(
-      communities,
-      { timezone: communities.timezone },
-      eq(communities.id, communityId),
-    ),
+  const [createdMeeting, rawCommunityTimezone] = await Promise.all([
+    createdMeetingId ? getMeetingDetail(communityId, createdMeetingId) : null,
+    getMeetingCommunityTimezone(communityId),
   ]);
   if (!createdMeeting) {
     throw new Error('Created meeting could not be reloaded');
   }
-  const communityTimezone = resolveTimezone(communityRows[0]?.timezone);
+  const communityTimezone = resolveTimezone(rawCommunityTimezone);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -315,7 +275,7 @@ async function handleUpdate(
   }
 
   const { id, communityId, title, meetingType, startsAt, endsAt, location } = parsed.data;
-  const existing = await findMeetingById(communityId, id);
+  const existing = await getMeetingDetail(communityId, id);
   if (!existing) {
     throw new NotFoundError('Meeting not found');
   }
@@ -357,11 +317,10 @@ async function handleUpdate(
   }
 
   if (Object.keys(updateData).length > 0) {
-    const scoped = createScopedClient(communityId);
-    await scoped.update(meetings, updateData, eq(meetings.id, id));
+    await updateMeetingForCommunity(communityId, id, updateData);
   }
 
-  const updatedMeeting = await findMeetingById(communityId, id);
+  const updatedMeeting = await getMeetingDetail(communityId, id);
   if (!updatedMeeting) {
     throw new NotFoundError('Meeting not found');
   }
@@ -393,8 +352,7 @@ async function handleDelete(
   }
 
   const { id, communityId } = parsed.data;
-  const scoped = createScopedClient(communityId);
-  await scoped.softDelete(meetings, eq(meetings.id, id));
+  await softDeleteMeetingForCommunity(communityId, id);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -419,36 +377,27 @@ async function handleAttach(
   }
 
   const { communityId, meetingId, documentId } = parsed.data;
-  const scoped = createScopedClient(communityId);
-
-  const [meetingRows, documentRows] = await Promise.all([
-    scoped.selectFrom(meetings, { id: meetings.id }, eq(meetings.id, meetingId)),
-    scoped.selectFrom(documents, { id: documents.id }, eq(documents.id, documentId)),
-  ]);
-  if (meetingRows.length === 0) {
+  const targets = await getMeetingDocumentTargets(communityId, meetingId, documentId);
+  if (!targets.meetingFound) {
     throw new NotFoundError('Meeting not found');
   }
-  if (documentRows.length === 0) {
+  if (!targets.documentFound) {
     throw new NotFoundError('Document not found');
   }
 
-  const rows = await scoped.insert(meetingDocuments, {
-    meetingId,
-    documentId,
-    attachedBy: actorUserId,
-  });
+  const attachment = await attachMeetingDocument(communityId, meetingId, documentId, actorUserId);
 
   await logAuditEvent({
     userId: actorUserId,
     action: 'update',
     resourceType: 'meeting_document',
-    resourceId: String(rows[0]?.id ?? ''),
+    resourceId: String(attachment?.id ?? ''),
     communityId,
     newValues: { meetingId, documentId },
     metadata: { subAction: 'attach' },
   });
 
-  return NextResponse.json({ data: rows[0] }, { status: 201 });
+  return NextResponse.json({ data: attachment }, { status: 201 });
 }
 
 async function handleDetach(
@@ -463,26 +412,15 @@ async function handleDetach(
   }
 
   const { communityId, meetingId, documentId } = parsed.data;
-  const scoped = createScopedClient(communityId);
-
-  const [meetingRows, documentRows] = await Promise.all([
-    scoped.selectFrom(meetings, { id: meetings.id }, eq(meetings.id, meetingId)),
-    scoped.selectFrom(documents, { id: documents.id }, eq(documents.id, documentId)),
-  ]);
-  if (meetingRows.length === 0) {
+  const targets = await getMeetingDocumentTargets(communityId, meetingId, documentId);
+  if (!targets.meetingFound) {
     throw new NotFoundError('Meeting not found');
   }
-  if (documentRows.length === 0) {
+  if (!targets.documentFound) {
     throw new NotFoundError('Document not found');
   }
 
-  await scoped.hardDelete(
-    meetingDocuments,
-    and(
-      eq(meetingDocuments.meetingId, meetingId),
-      eq(meetingDocuments.documentId, documentId),
-    ),
-  );
+  await detachMeetingDocument(communityId, meetingId, documentId);
 
   await logAuditEvent({
     userId: actorUserId,
