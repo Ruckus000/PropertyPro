@@ -66,6 +66,12 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
     }
     return [];
   });
+  const selectFrom = vi.fn().mockImplementation(async (table: unknown) => {
+    const queryImpl = typeof overrides['query'] === 'function'
+      ? overrides['query'] as (table: unknown) => Promise<unknown[]>
+      : query;
+    return queryImpl(table);
+  });
 
   return {
     query,
@@ -93,6 +99,7 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
     softDelete: vi.fn().mockResolvedValue([]),
     hardDelete: vi.fn(),
     ...overrides,
+    selectFrom: overrides['selectFrom'] ?? selectFrom,
   };
 }
 
