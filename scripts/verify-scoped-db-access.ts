@@ -51,8 +51,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/compliance-alert-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available
   resolve(repoRoot, 'apps/web/src/lib/services/stripe-service.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/stripe-webhook-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/actions/checkout.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/webhooks/stripe/route.ts'),
   // P2-34a: Payment reminders + subscription guard — cross-community cron + mutation guard
   resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
   resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
