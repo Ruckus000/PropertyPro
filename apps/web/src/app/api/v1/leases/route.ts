@@ -3,21 +3,14 @@
  *
  * Patterns:
  * - withErrorHandler for structured error responses
- * - createScopedClient for tenant isolation (AGENTS #13)
+ * - lease-service helpers for tenant-scoped DB access (AGENTS #13)
  * - logAuditEvent on every mutation
  * - Zod validation on request bodies
  * - Apartment-only feature gate (AGENTS #34)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  logAuditEvent,
-  leases,
-  units,
-  userRoles,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
@@ -30,6 +23,16 @@ import {
   getRenewalChain,
   type LeaseRecord,
 } from '@/lib/services/lease-expiration-service';
+import {
+  createLeaseForCommunity,
+  getLeaseById,
+  getTenantRoleForLease,
+  getUnitLeaseDefaults,
+  listLeasesForCommunity,
+  markLeaseRenewed,
+  softDeleteLeaseForCommunity,
+  updateLeaseForCommunity,
+} from '@/lib/services/lease-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
@@ -228,8 +231,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(leases);
+  const rows = await listLeasesForCommunity(communityId);
   let leaseRecords = rows.map(coerceLeaseRecord);
 
   // Optional filters
@@ -261,7 +263,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     const leaseId = Number(chainFor);
     if (Number.isInteger(leaseId) && leaseId > 0) {
       // Need all leases (not just active) for chain traversal
-      const allRows = await scoped.query(leases);
+      const allRows = await listLeasesForCommunity(communityId);
       const allLeases = allRows.map(coerceLeaseRecord);
       const chain = getRenewalChain(leaseId, allLeases);
       return NextResponse.json({ data: chain });
@@ -293,28 +295,22 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
-  const scoped = createScopedClient(communityId);
-
   // Validate unit belongs to this community
-  const unitRows = await scoped.query(units);
-  const unit = unitRows.find((row) => row['id'] === payload.unitId);
+  const unit = await getUnitLeaseDefaults(communityId, payload.unitId);
   if (!unit) {
     throw new ValidationError('Unit not found in this community');
   }
   const unitRentAmount = (unit['rentAmount'] as string | null) ?? null;
 
   // Validate resident has a tenant (non-owner resident) role in this community
-  const roleRows = await scoped.query(userRoles);
-  const residentRole = roleRows.find(
-    (row) => row['userId'] === payload.residentId && row['role'] === 'resident' && row['isUnitOwner'] !== true,
-  );
+  const residentRole = await getTenantRoleForLease(communityId, payload.residentId);
   if (!residentRole) {
     throw new ValidationError('Resident must have a tenant role in this community');
   }
 
   validateLeaseDateWindow(payload.startDate, payload.endDate ?? null);
 
-  const existingLeaseRows = await scoped.query(leases);
+  const existingLeaseRows = await listLeasesForCommunity(communityId);
   const existingLeases = existingLeaseRows as unknown as LeaseLikeRow[];
   ensureNoUnitLeaseOverlap(
     {
@@ -349,7 +345,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
 
     // Mark the previous lease as 'renewed'
-    await scoped.update(leases, { status: 'renewed' }, eq(leases.id, previousLeaseId));
+    await markLeaseRenewed(communityId, previousLeaseId);
 
     await logAuditEvent({
       userId: actorUserId,
@@ -363,7 +359,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  const insertedRows = await scoped.insert(leases, {
+  const created = await createLeaseForCommunity(communityId, {
     unitId: payload.unitId,
     residentId: payload.residentId,
     startDate: payload.startDate,
@@ -374,7 +370,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     notes: payload.notes ?? null,
   });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ValidationError('Failed to create lease');
   }
@@ -444,11 +439,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
-  const scoped = createScopedClient(communityId);
-
   // Find the existing lease
-  const existingRows = await scoped.query(leases);
-  const existing = existingRows.find((row) => row['id'] === id);
+  const existing = await getLeaseById(communityId, id);
   if (!existing) {
     throw new NotFoundError('Lease not found');
   }
@@ -483,7 +475,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('No fields to update');
   }
 
-  const allRows = await scoped.query(leases);
+  const allRows = await listLeasesForCommunity(communityId);
   const allLeases = allRows as unknown as LeaseLikeRow[];
   const candidateEndDate =
     fields.endDate !== undefined ? fields.endDate : ((existing['endDate'] as string | null) ?? null);
@@ -518,7 +510,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  const [updated] = await scoped.update(leases, updateData, eq(leases.id, id));
+  const updated = await updateLeaseForCommunity(communityId, id, updateData);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -581,16 +573,13 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requireApartmentCommunity(membership.communityType);
 
-  const scoped = createScopedClient(communityId);
-
   // Verify lease exists
-  const existingRows = await scoped.query(leases);
-  const existing = existingRows.find((row) => row['id'] === id);
+  const existing = await getLeaseById(communityId, id);
   if (!existing) {
     throw new NotFoundError('Lease not found');
   }
 
-  await scoped.softDelete(leases, eq(leases.id, id));
+  await softDeleteLeaseForCommunity(communityId, id);
 
   await logAuditEvent({
     userId: actorUserId,
