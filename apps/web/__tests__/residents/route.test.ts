@@ -9,6 +9,7 @@ const {
   createScopedClientMock,
   logAuditEventMock,
   scopedQueryMock,
+  scopedSelectFromMock,
   scopedInsertMock,
   scopedUpdateMock,
   scopedHardDeleteMock,
@@ -22,6 +23,7 @@ const {
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedQueryMock: vi.fn(),
+  scopedSelectFromMock: vi.fn(),
   scopedInsertMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
   scopedHardDeleteMock: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((col: unknown, value: unknown) => ({ col, value })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -76,6 +79,7 @@ describe('p1-18 residents route', () => {
 
     createScopedClientMock.mockReturnValue({
       query: scopedQueryMock,
+      selectFrom: scopedSelectFromMock,
       insert: scopedInsertMock,
       update: scopedUpdateMock,
       hardDelete: scopedHardDeleteMock,
@@ -83,7 +87,7 @@ describe('p1-18 residents route', () => {
   });
 
   it('POST creates user role and notification preferences with scoped client', async () => {
-    scopedQueryMock
+    scopedSelectFromMock
       .mockResolvedValueOnce([
         {
           id: 42,
@@ -166,7 +170,7 @@ describe('p1-18 residents route', () => {
   });
 
   it('POST keeps tenant context scoped by request communityId', async () => {
-    scopedQueryMock
+    scopedSelectFromMock
       .mockResolvedValueOnce([
         {
           id: 777,
