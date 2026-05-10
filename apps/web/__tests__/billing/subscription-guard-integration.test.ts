@@ -142,6 +142,12 @@ describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
         }
         return [];
       }),
+      selectFrom: vi.fn().mockImplementation(async (table: unknown) => {
+        if (table === usersTableMock) {
+          return [{ fullName: 'P0 Test User' }];
+        }
+        return [];
+      }),
       insert: vi.fn().mockResolvedValue([
         { id: 1, title: 'Test', body: 'body', audience: 'all', isPinned: false },
       ]),
