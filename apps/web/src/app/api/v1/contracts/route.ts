@@ -11,15 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  logAuditEvent,
-  contracts,
-  contractBids,
-  documents,
-  complianceChecklistItems,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
@@ -30,6 +22,16 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getContractExpirationAlerts } from '@/lib/services/contract-renewal-alerts';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  createContractBidForCommunity,
+  createContractForCommunity,
+  getContractById,
+  getContractChecklistItemById,
+  getContractDocumentById,
+  listContractBidsForCommunity,
+  listContractsForCommunity,
+  updateContractById,
+} from '@/lib/services/contract-service';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -197,8 +199,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'contracts', 'read');
 
   const scoped = createScopedClient(communityId);
-  const contractRows = await scoped.query(contracts);
-  const bidRows = await scoped.query(contractBids);
+  const contractRows = await listContractsForCommunity(scoped);
+  const bidRows = await listContractBidsForCommunity(scoped);
   const contractRecords = contractRows.map(coerceContractRow);
 
   // Group bids by contractId and apply embargo
@@ -272,24 +274,23 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(communityId);
 
-  const existingRows = await scoped.selectFrom(contracts, {}, eq(contracts.id, id));
-  const existing = (existingRows as unknown as Record<string, unknown>[])[0];
+  const existing = await getContractById(scoped, id);
   if (!existing) {
     throw new NotFoundError('Contract not found');
   }
 
   // Validate documentId belongs to this community if provided
   if (fields.documentId) {
-    const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, fields.documentId));
-    if ((docRows as unknown as unknown[]).length === 0) {
+    const document = await getContractDocumentById(scoped, fields.documentId);
+    if (!document) {
       throw new ValidationError('Document not found in this community');
     }
   }
 
   // Validate complianceChecklistItemId belongs to this community if provided
   if (fields.complianceChecklistItemId) {
-    const checklistRows = await scoped.selectFrom(complianceChecklistItems, {}, eq(complianceChecklistItems.id, fields.complianceChecklistItemId));
-    if ((checklistRows as unknown as unknown[]).length === 0) {
+    const checklistItem = await getContractChecklistItemById(scoped, fields.complianceChecklistItemId);
+    if (!checklistItem) {
       throw new ValidationError('Compliance checklist item not found in this community');
     }
   }
@@ -310,7 +311,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('No fields to update');
   }
 
-  const [updated] = await scoped.update(contracts, updateData, eq(contracts.id, id));
+  const updated = await updateContractById(scoped, id, updateData);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -352,21 +353,21 @@ async function handleCreateContract(
 
   // Validate documentId belongs to this community
   if (payload.documentId) {
-    const docRows = await scoped.selectFrom(documents, {}, eq(documents.id, payload.documentId));
-    if ((docRows as unknown as unknown[]).length === 0) {
+    const document = await getContractDocumentById(scoped, payload.documentId);
+    if (!document) {
       throw new ValidationError('Document not found in this community');
     }
   }
 
   // Validate complianceChecklistItemId belongs to this community
   if (payload.complianceChecklistItemId) {
-    const checklistRows = await scoped.selectFrom(complianceChecklistItems, {}, eq(complianceChecklistItems.id, payload.complianceChecklistItemId));
-    if ((checklistRows as unknown as unknown[]).length === 0) {
+    const checklistItem = await getContractChecklistItemById(scoped, payload.complianceChecklistItemId);
+    if (!checklistItem) {
       throw new ValidationError('Compliance checklist item not found in this community');
     }
   }
 
-  const insertedRows = await scoped.insert(contracts, {
+  const created = await createContractForCommunity(scoped, {
     title: payload.title,
     vendorName: payload.vendorName,
     description: payload.description ?? null,
@@ -382,7 +383,6 @@ async function handleCreateContract(
     createdBy: actorUserId,
   });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ValidationError('Failed to create contract');
   }
@@ -428,13 +428,12 @@ async function handleCreateBid(
   const scoped = createScopedClient(communityId);
 
   // Validate contract belongs to this community
-  const contractRows = await scoped.selectFrom(contracts, {}, eq(contracts.id, payload.contractId));
-  const contract = (contractRows as unknown as Record<string, unknown>[])[0];
+  const contract = await getContractById(scoped, payload.contractId);
   if (!contract) {
     throw new NotFoundError('Contract not found in this community');
   }
 
-  const insertedRows = await scoped.insert(contractBids, {
+  const created = await createContractBidForCommunity(scoped, {
     contractId: payload.contractId,
     vendorName: payload.vendorName,
     bidAmount: payload.bidAmount,
@@ -442,7 +441,6 @@ async function handleCreateBid(
     createdBy: actorUserId,
   });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ValidationError('Failed to create bid');
   }
