@@ -20,12 +20,7 @@ import {
   createScopedClient,
   createPresignedDownloadUrl,
   logAuditEvent,
-  maintenanceRequests,
-  maintenanceComments,
-  paginate,
-  units,
 } from '@propertypro/db';
-import { eq, and, inArray } from '@propertypro/db/filters';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -38,6 +33,14 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
 import { formatRequest } from './_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  createMaintenanceCommentForRequest,
+  createMaintenanceRequestForCommunity,
+  getMaintenanceRequestById,
+  getMaintenanceRequestUnitById,
+  listMaintenanceCommentsForRequests,
+  paginateMaintenanceRequestsForCommunity,
+} from '@/lib/services/maintenance-request-service';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -133,46 +136,31 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const scoped = createScopedClient(communityId);
 
-  // Push filters to DB — avoids full-table scan on every list request
-  const conditions: ReturnType<typeof eq>[] = [];
-  if (isResident) conditions.push(eq(maintenanceRequests.submittedById, actorUserId));
-  if (statusFilter) conditions.push(eq(maintenanceRequests.status, statusFilter as 'submitted' | 'acknowledged' | 'in_progress' | 'resolved' | 'closed' | 'open'));
-  if (categoryFilter) conditions.push(eq(maintenanceRequests.category, categoryFilter));
-  if (priorityFilter) conditions.push(eq(maintenanceRequests.priority, priorityFilter as 'low' | 'normal' | 'high' | 'urgent'));
-  if (isStaff && assignedToIdFilter) conditions.push(eq(maintenanceRequests.assignedToId, assignedToIdFilter));
-
-  const where =
-    conditions.length === 0
-      ? undefined
-      : conditions.length === 1
-        ? conditions[0]
-        : and(...conditions);
-
-  const result = await paginate(
+  const result = await paginateMaintenanceRequestsForCommunity({
     scoped,
-    maintenanceRequests,
-    { cursor: parsedQuery.data.cursor, pageSize: parsedQuery.data.pageSize },
-    { where },
-  );
+    actorUserId,
+    isResident,
+    isStaff,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+    statusFilter,
+    categoryFilter,
+    priorityFilter,
+    assignedToIdFilter,
+  });
 
   // Fetch comments only for this page's request IDs (not all community comments).
-  const pagedIds = result.data.map((r) => (r as Record<string, unknown>)['id'] as number);
+  const pagedIds = result.data.map((r) => r['id'] as number);
   const commentsByRequestId = new Map<number, Record<string, unknown>[]>();
-  if (pagedIds.length > 0) {
-    const commentRows = await scoped.selectFrom(
-      maintenanceComments,
-      {},
-      inArray(maintenanceComments.requestId, pagedIds),
-    ) as unknown as Record<string, unknown>[];
-    for (const c of commentRows) {
-      const rid = c['requestId'] as number;
-      const bucket = commentsByRequestId.get(rid) ?? [];
-      bucket.push(c);
-      commentsByRequestId.set(rid, bucket);
-    }
+  const commentRows = await listMaintenanceCommentsForRequests(scoped, pagedIds);
+  for (const c of commentRows) {
+    const rid = c['requestId'] as number;
+    const bucket = commentsByRequestId.get(rid) ?? [];
+    bucket.push(c);
+    commentsByRequestId.set(rid, bucket);
   }
 
-  const data = (result.data as Record<string, unknown>[]).map((r) => {
+  const data = result.data.map((r) => {
     const requestId = r['id'] as number;
     const comments = (commentsByRequestId.get(requestId) ?? []).filter((c) => {
       if (isResident) return !c['isInternal'];
@@ -243,12 +231,8 @@ async function handleCreateRequest(
 
   // Validate unitId belongs to this community (scoped client auto-injects communityId filter)
   if (payload.unitId != null) {
-    const unitRows = await scoped.selectFrom(
-      units,
-      {},
-      eq(units.id, payload.unitId),
-    ) as unknown as Record<string, unknown>[];
-    if (unitRows.length === 0) {
+    const unit = await getMaintenanceRequestUnitById(scoped, payload.unitId);
+    if (!unit) {
       throw new ValidationError('Unit not found in this community');
     }
   }
@@ -274,7 +258,7 @@ async function handleCreateRequest(
     }
   }
 
-  const insertedRows = await scoped.insert(maintenanceRequests, {
+  const created = await createMaintenanceRequestForCommunity(scoped, {
     submittedById: actorUserId,
     unitId: payload.unitId ?? null,
     title: payload.title,
@@ -285,7 +269,6 @@ async function handleCreateRequest(
     photos: photoEntries.length > 0 ? photoEntries : null,
   });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ValidationError('Failed to create maintenance request');
   }
@@ -343,12 +326,7 @@ async function handleAddComment(
   const scoped = createScopedClient(communityId);
 
   // Verify request belongs to this community
-  const reqRows = await scoped.selectFrom(
-    maintenanceRequests,
-    {},
-    eq(maintenanceRequests.id, payload.requestId),
-  );
-  const existingRequest = (reqRows as unknown as Record<string, unknown>[])[0];
+  const existingRequest = await getMaintenanceRequestById(scoped, payload.requestId);
   if (!existingRequest) {
     throw new ValidationError('Maintenance request not found in this community');
   }
@@ -361,14 +339,13 @@ async function handleAddComment(
   // Force isInternal=false for residents regardless of request body
   const isInternal = isResident ? false : payload.isInternal;
 
-  const insertedRows = await scoped.insert(maintenanceComments, {
+  const created = await createMaintenanceCommentForRequest(scoped, {
     requestId: payload.requestId,
     userId: actorUserId,
     text: payload.text,
     isInternal,
   });
 
-  const created = insertedRows[0];
   if (!created) {
     throw new ValidationError('Failed to create comment');
   }
@@ -415,12 +392,7 @@ async function handleRequestUploadUrl(
   if (payload.requestId != null) {
     // Verify ownership for residents
     const scoped = createScopedClient(communityId);
-    const reqRows = await scoped.selectFrom(
-      maintenanceRequests,
-      {},
-      eq(maintenanceRequests.id, payload.requestId),
-    );
-    const existingRequest = (reqRows as unknown as Record<string, unknown>[])[0];
+    const existingRequest = await getMaintenanceRequestById(scoped, payload.requestId);
     if (!existingRequest) {
       throw new ValidationError('Maintenance request not found in this community');
     }
