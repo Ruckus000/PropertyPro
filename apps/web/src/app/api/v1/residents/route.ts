@@ -8,22 +8,14 @@
  *
  * All routes use:
  * - withErrorHandler (AGENTS #43)
- * - createScopedClient for tenant isolation (AGENTS #7, #14)
+ * - resident-service helpers for tenant-scoped DB access (AGENTS #7, #14)
  * - logAuditEvent for mutations (P1-27)
  * - Zod validation
  * - ADR-001 role constraints via role-validator
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  logAuditEvent,
-  notificationPreferences,
-  userRoles,
-  users,
-} from '@propertypro/db';
-import { eq, inArray } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import {
   NEW_COMMUNITY_ROLES,
   PRESET_KEYS,
@@ -44,6 +36,19 @@ import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/commu
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  createResidentNotificationPreferences,
+  createResidentRole,
+  createResidentUser,
+  deleteResidentRole,
+  getResidentCommunityTypeValue,
+  getResidentRoleByUserId,
+  getResidentUserByEmail,
+  getResidentUserById,
+  listResidentsForCommunity,
+  updateResidentRole,
+  updateResidentUser,
+} from '@/lib/services/resident-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -75,15 +80,13 @@ const deleteResidentSchema = z.object({
 });
 
 async function getCommunityType(communityId: number): Promise<CommunityType> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row['id'] === communityId);
+  const communityType = await getResidentCommunityTypeValue(communityId);
 
-  if (!community) {
+  if (!communityType) {
     throw new NotFoundError(`Community ${communityId} not found`);
   }
 
-  return requireCommunityType(community['communityType'], `residents.getCommunityType(${communityId})`);
+  return requireCommunityType(communityType, `residents.getCommunityType(${communityId})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,66 +108,25 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'residents', 'read');
-  const scoped = createScopedClient(communityId);
 
   // Optional role filters pushed to the DB — avoids fetching and discarding unneeded rows
   const validRoles = new Set(NEW_COMMUNITY_ROLES as unknown as string[]);
   const rolesParam = searchParams.get('roles');
   const roleParam = searchParams.get('role');
 
-  let roleRows: Record<string, unknown>[];
+  let roleFilter: { role?: string; roles?: string[] } = {};
   if (rolesParam) {
     const roleList = rolesParam.split(',').map((r) => r.trim()).filter(Boolean);
     for (const r of roleList) {
       if (!validRoles.has(r)) throw new ValidationError(`Invalid role filter: ${r}`);
     }
-    roleRows = await scoped.selectFrom(
-      userRoles,
-      {},
-      inArray(userRoles.role, roleList as unknown as ('resident' | 'manager' | 'pm_admin')[]),
-    ) as unknown as Record<string, unknown>[];
+    roleFilter = { roles: roleList };
   } else if (roleParam) {
     if (!validRoles.has(roleParam)) throw new ValidationError(`Invalid role filter: ${roleParam}`);
-    roleRows = await scoped.selectFrom(
-      userRoles,
-      {},
-      eq(userRoles.role, roleParam as 'resident' | 'manager' | 'pm_admin'),
-    ) as unknown as Record<string, unknown>[];
-  } else {
-    roleRows = await scoped.query(userRoles) as unknown as Record<string, unknown>[];
+    roleFilter = { role: roleParam };
   }
 
-  if (roleRows.length === 0) {
-    return NextResponse.json({ data: [] });
-  }
-
-  const userIds = new Set(roleRows.map((row) => row['userId'] as string));
-  const userRows = await scoped.query(users);
-
-  const userMap = new Map<string, Record<string, unknown>>();
-  for (const row of userRows) {
-    const userId = row['id'] as string;
-    if (userIds.has(userId)) {
-      userMap.set(userId, row as Record<string, unknown>);
-    }
-  }
-
-  const residents = roleRows.map((roleRow) => {
-    const userId = roleRow['userId'] as string;
-    const userRow = userMap.get(userId);
-
-    return {
-      userId,
-      communityId,
-      roleId: roleRow['id'] as number,
-      role: roleRow['role'] as string,
-      unitId: (roleRow['unitId'] as number | null) ?? null,
-      email: (userRow?.['email'] as string | undefined) ?? null,
-      fullName: (userRow?.['fullName'] as string | undefined) ?? null,
-      phone: (userRow?.['phone'] as string | undefined) ?? null,
-      createdAt: roleRow['createdAt'] as string,
-    };
-  });
+  const residents = await listResidentsForCommunity(communityId, roleFilter);
 
   return NextResponse.json({ data: residents });
 });
@@ -189,7 +151,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(actorMembership, 'residents', 'write');
-  const scoped = createScopedClient(communityId);
 
   const communityType = await getCommunityType(communityId);
 
@@ -206,30 +167,23 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     throw new ValidationError('Owners are not allowed in apartment communities');
   }
 
-  // users table is global; scoped query applies only deleted_at filtering here.
-  const existingUsers = await scoped.query(users);
   const normalizedEmail = email.toLowerCase();
 
-  let userRow = existingUsers.find(
-    (row) => (row['email'] as string).toLowerCase() === normalizedEmail,
-  );
+  let userRow = await getResidentUserByEmail(communityId, normalizedEmail);
 
   const isNewUser = !userRow;
   const userId = isNewUser ? crypto.randomUUID() : (userRow?.['id'] as string);
 
   if (isNewUser) {
-    const insertedUsers = await scoped.insert(users, {
+    userRow = await createResidentUser(communityId, {
       id: userId,
       email: normalizedEmail,
       fullName,
       phone: phone ?? null,
     });
-
-    userRow = insertedUsers[0] as Record<string, unknown>;
   }
 
-  const existingRoles = await scoped.query(userRoles);
-  const existingRole = existingRoles.find((row) => row['userId'] === userId);
+  const existingRole = await getResidentRoleByUserId(communityId, userId);
 
   if (existingRole) {
     throw new ValidationError(
@@ -245,7 +199,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       : null;
   const displayTitle = resolveDisplayTitle(role, effectiveIsUnitOwner, presetKey);
 
-  const insertedRoles = await scoped.insert(userRoles, {
+  const insertedRole = await createResidentRole(communityId, {
     userId,
     role,
     unitId: unitId ?? null,
@@ -256,9 +210,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 
   // Acceptance criterion: create notification_preferences when user role is created.
-  await scoped.insert(notificationPreferences, {
-    userId,
-  });
+  await createResidentNotificationPreferences(communityId, userId);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -283,7 +235,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         communityId,
         role,
         unitId: unitId ?? null,
-        roleId: insertedRoles[0]?.['id'] as number,
+        roleId: insertedRole['id'] as number,
         email: normalizedEmail,
         fullName,
         phone: phone ?? null,
@@ -326,10 +278,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     throw new ForbiddenError('Cannot modify your own role');
   }
 
-  const scoped = createScopedClient(communityId);
-
-  const roleRows = await scoped.query(userRoles);
-  const existingRole = roleRows.find((row) => row['userId'] === userId);
+  const existingRole = await getResidentRoleByUserId(communityId, userId);
 
   if (!existingRole) {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
@@ -353,8 +302,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const newValues: Record<string, unknown> = {};
 
   if (fullName !== undefined || phone !== undefined) {
-    const userRows = await scoped.query(users);
-    const currentUser = userRows.find((row) => row['id'] === userId);
+    const currentUser = await getResidentUserById(communityId, userId);
 
     const userUpdate: Record<string, unknown> = {};
 
@@ -371,7 +319,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     }
 
     if (Object.keys(userUpdate).length > 0) {
-      await scoped.update(users, userUpdate, eq(users.id, userId));
+      await updateResidentUser(communityId, userId, userUpdate);
     }
   }
 
@@ -429,7 +377,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     }
 
     if (Object.keys(roleUpdate).length > 0) {
-      await scoped.update(userRoles, roleUpdate, eq(userRoles.userId, userId));
+      await updateResidentRole(communityId, userId, roleUpdate);
     }
   }
 
@@ -473,16 +421,14 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const actorMembership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(actorMembership, 'residents', 'write');
-  const scoped = createScopedClient(communityId);
 
-  const roleRows = await scoped.query(userRoles);
-  const existingRole = roleRows.find((row) => row['userId'] === userId);
+  const existingRole = await getResidentRoleByUserId(communityId, userId);
 
   if (!existingRole) {
     throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
   }
 
-  await scoped.hardDelete(userRoles, eq(userRoles.userId, userId));
+  await deleteResidentRole(communityId, userId);
 
   // Cascade: revoke active recurring/permanent visitor passes registered by this user.
   // Coupling note: this is the only resident removal code path in the codebase.
