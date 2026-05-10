@@ -34,11 +34,11 @@ import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   getMaintenanceRequestById,
-  isMaintenanceStaffAssignee,
   listMaintenanceCommentsForRequest,
   softDeleteMaintenanceRequestById,
   updateMaintenanceRequestById,
 } from '@/lib/services/maintenance-request-service';
+import { isMaintenanceStaffAssignee } from '@/lib/services/maintenance-assignee-service';
 
 /**
  * Valid status transitions.
