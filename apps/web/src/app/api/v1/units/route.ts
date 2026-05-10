@@ -14,13 +14,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  logAuditEvent,
-  units,
-  userRoles,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -31,6 +25,15 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import {
+  createUnitForCommunity,
+  getUnitById,
+  getUnitByNumber,
+  listResidentRolesForUnit,
+  listUnitsForCommunity,
+  softDeleteUnitById,
+  updateUnitById,
+} from '@/lib/services/unit-service';
 
 const communityIdSchema = z.coerce.number().int().positive();
 
@@ -97,7 +100,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requirePermission(membership, 'units', 'read');
   const scoped = createScopedClient(communityId);
 
-  const rows = await scoped.query(units);
+  const rows = await listUnitsForCommunity(scoped);
 
   const data = (rows as Record<string, unknown>[]).map((row) => ({
     id: row['id'] as number,
@@ -146,15 +149,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Check for duplicate unit number within the community
-  const existingUnits = await scoped.query(units);
-  const duplicate = (existingUnits as Record<string, unknown>[]).find(
-    (row) => (row['unitNumber'] as string) === unitNumber,
-  );
+  const duplicate = await getUnitByNumber(scoped, unitNumber);
   if (duplicate) {
     throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
   }
 
-  const inserted = await scoped.insert(units, {
+  const newUnit = await createUnitForCommunity(scoped, {
     unitNumber,
     building: building ?? null,
     floor: floor ?? null,
@@ -163,8 +163,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     sqft: sqft ?? null,
     rentAmount: rentAmount ?? null,
   });
-
-  const newUnit = inserted[0] as Record<string, unknown>;
+  if (!newUnit) {
+    throw new Error('Failed to create unit');
+  }
 
   await logAuditEvent({
     userId: actorUserId,
@@ -228,11 +229,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  // Find the existing unit
-  const allUnits = await scoped.query(units);
-  const existing = (allUnits as Record<string, unknown>[]).find(
-    (row) => (row['id'] as number) === unitId,
-  );
+  const existing = await getUnitById(scoped, unitId);
 
   if (!existing) {
     throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
@@ -240,10 +237,8 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   // Check for duplicate unit number if changing it
   if (unitNumber !== undefined) {
-    const duplicate = (allUnits as Record<string, unknown>[]).find(
-      (row) => (row['unitNumber'] as string) === unitNumber && (row['id'] as number) !== unitId,
-    );
-    if (duplicate) {
+    const duplicate = await getUnitByNumber(scoped, unitNumber);
+    if (duplicate && (duplicate['id'] as number) !== unitId) {
       throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
     }
   }
@@ -276,7 +271,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
 
   updateData['updatedAt'] = new Date();
 
-  await scoped.update(units, updateData, eq(units.id, unitId));
+  await updateUnitById(scoped, unitId, updateData);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -326,21 +321,14 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   await requireActiveSubscriptionForMutation(communityId);
   const scoped = createScopedClient(communityId);
 
-  // Find the existing unit
-  const allUnits = await scoped.query(units);
-  const existing = (allUnits as Record<string, unknown>[]).find(
-    (row) => (row['id'] as number) === unitId,
-  );
+  const existing = await getUnitById(scoped, unitId);
 
   if (!existing) {
     throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
   }
 
   // Check for active residents assigned to this unit
-  const roleRows = await scoped.query(userRoles);
-  const activeResidents = (roleRows as Record<string, unknown>[]).filter(
-    (row) => (row['unitId'] as number | null) === unitId,
-  );
+  const activeResidents = await listResidentRolesForUnit(scoped, unitId);
 
   if (activeResidents.length > 0) {
     throw new ValidationError(
@@ -349,7 +337,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
   }
 
   // Soft-delete the unit
-  await scoped.softDelete(units, eq(units.id, unitId));
+  await softDeleteUnitById(scoped, unitId);
 
   await logAuditEvent({
     userId: actorUserId,
