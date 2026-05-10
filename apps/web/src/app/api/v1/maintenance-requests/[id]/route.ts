@@ -20,14 +20,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  createScopedClient,
-  logAuditEvent,
-  maintenanceRequests,
-  maintenanceComments,
-  userRoles,
-} from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -39,6 +32,13 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import {
+  getMaintenanceRequestById,
+  isMaintenanceStaffAssignee,
+  listMaintenanceCommentsForRequest,
+  softDeleteMaintenanceRequestById,
+  updateMaintenanceRequestById,
+} from '@/lib/services/maintenance-request-service';
 
 /**
  * Valid status transitions.
@@ -109,11 +109,11 @@ export const GET = withErrorHandler(async (req: NextRequest, context?: { params:
 
   const scoped = createScopedClient(communityId);
   const [reqRows, commentRows] = await Promise.all([
-    scoped.selectFrom(maintenanceRequests, {}, eq(maintenanceRequests.id, id)),
-    scoped.selectFrom(maintenanceComments, {}, eq(maintenanceComments.requestId, id)),
+    getMaintenanceRequestById(scoped, id),
+    listMaintenanceCommentsForRequest(scoped, id),
   ]);
 
-  const request = (reqRows as unknown as Record<string, unknown>[])[0];
+  const request = reqRows;
   if (!request) {
     throw new NotFoundError('Maintenance request not found');
   }
@@ -124,7 +124,7 @@ export const GET = withErrorHandler(async (req: NextRequest, context?: { params:
   }
 
   // Filter internal comments for residents
-  const comments = (commentRows as unknown as Record<string, unknown>[]).filter((c) => {
+  const comments = commentRows.filter((c) => {
     if (isResident) return !c['isInternal'];
     return true;
   });
@@ -164,12 +164,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
   }
 
   const scoped = createScopedClient(communityId);
-  const reqRows = await scoped.selectFrom(
-    maintenanceRequests,
-    {},
-    eq(maintenanceRequests.id, id),
-  );
-  const existing = (reqRows as unknown as Record<string, unknown>[])[0];
+  const existing = await getMaintenanceRequestById(scoped, id);
   if (!existing) {
     throw new NotFoundError('Maintenance request not found');
   }
@@ -200,17 +195,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
   if (fields.assignedToId !== undefined) {
     // Validate that the assignee is a community member with an admin role
     if (fields.assignedToId !== null) {
-      // Filter by userId at the DB level — scoped client auto-injects communityId,
-      // so this is a point lookup (unique constraint on userId+communityId)
-      const roleRows = await scoped.selectFrom(
-        userRoles,
-        {},
-        eq(userRoles.userId, fields.assignedToId),
-      ) as unknown as Record<string, unknown>[];
-      const match = roleRows.find(
-        (row) => row['role'] === 'manager' || row['role'] === 'pm_admin',
-      );
-      if (!match) {
+      if (!(await isMaintenanceStaffAssignee(scoped, fields.assignedToId))) {
         throw new ValidationError('Assigned user must be maintenance staff');
       }
     }
@@ -248,7 +233,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, context?: { param
     throw new ValidationError('No fields to update');
   }
 
-  const [updated] = await scoped.update(maintenanceRequests, updateData, eq(maintenanceRequests.id, id));
+  const updated = await updateMaintenanceRequestById(scoped, id, updateData);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -331,17 +316,12 @@ export const DELETE = withErrorHandler(async (req: NextRequest, context?: { para
   }
 
   const scoped = createScopedClient(communityId);
-  const reqRows = await scoped.selectFrom(
-    maintenanceRequests,
-    {},
-    eq(maintenanceRequests.id, id),
-  );
-  const existing = (reqRows as unknown as Record<string, unknown>[])[0];
+  const existing = await getMaintenanceRequestById(scoped, id);
   if (!existing) {
     throw new NotFoundError('Maintenance request not found');
   }
 
-  await scoped.softDelete(maintenanceRequests, eq(maintenanceRequests.id, id));
+  await softDeleteMaintenanceRequestById(scoped, id);
 
   await logAuditEvent({
     userId: actorUserId,
