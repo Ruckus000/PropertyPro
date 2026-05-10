@@ -4,7 +4,7 @@
  * All mutations use:
  * - withErrorHandler for structured error responses
  * - withAuditLog for compliance audit trail
- * - createScopedClient for cross-tenant isolation
+ * - announcement-service helpers for scoped DB access
  * - Zod validation for input
  *
  * P1-17c: Publish flow queues non-blocking announcement email delivery.
@@ -12,13 +12,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
-  createScopedClient,
-  announcements,
   logAuditEvent,
-  users,
   type Announcement,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { withAuditLog } from '@/lib/middleware/audit-middleware';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -38,6 +34,15 @@ import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
+import {
+  createAnnouncementForCommunity,
+  getAnnouncementAuthorName,
+  getAnnouncementById,
+  getAnnouncementByIdIncludingDeleted,
+  restoreAnnouncementForCommunity,
+  softDeleteAnnouncementForCommunity,
+  updateAnnouncementForCommunity,
+} from '@/lib/services/announcement-service';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 
 // ---------------------------------------------------------------------------
@@ -217,9 +222,7 @@ export const DELETE = withErrorHandler(
       }
 
       const { id, communityId } = result.data;
-      const scoped = createScopedClient(communityId);
-
-      const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
+      const existing = await getAnnouncementById(communityId, id);
 
       if (!existing) {
         throw new NotFoundError('Announcement not found');
@@ -237,7 +240,7 @@ export const DELETE = withErrorHandler(
         throw new ForbiddenError('You can only delete your own announcements');
       }
 
-      await scoped.softDelete(announcements, eq(announcements.id, id));
+      await softDeleteAnnouncementForCommunity(communityId, id);
 
       await audit.log({
         action: 'delete',
@@ -281,14 +284,12 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
 
   const { communityId, ...data } = result.data;
   const sanitizedBody = sanitizeHtml(data.body);
-  const scoped = createScopedClient(communityId);
 
-  const rows = await scoped.insert(announcements, {
+  const created = await createAnnouncementForCommunity(communityId, {
     ...data,
     body: sanitizedBody,
     publishedBy: audit.userId,
   });
-  const created = rows[0] as Announcement;
 
   await audit.log({
     action: 'create',
@@ -297,12 +298,7 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
     newValues: { title: data.title, audience: data.audience, isPinned: data.isPinned },
   });
 
-  const authorRows = await scoped.query(users);
-  const author = authorRows.find((row) => row['id'] === audit.userId);
-  const authorName =
-    typeof author?.['fullName'] === 'string'
-      ? (author['fullName'] as string)
-      : 'Community Team';
+  const authorName = await getAnnouncementAuthorName(communityId, audit.userId);
 
   try {
     const recipientCount = await queueAnnouncementDelivery({
@@ -370,10 +366,9 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
   }
 
   const { id, communityId, ...fields } = result.data;
-  const scoped = createScopedClient(communityId);
 
   // Fetch existing to capture old values for audit
-  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
+  const existing = await getAnnouncementById(communityId, id);
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
@@ -392,11 +387,7 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
     }
   }
 
-  const updated = await scoped.update(
-    announcements,
-    newValues,
-    eq(announcements.id, id),
-  );
+  const updated = await updateAnnouncementForCommunity(communityId, id, newValues);
 
   await audit.log({
     action: 'update',
@@ -406,7 +397,7 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
     newValues,
   });
 
-  return NextResponse.json({ data: updated[0] });
+  return NextResponse.json({ data: updated });
 }
 
 async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
@@ -418,19 +409,13 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
   }
 
   const { id, communityId, isPinned } = result.data;
-  const scoped = createScopedClient(communityId);
-
-  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
+  const existing = await getAnnouncementById(communityId, id);
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
   }
 
-  const updated = await scoped.update(
-    announcements,
-    { isPinned },
-    eq(announcements.id, id),
-  );
+  const updated = await updateAnnouncementForCommunity(communityId, id, { isPinned });
 
   await audit.log({
     action: 'update',
@@ -441,7 +426,7 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
     metadata: { subAction: 'pin' },
   });
 
-  return NextResponse.json({ data: updated[0] });
+  return NextResponse.json({ data: updated });
 }
 
 async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
@@ -453,17 +438,13 @@ async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Pr
   }
 
   const { id, communityId } = result.data;
-  const scoped = createScopedClient(communityId);
-
-  const existing = (await scoped.queryById(announcements, id, {
-    includeSoftDeleted: true,
-  })) as Announcement | null;
+  const existing = await getAnnouncementByIdIncludingDeleted(communityId, id);
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
   }
 
-  const updated = await scoped.restoreSoftDelete(announcements, eq(announcements.id, id));
+  const updated = await restoreAnnouncementForCommunity(communityId, id);
 
   await audit.log({
     action: 'update',
@@ -474,7 +455,7 @@ async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Pr
     metadata: { subAction: 'restore' },
   });
 
-  return NextResponse.json({ data: updated[0] ?? existing });
+  return NextResponse.json({ data: updated ?? existing });
 }
 
 async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
@@ -486,20 +467,14 @@ async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Pr
   }
 
   const { id, communityId, archive } = result.data;
-  const scoped = createScopedClient(communityId);
-
-  const existing = (await scoped.queryById(announcements, id)) as Announcement | null;
+  const existing = await getAnnouncementById(communityId, id);
 
   if (!existing) {
     throw new NotFoundError('Announcement not found');
   }
 
   const archivedAt = archive ? new Date() : null;
-  const updated = await scoped.update(
-    announcements,
-    { archivedAt },
-    eq(announcements.id, id),
-  );
+  const updated = await updateAnnouncementForCommunity(communityId, id, { archivedAt });
 
   await audit.log({
     action: 'update',
@@ -510,5 +485,5 @@ async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Pr
     metadata: { subAction: archive ? 'archive' : 'unarchive' },
   });
 
-  return NextResponse.json({ data: updated[0] });
+  return NextResponse.json({ data: updated });
 }
