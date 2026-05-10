@@ -203,3 +203,44 @@ export function mergeStepData<T extends { completionMarkers?: Record<string, boo
 
     return merged;
 }
+
+/**
+ * Look up the community row for wizard profile pre-population. Returns
+ * the row record or `null` when no row matches.
+ *
+ * Replaces the prior route-side `scoped.query(communities)` + JS `.find()`
+ * (full-table fetch anti-pattern, same class as drains
+ * #244/#287/#292/#295/#60/#61/#62/#64).
+ */
+export async function getCommunityForWizardSeed(
+    scoped: ScopedClient,
+    communityId: number,
+): Promise<Record<string, unknown> | null> {
+    const rows = (await scoped.selectFrom(
+        communities,
+        {},
+        eq(communities.id, communityId),
+    )) as unknown as Array<Record<string, unknown>>;
+    return rows[0] ?? null;
+}
+
+/**
+ * Apply a partial update to the wizard state row matching
+ * `(communityId, wizardType)`. Caller MUST have already verified
+ * the wizard exists (typically via `getOrCreateWizardState`).
+ */
+export async function updateWizardStateRow(
+    scoped: ScopedClient,
+    communityId: number,
+    wizardType: string,
+    values: Record<string, unknown>,
+): Promise<void> {
+    await scoped.update(
+        onboardingWizardState,
+        values,
+        and(
+            eq(onboardingWizardState.communityId, communityId),
+            eq(onboardingWizardState.wizardType, wizardType),
+        ),
+    );
+}

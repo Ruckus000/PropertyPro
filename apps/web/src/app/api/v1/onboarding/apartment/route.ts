@@ -7,13 +7,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import {
-  communities,
-  createScopedClient,
-  logAuditEvent,
-  onboardingWizardState,
-} from '@propertypro/db';
-import { and, eq } from '@propertypro/db/filters';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -38,6 +32,8 @@ import {
   updateCommunityProfile,
   getOrCreateWizardState,
   buildProfileFromCommunity,
+  getCommunityForWizardSeed,
+  updateWizardStateRow,
 } from '@/lib/onboarding/wizard-common';
 
 const WIZARD_TYPE = 'apartment';
@@ -136,8 +132,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const scoped = createScopedClient(communityId);
 
   // Pre-populate profile step from existing community data (collected during signup)
-  const communityRows = await scoped.query(communities);
-  const community = communityRows.find((row) => row['id'] === communityId);
+  const community = await getCommunityForWizardSeed(scoped, communityId);
   const initialStepData = community
     ? { profile: buildProfileFromCommunity(community) }
     : undefined;
@@ -192,18 +187,16 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const lastCompletedStep = Math.max(existingLastStep, step);
   const status = wizard.status === 'skipped' ? 'in_progress' : wizard.status;
 
-  await scoped.update(
-    onboardingWizardState,
+  await updateWizardStateRow(
+    scoped,
+    communityId,
+    WIZARD_TYPE,
     {
       status,
       lastCompletedStep,
       stepData: mergedStepData,
       updatedAt: new Date(),
     },
-    and(
-      eq(onboardingWizardState.communityId, communityId),
-      eq(onboardingWizardState.wizardType, WIZARD_TYPE),
-    ),
   );
 
   await logAuditEvent({
@@ -267,8 +260,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const stepData = normalizeWizardStepData(wizard.stepData);
 
   // Mark wizard as completed
-  await scoped.update(
-    onboardingWizardState,
+  await updateWizardStateRow(
+    scoped,
+    communityId,
+    WIZARD_TYPE,
     {
       status: 'completed',
       lastCompletedStep: MAX_STEP_INDEX,
@@ -276,10 +271,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       completedAt: now,
       updatedAt: now,
     },
-    and(
-      eq(onboardingWizardState.communityId, communityId),
-      eq(onboardingWizardState.wizardType, WIZARD_TYPE),
-    ),
   );
 
   // Create checklist items for the post-onboarding checklist
