@@ -11,17 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { captureException } from '@sentry/nextjs';
-import { and, eq, isNull, sql } from '@propertypro/db/filters';
 import type Stripe from 'stripe';
-import {
-  communities,
-  pendingSignups,
-  provisioningJobs,
-  stripePrices,
-  stripeWebhookEvents,
-} from '@propertypro/db';
-// AUTHZ: Webhook handler — pre-tenant lookup before community context is resolved.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   getStripeClient,
   resolvePlanIdFromStripePriceId,
@@ -36,6 +26,23 @@ import {
 import { runProvisioning, runAddToGroupProvisioning } from '@/lib/services/provisioning-service';
 import { processFinanceStripeEvent } from '@/lib/services/finance-service';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
+import {
+  cancelCommunitySubscriptionByIdIfFirst,
+  cancelCommunitySubscriptionByStripeSubscriptionIfFirst,
+  getCommunityByStripeSubscriptionId,
+  getProvisioningJobIdBySignupRequestId,
+  getStripeWebhookAttempt,
+  insertProvisioningJobFence,
+  insertStripeWebhookFence,
+  markAccessPlanConverted,
+  markCommunityPaymentFailed,
+  markCommunityPaymentSucceeded,
+  markPendingSignupPaymentCompleted,
+  markStripeWebhookProcessed,
+  persistSelfServeCommunityStripeIds,
+  updateCommunitySubscriptionFromStripe,
+  updateStripePriceUnitAmount,
+} from '@/lib/services/stripe-webhook-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -158,18 +165,7 @@ async function handleCheckoutSessionCompleted(
   // If an access plan was active when the community subscribed, mark it as converted.
   const accessPlanId = session.metadata?.accessPlanId;
   if (accessPlanId) {
-    const { accessPlans } = await import('@propertypro/db');
-    const db = createUnscopedClient();
-    await db
-      .update(accessPlans)
-      .set({ convertedAt: new Date() })
-      .where(
-        and(
-          eq(accessPlans.id, Number(accessPlanId)),
-          isNull(accessPlans.convertedAt),
-          isNull(accessPlans.revokedAt),
-        ),
-      );
+    await markAccessPlanConverted(Number(accessPlanId));
   }
 
   if (!signupRequestId) {
@@ -198,19 +194,11 @@ async function handleCheckoutSessionCompleted(
           ? freshSession.subscription
           : (freshSession.subscription as { id: string } | null)?.id ?? null;
 
-      const db = createUnscopedClient();
-      const updates: {
-        updatedAt: Date;
-        stripeCustomerId?: string;
-        stripeSubscriptionId?: string;
-      } = { updatedAt: new Date() };
-      if (stripeCustomerId) updates.stripeCustomerId = stripeCustomerId;
-      if (stripeSubscriptionId) updates.stripeSubscriptionId = stripeSubscriptionId;
-
-      await db
-        .update(communities)
-        .set(updates)
-        .where(eq(communities.id, communityId));
+      await persistSelfServeCommunityStripeIds({
+        communityId,
+        stripeCustomerId,
+        stripeSubscriptionId,
+      });
       return;
     }
 
@@ -247,38 +235,22 @@ async function handleCheckoutSessionCompleted(
       ? freshSession.subscription
       : (freshSession.subscription as { id: string } | null)?.id ?? null;
 
-  const db = createUnscopedClient();
-
-  await db
-    .update(pendingSignups)
-    .set({
-      status: 'payment_completed',
-      payload: sql`coalesce(${pendingSignups.payload}, '{}'::jsonb) || ${JSON.stringify({ stripeCustomerId, stripeSubscriptionId })}::jsonb`,
-      updatedAt: new Date(),
-    })
-    .where(eq(pendingSignups.signupRequestId, signupRequestId));
+  await markPendingSignupPaymentCompleted({
+    signupRequestId,
+    stripeCustomerId,
+    stripeSubscriptionId,
+  });
 
   // Insert provisioning job stub — onConflictDoNothing handles idempotent re-delivery.
-  await db
-    .insert(provisioningJobs)
-    .values({
-      signupRequestId,
-      stripeEventId: eventId,
-      status: 'initiated',
-    })
-    .onConflictDoNothing();
+  await insertProvisioningJobFence({ signupRequestId, stripeEventId: eventId });
 
   // Look up the job id (may be a newly inserted row or an existing one from a prior delivery).
-  const [job] = await db
-    .select({ id: provisioningJobs.id })
-    .from(provisioningJobs)
-    .where(eq(provisioningJobs.signupRequestId, signupRequestId))
-    .limit(1);
+  const jobId = await getProvisioningJobIdBySignupRequestId(signupRequestId);
 
-  if (job) {
+  if (jobId !== null) {
     // Await the resumable state machine so serverless cannot drop the work after
     // the webhook returns. On failure, the outer handler returns 500 and Stripe retries.
-    await runProvisioning(job.id);
+    await runProvisioning(jobId);
   }
 
   logStripeWebhookEvent('info', 'Provisioning completed from checkout.session.completed', {
@@ -293,23 +265,12 @@ async function handleCheckoutSessionCompleted(
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
   // Fetch fresh state [AGENTS #28]
   const fresh = await retrieveSubscription(subscription.id);
-  const db = createUnscopedClient();
   const now = new Date();
 
   // Look up community by stripeSubscriptionId — needed for name/communityType (email) and to
   // decide which update path to take.
   // [AGENTS #28] retrieveSubscription called for fresh status + price lookup_key
-  const existing = await db
-    .select({
-      id: communities.id,
-      name: communities.name,
-      communityType: communities.communityType,
-    })
-    .from(communities)
-    .where(eq(communities.stripeSubscriptionId, fresh.id))
-    .limit(1);
-
-  const community = existing[0];
+  const community = await getCommunityByStripeSubscriptionId(fresh.id);
   if (!community) return;
 
   if (fresh.status !== 'canceled') {
@@ -334,18 +295,12 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
       resolvedPlan = null;
     }
 
-    const updates: Record<string, unknown> = {
+    await updateCommunitySubscriptionFromStripe({
+      communityId: community.id,
       subscriptionStatus: fresh.status,
       subscriptionPlan: resolvedPlan,
-      updatedAt: now,
-    };
-    if (fresh.status === 'past_due') {
-      updates['paymentFailedAt'] = now;
-    }
-    await db
-      .update(communities)
-      .set(updates)
-      .where(eq(communities.id, community.id));
+      paymentFailedAt: fresh.status === 'past_due' ? now : undefined,
+    });
     return;
   }
 
@@ -354,24 +309,13 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
   // event IDs that both pass the idempotency fence), only the first to acquire the row
   // lock will see subscriptionCanceledAt IS NULL; the loser gets an empty RETURNING and
   // skips the email — preventing double-send.
-  const rows = await db
-    .update(communities)
-    .set({
-      subscriptionStatus: 'canceled',
-      subscriptionCanceledAt: now,
-      subscriptionPlan: null,
-      nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(communities.id, community.id),
-        isNull(communities.subscriptionCanceledAt),
-      ),
-    )
-    .returning({ id: communities.id });
+  const wasFirstCancellation = await cancelCommunitySubscriptionByIdIfFirst({
+    communityId: community.id,
+    canceledAt: now,
+    nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
+  });
 
-  if (!rows[0]) return; // already canceled — skip email
+  if (!wasFirstCancellation) return; // already canceled — skip email
 
   await sendSubscriptionCanceledEmail(community.id, {
     communityName: community.name,
@@ -385,35 +329,17 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Pro
   const fresh = await retrieveSubscription(subscription.id);
   if (fresh.status !== 'canceled') return;
 
-  const db = createUnscopedClient();
   const now = new Date();
 
   // Atomic UPDATE: only matches when subscriptionCanceledAt IS NULL.
   // If two concurrent handlers race (subscription.updated + subscription.deleted on different
   // event IDs), PostgreSQL's row lock ensures exactly one wins and gets rows back.
   // The loser gets an empty RETURNING and skips the email — no double-send.
-  const rows = await db
-    .update(communities)
-    .set({
-      subscriptionStatus: 'canceled',
-      subscriptionCanceledAt: now,
-      subscriptionPlan: null,
-      nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(communities.stripeSubscriptionId, subscription.id),
-        isNull(communities.subscriptionCanceledAt),
-      ),
-    )
-    .returning({
-      id: communities.id,
-      name: communities.name,
-      communityType: communities.communityType,
-    });
-
-  const community = rows[0];
+  const community = await cancelCommunitySubscriptionByStripeSubscriptionIfFirst({
+    stripeSubscriptionId: subscription.id,
+    canceledAt: now,
+    nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
+  });
   if (!community) return; // already canceled or community not found
 
   await sendSubscriptionCanceledEmail(community.id, {
@@ -428,17 +354,10 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
   if (!subscriptionId) return;
 
-  const db = createUnscopedClient();
   const now = new Date();
   const nextReminderAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // Day 3
 
-  const communityRows = await db
-    .select()
-    .from(communities)
-    .where(eq(communities.stripeSubscriptionId, subscriptionId))
-    .limit(1);
-
-  const community = communityRows[0];
+  const community = await getCommunityByStripeSubscriptionId(subscriptionId);
   if (!community) {
     logStripeWebhookEvent('warn', 'invoice.payment_failed has no matching community', {
       eventType: 'invoice.payment_failed',
@@ -450,15 +369,11 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     return;
   }
 
-  await db
-    .update(communities)
-    .set({
-      subscriptionStatus: 'past_due',
-      paymentFailedAt: community.paymentFailedAt ?? now,
-      nextReminderAt: community.nextReminderAt ?? nextReminderAt,
-      updatedAt: now,
-    })
-    .where(eq(communities.id, community.id));
+  await markCommunityPaymentFailed({
+    community,
+    paymentFailedAt: now,
+    nextReminderAt,
+  });
 
   const amountDue = invoice.amount_due
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
@@ -480,17 +395,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
   const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
   if (!subscriptionId) return;
 
-  const db = createUnscopedClient();
-
-  await db
-    .update(communities)
-    .set({
-      subscriptionStatus: 'active',
-      paymentFailedAt: null,
-      nextReminderAt: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(communities.stripeSubscriptionId, subscriptionId));
+  await markCommunityPaymentSucceeded(subscriptionId);
 }
 
 async function handleCheckoutSessionExpired(
@@ -539,11 +444,10 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     case 'price.updated': {
       const price = event.data.object as Stripe.Price;
       if (price.unit_amount !== null) {
-        const db = createUnscopedClient();
-        await db
-          .update(stripePrices)
-          .set({ unitAmountCents: price.unit_amount, updatedAt: new Date() })
-          .where(eq(stripePrices.stripePriceId, price.id));
+        await updateStripePriceUnitAmount({
+          stripePriceId: price.id,
+          unitAmountCents: price.unit_amount,
+        });
       }
       break;
     }
@@ -593,17 +497,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   }
 
   // 3. Idempotency check — distinguish processed vs failed vs new
-  const db = createUnscopedClient();
-  const existing = await db
-    .select({
-      eventId: stripeWebhookEvents.eventId,
-      processedAt: stripeWebhookEvents.processedAt,
-    })
-    .from(stripeWebhookEvents)
-    .where(eq(stripeWebhookEvents.eventId, event.id))
-    .limit(1);
-
-  const priorAttempt = existing[0];
+  const priorAttempt = await getStripeWebhookAttempt(event.id);
   let isRetry = false;
 
   if (priorAttempt) {
@@ -633,7 +527,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // 4. Insert idempotency fence (skip on retry — row already exists)
   if (!isRetry) {
     try {
-      await db.insert(stripeWebhookEvents).values({ eventId: event.id });
+      await insertStripeWebhookFence(event.id);
     } catch (insertErr) {
       if (!isUniqueConstraintError(insertErr)) {
         // Not a unique constraint violation — genuine DB error
@@ -648,11 +542,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
         return NextResponse.json({ error: 'Webhook fence insert failed' }, { status: 500 });
       }
       // Unique violation — race condition, another request inserted first
-      const [raceCheck] = await db
-        .select({ processedAt: stripeWebhookEvents.processedAt })
-        .from(stripeWebhookEvents)
-        .where(eq(stripeWebhookEvents.eventId, event.id))
-        .limit(1);
+      const raceCheck = await getStripeWebhookAttempt(event.id);
 
       if (raceCheck && raceCheck.processedAt !== null) {
         return NextResponse.json({ received: true });
@@ -664,10 +554,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // 5. Process event — catch unexpected errors, log to Sentry, never re-throw
   try {
     await handleStripeEvent(event);
-    await db
-      .update(stripeWebhookEvents)
-      .set({ processedAt: new Date() })
-      .where(eq(stripeWebhookEvents.eventId, event.id));
+    await markStripeWebhookProcessed(event.id);
     logStripeWebhookEvent('info', 'Stripe webhook event processed successfully', {
       eventId: event.id,
       eventType: event.type,

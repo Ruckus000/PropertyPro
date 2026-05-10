@@ -99,7 +99,7 @@ const ALLOWED_SYMBOLS = new Set<string>([
 ]);
 
 // ---------------------------------------------------------------------------
-// Grandfather allowlist — 89 files as of 2026-05-08 survey
+// Grandfather allowlist — drained to 0 files as of A3 Phase 2 drain #77.
 //
 // These files predate the guard and are allowed to keep their direct table
 // imports. New files MUST NOT be added without explicit review — the guard
@@ -114,9 +114,7 @@ const ALLOWED_SYMBOLS = new Set<string>([
 //   4. Remove the file from this set.
 // ---------------------------------------------------------------------------
 
-const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([
-  'apps/web/src/app/api/v1/webhooks/stripe/route.ts',
-]);
+const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([]);
 
 // ---------------------------------------------------------------------------
 // Detection
