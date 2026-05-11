@@ -187,8 +187,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   // Strip sensitive access-control field from resident responses
   if (isResidentRole(membership.role)) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const sanitized = visitors.map(({ passCode, ...rest }) => rest);
+    const sanitized = visitors.map(({ passCode: _, ...rest }) => rest);
     return NextResponse.json({ data: sanitized });
   }
 

@@ -19,8 +19,7 @@ import { deriveVisitorStatus } from '@/lib/visitors/visitor-logic';
 
 /** Strip passCode from resident responses — mirrors the guard in GET /visitors */
 function stripPassCode<T extends Record<string, unknown>>(rows: T[]) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return rows.map(({ passCode, ...rest }) => rest);
+  return rows.map(({ passCode: _, ...rest }) => rest);
 }
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
