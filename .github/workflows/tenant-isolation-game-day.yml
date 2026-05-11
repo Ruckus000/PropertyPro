@@ -1,0 +1,103 @@
+name: Tenant Isolation Game Day
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly canary, Monday 09:30 UTC.
+    - cron: '30 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  tenant-isolation-game-day:
+    name: tenant-isolation-game-day
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: propertypro_tenant_game_day
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_tenant_game_day
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_tenant_game_day
+      PROPERTYPRO_SEED_ENV: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Stub Supabase primitives
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+              CREATE ROLE service_role NOLOGIN;
+            END IF;
+          END $$;
+
+          GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+          CREATE SCHEMA IF NOT EXISTS auth;
+
+          CREATE OR REPLACE FUNCTION auth.uid()
+            RETURNS uuid
+            LANGUAGE sql
+            STABLE
+          AS $$ SELECT NULL::uuid; $$;
+
+          CREATE OR REPLACE FUNCTION auth.role()
+            RETURNS text
+            LANGUAGE sql
+            STABLE
+          AS $$ SELECT 'service_role'::text; $$;
+
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            email text,
+            raw_user_meta_data jsonb DEFAULT '{}'::jsonb
+          );
+
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+          SQL
+
+      - name: Build packages
+        run: pnpm --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db build
+
+      - name: Run migrations
+        run: pnpm --filter @propertypro/db db:migrate
+
+      - name: Run tenant isolation game day
+        run: pnpm test:tenant-isolation-game-day

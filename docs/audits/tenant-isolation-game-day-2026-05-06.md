@@ -2,6 +2,12 @@
 
 Phase 0.5 of the verification gate from `~/.claude/plans/draft-a-plan-that-reflective-pie.md`.
 
+**2026-05-11 update:** the API/database dynamic game-day canary is now
+automated and scheduled weekly. See
+[`tenant-isolation-game-day-2026-05-11.md`](tenant-isolation-game-day-2026-05-11.md).
+The remaining unautomated slice is the browser-only TanStack Query
+cache-poisoning assertion.
+
 **Scope notice:** the original Phase 0.5 design called for a full game day with two concurrent workers, fault injection, and in-page assertions in a non-prod environment. That requires a non-prod env with seeded data + DB write access, which this worktree does not have. What follows is a **strict subset** — confirming the static foundation (RLS enabled and forced on every tenant table) is in place at the DB layer in production. The dynamic experiments remain blocked.
 
 Queries via Supabase MCP against the **PropertyPro production project** (`vbqobyagjzvlfpfozvmx`). Read-only metadata queries only.
