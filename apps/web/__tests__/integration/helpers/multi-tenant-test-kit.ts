@@ -18,7 +18,11 @@ import type {
   MultiTenantCommunityKey,
 } from '../../fixtures/multi-tenant-communities';
 import type { MultiTenantUserFixture, MultiTenantUserKey } from '../../fixtures/multi-tenant-users';
-import { clearTestAuthState, registerTestAuthState } from '../providers/test-auth-provider';
+import {
+  clearTestAuthState,
+  registerTestAuthState,
+  runWithTestAuthUserId,
+} from '../providers/test-auth-provider';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -231,6 +235,15 @@ export function requireCurrentActor(state: TestKitState): string {
     throw new Error('Current test actor user ID is not set');
   }
   return state.currentActorUserId;
+}
+
+export function runAsActor<T>(
+  state: TestKitState,
+  userKey: MultiTenantUserKey,
+  callback: () => T,
+): T {
+  const user = requireUser(state, userKey);
+  return runWithTestAuthUserId(user.id, callback);
 }
 
 // ---------------------------------------------------------------------------

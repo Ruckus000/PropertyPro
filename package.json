@@ -21,6 +21,7 @@
     "perf:check": "tsx scripts/perf-check.ts",
     "lint:docs": "tsx scripts/lint-documentation.ts",
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
+    "test:tenant-isolation-game-day": "pnpm exec vitest run --config apps/web/vitest.integration.config.ts apps/web/__tests__/integration/tenant-isolation-game-day.integration.test.ts",
     "playwright:install": "pnpm --filter @propertypro/web playwright:install",
     "test:e2e": "pnpm --filter @propertypro/web test:e2e",
     "test:e2e:esign": "pnpm --filter @propertypro/web test:e2e -- e2e/esign-and-documents-flow.spec.ts",
