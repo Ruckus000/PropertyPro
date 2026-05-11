@@ -32,6 +32,7 @@ import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 // Feature flag: set to true to use the new command palette
 const USE_COMMAND_PALETTE_V2 = true;
@@ -163,20 +164,9 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
       </div>
 
       {/* Mobile drawer overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-50 flex lg:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Navigation"
-        >
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={closeMobileNav}
-            aria-hidden="true"
-          />
-          {/* Drawer */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-[300px] p-0 sm:w-[300px]" >
+          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
           <div className="relative z-10 h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <AppSidebar
               expandedOverride={true}
@@ -192,17 +182,10 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
               userName={user?.fullName ?? null}
               plan={community?.plan ?? null}
             />
-            <button
-              type="button"
-              onClick={closeMobileNav}
-              className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-md text-white/60 transition-colors duration-quick hover:text-white"
-              aria-label="Close navigation"
-            >
-              <X size={18} />
-            </button>
+
           </div>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
       {/* Main content area — inert when mobile drawer is open to trap focus */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={mobileOpen || undefined}>

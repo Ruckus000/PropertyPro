@@ -1,3 +1,6 @@
+import { Suspense } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Skeleton } from '@/components/ui/skeleton';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
@@ -15,6 +18,19 @@ import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announc
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
 import { DashboardEsignPending } from '@/components/dashboard/dashboard-esign-pending';
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-16 w-full rounded-md" />
+      <Skeleton className="h-10 w-[200px]" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Skeleton className="h-64 w-full rounded-md" />
+        <Skeleton className="h-64 w-full rounded-md" />
+      </div>
+    </div>
+  );
+}
+
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -69,30 +85,34 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   );
 
   return (
-    <div className="space-y-6">
-      <OnboardingChecklist
-        communityId={context.communityId}
-        communityName={data.communityName}
-      />
-      <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <DashboardAnnouncements
-          items={data.announcements}
-          communityId={context.communityId}
-          canWriteAnnouncements={canWriteAnnouncements}
-        />
-        <DashboardMeetings items={data.meetings} timezone={data.timezone} />
-        {features.hasViolations && data.violationSummary && (
-          <DashboardViolations
-            summary={data.violationSummary}
+    <ErrorBoundary>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <div className="space-y-6">
+          <OnboardingChecklist
             communityId={context.communityId}
-            isAdmin={membership.isAdmin}
+            communityName={data.communityName}
           />
-        )}
-        {features.hasEsign && data.pendingSigners.length > 0 && (
-          <DashboardEsignPending items={data.pendingSigners} />
-        )}
-      </div>
-    </div>
+          <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <DashboardAnnouncements
+              items={data.announcements}
+              communityId={context.communityId}
+              canWriteAnnouncements={canWriteAnnouncements}
+            />
+            <DashboardMeetings items={data.meetings} timezone={data.timezone} />
+            {features.hasViolations && data.violationSummary && (
+              <DashboardViolations
+                summary={data.violationSummary}
+                communityId={context.communityId}
+                isAdmin={membership.isAdmin}
+              />
+            )}
+            {features.hasEsign && data.pendingSigners.length > 0 && (
+              <DashboardEsignPending items={data.pendingSigners} />
+            )}
+          </div>
+        </div>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
