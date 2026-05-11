@@ -36,3 +36,13 @@ export interface SendEmailOptions {
 export interface SendEmailResult {
   id: string;
 }
+
+export interface SendBulkEmailResult {
+  results: {
+    success: boolean;
+    id?: string;
+    error?: string;
+  }[];
+  successCount: number;
+  failureCount: number;
+}

@@ -33,7 +33,7 @@ import type {
   UserRoleRecord,
 } from '@propertypro/db';
 import { eq, and, desc, inArray } from '@propertypro/db/filters';
-import { EmergencyAlertEmail, sendEmail } from '@propertypro/email';
+import { EmergencyAlertEmail, sendBulkEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import { normalizeToE164, isValidE164, maskPhone } from '@/lib/utils/phone';
 import { chunk } from '@/lib/utils/chunk';
@@ -310,54 +310,82 @@ export async function executeBroadcast(
     // Email sending
     (async () => {
       if (emailRecipients.length === 0) return 0;
-      let sentCount = 0;
 
-      for (const batch of chunk(emailRecipients, 50)) {
-        await Promise.all(
-          batch.map(async (recipient) => {
-            try {
-              const result = await sendEmail({
-                to: recipient.email!,
-                subject: `🚨 ${title}`,
-                category: 'transactional',
-                react: createElement(EmergencyAlertEmail, {
-                  branding: { communityName },
-                  recipientName: '',
-                  alertTitle: title,
-                  alertBody: emailBody,
-                  severity: severity as EmergencyAlertSeverity,
-                  sentAt: new Date().toISOString(),
-                }),
-              });
+      const emailPayloads = emailRecipients.map((recipient) => ({
+        to: recipient.email!,
+        subject: `🚨 ${title}`,
+        category: 'transactional' as const,
+        react: createElement(EmergencyAlertEmail, {
+          branding: { communityName },
+          recipientName: '',
+          alertTitle: title,
+          alertBody: emailBody,
+          severity: severity as EmergencyAlertSeverity,
+          sentAt: new Date().toISOString(),
+        }),
+      }));
 
-              await scoped.update(
+      const bulkResult = await sendBulkEmail(emailPayloads);
+
+      // We assume bulkResult.results maps 1:1 with emailRecipients in order
+      const successfulIds: string[] = [];
+      const failedIds: string[] = [];
+      const providerIdsMap = new Map<string, string>();
+
+      for (let i = 0; i < emailRecipients.length; i++) {
+        const recipient = emailRecipients[i];
+        if (!recipient) continue;
+
+        const result = bulkResult.results[i];
+
+        if (result && result.success) {
+          successfulIds.push(recipient.userId);
+          if (result.id) providerIdsMap.set(recipient.userId, result.id);
+        } else {
+          failedIds.push(recipient.userId);
+        }
+      }
+
+      // Batch update successful queries
+      // We will perform individual updates for success to record provider IDs, but they can be parallelized in chunks.
+      if (successfulIds.length > 0) {
+        for (const batch of chunk(successfulIds, 50)) {
+          await Promise.all(
+            batch.map((userId) =>
+              scoped.update(
                 emergencyBroadcastRecipients,
                 {
                   emailStatus: 'sent',
-                  emailProviderId: result.id,
+                  emailProviderId: providerIdsMap.get(userId),
                   emailSentAt: new Date(),
                 },
                 and(
                   eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
-                  eq(emergencyBroadcastRecipients.userId, recipient.userId),
-                ),
-              );
-              sentCount++;
-            } catch {
-              await scoped.update(
-                emergencyBroadcastRecipients,
-                { emailStatus: 'failed' },
-                and(
-                  eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
-                  eq(emergencyBroadcastRecipients.userId, recipient.userId),
-                ),
-              );
-            }
-          }),
-        );
+                  eq(emergencyBroadcastRecipients.userId, userId),
+                )
+              )
+            )
+          );
+        }
       }
 
-      return sentCount;
+      // Batch update failures using inArray to reduce N+1 updates
+      if (failedIds.length > 0) {
+        for (const batch of chunk(failedIds, 50)) {
+          if (batch.length > 0) {
+            await scoped.update(
+              emergencyBroadcastRecipients,
+              { emailStatus: 'failed' },
+              and(
+                eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+                inArray(emergencyBroadcastRecipients.userId, batch),
+              )
+            );
+          }
+        }
+      }
+
+      return bulkResult.successCount;
     })(),
   ]);
 

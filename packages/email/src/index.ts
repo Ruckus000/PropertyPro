@@ -5,6 +5,7 @@ export type {
   EmailCategory,
   SendEmailOptions,
   SendEmailResult,
+  SendBulkEmailResult,
 } from "./types";
 
 // Layout
@@ -108,5 +109,5 @@ export { EmailAlert } from "./components/email-alert";
 export * as emailStyles from "./components/shared-styles";
 
 // Send helper
-export { sendEmail, testInbox, clearTestInbox } from "./send";
+export { sendEmail, sendBulkEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";
