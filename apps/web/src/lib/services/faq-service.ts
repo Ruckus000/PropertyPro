@@ -1,5 +1,11 @@
-import { createScopedClient, faqs } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import {
+  clampPageSize,
+  createScopedClient,
+  faqs,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@propertypro/db';
+import { and, asc, eq, gt, isNull, or, sql } from '@propertypro/db/filters';
 import { DEFAULT_FAQS } from '@propertypro/shared';
 
 export interface VisibleFaq {
@@ -68,6 +74,102 @@ export function filterFaqsForRole(
   return sortFaqs(faqRows)
     .filter((faq) => isFaqVisibleToRole(faq, role))
     .map(toVisibleFaq);
+}
+
+interface FaqOrderedCursorPayload {
+  sortOrder: number;
+  id: number;
+}
+
+function encodeFaqOrderedCursor(payload: FaqOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeFaqOrderedCursor(
+  cursor: string | null | undefined,
+): FaqOrderedCursorPayload | null {
+  if (!cursor) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      Number.isInteger((parsed as { sortOrder?: unknown }).sortOrder) &&
+      Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      return {
+        sortOrder: (parsed as { sortOrder: number }).sortOrder,
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function buildFaqRoleVisibilityWhere(role: string | null | undefined) {
+  const globallyVisible = or(
+    isNull(faqs.roleVisibility),
+    sql`cardinality(${faqs.roleVisibility}) = 0`,
+  );
+
+  if (!role) {
+    return globallyVisible;
+  }
+
+  return or(
+    globallyVisible,
+    sql`${role} = ANY(${faqs.roleVisibility})`,
+  );
+}
+
+function buildFaqOrderedCursorWhere(cursor: FaqOrderedCursorPayload | null) {
+  if (!cursor) return undefined;
+  return or(
+    gt(faqs.sortOrder, cursor.sortOrder),
+    and(eq(faqs.sortOrder, cursor.sortOrder), gt(faqs.id, cursor.id)),
+  );
+}
+
+export async function listVisibleFaqsPage(
+  communityId: number,
+  role: string | null | undefined,
+  input: PaginationInput = {},
+): Promise<PaginatedResult<VisibleFaq>> {
+  const pageSize = clampPageSize(input.pageSize);
+  const cursor = decodeFaqOrderedCursor(input.cursor);
+  const roleWhere = buildFaqRoleVisibilityWhere(role);
+  const cursorWhere = buildFaqOrderedCursorWhere(cursor);
+  const where = cursorWhere ? and(roleWhere, cursorWhere) : roleWhere;
+
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom(faqs, {}, where)
+    .orderBy(asc(faqs.sortOrder), asc(faqs.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const data = dataRows.map(toVisibleFaq);
+
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeFaqOrderedCursor({
+          sortOrder: (lastRow['sortOrder'] as number | null | undefined) ?? 0,
+          id: lastRow['id'] as number,
+        })
+      : null;
+
+  return {
+    data,
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function ensureFaqsExist(communityId: number): Promise<void> {

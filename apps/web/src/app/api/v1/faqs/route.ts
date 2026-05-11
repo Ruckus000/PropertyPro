@@ -23,12 +23,15 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   createFaq,
   ensureFaqsExist,
-  filterFaqsForRole,
-  listFaqs,
+  listVisibleFaqsPage,
 } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 const communityIdSchema = z.coerce.number().int().positive();
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
 
 const postSchema = z.object({
   communityId: z.number().int().positive(),
@@ -47,13 +50,28 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, userId);
 
+  const query = listQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!query.success) {
+    throw new ValidationError('Invalid query parameters');
+  }
+
   // Lazy-seed default FAQs if none exist
   await ensureFaqsExist(communityId);
 
-  const rows = await listFaqs(communityId);
-  const visibleFaqs = filterFaqsForRole(rows, membership.role);
+  const result = await listVisibleFaqsPage(communityId, membership.role, {
+    cursor: query.data.cursor,
+    pageSize: query.data.pageSize,
+  });
 
-  return NextResponse.json({ data: visibleFaqs });
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

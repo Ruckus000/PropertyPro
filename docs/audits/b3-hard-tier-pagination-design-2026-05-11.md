@@ -3,6 +3,11 @@
 Date: 2026-05-11
 Branch: `codex/b3-hard-tier-pagination-design`
 
+Status update: FAQ ordered-keyset rollout has been implemented on
+`codex/b3-faqs-ordered-keyset-pagination` as the first hard-tier proof. The
+remaining hard-tier focus is announcements; the optional FAQ order index remains
+deferred until production row counts justify a migration.
+
 ## Summary
 
 The B3 easy tier is exhausted. The remaining list endpoints are not safe
@@ -159,6 +164,12 @@ FAQs are the smallest safe hard-tier proof:
 - curated order is explicit (`sortOrder`)
 - visibility filter is deterministic SQL
 - lazy seed is already isolated in `ensureFaqsExist()`
+
+Implementation status: complete on `codex/b3-faqs-ordered-keyset-pagination`.
+The GET route now lazy-seeds after query validation, pushes role visibility into
+SQL, keysets by `(sort_order ASC, id ASC)`, emits opaque `{ sortOrder, id }`
+cursors, and returns the canonical double-wrapped B3 envelope. FAQ mutation,
+reorder, search, and manage paths are intentionally unchanged.
 
 Implementation sketch:
 
