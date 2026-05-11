@@ -47,10 +47,22 @@ const createDocumentSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().nullable().optional(),
   categoryId: z.number().int().positive(),
-  filePath: z.string().min(1),
+  filePath: z.string().min(1).refine(
+    (path) => !path.includes('..'),
+    { message: 'Path traversal is not allowed' },
+  ),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
   mimeType: z.string().min(1).optional(),
+}).superRefine((data, ctx) => {
+  const expectedPrefix = `communities/${data.communityId}/`;
+  if (!data.filePath.startsWith(expectedPrefix)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `filePath must start with ${expectedPrefix}`,
+      path: ['filePath'],
+    });
+  }
 });
 
 const listQuerySchema = z.object({
