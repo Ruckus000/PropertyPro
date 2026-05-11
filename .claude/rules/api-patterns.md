@@ -74,6 +74,25 @@ return NextResponse.json({
 - Optional 4th arg `{ where?: SQL, direction?: 'asc' | 'desc' }` for filtering
   and sort direction (defaults to `desc`, i.e. newest first).
 
+### Hard-tier warning: non-id sort orders
+
+Do not migrate an endpoint to the id-only `paginate()` helper when the
+user-visible order is not equivalent to `id desc` / `id asc`. These endpoints
+need a sort-preserving keyset design first:
+
+- pinned/newest feeds: `isPinned desc, publishedAt/createdAt desc, id desc`
+- curated lists: `sortOrder asc, id asc`
+- calendar/reservation lists: `startTime/expectedArrival` order
+- directories: `name asc` or `isActive desc, name asc`
+- merged feeds or joined/aggregate rows
+
+For these hard-tier endpoints, push every visibility filter into SQL, append
+`id` as the final deterministic tiebreaker, and encode all sort keys in an
+opaque cursor. See
+`docs/audits/b3-hard-tier-pagination-design-2026-05-11.md` before changing
+announcements, FAQs, reservations, visitors, vendors, assessments, amenities,
+forum threads, calendar events, elections, or leases.
+
 ### Filter pushdown
 
 Push every filter into the SQL `where` predicate. Don't post-fetch in JS:
