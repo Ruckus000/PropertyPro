@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { UNKNOWN_SUBDOMAIN_REASON } from '@/lib/middleware/unknown-subdomain-reason';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { CommunityPickerGrid } from '@/components/community-picker/community-picker-grid';
 import { resolveSafeReturnTo, applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
@@ -28,6 +30,11 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
   const params = await searchParams;
   const rawReturnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
   const safeReturnTo = resolveSafeReturnTo(rawReturnTo);
+  const rawReason = params.reason;
+  const unknownSubdomain =
+    typeof rawReason === 'string'
+      ? rawReason === UNKNOWN_SUBDOMAIN_REASON
+      : Array.isArray(rawReason) && rawReason.includes(UNKNOWN_SUBDOMAIN_REASON);
 
   const communities = await listCommunitiesForUser(userId);
 
@@ -46,6 +53,15 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
 
   return (
     <main id="main-content" className="mx-auto max-w-4xl px-6 py-12">
+      {unknownSubdomain && (
+        <div className="mb-6">
+          <AlertBanner
+            status="warning"
+            title="Community link not recognized"
+            description="That web address does not match an active community. Pick a community below, or confirm the link your board or manager sent you."
+          />
+        </div>
+      )}
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-semibold text-content dark:text-gray-100">Select a Community</h1>
         <p className="mt-2 text-sm text-content-secondary dark:text-gray-300">

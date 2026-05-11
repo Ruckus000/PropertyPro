@@ -16,6 +16,7 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
 }));
 
 import { middleware } from '../../src/middleware';
+import { UNKNOWN_SUBDOMAIN_REASON } from '../../src/lib/middleware/unknown-subdomain-reason';
 
 function request(
   url: string,
@@ -176,6 +177,29 @@ describe('p1-22 session middleware', () => {
 
     expect(response.status).toBe(404);
     expect(json.error).toBe('Not Found');
+  });
+
+  it('redirects unknown tenant subdomain page requests to canonical select-community', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000');
+    try {
+      limitMock.mockResolvedValueOnce({
+        data: [],
+        error: null,
+      });
+
+      const response = await middleware(
+        request('http://localhost:3000/dashboard', {
+          host: 'unknown.getpropertypro.com',
+        }),
+      );
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe(
+        `http://localhost:3000/select-community?reason=${UNKNOWN_SUBDOMAIN_REASON}`,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('redirects authenticated but unverified users to /auth/verify-email', async () => {

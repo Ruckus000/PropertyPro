@@ -3,7 +3,8 @@
  *
  * Responsibilities:
  * 1. Refresh Supabase auth session without blocking rendering
- * 2. Resolve tenant context for protected routes and return 404 on invalid tenants
+ * 2. Resolve tenant context for protected routes; unknown tenant slugs on pages
+ *    redirect to canonical /select-community (APIs return 404 JSON)
  * 3. Redirect unauthenticated users away from protected routes to /auth/login?returnTo=<original>
  * 4. Redirect authenticated but unverified users to /auth/verify-email
  * 5. Attach X-Request-ID (UUID) header for request tracing [AGENTS #45]
@@ -13,7 +14,12 @@
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
-import { resolveCommunityContext, SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
+import {
+  getWebAppOriginFromEnv,
+  resolveCommunityContext,
+  SUPPORT_SESSION_COOKIE,
+} from '@propertypro/shared';
+import { UNKNOWN_SUBDOMAIN_REASON } from './lib/middleware/unknown-subdomain-reason';
 import {
   resolveActiveSupportSession,
   isReadOnlyBlocked,
@@ -228,10 +234,14 @@ function notFoundResponse(
   isPreview: boolean = false,
 ): NextResponse {
   const isApi = isApiPath(request.nextUrl.pathname);
-  const target = isApi
-    ? NextResponse.json({ error: 'Not Found' }, { status: 404 })
-    : new NextResponse('Not Found', { status: 404 });
-  return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
+  if (isApi) {
+    const target = NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
+  }
+  const redirectUrl = new URL('/select-community', getWebAppOriginFromEnv());
+  redirectUrl.searchParams.set('reason', UNKNOWN_SUBDOMAIN_REASON);
+  const target = NextResponse.redirect(redirectUrl, 307);
+  return finaliseResponse(source, target, requestId, origin, false, isPreview);
 }
 
 function internalErrorResponse(
