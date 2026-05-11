@@ -207,10 +207,12 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    expect(json.data.length).toBeGreaterThanOrEqual(1);
+    const json = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(response);
+    expect(json.data.data.length).toBeGreaterThanOrEqual(1);
 
-    const found = json.data.find((a) => a['title'] === `Test Announcement ${kit.runSuffix}`);
+    const found = json.data.data.find((a) => a['title'] === `Test Announcement ${kit.runSuffix}`);
     expect(found).toBeDefined();
   });
 
@@ -314,11 +316,13 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const getResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
-    const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
-    expect(getJson.data.length).toBeGreaterThan(0);
+    const getJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(getResponse);
+    expect(getJson.data.data.length).toBeGreaterThan(0);
     // The created announcement should be pinned and appear first
-    expect(getJson.data[0]['id']).toBe(createdAnnouncementId);
-    expect(getJson.data[0]['isPinned']).toBe(true);
+    expect(getJson.data.data[0]['id']).toBe(createdAnnouncementId);
+    expect(getJson.data.data[0]['isPinned']).toBe(true);
 
     // Unpin
     const unpinResponse = await route.POST(
@@ -368,16 +372,20 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const defaultResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
-    const defaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(defaultResponse);
-    const archivedInDefault = defaultJson.data.find((a) => a['id'] === createdAnnouncementId);
+    const defaultJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(defaultResponse);
+    const archivedInDefault = defaultJson.data.data.find((a) => a['id'] === createdAnnouncementId);
     expect(archivedInDefault).toBeUndefined();
 
     // With includeArchived=true
     const archivedResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}&includeArchived=true`)),
     );
-    const archivedJson = await parseJson<{ data: Array<Record<string, unknown>> }>(archivedResponse);
-    const archivedInList = archivedJson.data.find((a) => a['id'] === createdAnnouncementId);
+    const archivedJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(archivedResponse);
+    const archivedInList = archivedJson.data.data.find((a) => a['id'] === createdAnnouncementId);
     expect(archivedInList).toBeDefined();
 
     // Unarchive for cleanup
@@ -467,10 +475,12 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const listDefault = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
-    const listDefaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+    const listDefaultJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(
       listDefault,
     );
-    expect(listDefaultJson.data.find((a) => a['id'] === toDeleteId)).toBeUndefined();
+    expect(listDefaultJson.data.data.find((a) => a['id'] === toDeleteId)).toBeUndefined();
 
     // Deleting again returns 404 (already soft-deleted)
     const repeatDelete = await route.DELETE(
@@ -495,9 +505,9 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
     const listAfterRestoreJson = await parseJson<{
-      data: Array<Record<string, unknown>>;
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
     }>(listAfterRestore);
-    const restored = listAfterRestoreJson.data.find((a) => a['id'] === toDeleteId);
+    const restored = listAfterRestoreJson.data.data.find((a) => a['id'] === toDeleteId);
     expect(restored).toBeDefined();
     expect(restored?.['deletedAt']).toBeNull();
   });
@@ -567,10 +577,12 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const listDefault = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
-    const listDefaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+    const listDefaultJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(
       listDefault,
     );
-    expect(listDefaultJson.data.find((a) => a['id'] === id)).toBeUndefined();
+    expect(listDefaultJson.data.data.find((a) => a['id'] === id)).toBeUndefined();
   });
 
   it('non-admin cannot restore a soft-deleted announcement (403)', async () => {
@@ -642,8 +654,10 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     const listAfter = await route.GET(
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
-    const listAfterJson = await parseJson<{ data: Array<Record<string, unknown>> }>(listAfter);
-    const row = listAfterJson.data.find((a) => a['id'] === id);
+    const listAfterJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(listAfter);
+    const row = listAfterJson.data.data.find((a) => a['id'] === id);
     expect(row).toBeDefined();
     expect(row?.['deletedAt']).toBeNull();
   });

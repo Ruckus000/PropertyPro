@@ -94,7 +94,11 @@ describe('p1-17 announcements route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
-    listVisibleAnnouncementsMock.mockResolvedValue({ rows: [], totalCount: 0 });
+    listVisibleAnnouncementsMock.mockResolvedValue({
+      rows: [],
+      totalCount: 0,
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
 
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockImplementation(async (table) => {
@@ -113,26 +117,32 @@ describe('p1-17 announcements route', () => {
     listVisibleAnnouncementsMock.mockResolvedValueOnce({
       rows: [{ id: 1, title: 'Pinned' }],
       totalCount: 1,
+      pagination: { nextCursor: 'next', hasMore: true, pageSize: 1 },
     });
 
     const req = new NextRequest('http://localhost:3000/api/v1/announcements?communityId=42');
     const res = await GET(req);
     const json = (await res.json()) as {
-      data: Array<{ id: number }>;
+      data: {
+        data: Array<{ id: number }>;
+        pagination: { nextCursor: string | null; hasMore: boolean; pageSize: number };
+      };
     };
 
     expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
       42,
       expect.objectContaining({ userId: 'session-user-1' }),
-      { includeArchived: false, query: '' },
+      { includeArchived: false, query: '', cursor: undefined, pageSize: undefined },
     );
-    expect(json.data.map((x) => x.id)).toEqual([1]);
+    expect(json.data.data.map((x) => x.id)).toEqual([1]);
+    expect(json.data.pagination).toEqual({ nextCursor: 'next', hasMore: true, pageSize: 1 });
   });
 
   it('GET forwards includeArchived and query filters to shared visibility lookup', async () => {
     listVisibleAnnouncementsMock.mockResolvedValueOnce({
       rows: [{ id: 2, title: 'Archived' }],
       totalCount: 1,
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
     });
 
     const req = new NextRequest(
@@ -140,15 +150,43 @@ describe('p1-17 announcements route', () => {
     );
     const res = await GET(req);
     const json = (await res.json()) as {
-      data: Array<{ id: number }>;
+      data: { data: Array<{ id: number }> };
     };
 
     expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
       42,
       expect.objectContaining({ userId: 'session-user-1' }),
-      { includeArchived: true, query: 'board' },
+      { includeArchived: true, query: 'board', cursor: undefined, pageSize: undefined },
     );
-    expect(json.data.map((x) => x.id)).toEqual([2]);
+    expect(json.data.data.map((x) => x.id)).toEqual([2]);
+  });
+
+  it('GET passes cursor and pageSize to the ordered-keyset visibility lookup', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/announcements?communityId=42&cursor=abc123&pageSize=2',
+    );
+
+    await GET(req);
+
+    expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ userId: 'session-user-1' }),
+      { includeArchived: false, query: '', cursor: 'abc123', pageSize: 2 },
+    );
+  });
+
+  it('GET treats empty cursor and pageSize query params as missing', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/announcements?communityId=42&cursor=&pageSize=',
+    );
+
+    await GET(req);
+
+    expect(listVisibleAnnouncementsMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ userId: 'session-user-1' }),
+      { includeArchived: false, query: '', cursor: undefined, pageSize: undefined },
+    );
   });
 
   it('POST create uses scoped insert and writes audit log', async () => {

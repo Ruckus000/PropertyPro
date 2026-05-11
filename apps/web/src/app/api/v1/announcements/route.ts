@@ -88,6 +88,11 @@ const deleteAnnouncementSchema = z.object({
   communityId: z.number().int().positive('Community ID must be a positive integer'),
 });
 
+const listAnnouncementsQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
 const parsedBodyCache = new WeakMap<NextRequest, Promise<Record<string, unknown>>>();
 
 async function getParsedBody(req: NextRequest): Promise<Record<string, unknown>> {
@@ -127,13 +132,29 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'announcements', 'read');
+  const parsedQuery = listAnnouncementsQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
   const query = searchParams.get('q')?.trim() ?? '';
-  const { rows } = await listVisibleAnnouncements(communityId, membership, {
+  const { rows, pagination } = await listVisibleAnnouncements(communityId, membership, {
     includeArchived,
     query,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
   });
 
-  return NextResponse.json({ data: rows });
+  return NextResponse.json({
+    data: {
+      data: rows,
+      pagination,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
