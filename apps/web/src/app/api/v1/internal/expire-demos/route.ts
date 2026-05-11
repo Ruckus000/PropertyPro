@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
-import { emitConversionEvent } from '@/lib/services/conversion-events';
+import { bulkEmitConversionEvents, emitConversionEvent } from '@/lib/services/conversion-events';
 import {
   banDemoAuthUser,
   expireStaleAccessRequests,
@@ -18,15 +18,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // ── Step 1: Detect demos entering grace period ──
   const enteringGrace = await findDemosEnteringGrace(now);
 
-  for (const row of enteringGrace) {
-    await emitConversionEvent({
-      demoId: row.demoInstanceId,
-      communityId: row.communityId,
-      eventType: 'grace_started',
-      source: 'cron',
-      dedupeKey: `demo:${row.demoInstanceId}:grace_started`,
-      occurredAt: row.trialEndsAt ?? now,
-    });
+  const graceEvents = enteringGrace.map((row) => ({
+    demoId: row.demoInstanceId,
+    communityId: row.communityId,
+    eventType: 'grace_started' as const,
+    source: 'cron' as const,
+    dedupeKey: `demo:${row.demoInstanceId}:grace_started`,
+    occurredAt: row.trialEndsAt ?? now,
+  }));
+
+  if (graceEvents.length > 0) {
+    await bulkEmitConversionEvents(graceEvents);
   }
 
   if (enteringGrace.length > 0) {

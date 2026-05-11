@@ -60,3 +60,33 @@ export async function emitConversionEvent(params: EmitEventParams): Promise<void
     console.warn('[conversion-events] failed to record event:', err);
   }
 }
+
+/**
+ * Emit multiple conversion events in a single bulk operation (awaited best-effort).
+ * Non-fatal: primary operation succeeds regardless.
+ */
+export async function bulkEmitConversionEvents(events: EmitEventParams[]): Promise<void> {
+  if (events.length === 0) return;
+
+  try {
+    const db = createUnscopedClient();
+    await db
+      .insert(conversionEvents)
+      .values(
+        events.map((params) => ({
+          demoId: params.demoId ?? null,
+          communityId: params.communityId ?? null,
+          eventType: params.eventType,
+          source: params.source,
+          dedupeKey: params.dedupeKey,
+          occurredAt: params.occurredAt ?? new Date(),
+          userId: params.userId ?? null,
+          stripeEventId: params.stripeEventId ?? null,
+          metadata: params.metadata ?? {},
+        })),
+      )
+      .onConflictDoNothing();
+  } catch (err) {
+    console.warn('[conversion-events] failed to record bulk events:', err);
+  }
+}

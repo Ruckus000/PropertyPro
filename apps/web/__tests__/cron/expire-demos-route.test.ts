@@ -58,6 +58,7 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@/lib/services/conversion-events', () => ({
   emitConversionEvent: vi.fn().mockResolvedValue(undefined),
+  bulkEmitConversionEvents: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -79,6 +80,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 // AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { bulkEmitConversionEvents, emitConversionEvent } from '@/lib/services/conversion-events';
 import { POST } from '../../src/app/api/v1/internal/expire-demos/route';
 
 const URL = 'http://localhost:3000/api/v1/internal/expire-demos';
@@ -113,6 +115,7 @@ function buildMocks(
   expiredDemos: object[] = [],
   expiredAccessRequests: object[] = [],
   banBehavior: 'success' | 'fail' = 'success',
+  graceDemos: object[] = [],
 ) {
   resetDbMocks();
 
@@ -120,11 +123,11 @@ function buildMocks(
   const mockSelectWhere = vi.fn();
   const mockUpdateWhere = vi.fn();
 
-  // Select chains: first call = grace detection (empty), second call = expired demos
+  // Select chains: first call = grace detection, second call = expired demos
   let selectWhereCallCount = 0;
   mockSelectWhere.mockImplementation(() => {
     selectWhereCallCount++;
-    if (selectWhereCallCount === 1) return Promise.resolve([]); // grace query — no demos in grace
+    if (selectWhereCallCount === 1) return Promise.resolve(graceDemos); // grace query
     return Promise.resolve(expiredDemos);
   });
 
@@ -208,6 +211,35 @@ describe('expire-demos cron route', () => {
     // The access request expiry update always runs (1 call), but no community/demo soft-deletes
     expect(mockDbUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdateUserById).not.toHaveBeenCalled();
+  });
+
+  it('detects demos entering grace period and emits bulk events', async () => {
+    const graceDemo = {
+      communityId: 10,
+      demoInstanceId: 20,
+      trialEndsAt: new Date('2025-01-01T10:00:00Z'),
+    };
+
+    buildMocks([], [], 'success', [graceDemo]);
+
+    const req = makeRequest('test-demo-secret');
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const json = (await res.json()) as { data: { graceDetected: number } };
+    expect(json.data.graceDetected).toBe(1);
+
+    expect(bulkEmitConversionEvents).toHaveBeenCalledTimes(1);
+    expect(bulkEmitConversionEvents).toHaveBeenCalledWith([
+      {
+        demoId: 20,
+        communityId: 10,
+        eventType: 'grace_started',
+        source: 'cron',
+        dedupeKey: 'demo:20:grace_started',
+        occurredAt: graceDemo.trialEndsAt,
+      },
+    ]);
   });
 
   it('soft-deletes expired communities and bans demo users', async () => {
