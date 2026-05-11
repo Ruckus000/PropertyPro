@@ -31,8 +31,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       ids.push(row.id);
       byCommunity.set(row.communityId, ids);
     }
+
+    const auditPromises = [];
     for (const [communityId, ids] of byCommunity) {
-      await logAuditEvent({
+      auditPromises.push(logAuditEvent({
         userId: null,
         communityId,
         action: 'update',
@@ -40,8 +42,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         resourceId: ids.join(','),
         newValues: { checkedOutAt: now },
         metadata: { transition: 'auto_checkout', count: ids.length },
-      });
+      }));
     }
+    await Promise.all(auditPromises);
 
     return NextResponse.json({
       data: { autoCheckedOut: overdue.length, errors },

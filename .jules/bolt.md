@@ -1,4 +1,4 @@
-# Codebase Learnings (Bolt)
+# Performance Learnings (Bolt Persona)
 
-- When optimizing database interactions involving Drizzle ORM, especially moving from singular updates to bulk updates using `inArray`, always ensure the input array has items before executing the query (e.g., `if (ids.length > 0)`). Empty arrays passed to `inArray` can throw an exception and roll back the whole transaction.
-- If processing a large batch of items that also requires calling an external API (like Supabase auth administration), chunk the items array to a reasonable size (e.g., 10 or 20 items per chunk) and process them with `Promise.allSettled`. This avoids triggering third-party API rate limits and ensures that individual external API failures do not halt the entire batch.
+- Resolving N+1 logging latency (e.g. `apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts`) by batching logging calls with `Promise.all` yields immense latency reductions (down from ~1s to ~13ms for 100 iterations on mocked data). This should be a standard pattern when auditing batch events.
+- Sandbox CI database access (via `DATABASE_URL`) cannot be locally created if Postgres service is not installed natively in the container, meaning DB tests fail due to connection refused. Performance improvement testing is typically verified purely on logic changes or mocking.
