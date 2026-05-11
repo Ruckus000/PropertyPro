@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
+import { unionAll } from 'drizzle-orm/pg-core';
 import { db } from '../drizzle';
 import { assessmentLineItems } from '../schema/assessment-line-items';
 import { communities } from '../schema/communities';
@@ -108,78 +109,92 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     .filter((row) => row.communityType === 'apartment')
     .map((row) => row.communityId);
 
-  const [residentCountsRaw, unitCountsRaw, maintenanceCountsRaw, complianceCountsRaw, occupiedUnitsRaw] =
-    await Promise.all([
-      // Count residents (users with 'resident' role in community)
-      db
-        .select({
-          communityId: userRoles.communityId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(userRoles)
-        .where(and(inArray(userRoles.communityId, communityIds), eq(userRoles.role, 'resident')))
-        .groupBy(userRoles.communityId),
+  const queries = [
+    // Count residents (users with 'resident' role in community)
+    db
+      .select({
+        communityId: userRoles.communityId,
+        metric: sql<string>`'resident'`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(userRoles)
+      .where(and(inArray(userRoles.communityId, communityIds), eq(userRoles.role, 'resident')))
+      .groupBy(userRoles.communityId),
 
-      // Count units
-      db
-        .select({
-          communityId: units.communityId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(units)
-        .where(and(inArray(units.communityId, communityIds), isNull(units.deletedAt)))
-        .groupBy(units.communityId),
+    // Count units
+    db
+      .select({
+        communityId: units.communityId,
+        metric: sql<string>`'unit'`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(units)
+      .where(and(inArray(units.communityId, communityIds), isNull(units.deletedAt)))
+      .groupBy(units.communityId),
 
-      // Count open maintenance requests (status in open/submitted/acknowledged/in_progress)
+    // Count open maintenance requests (status in open/submitted/acknowledged/in_progress)
+    db
+      .select({
+        communityId: maintenanceRequests.communityId,
+        metric: sql<string>`'maintenance'`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(maintenanceRequests)
+      .where(
+        and(
+          inArray(maintenanceRequests.communityId, communityIds),
+          isNull(maintenanceRequests.deletedAt),
+          inArray(maintenanceRequests.status, ['open', 'submitted', 'acknowledged', 'in_progress']),
+        ),
+      )
+      .groupBy(maintenanceRequests.communityId),
+
+    // Count unsatisfied compliance items (documentId is null)
+    db
+      .select({
+        communityId: complianceChecklistItems.communityId,
+        metric: sql<string>`'compliance'`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(complianceChecklistItems)
+      .where(
+        and(
+          inArray(complianceChecklistItems.communityId, communityIds),
+          isNull(complianceChecklistItems.deletedAt),
+          isNull(complianceChecklistItems.documentId),
+        ),
+      )
+      .groupBy(complianceChecklistItems.communityId),
+  ];
+
+  if (apartmentIds.length > 0) {
+    queries.push(
       db
         .select({
-          communityId: maintenanceRequests.communityId,
-          count: sql<number>`count(*)::int`,
+          communityId: leases.communityId,
+          metric: sql<string>`'occupied'`,
+          count: sql<number>`count(distinct ${leases.unitId})::int`,
         })
-        .from(maintenanceRequests)
+        .from(leases)
         .where(
           and(
-            inArray(maintenanceRequests.communityId, communityIds),
-            isNull(maintenanceRequests.deletedAt),
-            inArray(maintenanceRequests.status, ['open', 'submitted', 'acknowledged', 'in_progress']),
+            inArray(leases.communityId, apartmentIds),
+            isNull(leases.deletedAt),
+            eq(leases.status, 'active'),
           ),
         )
-        .groupBy(maintenanceRequests.communityId),
+        .groupBy(leases.communityId) as any
+    );
+  }
 
-      // Count unsatisfied compliance items (documentId is null)
-      db
-        .select({
-          communityId: complianceChecklistItems.communityId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(complianceChecklistItems)
-        .where(
-          and(
-            inArray(complianceChecklistItems.communityId, communityIds),
-            isNull(complianceChecklistItems.deletedAt),
-            isNull(complianceChecklistItems.documentId),
-          ),
-        )
-        .groupBy(complianceChecklistItems.communityId),
+  const unionQuery = queries.reduce((acc, q, i) => i === 0 ? acc : unionAll(acc, q as any), queries[0] as any);
+  const allCounts = await unionQuery as Array<{ communityId: number; metric: string; count: number }>;
 
-      // Count distinct occupied units via active leases (apartment communities only)
-      apartmentIds.length > 0
-        ? db
-            .select({
-              communityId: leases.communityId,
-              count: sql<number>`count(distinct ${leases.unitId})::int`,
-            })
-            .from(leases)
-            .where(
-              and(
-                inArray(leases.communityId, apartmentIds),
-                isNull(leases.deletedAt),
-                eq(leases.status, 'active'),
-              ),
-            )
-            .groupBy(leases.communityId)
-        : Promise.resolve([]),
-    ]);
+  const residentCountsRaw = allCounts.filter((row) => row.metric === 'resident');
+  const unitCountsRaw = allCounts.filter((row) => row.metric === 'unit');
+  const maintenanceCountsRaw = allCounts.filter((row) => row.metric === 'maintenance');
+  const complianceCountsRaw = allCounts.filter((row) => row.metric === 'compliance');
+  const occupiedUnitsRaw = allCounts.filter((row) => row.metric === 'occupied');
 
   const residentCounts = toCountMap(residentCountsRaw);
   const unitCounts = toCountMap(unitCountsRaw);
