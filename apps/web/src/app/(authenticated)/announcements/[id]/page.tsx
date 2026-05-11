@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pin } from 'lucide-react';
+import DOMPurify from 'isomorphic-dompurify';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import {
@@ -131,7 +132,7 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
       >
         <div
           className="prose prose-neutral max-w-none text-content-secondary"
-          dangerouslySetInnerHTML={{ __html: announcement.body }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(announcement.body) }}
         />
       </article>
     </div>
