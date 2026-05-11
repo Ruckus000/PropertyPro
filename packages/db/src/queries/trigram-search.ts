@@ -10,6 +10,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from '../drizzle';
+import { escapeLikePattern } from '../utils/escape';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -356,7 +357,7 @@ export async function searchResidentsByTrigram(
   limit: number,
 ): Promise<TrigramSearchResult<ResidentSearchHit>> {
   return withTrigramTx(async (tx) => {
-    const likePattern = `${sanitizedInput}%`;
+    const likePattern = `${escapeLikePattern(sanitizedInput.trim())}%`;
 
     const rows = await tx.execute(sql`
       SELECT
@@ -366,7 +367,7 @@ export async function searchResidentsByTrigram(
         un.unit_number,
         ur.role,
         CASE
-          WHEN un.unit_number LIKE ${likePattern} THEN 0.9
+          WHEN un.unit_number LIKE ${likePattern} ESCAPE '\\' THEN 0.9
           ELSE GREATEST(
             word_similarity(${query}, usi.full_name),
             word_similarity(${query}, usi.email)
@@ -420,7 +421,7 @@ export async function searchUsersByTrigram(
   limit: number,
 ): Promise<TrigramSearchResult<UserSearchHit>> {
   return withTrigramTx(async (tx) => {
-    const likePattern = `${sanitizedInput}%`;
+    const likePattern = `${escapeLikePattern(sanitizedInput.trim())}%`;
 
     const rows = await tx.execute(sql`
       SELECT
@@ -431,7 +432,7 @@ export async function searchUsersByTrigram(
         ur.display_title,
         ur.preset_key,
         CASE
-          WHEN un.unit_number LIKE ${likePattern} THEN 0.9
+          WHEN un.unit_number LIKE ${likePattern} ESCAPE '\\' THEN 0.9
           ELSE GREATEST(
             word_similarity(${query}, usi.full_name),
             word_similarity(${query}, usi.email)
