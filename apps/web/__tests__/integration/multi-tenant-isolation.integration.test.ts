@@ -567,8 +567,10 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${seeded.communityAId}`)),
     );
     expect(defaultResponse.status).toBe(200);
-    const defaultJson = await parseJson<{ data: Array<Record<string, unknown>> }>(defaultResponse);
-    const defaultTitles = defaultJson.data.map((row) => String(row['title']));
+    const defaultJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(defaultResponse);
+    const defaultTitles = defaultJson.data.data.map((row) => String(row['title']));
     expect(defaultTitles).toContain(seeded.announcementATitle);
     expect(defaultTitles).not.toContain(seeded.announcementArchivedATitle);
     expect(defaultTitles).not.toContain(seeded.announcementBTitle);
@@ -579,10 +581,12 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
       ),
     );
     expect(includeArchivedResponse.status).toBe(200);
-    const includeArchivedJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+    const includeArchivedJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(
       includeArchivedResponse,
     );
-    const includeArchivedTitles = includeArchivedJson.data.map((row) => String(row['title']));
+    const includeArchivedTitles = includeArchivedJson.data.data.map((row) => String(row['title']));
     expect(includeArchivedTitles).toContain(seeded.announcementATitle);
     expect(includeArchivedTitles).toContain(seeded.announcementArchivedATitle);
     expect(includeArchivedTitles).not.toContain(seeded.announcementBTitle);

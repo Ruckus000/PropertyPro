@@ -193,7 +193,9 @@ async function pollPalmReader(): Promise<void> {
       expect(documentResponse.status).toBe(200);
       expect(residentResponse.status).toBe(200);
 
-      const announcementJson = await parseJson<{ data: Array<Record<string, unknown>> }>(
+      const announcementJson = await parseJson<{
+        data: { data: Array<Record<string, unknown>>; pagination: unknown };
+      }>(
         announcementResponse,
       );
       const documentJson = await parseJson<{
@@ -204,7 +206,7 @@ async function pollPalmReader(): Promise<void> {
       );
 
       assertTenantRows(
-        announcementJson.data,
+        announcementJson.data.data,
         communityB.id,
         forbiddenNeedle,
         'Palm announcements',
@@ -247,8 +249,10 @@ async function runRollbackFault(): Promise<void> {
       new NextRequest(apiUrl(`/api/v1/announcements?communityId=${communityA.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    expect(json.data.some((row) => row['title'] === sentinel)).toBe(false);
+    const json = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; pagination: unknown };
+    }>(response);
+    expect(json.data.data.some((row) => row['title'] === sentinel)).toBe(false);
   });
 }
 

@@ -1,11 +1,14 @@
 import {
   announcements,
+  clampPageSize,
   communities,
   createScopedClient,
+  demoSeedRegistry,
   type Announcement,
   type Community,
+  type PaginatedResult,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { applyDemoAnnouncementProvenancePolicy } from './demo-announcement-provenance';
@@ -22,11 +25,14 @@ export interface VisibleAnnouncementsOptions {
   includeDeleted?: boolean;
   query?: string;
   limit?: number;
+  cursor?: string | null;
+  pageSize?: number | null;
 }
 
 export interface VisibleAnnouncementsResult<T> {
   rows: T[];
   totalCount: number;
+  pagination?: PaginatedResult<T>['pagination'];
 }
 
 export interface VisibleAnnouncementSearchHit {
@@ -79,7 +85,11 @@ function sortAnnouncements<T extends { isPinned: boolean; publishedAt: Date | st
   return [...rows].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    const publishedDiff = new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    if (publishedDiff !== 0) return publishedDiff;
+    const leftId = 'id' in a && typeof a.id === 'number' ? a.id : 0;
+    const rightId = 'id' in b && typeof b.id === 'number' ? b.id : 0;
+    return rightId - leftId;
   });
 }
 
@@ -123,6 +133,222 @@ export function canReadAnnouncementAudience(
 
 export function formatAnnouncementAudienceLabel(audience: AnnouncementAudience): string {
   return AUDIENCE_LABELS[audience];
+}
+
+interface AnnouncementOrderedCursorPayload {
+  isPinned: boolean;
+  publishedAt: string;
+  id: number;
+}
+
+interface DemoAnnouncementProvenanceWhere {
+  where?: SQL;
+  failClosed: boolean;
+}
+
+function encodeAnnouncementOrderedCursor(payload: AnnouncementOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeAnnouncementOrderedCursor(
+  cursor: string | null | undefined,
+): AnnouncementOrderedCursorPayload | null {
+  if (!cursor) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { isPinned?: unknown }).isPinned === 'boolean' &&
+      typeof (parsed as { publishedAt?: unknown }).publishedAt === 'string' &&
+      Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      const publishedAt = new Date((parsed as { publishedAt: string }).publishedAt);
+      if (Number.isNaN(publishedAt.getTime())) {
+        return null;
+      }
+      return {
+        isPinned: (parsed as { isPinned: boolean }).isPinned,
+        publishedAt: publishedAt.toISOString(),
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function buildAnnouncementQueryWhere(query: string | null | undefined): SQL | undefined {
+  const normalizedQuery = query?.trim();
+  if (!normalizedQuery) return undefined;
+
+  const pattern = `%${escapeLikePattern(normalizedQuery)}%`;
+  return or(
+    sql`${announcements.title} ILIKE ${pattern} ESCAPE '\\'`,
+    sql`${announcements.body} ILIKE ${pattern} ESCAPE '\\'`,
+  );
+}
+
+function buildAnnouncementAudienceWhere(membership: CommunityMembership): SQL | undefined {
+  if (membership.isAdmin) {
+    return undefined;
+  }
+
+  if (membership.role !== 'resident') {
+    return eq(announcements.audience, 'all');
+  }
+
+  return inArray(
+    announcements.audience,
+    membership.isUnitOwner ? ['all', 'owners_only'] : ['all', 'tenants_only'],
+  );
+}
+
+function buildAnnouncementOrderedCursorWhere(
+  cursor: AnnouncementOrderedCursorPayload | null,
+): SQL | undefined {
+  if (!cursor) return undefined;
+
+  const publishedAt = new Date(cursor.publishedAt);
+  return or(
+    lt(announcements.isPinned, cursor.isPinned),
+    and(
+      eq(announcements.isPinned, cursor.isPinned),
+      or(
+        lt(announcements.publishedAt, publishedAt),
+        and(
+          eq(announcements.publishedAt, publishedAt),
+          lt(announcements.id, cursor.id),
+        ),
+      ),
+    ),
+  );
+}
+
+async function buildDemoAnnouncementProvenanceWhere(
+  community: AnnouncementCommunityContext,
+): Promise<DemoAnnouncementProvenanceWhere> {
+  if (!community.isDemo && !community.trialEndsAt && !community.demoExpiresAt) {
+    return { failClosed: false };
+  }
+
+  try {
+    const scoped = createScopedClient(community.id);
+    const rows = await scoped.selectFrom<{ entityId: string }>(
+      demoSeedRegistry,
+      { entityId: demoSeedRegistry.entityId },
+      and(
+        eq(demoSeedRegistry.communityId, community.id),
+        eq(demoSeedRegistry.entityType, 'announcement'),
+      ),
+    );
+
+    const ids = rows
+      .map((row) => Number(row.entityId))
+      .filter((value) => Number.isInteger(value) && value > 0);
+    if (ids.length === 0) {
+      return { failClosed: true };
+    }
+    return { where: notInArray(announcements.id, ids), failClosed: false };
+  } catch {
+    return { failClosed: true };
+  }
+}
+
+async function buildVisibleAnnouncementsWhere(
+  community: AnnouncementCommunityContext,
+  membership: CommunityMembership,
+  options: VisibleAnnouncementsOptions,
+): Promise<{ where?: SQL; failClosed: boolean }> {
+  const clauses: SQL[] = [];
+
+  if (options.includeArchived !== true) {
+    clauses.push(isNull(announcements.archivedAt));
+  }
+
+  const audienceWhere = buildAnnouncementAudienceWhere(membership);
+  if (audienceWhere) {
+    clauses.push(audienceWhere);
+  }
+
+  const queryWhere = buildAnnouncementQueryWhere(options.query);
+  if (queryWhere) {
+    clauses.push(queryWhere);
+  }
+
+  const demoWhere = await buildDemoAnnouncementProvenanceWhere(community);
+  if (demoWhere.failClosed) {
+    return { failClosed: true };
+  }
+  if (demoWhere.where) {
+    clauses.push(demoWhere.where);
+  }
+
+  const cursorWhere = buildAnnouncementOrderedCursorWhere(
+    decodeAnnouncementOrderedCursor(options.cursor),
+  );
+  if (cursorWhere) {
+    clauses.push(cursorWhere);
+  }
+
+  return {
+    where:
+      clauses.length === 0
+        ? undefined
+        : clauses.length === 1
+          ? clauses[0]
+          : and(...clauses),
+    failClosed: false,
+  };
+}
+
+async function listVisibleAnnouncementsPage(
+  community: AnnouncementCommunityContext,
+  membership: CommunityMembership,
+  options: VisibleAnnouncementsOptions = {},
+): Promise<VisibleAnnouncementsResult<Announcement>> {
+  const pageSize = clampPageSize(options.pageSize);
+  const { where, failClosed } = await buildVisibleAnnouncementsWhere(community, membership, options);
+  if (failClosed) {
+    return {
+      rows: [],
+      totalCount: 0,
+      pagination: { nextCursor: null, hasMore: false, pageSize },
+    };
+  }
+
+  const scoped = createScopedClient(community.id);
+  const rows = await scoped
+    .selectFrom(announcements, {}, where)
+    .orderBy(desc(announcements.isPinned), desc(announcements.publishedAt), desc(announcements.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = (hasMore ? rows.slice(0, pageSize) : rows) as Announcement[];
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeAnnouncementOrderedCursor({
+          isPinned: lastRow.isPinned,
+          publishedAt: lastRow.publishedAt.toISOString(),
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    rows: dataRows,
+    totalCount: dataRows.length,
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function filterVisibleAnnouncements(
@@ -182,34 +408,64 @@ export async function listVisibleAnnouncements(
 ): Promise<VisibleAnnouncementsResult<Announcement>> {
   const scoped = createScopedClient(communityId);
   const includeDeletedAtQuery = options.includeDeleted === true && membership.isAdmin;
-  const [announcementRows, communityRows] = await Promise.all([
-    includeDeletedAtQuery
-      ? scoped.queryIncludingDeleted(announcements)
-      : scoped.query(announcements),
-    scoped.selectFrom(
-      communities,
-      {
-        id: communities.id,
-        isDemo: communities.isDemo,
-        trialEndsAt: communities.trialEndsAt,
-        demoExpiresAt: communities.demoExpiresAt,
-      },
-      eq(communities.id, communityId),
-    ),
-  ]);
+  const wantsPaginatedSqlPath =
+    Object.prototype.hasOwnProperty.call(options, 'cursor') ||
+    Object.prototype.hasOwnProperty.call(options, 'pageSize');
+
+  const communityRows = await scoped.selectFrom(
+    communities,
+    {
+      id: communities.id,
+      isDemo: communities.isDemo,
+      trialEndsAt: communities.trialEndsAt,
+      demoExpiresAt: communities.demoExpiresAt,
+    },
+    eq(communities.id, communityId),
+  );
 
   const community = communityRows[0];
   if (!community) {
     return { rows: [], totalCount: 0 };
   }
 
+  const communityContext = {
+    id: Number(community['id']),
+    isDemo: Boolean(community['isDemo']),
+    trialEndsAt: (community['trialEndsAt'] as Date | null | undefined) ?? null,
+    demoExpiresAt: (community['demoExpiresAt'] as Date | null | undefined) ?? null,
+  };
+
+  if (wantsPaginatedSqlPath && !includeDeletedAtQuery) {
+    const canReadAnnouncements = checkPermissionV2(
+      membership.role,
+      membership.communityType,
+      'announcements',
+      'read',
+      {
+        isUnitOwner: membership.isUnitOwner,
+        permissions: membership.permissions,
+      },
+    );
+    if (!canReadAnnouncements) {
+      return {
+        rows: [],
+        totalCount: 0,
+        pagination: {
+          nextCursor: null,
+          hasMore: false,
+          pageSize: clampPageSize(options.pageSize),
+        },
+      };
+    }
+    return listVisibleAnnouncementsPage(communityContext, membership, options);
+  }
+
+  const announcementRows = includeDeletedAtQuery
+    ? await scoped.queryIncludingDeleted(announcements)
+    : await scoped.query(announcements);
+
   return filterVisibleAnnouncements(
-    {
-      id: Number(community['id']),
-      isDemo: Boolean(community['isDemo']),
-      trialEndsAt: (community['trialEndsAt'] as Date | null | undefined) ?? null,
-      demoExpiresAt: (community['demoExpiresAt'] as Date | null | undefined) ?? null,
-    },
+    communityContext,
     membership,
     announcementRows as Announcement[],
     options,
