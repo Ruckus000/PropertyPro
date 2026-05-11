@@ -51,17 +51,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // -------------------------------------------------------------------------
   const coolingExpired = await findCoolingExpiredDeletionRequests(now);
 
-  for (const req of coolingExpired) {
+  const userDeletionIds = coolingExpired.filter(req => req.requestType === 'user').map(req => req.id);
+  const communityDeletionIds = coolingExpired.filter(req => req.requestType === 'community').map(req => req.id);
+
+  if (userDeletionIds.length > 0) {
     try {
-      if (req.requestType === 'user') {
-        await executeUserSoftDelete(req.id);
-        summary.softDeleted.users++;
-      } else {
-        await executeCommunitySoftDelete(req.id);
-        summary.softDeleted.communities++;
-      }
+      const results = await executeUserSoftDelete(userDeletionIds);
+      summary.softDeleted.users += results.length;
     } catch (err) {
-      summary.errors.push(`soft-delete ${req.requestType} ${req.id}: ${String(err)}`);
+      summary.errors.push(`batch soft-delete user: ${String(err)}`);
+    }
+  }
+
+  if (communityDeletionIds.length > 0) {
+    try {
+      const results = await executeCommunitySoftDelete(communityDeletionIds);
+      summary.softDeleted.communities += results.length;
+    } catch (err) {
+      summary.errors.push(`batch soft-delete community: ${String(err)}`);
     }
   }
 

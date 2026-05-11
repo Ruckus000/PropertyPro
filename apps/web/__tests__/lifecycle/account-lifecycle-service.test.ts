@@ -33,6 +33,7 @@ const {
   andMock,
   isNullMock,
   neMock,
+  inArrayMock,
   accessPlansTable,
   communitiesTable,
   usersTable,
@@ -46,6 +47,7 @@ const {
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
     neMock: vi.fn((col: unknown, val: unknown) => ({ _ne: [col, val] })),
+    inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
     accessPlansTable: {
       id: 'access_plans.id',
       communityId: 'access_plans.community_id',
@@ -111,6 +113,7 @@ vi.mock('@propertypro/db/filters', () => ({
   and: andMock,
   isNull: isNullMock,
   ne: neMock,
+  inArray: inArrayMock,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
@@ -566,9 +569,9 @@ describe('executeUserSoftDelete', () => {
       auth: { admin: { updateUserById: updateUserByIdMock } },
     });
 
-    const result = await executeUserSoftDelete(1);
+    const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual(request);
+    expect(result).toEqual([request]);
     expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
       ban_duration: 'none',
       user_metadata: { soft_deleted: true },
@@ -586,20 +589,19 @@ describe('executeUserSoftDelete', () => {
     });
 
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = await executeUserSoftDelete(1);
+    const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual(request);
+    expect(result).toEqual([request]);
     expect(consoleWarnSpy).toHaveBeenCalled();
     consoleWarnSpy.mockRestore();
   });
 
-  it('throws when request is not found', async () => {
+  it('does not throw when request is not found, processes what it finds', async () => {
     const dbMock = buildDbMock({ updateReturning: [[]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    await expect(executeUserSoftDelete(999)).rejects.toThrow(
-      'Deletion request 999 not found',
-    );
+    const result = await executeUserSoftDelete([999]);
+    expect(result).toEqual([]);
   });
 });
 
@@ -756,19 +758,18 @@ describe('executeCommunitySoftDelete', () => {
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await executeCommunitySoftDelete(1);
+    const result = await executeCommunitySoftDelete([1]);
 
-    expect(result).toEqual(request);
+    expect(result).toEqual([request]);
     expect(dbMock._calls.filter((c) => c.op === 'update')).toHaveLength(2);
   });
 
-  it('throws when request is not found', async () => {
+  it('does not throw when request is not found, processes what it finds', async () => {
     const dbMock = buildDbMock({ updateReturning: [[]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    await expect(executeCommunitySoftDelete(999)).rejects.toThrow(
-      'Deletion request 999 not found',
-    );
+    const result = await executeCommunitySoftDelete([999]);
+    expect(result).toEqual([]);
   });
 });
 
