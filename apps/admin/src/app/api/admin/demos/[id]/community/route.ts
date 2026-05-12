@@ -6,7 +6,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { captureMessage } from '@sentry/nextjs';
+import { captureException } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -147,7 +147,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     } as never)
     .then(({ error: auditError }) => {
       if (auditError) {
-        captureMessage('[audit] Failed to log demo community change', { level: 'error', extra: { message: auditError.message } });
+        captureException(auditError, { extra: { context: '[audit] Failed to log demo community change', demo_id: demoId } });
       }
     });
 

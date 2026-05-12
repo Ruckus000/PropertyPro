@@ -130,7 +130,7 @@ export async function POST(
     .limit(1);
 
   if (queryError) {
-    captureMessage('[convert/POST] Query error', { level: 'error', extra: { message: queryError.message } });
+    captureException(queryError, { extra: { context: '[convert/POST] Query error', slug } });
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: 'Failed to look up demo' } },
       { status: 500 },
@@ -181,7 +181,11 @@ export async function POST(
     .single();
 
   if (priceError || !priceRow) {
-    captureMessage('[convert/POST] Price lookup error', { level: 'error', extra: { message: priceError?.message } });
+    if (priceError) {
+      captureException(priceError, { extra: { context: '[convert/POST] Price lookup error', planId, community_type: community.community_type } });
+    } else {
+      captureMessage('[convert/POST] No price row found', { level: 'error', extra: { planId, community_type: community.community_type } });
+    }
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: `No Stripe price configured for plan=${planId}` } },
       { status: 500 },
