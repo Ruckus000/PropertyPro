@@ -73,4 +73,10 @@ describe('normalizeCounty', () => {
   it('handles multiple spaces before "County"', () => {
     expect(normalizeCounty('Miami  County')).toBe('Miami');
   });
+
+  it('returns empty string for empty or whitespace-only input', () => {
+    expect(normalizeCounty('')).toBe('');
+    expect(normalizeCounty('   ')).toBe('');
+    expect(normalizeCounty('\t\n')).toBe('');
+  });
 });
