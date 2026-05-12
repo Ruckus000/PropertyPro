@@ -6,6 +6,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { validateUploadFilePath } from '@/lib/api/upload-path';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireViolationsEnabled } from '@/lib/violations/common';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
@@ -15,22 +16,10 @@ const createViolationEvidenceSchema = z.object({
   communityId: z.number().int().positive(),
   title: z.string().min(1).max(500),
   description: z.string().nullable().optional(),
-  filePath: z.string().min(1).refine(
-    (path) => !path.includes('..'),
-    { message: 'Path traversal is not allowed' },
-  ),
+  filePath: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
   mimeType: z.string().min(1).optional(),
-}).superRefine((data, ctx) => {
-  const expectedPrefix = `communities/${data.communityId}/`;
-  if (!data.filePath.startsWith(expectedPrefix)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `filePath must start with ${expectedPrefix}`,
-      path: ['filePath'],
-    });
-  }
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -45,6 +34,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  validateUploadFilePath(parseResult.data.filePath, communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 
