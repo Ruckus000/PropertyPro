@@ -41,8 +41,10 @@ export function NotificationDropdown({ communityId, onClose }: NotificationDropd
 
   return (
     <div
+      ref={ref}
+      role="dialog"
       aria-label="Notifications"
-      className="w-80 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-card)] shadow-[var(--shadow-e2)]"
+      className="absolute right-0 top-full z-[var(--z-dropdown,50)] mt-2 w-80 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-card)] shadow-[var(--shadow-e2)]"
     >
       <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">Notifications</h2>

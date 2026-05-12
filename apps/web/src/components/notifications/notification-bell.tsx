@@ -6,7 +6,6 @@ import { useUnreadCount } from '@/hooks/use-notifications';
 import { useNotificationRealtime } from '@/hooks/use-notification-realtime';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { NotificationDropdown } from './notification-dropdown';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface NotificationBellProps {
   communityId: number | null;
