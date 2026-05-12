@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Badge, Button, Card } from '@propertypro/ui';
 import {
   addDays,
@@ -48,6 +49,21 @@ export function MonthGrid({
 
   const today = new Date();
 
+  // Group events by dateKey to avoid O(N*M) filtering inside the days loop
+  const eventsByDateKey = useMemo(() => {
+    const grouped = new Map<string, CalendarEvent[]>();
+    for (const event of events) {
+      const dateKey = getCalendarEventDateKey(event, communityTimezone);
+      const existing = grouped.get(dateKey);
+      if (existing) {
+        existing.push(event);
+      } else {
+        grouped.set(dateKey, [event]);
+      }
+    }
+    return grouped;
+  }, [events, communityTimezone]);
+
   return (
     <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
       <Card.Header bordered>
@@ -95,9 +111,7 @@ export function MonthGrid({
         <div className="grid grid-cols-7 gap-2">
           {days.map((day) => {
             const dateKey = format(day, 'yyyy-MM-dd');
-            const dayEvents = events.filter(
-              (event) => getCalendarEventDateKey(event, communityTimezone) === dateKey,
-            );
+            const dayEvents = eventsByDateKey.get(dateKey) || [];
             const isCurrentMonth = isSameMonth(day, currentMonth);
             const isToday = isSameDay(day, today);
             const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
