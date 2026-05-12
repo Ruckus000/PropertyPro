@@ -33,6 +33,14 @@ interface ActivityFeedResponse {
   users: Record<string, string>;
 }
 
+interface ActivityFeedEnvelope {
+  data:
+    | ActivityFeedResponse
+    | AuditEntry[];
+  pagination?: ActivityFeedResponse["pagination"];
+  users?: Record<string, string>;
+}
+
 class ActivityFetchError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -93,6 +101,37 @@ function actionDotColor(action: string): string {
   }
 }
 
+function isAuditEntry(value: unknown): value is AuditEntry {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "number"
+  );
+}
+
+function normalizeActivityFeedResponse(payload: unknown): ActivityFeedResponse {
+  const envelope = payload as ActivityFeedEnvelope;
+  const inner = envelope?.data;
+
+  if (Array.isArray(inner)) {
+    return {
+      data: inner.filter(isAuditEntry),
+      pagination: envelope.pagination ?? { nextCursor: null, hasMore: false },
+      users: envelope.users ?? {},
+    };
+  }
+
+  if (inner && typeof inner === "object" && Array.isArray(inner.data)) {
+    return {
+      data: inner.data.filter(isAuditEntry),
+      pagination: inner.pagination ?? { nextCursor: null, hasMore: false },
+      users: inner.users ?? {},
+    };
+  }
+
+  throw new ActivityFetchError(200, "Invalid activity response");
+}
+
 // ── Component ───────────────────────────────────────
 
 export interface ComplianceActivityFeedProps {
@@ -109,7 +148,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
       if (!res.ok) {
         throw new ActivityFetchError(res.status, "Failed to load activity");
       }
-      return res.json();
+      return normalizeActivityFeedResponse(await res.json());
     },
     staleTime: 2 * 60_000, // 2 minutes
     retry: false,
