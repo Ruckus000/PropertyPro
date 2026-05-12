@@ -6,6 +6,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { validateUploadFilePath } from '@/lib/api/upload-path';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireViolationsEnabled } from '@/lib/violations/common';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
@@ -33,6 +34,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+  validateUploadFilePath(parseResult.data.filePath, communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
 

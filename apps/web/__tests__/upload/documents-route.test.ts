@@ -659,9 +659,78 @@ describe('p1-11 documents route — additional coverage', () => {
   });
 
   describe('POST input validation edge cases', () => {
-    // TODO (security): filePath is not sanitized against path traversal.
-    // The Zod schema only requires z.string().min(1). Consider adding a path
-    // allowlist pattern (e.g. /^communities\/\d+\//) to prevent cross-tenant paths.
+    it('POST returns 400 when filePath contains path traversal', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+
+      const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          title: 'Traversal Doc',
+          categoryId: 7,
+          filePath: 'communities/42/documents/../../../etc/passwd',
+          fileName: 'passwd',
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+        }),
+      });
+
+      const res = await POST(req);
+      // Currently this might not be 400 if it's not sanitized.
+      // We WANT it to be 400 after the fix.
+      expect(res.status).toBe(400);
+    });
+
+    it('POST returns 400 when filePath belongs to another community', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+
+      const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          title: 'Cross-tenant Doc',
+          categoryId: 7,
+          filePath: 'communities/99/documents/secret.pdf',
+          fileName: 'secret.pdf',
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('POST returns 201 when filePath is valid', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+      scopedInsertMock.mockResolvedValueOnce([
+        {
+          id: 99,
+          communityId: 42,
+          title: 'Valid Doc',
+          filePath: 'communities/42/documents/file.pdf',
+        },
+      ]);
+
+      const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          title: 'Valid Doc',
+          categoryId: 7,
+          filePath: 'communities/42/documents/file.pdf',
+          fileName: 'file.pdf',
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(201);
+    });
 
     it('GET without communityId returns 400', async () => {
       const req = new NextRequest('http://localhost:3000/api/v1/documents');

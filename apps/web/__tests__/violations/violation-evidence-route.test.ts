@@ -102,4 +102,44 @@ describe('violation evidence route', () => {
     expect(res.status).toBe(400);
     expect(createUploadedDocumentMock).not.toHaveBeenCalled();
   });
+
+  it('rejects filePath with path traversal', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/violations/evidence', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 8,
+        title: 'Traversal Evidence',
+        filePath: 'communities/8/documents/../../etc/passwd',
+        fileName: 'passwd',
+        fileSize: 512,
+        mimeType: 'image/png',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects filePath belonging to another community', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/violations/evidence', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        communityId: 8,
+        title: 'Cross-tenant Evidence',
+        filePath: 'communities/9/documents/evidence.png',
+        fileName: 'evidence.png',
+        fileSize: 512,
+        mimeType: 'image/png',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
 });

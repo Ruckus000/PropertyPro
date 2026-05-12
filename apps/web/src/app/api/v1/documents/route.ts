@@ -29,6 +29,7 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { validateUploadFilePath } from '@/lib/api/upload-path';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { isElevatedRole } from '@propertypro/shared';
 import { requirePermission } from '@/lib/db/access-control';
@@ -126,6 +127,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const payload = parseResult.data;
   const effectiveCommunityId = resolveEffectiveCommunityId(req, payload.communityId);
+  validateUploadFilePath(payload.filePath, effectiveCommunityId);
   await assertNotDemoGrace(effectiveCommunityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'documents', 'write');
