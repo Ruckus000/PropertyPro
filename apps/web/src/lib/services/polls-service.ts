@@ -1,4 +1,5 @@
 import {
+  clampPageSize,
   createScopedClient,
   forumReplies,
   forumThreads,
@@ -7,9 +8,10 @@ import {
   paginate,
   polls,
   pollVotes,
+  type PaginatedResult,
   type PollType,
 } from '@propertypro/db';
-import { and, asc, desc, eq, gt, isNull, or } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gt, isNull, lt, or } from '@propertypro/db/filters';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   BadRequestError,
@@ -107,6 +109,17 @@ export interface UpdateForumThreadInput {
   isLocked?: boolean;
 }
 
+export interface PaginatedForumThreads {
+  data: ForumThreadRecord[];
+  pagination: PaginatedResult<ForumThreadRecord>['pagination'];
+}
+
+interface ForumThreadOrderedCursorPayload {
+  isPinned: boolean;
+  createdAt: string;
+  id: number;
+}
+
 const VALID_POLL_TYPES: readonly PollType[] = ['single_choice', 'multiple_choice'];
 
 function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
@@ -193,6 +206,62 @@ function mapForumThreadRow(row: ForumThreadRecord): ForumThreadRecord {
     isPinned: Boolean(row.isPinned),
     isLocked: Boolean(row.isLocked),
   };
+}
+
+function encodeForumThreadOrderedCursor(payload: ForumThreadOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeForumThreadOrderedCursor(
+  cursor: string | null | undefined,
+): ForumThreadOrderedCursorPayload | null {
+  if (!cursor) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { isPinned?: unknown }).isPinned === 'boolean' &&
+      typeof (parsed as { createdAt?: unknown }).createdAt === 'string' &&
+      Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      const createdAt = new Date((parsed as { createdAt: string }).createdAt);
+      if (Number.isNaN(createdAt.getTime())) {
+        return null;
+      }
+      return {
+        isPinned: (parsed as { isPinned: boolean }).isPinned,
+        createdAt: createdAt.toISOString(),
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildForumThreadOrderedCursorWhere(
+  cursor: ForumThreadOrderedCursorPayload | null,
+) {
+  if (!cursor) return undefined;
+
+  const createdAt = new Date(cursor.createdAt);
+  return or(
+    lt(forumThreads.isPinned, cursor.isPinned),
+    and(
+      eq(forumThreads.isPinned, cursor.isPinned),
+      or(
+        lt(forumThreads.createdAt, createdAt),
+        and(
+          eq(forumThreads.createdAt, createdAt),
+          lt(forumThreads.id, cursor.id),
+        ),
+      ),
+    ),
+  );
 }
 
 function mapForumReplyRow(row: ForumReplyRecord): ForumReplyRecord {
@@ -437,24 +506,50 @@ export async function createForumThreadForCommunity(
   return created;
 }
 
-export async function listForumThreadsForCommunity(
-  communityId: number,
-  options?: {
-    limit?: number;
-    offset?: number;
-  },
-): Promise<ForumThreadRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const limit = options?.limit ?? 50;
-  const offset = options?.offset ?? 0;
-
+/**
+ * Ordered-keyset paginated forum thread list.
+ *
+ * Sort contract:
+ *   ORDER BY is_pinned DESC, created_at DESC, id DESC
+ *
+ * AUTHZ: tenant-scoped - caller MUST have already verified the actor's
+ * community membership and community-board read gates.
+ */
+export async function paginateForumThreadsForCommunity(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+}): Promise<PaginatedForumThreads> {
+  const pageSize = clampPageSize(params.pageSize);
+  const cursorWhere = buildForumThreadOrderedCursorWhere(
+    decodeForumThreadOrderedCursor(params.cursor),
+  );
+  const scoped = createScopedClient(params.communityId);
   const rows = await scoped
-    .selectFrom<ForumThreadRecord>(forumThreads, {})
-    .orderBy(desc(forumThreads.isPinned), desc(forumThreads.createdAt))
-    .limit(limit)
-    .offset(offset);
+    .selectFrom<ForumThreadRecord>(forumThreads, {}, cursorWhere)
+    .orderBy(desc(forumThreads.isPinned), desc(forumThreads.createdAt), desc(forumThreads.id))
+    .limit(pageSize + 1);
 
-  return rows.map(mapForumThreadRow);
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeForumThreadOrderedCursor({
+          isPinned: Boolean(lastRow.isPinned),
+          createdAt: lastRow.createdAt.toISOString(),
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    data: dataRows.map(mapForumThreadRow),
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function getForumThreadWithRepliesForCommunity(

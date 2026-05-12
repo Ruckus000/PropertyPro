@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { BadRequestError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
@@ -12,7 +12,7 @@ import {
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { createForumThreadForCommunity, listForumThreadsForCommunity } from '@/lib/services/polls-service';
+import { createForumThreadForCommunity, paginateForumThreadsForCommunity } from '@/lib/services/polls-service';
 
 const createThreadSchema = z.object({
   communityId: z.number().int().positive(),
@@ -20,16 +20,10 @@ const createThreadSchema = z.object({
   body: z.string().trim().min(1).max(8000),
 });
 
-function parseNonNegativeInt(raw: string | null, fallback: number, label: string): number {
-  if (raw === null || raw === undefined || raw.length === 0) {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new BadRequestError(`${label} must be a non-negative integer`);
-  }
-  return parsed;
-}
+const listThreadsQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
@@ -40,11 +34,28 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   requirePollReadPermission(membership);
 
   const { searchParams } = new URL(req.url);
-  const limit = parseNonNegativeInt(searchParams.get('limit'), 50, 'limit');
-  const offset = parseNonNegativeInt(searchParams.get('offset'), 0, 'offset');
+  const parsedQuery = listThreadsQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
 
-  const data = await listForumThreadsForCommunity(communityId, { limit, offset });
-  return NextResponse.json({ data });
+  const result = await paginateForumThreadsForCommunity({
+    communityId,
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
+
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

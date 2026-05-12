@@ -192,10 +192,14 @@ export function useBoardForumThreads(
 
   return useQuery({
     queryKey: BOARD_KEYS.forum.list(communityId, limit, offset),
-    queryFn: async () =>
-      requestJson<BoardForumThreadListItem[]>(
-        `/api/v1/forum/threads?communityId=${communityId}&limit=${limit}&offset=${offset}`,
-      ),
+    queryFn: async ({ signal }) => {
+      const threads = await walkPaginated<BoardForumThreadListItem>(
+        '/api/v1/forum/threads',
+        { communityId: String(communityId) },
+        { signal },
+      );
+      return threads.slice(offset, offset + limit);
+    },
     enabled: communityId > 0,
     staleTime: 30_000,
   });
