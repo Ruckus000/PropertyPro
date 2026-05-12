@@ -109,86 +109,85 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     .filter((row) => row.communityType === 'apartment')
     .map((row) => row.communityId);
 
-  const queries = [
-    // Count residents (users with 'resident' role in community)
-    db
-      .select({
-        communityId: userRoles.communityId,
-        metric: sql<string>`'resident'`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(userRoles)
-      .where(and(inArray(userRoles.communityId, communityIds), eq(userRoles.role, 'resident')))
-      .groupBy(userRoles.communityId),
+  // Use -1 sentinel when no apartments are managed so the occupied branch
+  // always emits, keeping the union arity constant for type-safety.
+  const apartmentIdsForUnion = apartmentIds.length > 0 ? apartmentIds : [-1];
 
-    // Count units
-    db
-      .select({
-        communityId: units.communityId,
-        metric: sql<string>`'unit'`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(units)
-      .where(and(inArray(units.communityId, communityIds), isNull(units.deletedAt)))
-      .groupBy(units.communityId),
+  const residentsQuery = db
+    .select({
+      communityId: userRoles.communityId,
+      metric: sql<string>`'resident'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(userRoles)
+    .where(and(inArray(userRoles.communityId, communityIds), eq(userRoles.role, 'resident')))
+    .groupBy(userRoles.communityId);
 
-    // Count open maintenance requests (status in open/submitted/acknowledged/in_progress)
-    db
-      .select({
-        communityId: maintenanceRequests.communityId,
-        metric: sql<string>`'maintenance'`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(maintenanceRequests)
-      .where(
-        and(
-          inArray(maintenanceRequests.communityId, communityIds),
-          isNull(maintenanceRequests.deletedAt),
-          inArray(maintenanceRequests.status, ['open', 'submitted', 'acknowledged', 'in_progress']),
-        ),
-      )
-      .groupBy(maintenanceRequests.communityId),
+  const unitsQuery = db
+    .select({
+      communityId: units.communityId,
+      metric: sql<string>`'unit'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(units)
+    .where(and(inArray(units.communityId, communityIds), isNull(units.deletedAt)))
+    .groupBy(units.communityId);
 
-    // Count unsatisfied compliance items (documentId is null)
-    db
-      .select({
-        communityId: complianceChecklistItems.communityId,
-        metric: sql<string>`'compliance'`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(complianceChecklistItems)
-      .where(
-        and(
-          inArray(complianceChecklistItems.communityId, communityIds),
-          isNull(complianceChecklistItems.deletedAt),
-          isNull(complianceChecklistItems.documentId),
-        ),
-      )
-      .groupBy(complianceChecklistItems.communityId),
-  ];
+  const maintenanceQuery = db
+    .select({
+      communityId: maintenanceRequests.communityId,
+      metric: sql<string>`'maintenance'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(maintenanceRequests)
+    .where(
+      and(
+        inArray(maintenanceRequests.communityId, communityIds),
+        isNull(maintenanceRequests.deletedAt),
+        inArray(maintenanceRequests.status, ['open', 'submitted', 'acknowledged', 'in_progress']),
+      ),
+    )
+    .groupBy(maintenanceRequests.communityId);
 
-  if (apartmentIds.length > 0) {
-    queries.push(
-      db
-        .select({
-          communityId: leases.communityId,
-          metric: sql<string>`'occupied'`,
-          count: sql<number>`count(distinct ${leases.unitId})::int`,
-        })
-        .from(leases)
-        .where(
-          and(
-            inArray(leases.communityId, apartmentIds),
-            isNull(leases.deletedAt),
-            eq(leases.status, 'active'),
-          ),
-        )
-        .groupBy(leases.communityId) as any
-    );
-  }
+  const complianceQuery = db
+    .select({
+      communityId: complianceChecklistItems.communityId,
+      metric: sql<string>`'compliance'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(complianceChecklistItems)
+    .where(
+      and(
+        inArray(complianceChecklistItems.communityId, communityIds),
+        isNull(complianceChecklistItems.deletedAt),
+        isNull(complianceChecklistItems.documentId),
+      ),
+    )
+    .groupBy(complianceChecklistItems.communityId);
 
-  const unionQuery = queries.reduce((acc, q, i) => i === 0 ? acc : unionAll(acc, q as any), queries[0] as any);
-  const allCounts = await unionQuery as Array<{ communityId: number; metric: string; count: number }>;
+  const occupiedQuery = db
+    .select({
+      communityId: leases.communityId,
+      metric: sql<string>`'occupied'`,
+      count: sql<number>`count(distinct ${leases.unitId})::int`,
+    })
+    .from(leases)
+    .where(
+      and(
+        inArray(leases.communityId, apartmentIdsForUnion),
+        isNull(leases.deletedAt),
+        eq(leases.status, 'active'),
+      ),
+    )
+    .groupBy(leases.communityId);
+
+  const allCounts = (await unionAll(
+    residentsQuery,
+    unitsQuery,
+    maintenanceQuery,
+    complianceQuery,
+    occupiedQuery,
+  )) as Array<{ communityId: number; metric: string; count: number }>;
 
   const residentCountsRaw = allCounts.filter((row) => row.metric === 'resident');
   const unitCountsRaw = allCounts.filter((row) => row.metric === 'unit');
