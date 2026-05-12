@@ -540,43 +540,58 @@ export async function cancelUserDeletion(requestId: number, cancelledBy: string)
  * The auth ban is non-fatal — if Supabase is unreachable the DB state
  * is still committed.
  */
-export async function executeUserSoftDelete(requestId: number) {
+export async function executeUserSoftDelete(requestIds: number[]) {
+  if (requestIds.length === 0) return [];
+
   const now = new Date();
   const scheduledPurgeAt = addMonths(now, 6);
   const db = createUnscopedClient();
 
-  const result = await db.transaction(async (tx) => {
-    const [request] = await tx
+  const results = await db.transaction(async (tx) => {
+    const requests = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(eq(accountDeletionRequests.id, requestId))
+      .where(inArray(accountDeletionRequests.id, requestIds))
       .returning();
 
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
+    // We don't throw if some are missing, just process what we found to avoid failing the whole batch
 
-    await tx
-      .update(users)
-      .set({ deletedAt: now })
-      .where(eq(users.id, request.userId));
+    const userIds = requests.map(r => r.userId);
 
-    return request;
+    if (userIds.length > 0) {
+      await tx
+        .update(users)
+        .set({ deletedAt: now })
+        .where(inArray(users.id, userIds));
+    }
+
+    return requests;
   });
 
   // Ban in Supabase auth (non-fatal)
-  try {
-    const admin = createAdminClient();
-    await admin.auth.admin.updateUserById(result.userId, {
-      ban_duration: 'none',
-      user_metadata: { soft_deleted: true },
-    });
-  } catch (err) {
-    console.warn(
-      `[account-lifecycle] Failed to ban user ${result.userId} in Supabase auth:`,
-      err,
+  const admin = createAdminClient();
+  // Chunking to avoid rate limits
+  const CHUNK_SIZE = 10;
+  for (let i = 0; i < results.length; i += CHUNK_SIZE) {
+    const chunk = results.slice(i, i + CHUNK_SIZE);
+    await Promise.allSettled(
+      chunk.map(async (result) => {
+        try {
+          await admin.auth.admin.updateUserById(result.userId, {
+            ban_duration: 'none',
+            user_metadata: { soft_deleted: true },
+          });
+        } catch (err) {
+          console.warn(
+            `[account-lifecycle] Failed to ban user ${result.userId} in Supabase auth:`,
+            err,
+          );
+        }
+      })
     );
   }
 
-  return result;
+  return results;
 }
 
 /** Recovers a soft-deleted user: clears deletedAt and sets status to recovered. */
@@ -702,29 +717,35 @@ export async function interveneCommunityDeletion(
 /**
  * Soft-deletes a community: sets communities.deletedAt and schedules purge.
  */
-export async function executeCommunitySoftDelete(requestId: number) {
+export async function executeCommunitySoftDelete(requestIds: number[]) {
+  if (requestIds.length === 0) return [];
+
   const now = new Date();
   const scheduledPurgeAt = addMonths(now, 6);
   const db = createUnscopedClient();
 
-  const result = await db.transaction(async (tx) => {
-    const [request] = await tx
+  const results = await db.transaction(async (tx) => {
+    const requests = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(eq(accountDeletionRequests.id, requestId))
+      .where(inArray(accountDeletionRequests.id, requestIds))
       .returning();
 
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
+    // We don't throw if some are missing, just process what we found to avoid failing the whole batch
 
-    await tx
-      .update(communities)
-      .set({ deletedAt: now })
-      .where(eq(communities.id, request.communityId!));
+    const communityIds = requests.map(r => r.communityId!).filter(Boolean);
 
-    return request;
+    if (communityIds.length > 0) {
+      await tx
+        .update(communities)
+        .set({ deletedAt: now })
+        .where(inArray(communities.id, communityIds));
+    }
+
+    return requests;
   });
 
-  return result;
+  return results;
 }
 
 /** Recovers a soft-deleted community. */
