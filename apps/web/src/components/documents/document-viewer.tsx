@@ -15,6 +15,7 @@ import {
 } from '@/lib/documents/document-preview-loader';
 import type { DocumentListItem } from './document-list';
 import { DocumentViewerModal } from './DocumentViewerModal';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface DocumentViewerProps {
   communityId: number;
@@ -26,7 +27,15 @@ interface DocumentViewerProps {
   canEditAuthored?: boolean;
 }
 
-export function DocumentViewer({
+export function DocumentViewer(props: DocumentViewerProps) {
+  return (
+    <ErrorBoundary>
+      <DocumentViewerInner {...props} />
+    </ErrorBoundary>
+  );
+}
+
+function DocumentViewerInner({
   communityId,
   document,
   onClose,
