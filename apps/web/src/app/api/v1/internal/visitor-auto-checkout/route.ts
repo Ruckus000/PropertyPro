@@ -44,7 +44,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         metadata: { transition: 'auto_checkout', count: ids.length },
       }));
     }
-    await Promise.all(auditPromises);
+    const auditResults = await Promise.allSettled(auditPromises);
+    for (const result of auditResults) {
+      if (result.status === 'rejected') {
+        errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+      }
+    }
 
     return NextResponse.json({
       data: { autoCheckedOut: overdue.length, errors },
