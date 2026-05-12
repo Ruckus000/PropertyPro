@@ -262,6 +262,9 @@ export async function executeBroadcast(
   const communityName = communityRows[0]?.name ?? 'PropertyPro';
 
   const statusCallbackUrl = `${getBaseUrl()}/api/v1/webhooks/twilio`;
+  // Single timestamp shared across the entire batch so all `sentAt` /
+  // `emailSentAt` / `smsSentAt` columns line up exactly.
+  const sentAt = new Date();
 
   // ── Send SMS + Email in parallel ────────────────────────────────────────
 
@@ -295,7 +298,7 @@ export async function executeBroadcast(
             smsProviderSid: result.providerMessageId,
             smsErrorCode: result.errorCode,
             smsErrorMessage: result.errorMessage,
-            smsSentAt: result.success ? new Date() : null,
+            smsSentAt: result.success ? sentAt : null,
           },
           and(
             eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
@@ -321,7 +324,7 @@ export async function executeBroadcast(
           alertTitle: title,
           alertBody: emailBody,
           severity: severity as EmergencyAlertSeverity,
-          sentAt: new Date().toISOString(),
+          sentAt: sentAt.toISOString(),
         }),
       }));
 
@@ -357,7 +360,7 @@ export async function executeBroadcast(
                 {
                   emailStatus: 'sent',
                   emailProviderId: providerIdsMap.get(userId),
-                  emailSentAt: new Date(),
+                  emailSentAt: sentAt,
                 },
                 and(
                   eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
