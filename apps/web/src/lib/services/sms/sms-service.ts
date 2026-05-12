@@ -14,7 +14,6 @@ import type {
   SmsRecipient,
 } from './sms-types';
 import { TwilioProvider } from './twilio-provider';
-import { chunk } from '@/lib/utils/chunk';
 import { isValidE164 } from '@/lib/utils/phone';
 
 // ── Singleton provider ──────────────────────────────────────────────────────
@@ -74,31 +73,34 @@ export async function sendBulkEmergencySms(
   let successCount = 0;
   let failureCount = 0;
 
-  // Process in batches of 20 to control concurrency
-  const BATCH_SIZE = 20;
-  const batches = chunk(request.recipients, BATCH_SIZE);
+  // Use sliding window concurrency to maximize throughput
+  const CONCURRENCY = 20;
+  let currentIndex = 0;
 
-  for (const batch of batches) {
-    const batchResults = await Promise.all(
-      batch.map(async (recipient) => {
+  const workers = Array(Math.min(CONCURRENCY, request.recipients.length))
+    .fill(null)
+    .map(async () => {
+      while (currentIndex < request.recipients.length) {
+        const index = currentIndex++;
+        const recipient = request.recipients[index];
+        if (!recipient) break;
+
         const result = await provider.sendSms({
           to: recipient.phone,
           body: request.body,
           statusCallbackUrl: request.statusCallbackUrl,
         });
-        return { userId: recipient.userId, result };
-      }),
-    );
 
-    for (const { userId, result } of batchResults) {
-      results.set(userId, result);
-      if (result.success) {
-        successCount++;
-      } else {
-        failureCount++;
+        results.set(recipient.userId, result);
+        if (result.success) {
+          successCount++;
+        } else {
+          failureCount++;
+        }
       }
-    }
-  }
+    });
+
+  await Promise.all(workers);
 
   return { results, successCount, failureCount };
 }

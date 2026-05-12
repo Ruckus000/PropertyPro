@@ -53,12 +53,14 @@ export class TwilioProvider implements SmsProvider {
   private authToken: string;
   private messagingServiceSid: string;
   private baseUrl: string;
+  private authHeader: string;
 
   constructor() {
     this.accountSid = getRequiredEnv('TWILIO_ACCOUNT_SID');
     this.authToken = getRequiredEnv('TWILIO_AUTH_TOKEN');
     this.messagingServiceSid = getRequiredEnv('TWILIO_MESSAGING_SERVICE_SID');
     this.baseUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}`;
+    this.authHeader = `Basic ${btoa(`${this.accountSid}:${this.authToken}`)}`;
   }
 
   async sendSms(request: SmsSendRequest): Promise<SmsSendResult> {
@@ -77,7 +79,7 @@ export class TwilioProvider implements SmsProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${btoa(`${this.accountSid}:${this.authToken}`)}`,
+          Authorization: this.authHeader,
         },
         body: params.toString(),
       });
