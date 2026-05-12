@@ -7,6 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { captureException, captureMessage } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { ALLOWED_FONTS } from '@propertypro/theme';
 import { isValidHexColor, type CommunityBranding, isDemoTemplateId, getStrategyById, getTemplateById } from '@propertypro/shared';
@@ -180,10 +181,7 @@ export async function POST(request: NextRequest) {
   const authTokenSecret = randomBytes(32).toString('hex');
   const encryptionKey = process.env.DEMO_TOKEN_ENCRYPTION_KEY_HEX;
   if (!encryptionKey) {
-    console.error(
-      '[demos/POST] DEMO_TOKEN_ENCRYPTION_KEY_HEX is not configured. '
-      + 'Generate one with: openssl rand -hex 32',
-    );
+    captureMessage('[demos/POST] DEMO_TOKEN_ENCRYPTION_KEY_HEX is not configured. Generate one with: openssl rand -hex 32', { level: 'error' });
     return NextResponse.json(
       {
         error: {
@@ -241,7 +239,7 @@ export async function POST(request: NextRequest) {
       metadata: {},
     });
   } catch (err) {
-    console.warn('[demos/POST] Failed to emit demo_created event:', err);
+    captureException(err, { level: 'warning', extra: { context: '[demos/POST] Failed to emit demo_created event' } });
   }
 
   // Compile and store site_blocks when template IDs are provided
@@ -301,7 +299,7 @@ export async function POST(request: NextRequest) {
     try {
       await Promise.all(templateCompilations);
     } catch (err) {
-      console.error('[demos/POST] Failed to compile/store site_blocks:', err instanceof Error ? err.message : err);
+      captureException(err, { extra: { context: '[demos/POST] Failed to compile/store site_blocks' } });
       // Non-fatal: demo was created, templates can be regenerated later
     }
   }

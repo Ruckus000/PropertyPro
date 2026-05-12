@@ -14,6 +14,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { captureException, captureMessage } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getStripeClient } from '@/lib/stripe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -129,7 +130,7 @@ export async function POST(
     .limit(1);
 
   if (queryError) {
-    console.error('[convert/POST] Query error:', queryError.message);
+    captureException(queryError, { extra: { context: '[convert/POST] Query error', slug } });
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: 'Failed to look up demo' } },
       { status: 500 },
@@ -180,7 +181,11 @@ export async function POST(
     .single();
 
   if (priceError || !priceRow) {
-    console.error('[convert/POST] Price lookup error:', priceError?.message);
+    if (priceError) {
+      captureException(priceError, { extra: { context: '[convert/POST] Price lookup error', planId, community_type: community.community_type } });
+    } else {
+      captureMessage('[convert/POST] No price row found', { level: 'error', extra: { planId, community_type: community.community_type } });
+    }
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: `No Stripe price configured for plan=${planId}` } },
       { status: 500 },
@@ -210,7 +215,7 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Stripe checkout creation failed';
-    console.error('[convert/POST] Stripe error:', message);
+    captureException(err, { extra: { context: '[convert/POST] Stripe error' } });
     return NextResponse.json(
       { error: { code: 'STRIPE_ERROR', message } },
       { status: 500 },
@@ -230,11 +235,11 @@ export async function POST(
       metadata: {},
     });
   } catch (err) {
-    console.warn('[convert/POST] Failed to emit conversion event:', err);
+    captureException(err, { level: 'warning', extra: { context: '[convert/POST] Failed to emit conversion event' } });
   }
 
   if (!session.url) {
-    console.error('[convert/POST] Stripe session created but url is null', { sessionId: session.id });
+    captureMessage('[convert/POST] Stripe session created but url is null', { level: 'error', extra: { sessionId: session.id } });
     return NextResponse.json(
       { error: { code: 'STRIPE_ERROR', message: 'Checkout session URL unavailable' } },
       { status: 500 },

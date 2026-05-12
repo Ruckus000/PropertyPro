@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
+import { captureException } from '@sentry/nextjs';
 import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { isValidHexColor } from '@propertypro/shared';
@@ -148,7 +149,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     } as never)
     .then(({ error: auditError }) => {
       if (auditError) {
-        console.error('[audit] Failed to log demo branding change:', auditError.message);
+        captureException(auditError, { extra: { context: '[audit] Failed to log demo branding change', demo_id: demoId } });
       }
     });
 
