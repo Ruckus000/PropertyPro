@@ -7,6 +7,7 @@ import {
   buildRecordDedupeKey,
   buildShardPlan,
   mapCsvRow,
+  normalizeCounty,
 } from '../address-index/lib';
 
 const fixturePath = path.resolve(
@@ -55,5 +56,27 @@ describe('address index generator helpers', () => {
 
     expect(shardPlan.shardIds).toEqual(['shard-main-1']);
     expect(shardPlan.shardFiles['shard-main-1']).toHaveLength(2);
+  });
+});
+
+describe('normalizeCounty', () => {
+  it('removes "County" suffix and trims whitespace', () => {
+    expect(normalizeCounty('Miami-Dade')).toBe('Miami-Dade');
+    expect(normalizeCounty('Palm Beach County')).toBe('Palm Beach');
+    expect(normalizeCounty('PALM BEACH COUNTY')).toBe('PALM BEACH');
+    expect(normalizeCounty('  Broward  ')).toBe('Broward');
+    expect(normalizeCounty('Orange County  ')).toBe('Orange');
+    expect(normalizeCounty('County Line')).toBe('County Line');
+    expect(normalizeCounty('County')).toBe('County');
+  });
+
+  it('handles multiple spaces before "County"', () => {
+    expect(normalizeCounty('Miami  County')).toBe('Miami');
+  });
+
+  it('returns empty string for empty or whitespace-only input', () => {
+    expect(normalizeCounty('')).toBe('');
+    expect(normalizeCounty('   ')).toBe('');
+    expect(normalizeCounty('\t\n')).toBe('');
   });
 });
