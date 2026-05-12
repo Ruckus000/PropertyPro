@@ -7,6 +7,8 @@ import { Check, Loader2 } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
 import { ReauthModal } from '@/components/auth/reauth-modal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 type BillingInterval = 'month' | 'year';
 
@@ -119,19 +121,15 @@ export function ChangePlanForm({
       {/* Interval toggle */}
       <div className="inline-flex rounded-[10px] border border-edge bg-surface-card p-1">
         {(['month', 'year'] as const).map((opt) => (
-          <button
+          <Button
             key={opt}
             type="button"
+            variant={interval === opt ? "default" : "ghost"}
+            className={interval === opt ? "" : "text-content-secondary"}
             onClick={() => {
               setInterval(opt);
               setSelectedPlan(null);
             }}
-            className={
-              'rounded-[8px] px-4 py-1.5 text-sm font-medium transition-colors ' +
-              (interval === opt
-                ? 'bg-[var(--interactive-primary)] text-white'
-                : 'text-content-secondary hover:text-content-primary')
-            }
             aria-pressed={interval === opt}
           >
             {opt === 'month' ? 'Monthly' : 'Annual'}
@@ -140,7 +138,7 @@ export function ChangePlanForm({
                 Save ~17%
               </span>
             )}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -201,20 +199,16 @@ export function ChangePlanForm({
       {/* Action row */}
       {offeredPlans.length > 0 && (
         <div className="flex items-center justify-end gap-3">
-          <Link
-            href={cancelHref}
-            className="rounded-[10px] border border-edge px-4 py-2 text-sm font-medium text-content-primary hover:bg-surface-secondary"
-          >
-            Cancel
-          </Link>
-          <button
+          <Button variant="outline" asChild>
+            <Link href={cancelHref}>Cancel</Link>
+          </Button>
+          <Button
             type="button"
             onClick={openConfirm}
             disabled={!selectedPlan || isSubmitting}
-            className="rounded-[10px] bg-[var(--interactive-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Review change
-          </button>
+          </Button>
         </div>
       )}
 
@@ -228,54 +222,47 @@ export function ChangePlanForm({
       )}
 
       {/* Confirm dialog */}
-      {showConfirm && selected && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm-change-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={(e) => e.target === e.currentTarget && !isSubmitting && setShowConfirm(false)}
-        >
-          <div className="w-full max-w-md rounded-[16px] bg-surface-card p-6 shadow-lg">
-            <h2 id="confirm-change-title" className="text-lg font-semibold text-content-primary">
-              Confirm plan change
-            </h2>
-            <div className="mt-4 space-y-2 text-sm text-content-secondary">
-              <p>
-                You&apos;ll be moved to <strong className="text-content-primary">{selected.label}</strong> at{' '}
-                <strong className="text-content-primary">{formatPrice(selected.monthlyPriceUsd, interval)}</strong>{' '}
-                ({interval === 'year' ? 'billed annually' : 'billed monthly'}).
-              </p>
-              <p>
-                Stripe will charge a prorated amount today for the remainder of your current period and
-                bill the new rate going forward.
-              </p>
-              <p>
-                You&apos;ll be asked to re-enter your password to confirm.
-              </p>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                disabled={isSubmitting}
-                className="rounded-[10px] border border-edge px-4 py-2 text-sm font-medium text-content-primary hover:bg-surface-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--interactive-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {isSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-                Confirm change
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={showConfirm && selected !== null} onOpenChange={(open) => !isSubmitting && setShowConfirm(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm plan change</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 pt-2">
+                <p>
+                  You&apos;ll be moved to <strong className="text-content-primary">{selected?.label}</strong> at{' '}
+                  <strong className="text-content-primary">{selected ? formatPrice(selected.monthlyPriceUsd, interval) : ''}</strong>{' '}
+                  ({interval === 'year' ? 'billed annually' : 'billed monthly'}).
+                </p>
+                <p>
+                  Stripe will charge a prorated amount today for the remainder of your current period and
+                  bill the new rate going forward.
+                </p>
+                <p>
+                  You&apos;ll be asked to re-enter your password to confirm.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowConfirm(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={submit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+              Confirm change
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ReauthModal isOpen={reauthOpen} onCancel={reauthCancel} verify={reauthVerify} />
     </div>
