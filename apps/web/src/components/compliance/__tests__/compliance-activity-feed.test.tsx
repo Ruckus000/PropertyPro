@@ -158,4 +158,32 @@ describe('ComplianceActivityFeed', () => {
     ).toBeTruthy();
     expect(screen.getByText(/couldn't load recent activity/i)).toBeTruthy();
   });
+
+  it('drops malformed activity rows before rendering', async () => {
+    mockFetch.mockReturnValue(
+      jsonResponse({
+        data: {
+          data: [
+            { id: 1 },
+            {
+              id: 2,
+              userId: null,
+              action: 'link_document',
+              resourceType: 'compliance_checklist_item',
+              resourceId: '2',
+              metadata: { itemTitle: 'Budget' },
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+          users: {},
+        },
+      }),
+    );
+
+    render(<ComplianceActivityFeed communityId={42} />, { wrapper });
+
+    expect(await screen.findByText('Budget')).toBeTruthy();
+    expect(screen.getByText(/linked a document/i)).toBeTruthy();
+  });
 });

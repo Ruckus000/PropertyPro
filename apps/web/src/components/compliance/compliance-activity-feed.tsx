@@ -102,10 +102,17 @@ function actionDotColor(action: string): string {
 }
 
 function isAuditEntry(value: unknown): value is AuditEntry {
+  const entry = value as Partial<AuditEntry>;
   return (
     value !== null &&
     typeof value === "object" &&
-    typeof (value as { id?: unknown }).id === "number"
+    typeof entry.id === "number" &&
+    (typeof entry.userId === "string" || entry.userId === null) &&
+    typeof entry.action === "string" &&
+    typeof entry.resourceType === "string" &&
+    typeof entry.resourceId === "string" &&
+    (entry.metadata === null || (typeof entry.metadata === "object" && !Array.isArray(entry.metadata))) &&
+    typeof entry.createdAt === "string"
   );
 }
 
