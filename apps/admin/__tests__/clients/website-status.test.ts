@@ -83,6 +83,120 @@ describe('getWebsiteDomainInfo', () => {
       ignoredInvalidCustomDomain: true,
     });
   });
+
+  it('handles empty or whitespace custom domains without marking as ignored invalid', () => {
+    const emptyResult = getWebsiteDomainInfo({
+      slug: 'sunset-condos',
+      customDomain: '',
+    });
+    expect(emptyResult.ignoredInvalidCustomDomain).toBe(false);
+    expect(emptyResult.urlSource).toBe('slug_fallback');
+
+    const whitespaceResult = getWebsiteDomainInfo({
+      slug: 'sunset-condos',
+      customDomain: '   ',
+    });
+    expect(whitespaceResult.ignoredInvalidCustomDomain).toBe(false);
+  });
+
+  it('enforces hostname length boundaries (3-253 characters)', () => {
+    // 3 characters (min valid)
+    const minValid = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'a.b',
+    });
+    expect(minValid.urlSource).toBe('custom_domain');
+    expect(minValid.displayUrl).toBe('a.b');
+
+    // 2 characters (invalid)
+    const tooShort = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'a.',
+    });
+    expect(tooShort.urlSource).toBe('slug_fallback');
+
+    // 253 characters (max valid)
+    const longLabel = 'a'.repeat(63);
+    const maxValidDomain = `${longLabel}.${longLabel}.${longLabel}.${longLabel.slice(0, 57)}.com`;
+    expect(maxValidDomain.length).toBe(253);
+
+    const maxValid = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: maxValidDomain,
+    });
+    expect(maxValid.urlSource).toBe('custom_domain');
+    expect(maxValid.displayUrl).toBe(maxValidDomain);
+
+    // 254 characters (invalid)
+    const tooLong = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: maxValidDomain + 'a',
+    });
+    expect(tooLong.urlSource).toBe('slug_fallback');
+  });
+
+  it('enforces label length boundaries (1-63 characters)', () => {
+    // 63 characters (max valid label)
+    const maxLabel = 'a'.repeat(63);
+    const validResult = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: `${maxLabel}.com`,
+    });
+    expect(validResult.urlSource).toBe('custom_domain');
+
+    // 64 characters (invalid label)
+    const tooLongLabel = 'a'.repeat(64);
+    const invalidResult = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: `${tooLongLabel}.com`,
+    });
+    expect(invalidResult.urlSource).toBe('slug_fallback');
+  });
+
+  it('rejects labels starting or ending with hyphens', () => {
+    const startHyphen = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: '-foo.com',
+    });
+    expect(startHyphen.urlSource).toBe('slug_fallback');
+
+    const endHyphen = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'foo-.com',
+    });
+    expect(endHyphen.urlSource).toBe('slug_fallback');
+  });
+
+  it('rejects empty labels (consecutive or trailing dots)', () => {
+    const consecutiveDots = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'foo..bar.com',
+    });
+    expect(consecutiveDots.urlSource).toBe('slug_fallback');
+
+    const trailingDot = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'foo.com.',
+    });
+    expect(trailingDot.urlSource).toBe('slug_fallback');
+  });
+
+  it('rejects invalid characters like underscores', () => {
+    const result = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'my_domain.com',
+    });
+    expect(result.urlSource).toBe('slug_fallback');
+  });
+
+  it('performs complex sanitization including mixed-case protocols and fragments', () => {
+    const result = getWebsiteDomainInfo({
+      slug: 'x',
+      customDomain: 'hTtPs://MyDomain.Com/path#fragment',
+    });
+    expect(result.displayUrl).toBe('mydomain.com');
+    expect(result.urlSource).toBe('custom_domain');
+  });
 });
 
 describe('getSiteLiveStatus', () => {
