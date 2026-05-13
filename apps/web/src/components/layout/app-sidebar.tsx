@@ -17,6 +17,7 @@ import {
   inferCanonicalRoleFromMembership,
   toInitials,
   resolvePlanId,
+  PLAN_FEATURES,
   type AnyCommunityRole,
   type CommunityFeatures,
   type CommunityType,
@@ -201,9 +202,21 @@ export function AppSidebar({
         >
           <span className="truncate text-sm font-medium text-white">{userName}</span>
           {role && (
-            <span className="truncate text-xs text-white/70">
-              {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-xs text-white/70">
+                {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              </span>
+              {resolvedPlanId ? (
+                <PlanBadge tone="dark" label={PLAN_FEATURES[resolvedPlanId].displayName} />
+              ) : (
+                <span
+                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-white/10 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/60 ring-1 ring-inset ring-white/15"
+                  aria-label="No plan"
+                >
+                  No plan
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>

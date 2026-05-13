@@ -165,7 +165,10 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
 
       {/* Mobile drawer overlay */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-[300px] p-0 sm:w-[300px]" >
+        <SheetContent
+          side="left"
+          className="w-[260px] border-0 bg-transparent p-0 shadow-none sm:w-[260px] sm:max-w-none [&>button]:hidden"
+        >
           <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
           <div className="relative z-10 h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <AppSidebar
