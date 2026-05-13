@@ -28,6 +28,7 @@ export interface MaintenanceRequestItem {
   id: number;
   communityId: number;
   unitId: number | null;
+  unitLabel: string | null;
   submittedById: string;
   title: string;
   description: string;
@@ -56,6 +57,7 @@ export interface CreateRequestPayload {
   category: string;
   priority: string;
   unitId?: number | null;
+  unitLabel: string;
   storagePaths?: string[];
 }
 

@@ -13,6 +13,11 @@ const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
 const formSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500),
+  unitLabel: z
+    .string()
+    .trim()
+    .min(1, 'Apartment/Unit is required')
+    .max(50, 'Apartment/Unit must be 50 characters or fewer'),
   description: z.string().min(1, 'Description is required').max(5000),
   category: z.enum(CATEGORIES),
   priority: z.enum(PRIORITIES),
@@ -26,6 +31,7 @@ interface SubmitFormProps {
 
 export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
   const [title, setTitle] = useState('');
+  const [unitLabel, setUnitLabel] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('general');
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>('normal');
@@ -70,7 +76,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
     setFieldErrors({});
     setServerError(null);
 
-    const parsed = formSchema.safeParse({ title, description, category, priority });
+    const parsed = formSchema.safeParse({ title, unitLabel, description, category, priority });
     if (!parsed.success) {
       const errors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
@@ -94,6 +100,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       const result = await createMaintenanceRequest({
         communityId,
         title: parsed.data.title,
+        unitLabel: parsed.data.unitLabel,
         description: parsed.data.description,
         category: parsed.data.category,
         priority: parsed.data.priority,
@@ -101,6 +108,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       });
 
       setTitle('');
+      setUnitLabel('');
       setDescription('');
       setCategory('general');
       setPriority('normal');
@@ -132,6 +140,24 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
         />
         {fieldErrors['title'] && (
           <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['title']}</p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="mr-unit-label" className="block text-sm font-medium text-content-secondary">
+          Apartment/Unit Number <span className="text-status-danger">*</span>
+        </label>
+        <input
+          id="mr-unit-label"
+          type="text"
+          value={unitLabel}
+          onChange={(e) => setUnitLabel(e.target.value)}
+          maxLength={50}
+          placeholder="e.g. 4B, Apt 312"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+        />
+        {fieldErrors['unitLabel'] && (
+          <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['unitLabel']}</p>
         )}
       </div>
 
