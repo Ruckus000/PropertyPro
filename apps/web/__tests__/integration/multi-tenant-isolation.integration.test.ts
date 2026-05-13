@@ -864,7 +864,7 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
     vi.clearAllMocks();
   });
 
-  it('prefers tenant query over conflicting host subdomain', async () => {
+  it('prefers non-reserved host subdomain over conflicting tenant query', async () => {
     const tracker = configureMiddlewareClient({
       slugToCommunityId: {
         'tenant-query-wins': 501,
@@ -885,10 +885,10 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(tracker.getRequestedSlug()).toBe('tenant-query-wins');
-    expect(response.headers.get('x-middleware-request-x-community-id')).toBe('501');
-    expect(response.headers.get('x-middleware-request-x-tenant-slug')).toBe('tenant-query-wins');
-    expect(response.headers.get('x-middleware-request-x-tenant-source')).toBe('tenant_query');
+    expect(tracker.getRequestedSlug()).toBe('tenant-host-conflict');
+    expect(response.headers.get('x-middleware-request-x-community-id')).toBe('999');
+    expect(response.headers.get('x-middleware-request-x-tenant-slug')).toBe('tenant-host-conflict');
+    expect(response.headers.get('x-middleware-request-x-tenant-source')).toBe('host_subdomain');
   });
 
   it('sanitizes spoofed inbound tenant headers and forwards server-owned values', async () => {
