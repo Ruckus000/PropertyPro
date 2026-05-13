@@ -46,9 +46,19 @@ interface VendorOrderedCursorPayload {
   id: number;
 }
 
+interface AmenityOrderedCursorPayload {
+  name: string;
+  id: number;
+}
+
 export interface PaginatedVendors {
   data: VendorRecord[];
   pagination: PaginatedResult<VendorRecord>['pagination'];
+}
+
+export interface PaginatedAmenities {
+  data: AmenityRecord[];
+  pagination: PaginatedResult<AmenityRecord>['pagination'];
 }
 
 export interface WorkOrderRecord {
@@ -289,6 +299,49 @@ function buildVendorOrderedCursorWhere(
           gt(vendors.id, cursor.id),
         ),
       ),
+    ),
+  );
+}
+
+function encodeAmenityOrderedCursor(payload: AmenityOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeAmenityOrderedCursor(
+  cursor: string | null | undefined,
+): AmenityOrderedCursorPayload | null {
+  if (!cursor) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object'
+      && parsed !== null
+      && typeof (parsed as { name?: unknown }).name === 'string'
+      && Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      return {
+        name: (parsed as { name: string }).name,
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildAmenityOrderedCursorWhere(
+  cursor: AmenityOrderedCursorPayload | null,
+) {
+  if (!cursor) return undefined;
+
+  return or(
+    gt(amenities.name, cursor.name),
+    and(
+      eq(amenities.name, cursor.name),
+      gt(amenities.id, cursor.id),
     ),
   );
 }
@@ -674,6 +727,50 @@ export async function listAmenitiesForCommunity(
     .orderBy(asc(amenities.name));
 
   return rows.map(mapAmenityRow);
+}
+
+/**
+ * Ordered-keyset paginated amenity directory.
+ *
+ * Sort contract:
+ *   ORDER BY name ASC, id ASC
+ *
+ * AUTHZ: tenant-scoped - caller MUST have already verified amenity read
+ * permission and the amenities feature gate.
+ */
+export async function paginateAmenitiesForCommunity(
+  communityId: number,
+  input: PaginationInput = {},
+): Promise<PaginatedAmenities> {
+  const pageSize = clampPageSize(input.pageSize);
+  const cursorWhere = buildAmenityOrderedCursorWhere(
+    decodeAmenityOrderedCursor(input.cursor),
+  );
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<AmenityRecord>(amenities, {}, cursorWhere)
+    .orderBy(asc(amenities.name), asc(amenities.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeAmenityOrderedCursor({
+          name: lastRow.name,
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    data: dataRows.map(mapAmenityRow),
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function createAmenityForCommunity(

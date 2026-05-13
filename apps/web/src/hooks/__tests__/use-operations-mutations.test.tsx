@@ -9,6 +9,7 @@ import {
   useCreateMaintenanceRequest,
   useCreateWorkOrder,
   useCreateReservation,
+  useAmenities,
   useWorkOrders,
   useReservations,
 } from '../use-operations';
@@ -150,5 +151,40 @@ describe('useReservations — response roundtrip', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.data).toHaveLength(1);
     expect(result.current.data?.meta.total).toBe(33);
+  });
+});
+
+describe('useAmenities — response roundtrip', () => {
+  it('walks the canonical paginated envelope and preserves the array return shape', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            data: [{ id: 1, name: 'Clubhouse', description: null, location: null }],
+            pagination: { nextCursor: 'cursor-2', hasMore: true, pageSize: 100 },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            data: [{ id: 2, name: 'Pool', description: null, location: null }],
+            pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAmenities(42), { wrapper: wrapper(qc) });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map((amenity) => amenity.name)).toEqual(['Clubhouse', 'Pool']);
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/amenities?communityId=42&pageSize=100');
+    expect(fetchMock.mock.calls[1]![0]).toBe('/api/v1/amenities?communityId=42&pageSize=100&cursor=cursor-2');
   });
 });
