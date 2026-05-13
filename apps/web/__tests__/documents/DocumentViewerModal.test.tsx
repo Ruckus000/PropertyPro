@@ -37,7 +37,10 @@ describe('DocumentViewerModal', () => {
     );
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/documents/9/download?communityId=2');
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/documents/9/download?communityId=2',
+        { signal: expect.any(AbortSignal) },
+      );
     });
 
     await waitFor(() => {
@@ -75,5 +78,26 @@ describe('DocumentViewerModal', () => {
     await waitFor(() => {
       expect(document.querySelector('iframe[src="https://storage.example/fixed.pdf"]')).toBeTruthy();
     });
+  });
+
+  it('uses the fallback preview error when the download response is malformed', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+    });
+
+    render(
+      <DocumentViewerModal
+        open
+        onOpenChange={() => {}}
+        communityId={2}
+        documentId={12}
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByText(/unable to load document preview/i)).toBeVisible();
   });
 });
