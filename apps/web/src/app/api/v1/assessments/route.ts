@@ -15,7 +15,7 @@ import {
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
   createAssessmentForCommunity,
-  listAssessmentsForCommunity,
+  paginateAssessmentsForCommunity,
 } from '@/lib/services/finance-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
@@ -33,6 +33,11 @@ const createAssessmentSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const listAssessmentsQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -41,8 +46,29 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireFinanceEnabled(membership);
   requireFinanceReadPermission(membership);
 
-  const assessments = await listAssessmentsForCommunity(communityId);
-  return NextResponse.json({ data: assessments });
+  const searchParams = new URL(req.url).searchParams;
+  const parsedQuery = listAssessmentsQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid assessments query', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
+
+  const result = await paginateAssessmentsForCommunity(communityId, {
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
+
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

@@ -8,6 +8,7 @@ const {
   requireActiveSubscriptionForMutationMock,
   createAssessmentForCommunityMock,
   listAssessmentsForCommunityMock,
+  paginateAssessmentsForCommunityMock,
   updateAssessmentForCommunityMock,
   deleteAssessmentForCommunityMock,
   generateAssessmentLineItemsForCommunityMock,
@@ -26,6 +27,7 @@ const {
   requireActiveSubscriptionForMutationMock: vi.fn(),
   createAssessmentForCommunityMock: vi.fn(),
   listAssessmentsForCommunityMock: vi.fn(),
+  paginateAssessmentsForCommunityMock: vi.fn(),
   updateAssessmentForCommunityMock: vi.fn(),
   deleteAssessmentForCommunityMock: vi.fn(),
   generateAssessmentLineItemsForCommunityMock: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 vi.mock('@/lib/services/finance-service', () => ({
   createAssessmentForCommunity: createAssessmentForCommunityMock,
   listAssessmentsForCommunity: listAssessmentsForCommunityMock,
+  paginateAssessmentsForCommunity: paginateAssessmentsForCommunityMock,
   updateAssessmentForCommunity: updateAssessmentForCommunityMock,
   deleteAssessmentForCommunity: deleteAssessmentForCommunityMock,
   generateAssessmentLineItemsForCommunity: generateAssessmentLineItemsForCommunityMock,
@@ -88,7 +91,7 @@ vi.mock('@/lib/services/finance-service', () => ({
 
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
-import { POST as assessmentsPost } from '../../src/app/api/v1/assessments/route';
+import { GET as assessmentsGet, POST as assessmentsPost } from '../../src/app/api/v1/assessments/route';
 import { PATCH as assessmentPatch, DELETE as assessmentDelete } from '../../src/app/api/v1/assessments/[id]/route';
 import { POST as assessmentGeneratePost } from '../../src/app/api/v1/assessments/[id]/generate/route';
 import { POST as createIntentPost } from '../../src/app/api/v1/payments/create-intent/route';
@@ -125,6 +128,10 @@ describe('WS66 finance mutation routes', () => {
 
     createAssessmentForCommunityMock.mockResolvedValue({ id: 11 });
     listAssessmentsForCommunityMock.mockResolvedValue([]);
+    paginateAssessmentsForCommunityMock.mockResolvedValue({
+      data: [{ id: 11, title: 'Monthly Dues' }],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
     updateAssessmentForCommunityMock.mockResolvedValue({ id: 11, title: 'Updated' });
     deleteAssessmentForCommunityMock.mockResolvedValue(undefined);
     generateAssessmentLineItemsForCommunityMock.mockResolvedValue({
@@ -178,6 +185,44 @@ describe('WS66 finance mutation routes', () => {
       expect.objectContaining({ title: 'Monthly Dues' }),
       'req-finance-test-1',
     );
+  });
+
+  it('returns canonical paginated assessment list envelope', async () => {
+    paginateAssessmentsForCommunityMock.mockResolvedValueOnce({
+      data: [{ id: 12, title: 'Quarterly Dues' }],
+      pagination: { nextCursor: 'next-cursor', hasMore: true, pageSize: 25 },
+    });
+
+    const response = await assessmentsGet(
+      new NextRequest(`http://localhost:3000/api/v1/assessments?communityId=${communityId}&pageSize=25`),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(paginateAssessmentsForCommunityMock).toHaveBeenCalledWith(communityId, {
+      cursor: undefined,
+      pageSize: 25,
+    });
+    expect(body).toEqual({
+      data: {
+        data: [{ id: 12, title: 'Quarterly Dues' }],
+        pagination: { nextCursor: 'next-cursor', hasMore: true, pageSize: 25 },
+      },
+    });
+  });
+
+  it('passes empty assessment cursor and pageSize as missing values', async () => {
+    const response = await assessmentsGet(
+      new NextRequest(`http://localhost:3000/api/v1/assessments?communityId=${communityId}&cursor=&pageSize=`),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(paginateAssessmentsForCommunityMock).toHaveBeenCalledWith(communityId, {
+      cursor: undefined,
+      pageSize: undefined,
+    });
+    expect(body.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
   });
 
   it('guards assessment updates and deletes with active subscription check', async () => {
