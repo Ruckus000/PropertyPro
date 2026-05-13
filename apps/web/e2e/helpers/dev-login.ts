@@ -16,7 +16,7 @@ type AgentLoginPayload = {
   ok: boolean;
   portal: string;
   community: { id: number } | null;
-  allCommunities?: Array<{ id: number; slug: string }>;
+  allCommunities?: Array<{ id: number; slug: string; name: string }>;
 };
 
 export type LoginAsOptions = {
@@ -39,7 +39,11 @@ export async function loginAs(
   page: Page,
   role: DevRole,
   options?: LoginAsOptions,
-): Promise<{ communityId: number; portal: string }> {
+): Promise<{
+  communityId: number;
+  portal: string;
+  allCommunities: Array<{ id: number; slug: string; name: string }>;
+}> {
   async function fetchLogin(query: string): Promise<AgentLoginPayload> {
     let response;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -81,7 +85,11 @@ export async function loginAs(
 
   await page.goto(payload.portal, { waitUntil: 'networkidle' });
 
-  return { communityId, portal: payload.portal };
+  return {
+    communityId,
+    portal: payload.portal,
+    allCommunities: payload.allCommunities ?? [],
+  };
 }
 
 export async function loginAsPlatformAdmin(page: Page): Promise<void> {

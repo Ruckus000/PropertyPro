@@ -2,17 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { resolveCommunityContext } from '../../src/lib/tenant/resolve-community-context';
 
 describe('resolveCommunityContext', () => {
-  it('prefers communityId query parameter when present', () => {
+  it('prefers communityId query on www (reserved host cannot pin tenant from subdomain)', () => {
     const result = resolveCommunityContext({
       searchParams: new URLSearchParams('communityId=42&tenant=sunset'),
       routeSubdomain: 'ignored',
-      host: 'ignored.getpropertypro.com',
+      host: 'www.getpropertypro.com',
     });
 
     expect(result).toEqual({
       source: 'community_id',
       communityId: 42,
       tenantSlug: null,
+      isReservedSubdomain: false,
+    });
+  });
+
+  it('prefers non-reserved host tenant over conflicting communityId query', () => {
+    const result = resolveCommunityContext({
+      searchParams: new URLSearchParams('communityId=999'),
+      host: 'fake.getpropertypro.com',
+    });
+
+    expect(result).toEqual({
+      source: 'host_subdomain',
+      communityId: null,
+      tenantSlug: 'fake',
       isReservedSubdomain: false,
     });
   });

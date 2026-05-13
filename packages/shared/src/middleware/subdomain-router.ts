@@ -62,6 +62,20 @@ function parseHostSubdomain(host: string | null | undefined): string | null {
 export function resolveCommunityContext(
   input: ResolveCommunityContextInput,
 ): ResolvedCommunityContext {
+  const hostSubdomainRaw = normalizeTenantSlug(parseHostSubdomain(input.host));
+
+  // Non-reserved tenant host (e.g. sunset-condos.getpropertypro.com) must win over
+  // ?communityId= so a stale query param cannot pin the wrong community after a
+  // cross-subdomain switch. Canonical hosts (www, reserved labels) skip this block.
+  if (hostSubdomainRaw && !isReservedSubdomain(hostSubdomainRaw)) {
+    return {
+      source: 'host_subdomain',
+      communityId: null,
+      tenantSlug: hostSubdomainRaw,
+      isReservedSubdomain: false,
+    };
+  }
+
   const communityId = parseCommunityId(input.searchParams?.get('communityId') ?? null);
   if (communityId) {
     return {
@@ -94,13 +108,12 @@ export function resolveCommunityContext(
     };
   }
 
-  const hostSubdomain = normalizeTenantSlug(parseHostSubdomain(input.host));
-  if (hostSubdomain) {
-    const reserved = isReservedSubdomain(hostSubdomain);
+  if (hostSubdomainRaw) {
+    const reserved = isReservedSubdomain(hostSubdomainRaw);
     return {
       source: 'host_subdomain',
       communityId: null,
-      tenantSlug: hostSubdomain,
+      tenantSlug: hostSubdomainRaw,
       isReservedSubdomain: reserved,
     };
   }

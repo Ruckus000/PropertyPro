@@ -5,6 +5,13 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   // Point to monorepo root so Next.js doesn't pick up ~/package-lock.json
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Tenant subdomain Playwright (localtest.me) fetches /_next/* from a different
+  // dev host than the document; Next 15 requires this allowlist in development.
+  allowedDevOrigins: [
+    "http://localtest.me:3002",
+    "http://sunset-condos.localtest.me:3002",
+    "http://palm-shores-hoa.localtest.me:3002",
+  ],
   // Server-only packages that must not be bundled by webpack:
   //   - puppeteer-core / @sparticuz/chromium-min: Chromium binary is
   //     fetched from a CDN at runtime, so the package must remain a Node
