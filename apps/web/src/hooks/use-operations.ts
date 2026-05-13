@@ -8,7 +8,7 @@ import {
 } from '@/lib/api/admin-maintenance';
 import { listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
-import { walkAndSlice } from '@/lib/api/walk-paginated';
+import { walkAndSlice, walkPaginated } from '@/lib/api/walk-paginated';
 
 export interface OperationsListItem {
   id: number;
@@ -431,8 +431,12 @@ export const VENDOR_KEYS = {
 export function useVendors(communityId: number) {
   return useQuery({
     queryKey: VENDOR_KEYS.list(communityId),
-    queryFn: () =>
-      requestJson<VendorListItem[]>(`/api/v1/vendors?communityId=${communityId}`),
+    queryFn: ({ signal }) =>
+      walkPaginated<VendorListItem>(
+        '/api/v1/vendors',
+        { communityId: String(communityId) },
+        { signal },
+      ),
     enabled: communityId > 0,
     staleTime: 5 * 60_000,
   });

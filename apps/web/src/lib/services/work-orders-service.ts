@@ -1,10 +1,13 @@
 import {
   amenities,
   amenityReservations,
+  clampPageSize,
   complianceAuditLog,
   createScopedClient,
   logAuditEvent,
   paginate,
+  type PaginatedResult,
+  type PaginationInput,
   vendors,
   workOrders,
   type AmenityBookingRules,
@@ -12,7 +15,7 @@ import {
   type WorkOrderPriority,
   type WorkOrderStatus,
 } from '@propertypro/db';
-import { and, asc, desc, eq, inArray, sql } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from '@propertypro/db/filters';
 // AUTHZ: Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch after the caller has already verified tenant membership and reservation ownership scope.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { AppError } from '@/lib/api/errors/AppError';
@@ -35,6 +38,17 @@ interface VendorRecord {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface VendorOrderedCursorPayload {
+  isActive: boolean;
+  name: string;
+  id: number;
+}
+
+export interface PaginatedVendors {
+  data: VendorRecord[];
+  pagination: PaginatedResult<VendorRecord>['pagination'];
 }
 
 export interface WorkOrderRecord {
@@ -228,6 +242,57 @@ function mapVendorRow(row: VendorRecord): VendorRecord {
   };
 }
 
+function encodeVendorOrderedCursor(payload: VendorOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeVendorOrderedCursor(
+  cursor: string | null | undefined,
+): VendorOrderedCursorPayload | null {
+  if (!cursor) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object'
+      && parsed !== null
+      && typeof (parsed as { isActive?: unknown }).isActive === 'boolean'
+      && typeof (parsed as { name?: unknown }).name === 'string'
+      && Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      return {
+        isActive: (parsed as { isActive: boolean }).isActive,
+        name: (parsed as { name: string }).name,
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildVendorOrderedCursorWhere(
+  cursor: VendorOrderedCursorPayload | null,
+) {
+  if (!cursor) return undefined;
+
+  return or(
+    lt(vendors.isActive, cursor.isActive),
+    and(
+      eq(vendors.isActive, cursor.isActive),
+      or(
+        gt(vendors.name, cursor.name),
+        and(
+          eq(vendors.name, cursor.name),
+          gt(vendors.id, cursor.id),
+        ),
+      ),
+    ),
+  );
+}
+
 export function mapWorkOrderRow(row: WorkOrderRecord): WorkOrderRecord {
   return {
     ...row,
@@ -310,9 +375,54 @@ export async function listVendorsForCommunity(
   const scoped = createScopedClient(communityId);
   const rows = await scoped
     .selectFrom<VendorRecord>(vendors, {})
-    .orderBy(desc(vendors.isActive), asc(vendors.name));
+    .orderBy(desc(vendors.isActive), asc(vendors.name), asc(vendors.id));
 
   return rows.map(mapVendorRow);
+}
+
+/**
+ * Ordered-keyset paginated vendor directory.
+ *
+ * Sort contract:
+ *   ORDER BY is_active DESC, name ASC, id ASC
+ *
+ * AUTHZ: tenant-scoped - caller MUST have already verified work-order read
+ * permission and the work-order feature gate.
+ */
+export async function paginateVendorsForCommunity(
+  communityId: number,
+  input: PaginationInput = {},
+): Promise<PaginatedVendors> {
+  const pageSize = clampPageSize(input.pageSize);
+  const cursorWhere = buildVendorOrderedCursorWhere(
+    decodeVendorOrderedCursor(input.cursor),
+  );
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<VendorRecord>(vendors, {}, cursorWhere)
+    .orderBy(desc(vendors.isActive), asc(vendors.name), asc(vendors.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeVendorOrderedCursor({
+          isActive: Boolean(lastRow.isActive),
+          name: lastRow.name,
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    data: dataRows.map(mapVendorRow),
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function createVendorForCommunity(
