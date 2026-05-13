@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@propertypro/ui';
 import {
   Dialog,
@@ -10,16 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-
-interface DownloadResponse {
-  data?: {
-    url?: string;
-    fileName?: string;
-  };
-  error?: {
-    message?: string;
-  };
-}
+import { useDocumentDownloadUrl } from '@/hooks/use-documents';
 
 interface DocumentViewerModalProps {
   open: boolean;
@@ -31,37 +21,6 @@ interface DocumentViewerModalProps {
   contentTestId?: string;
 }
 
-const FALLBACK_ERROR_MESSAGE = 'Unable to load document preview';
-const MAX_SURFACED_ERROR_LENGTH = 200;
-
-async function fetchSignedUrl(communityId: number, documentId: number): Promise<{ url: string; fileName?: string }> {
-  const response = await fetch(`/api/v1/documents/${documentId}/download?communityId=${communityId}`);
-
-  let body: DownloadResponse | null = null;
-  try {
-    body = (await response.json()) as DownloadResponse;
-  } catch {
-    body = null;
-  }
-
-  if (!response.ok) {
-    const msg = body?.error?.message?.trim();
-    throw new Error(
-      msg && msg.length > 0 && msg.length <= MAX_SURFACED_ERROR_LENGTH ? msg : FALLBACK_ERROR_MESSAGE,
-    );
-  }
-
-  const url = body?.data?.url;
-  if (!url) {
-    throw new Error(FALLBACK_ERROR_MESSAGE);
-  }
-
-  return {
-    url,
-    fileName: body?.data?.fileName,
-  };
-}
-
 export function DocumentViewerModal({
   open,
   onOpenChange,
@@ -70,11 +29,10 @@ export function DocumentViewerModal({
   fileName,
   contentTestId,
 }: DocumentViewerModalProps) {
-  const query = useQuery({
-    queryKey: ['document-viewer-modal', communityId, documentId],
-    queryFn: async () => fetchSignedUrl(communityId, documentId!),
-    enabled: open && documentId != null,
-    retry: 0,
+  const query = useDocumentDownloadUrl({
+    communityId,
+    documentId,
+    enabled: open,
   });
 
   const isIOS = useMemo(() => {

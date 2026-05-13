@@ -16,10 +16,43 @@ import type { DocumentListItem } from '@/components/documents/document-list';
 export const documentsKey = (communityId: number, categoryId: number | null | undefined) =>
   ['documents', communityId, categoryId ?? 'all'] as const;
 
+export const documentDownloadKey = (communityId: number, documentId: number | null | undefined) =>
+  ['document-download', communityId, documentId ?? 'none'] as const;
+
+const DOCUMENT_DOWNLOAD_FALLBACK_ERROR = 'Unable to load document preview';
+const MAX_SURFACED_DOWNLOAD_ERROR_LENGTH = 200;
+
 interface UseDocumentsOptions {
   communityId: number;
   categoryId?: number | null;
   enabled?: boolean;
+}
+
+interface UseDocumentDownloadUrlOptions {
+  communityId: number;
+  documentId: number | null;
+  enabled?: boolean;
+}
+
+interface DocumentDownloadResponse {
+  url: string;
+  fileName?: string;
+}
+
+function normalizeDownloadError(error: unknown): Error {
+  if (error instanceof SyntaxError) {
+    return new Error(DOCUMENT_DOWNLOAD_FALLBACK_ERROR);
+  }
+
+  const message = error instanceof Error ? error.message.trim() : '';
+  if (
+    message.length > 0
+    && message.length <= MAX_SURFACED_DOWNLOAD_ERROR_LENGTH
+    && message !== 'Missing response payload'
+  ) {
+    return new Error(message);
+  }
+  return new Error(DOCUMENT_DOWNLOAD_FALLBACK_ERROR);
 }
 
 export function useDocuments({ communityId, categoryId, enabled = true }: UseDocumentsOptions) {
@@ -33,6 +66,32 @@ export function useDocuments({ communityId, categoryId, enabled = true }: UseDoc
       return walkPaginated<DocumentListItem>('/api/v1/documents', baseParams, { signal });
     },
     enabled: enabled && communityId > 0,
+  });
+}
+
+export function useDocumentDownloadUrl({
+  communityId,
+  documentId,
+  enabled = true,
+}: UseDocumentDownloadUrlOptions) {
+  return useQuery({
+    queryKey: documentDownloadKey(communityId, documentId),
+    queryFn: async ({ signal }) => {
+      try {
+        const data = await requestJson<DocumentDownloadResponse>(
+          `/api/v1/documents/${documentId}/download?communityId=${communityId}`,
+          { signal },
+        );
+        if (!data.url) {
+          throw new Error(DOCUMENT_DOWNLOAD_FALLBACK_ERROR);
+        }
+        return data;
+      } catch (error) {
+        throw normalizeDownloadError(error);
+      }
+    },
+    enabled: enabled && communityId > 0 && documentId != null,
+    retry: 0,
   });
 }
 

@@ -77,7 +77,10 @@ describe('ComplianceItemActions \u2014 View Document', () => {
     });
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/documents/555/download?communityId=9');
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/documents/555/download?communityId=9',
+        { signal: expect.any(AbortSignal) },
+      );
     });
     expect(windowOpenSpy).not.toHaveBeenCalled();
 
