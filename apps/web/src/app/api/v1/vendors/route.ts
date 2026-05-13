@@ -14,7 +14,7 @@ import {
   requireWorkOrdersReadPermission,
   requireWorkOrdersWritePermission,
 } from '@/lib/work-orders/common';
-import { createVendorForCommunity, listVendorsForCommunity } from '@/lib/services/work-orders-service';
+import { createVendorForCommunity, paginateVendorsForCommunity } from '@/lib/services/work-orders-service';
 
 const createVendorSchema = z.object({
   communityId: z.number().int().positive(),
@@ -26,6 +26,11 @@ const createVendorSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const listVendorsQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -35,8 +40,27 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requirePlanFeature(communityId, 'hasWorkOrders');
   requireWorkOrdersReadPermission(membership);
 
-  const data = await listVendorsForCommunity(communityId);
-  return NextResponse.json({ data });
+  const { searchParams } = new URL(req.url);
+  const parsedQuery = listVendorsQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid query parameters', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
+
+  const result = await paginateVendorsForCommunity(communityId, {
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {

@@ -16,20 +16,43 @@ function wrapper(qc: QueryClient) {
 beforeEach(() => fetchMock.mockReset());
 
 describe('useVendors', () => {
-  it('fetches /api/v1/vendors?communityId=X and returns data array', async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ data: [{ id: 1, name: 'Acme Plumbing', isActive: true }] }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
+  it('walks paginated /api/v1/vendors pages and returns a flat data array', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              data: [{ id: 1, name: 'Acme Plumbing', isActive: true }],
+              pagination: { nextCursor: 'next-page', hasMore: true, pageSize: 100 },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              data: [{ id: 2, name: 'Bravo Electric', isActive: true }],
+              pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     const { result } = renderHook(() => useVendors(42), { wrapper: wrapper(qc) });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([{ id: 1, name: 'Acme Plumbing', isActive: true }]);
-    expect(fetchMock.mock.calls[0]![0]).toContain('/api/v1/vendors?communityId=42');
+    expect(result.current.data).toEqual([
+      { id: 1, name: 'Acme Plumbing', isActive: true },
+      { id: 2, name: 'Bravo Electric', isActive: true },
+    ]);
+    expect(fetchMock.mock.calls[0]![0]).toContain('/api/v1/vendors?communityId=42&pageSize=100');
+    expect(fetchMock.mock.calls[1]![0]).toContain(
+      '/api/v1/vendors?communityId=42&pageSize=100&cursor=next-page',
+    );
   });
 
   it('is disabled when communityId is 0', () => {
