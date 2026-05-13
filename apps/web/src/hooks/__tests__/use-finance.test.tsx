@@ -132,7 +132,12 @@ describe('useAssessments', () => {
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: assessments }),
+      json: () => Promise.resolve({
+        data: {
+          data: assessments,
+          pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+        },
+      }),
     });
 
     const { result } = renderHook(() => useAssessments(42), { wrapper });
@@ -143,8 +148,8 @@ describe('useAssessments', () => {
 
     expect(result.current.data).toEqual(assessments);
     expect(mockFetch).toHaveBeenCalledWith(
-      '/api/v1/assessments?communityId=42',
-      undefined,
+      '/api/v1/assessments?communityId=42&pageSize=100',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -208,7 +213,12 @@ describe('useAssessments', () => {
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: assessments }),
+      json: () => Promise.resolve({
+        data: {
+          data: assessments,
+          pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+        },
+      }),
     });
 
     const { result } = renderHook(
@@ -227,6 +237,82 @@ describe('useAssessments', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.current.first.data).toEqual(assessments);
     expect(result.current.second.data).toEqual(assessments);
+  });
+
+  it('walks canonical assessment pages while preserving the array return shape', async () => {
+    const { wrapper } = createWrapper();
+    const firstPage: Assessment[] = [
+      {
+        id: 10,
+        communityId: 42,
+        title: 'Active Assessment',
+        description: null,
+        amountCents: 35000,
+        frequency: 'monthly',
+        dueDay: 1,
+        lateFeeAmountCents: 0,
+        lateFeeDaysGrace: 0,
+        startDate: '2026-01-01',
+        endDate: null,
+        isActive: true,
+        createdAt: '2026-05-01T00:00:00Z',
+      },
+    ];
+    const secondPage: Assessment[] = [
+      {
+        id: 9,
+        communityId: 42,
+        title: 'Inactive Assessment',
+        description: null,
+        amountCents: 12000,
+        frequency: 'one_time',
+        dueDay: null,
+        lateFeeAmountCents: 0,
+        lateFeeDaysGrace: 0,
+        startDate: '2026-02-01',
+        endDate: null,
+        isActive: false,
+        createdAt: '2026-04-01T00:00:00Z',
+      },
+    ];
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: {
+            data: firstPage,
+            pagination: { nextCursor: 'cursor-2', hasMore: true, pageSize: 100 },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: {
+            data: secondPage,
+            pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+          },
+        }),
+      });
+
+    const { result } = renderHook(() => useAssessments(42), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual([...firstPage, ...secondPage]);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/assessments?communityId=42&pageSize=100',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/assessments?communityId=42&pageSize=100&cursor=cursor-2',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 });
 

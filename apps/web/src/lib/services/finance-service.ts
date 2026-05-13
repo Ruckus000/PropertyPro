@@ -3,6 +3,7 @@ import { addDays, differenceInCalendarDays, endOfMonth, format, startOfMonth } f
 import {
   assessmentLineItems,
   assessments,
+  clampPageSize,
   communities,
   createScopedClient,
   financeStripeWebhookEvents,
@@ -16,8 +17,10 @@ import {
   stripeConnectedAccounts,
   units,
   users,
+  type PaginatedResult,
+  type PaginationInput,
 } from '@propertypro/db';
-import { and, asc, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, lt, lte, or } from '@propertypro/db/filters';
 import type { LedgerEntryType, StripePayableMetadata, PayableType } from '@propertypro/shared';
 import {
   type PaymentFeePolicy,
@@ -59,6 +62,12 @@ export interface AssessmentRecord {
   createdByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface AssessmentOrderedCursorPayload {
+  isActive: boolean;
+  createdAt: string;
+  id: number;
 }
 
 export interface AssessmentLineItemRecord {
@@ -368,18 +377,129 @@ function toLineItemDescription(assessment: AssessmentRecord, dueDate: string): s
   return `${assessment.title} (${dueDate})`;
 }
 
+function encodeAssessmentOrderedCursor(payload: AssessmentOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeAssessmentOrderedCursor(
+  cursor: string | null | undefined,
+): AssessmentOrderedCursorPayload | null {
+  if (!cursor) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null;
+    }
+
+    const createdAt = (parsed as { createdAt?: unknown }).createdAt;
+    const parsedDate =
+      typeof createdAt === 'string'
+        ? new Date(createdAt)
+        : null;
+
+    if (
+      typeof (parsed as { isActive?: unknown }).isActive === 'boolean'
+      && typeof createdAt === 'string'
+      && parsedDate !== null
+      && !Number.isNaN(parsedDate.getTime())
+      && Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      return {
+        isActive: (parsed as { isActive: boolean }).isActive,
+        createdAt,
+        id: (parsed as { id: number }).id,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildAssessmentOrderedCursorWhere(
+  cursor: AssessmentOrderedCursorPayload | null,
+) {
+  if (!cursor) return undefined;
+  const cursorCreatedAt = new Date(cursor.createdAt);
+
+  return or(
+    lt(assessments.isActive, cursor.isActive),
+    and(
+      eq(assessments.isActive, cursor.isActive),
+      or(
+        lt(assessments.createdAt, cursorCreatedAt),
+        and(
+          eq(assessments.createdAt, cursorCreatedAt),
+          lt(assessments.id, cursor.id),
+        ),
+      ),
+    ),
+  );
+}
+
+function mapAssessmentRow(row: AssessmentRecord): AssessmentRecord {
+  return {
+    ...row,
+    frequency: assertFrequency(row.frequency),
+  };
+}
+
 export async function listAssessmentsForCommunity(
   communityId: number,
 ): Promise<AssessmentRecord[]> {
   const scoped = createScopedClient(communityId);
   const rows = await scoped
     .selectFrom<AssessmentRecord>(assessments, {})
-    .orderBy(desc(assessments.isActive), desc(assessments.createdAt));
+    .orderBy(desc(assessments.isActive), desc(assessments.createdAt), desc(assessments.id));
 
-  return rows.map((row) => ({
-    ...row,
-    frequency: assertFrequency(row.frequency),
-  }));
+  return rows.map(mapAssessmentRow);
+}
+
+/**
+ * Ordered-keyset paginated assessment list.
+ *
+ * Sort contract:
+ *   ORDER BY is_active DESC, created_at DESC, id DESC
+ *
+ * AUTHZ: tenant-scoped - caller MUST have already verified finance read
+ * permission and the finance feature gate.
+ */
+export async function paginateAssessmentsForCommunity(
+  communityId: number,
+  input: PaginationInput = {},
+): Promise<PaginatedResult<AssessmentRecord>> {
+  const pageSize = clampPageSize(input.pageSize);
+  const cursorWhere = buildAssessmentOrderedCursorWhere(
+    decodeAssessmentOrderedCursor(input.cursor),
+  );
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<AssessmentRecord>(assessments, {}, cursorWhere)
+    .orderBy(desc(assessments.isActive), desc(assessments.createdAt), desc(assessments.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeAssessmentOrderedCursor({
+          isActive: Boolean(lastRow.isActive),
+          createdAt: lastRow.createdAt.toISOString(),
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    data: dataRows.map(mapAssessmentRow),
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function createAssessmentForCommunity(

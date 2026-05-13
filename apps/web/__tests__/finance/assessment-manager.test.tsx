@@ -75,7 +75,12 @@ function makeAssessment(
 function mockAssessmentsSuccess(assessments: AssessmentData[]) {
   mockFetch.mockResolvedValueOnce({
     ok: true,
-    json: () => Promise.resolve({ data: assessments }),
+    json: () => Promise.resolve({
+      data: {
+        data: assessments,
+        pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+      },
+    }),
   });
 }
 

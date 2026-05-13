@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 /* ─────── Types ─────── */
 
@@ -85,9 +86,11 @@ export function useAssessments(
 ) {
   return useQuery({
     queryKey: FINANCE_KEYS.assessments(communityId),
-    queryFn: () =>
-      requestJson<Assessment[]>(
-        `/api/v1/assessments?communityId=${communityId}`,
+    queryFn: ({ signal }) =>
+      walkPaginated<Assessment>(
+        '/api/v1/assessments',
+        { communityId: String(communityId) },
+        { signal },
       ),
     staleTime: 30_000,
     enabled: communityId > 0 && options?.enabled !== false,
