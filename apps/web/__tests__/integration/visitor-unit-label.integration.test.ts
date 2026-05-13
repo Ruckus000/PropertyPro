@@ -91,8 +91,10 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/visitors?communityId=${communityId}`)),
     );
     expect(listRes.status).toBe(200);
-    const listJson = await parseJson<{ data: Array<{ hostUnitLabel: string | null }> }>(listRes);
-    const match = listJson.data.find((row) => row.hostUnitLabel === unitLabel);
+    const listJson = await parseJson<{
+      data: { data: Array<{ hostUnitLabel: string | null }>; pagination: unknown };
+    }>(listRes);
+    const match = listJson.data.data.find((row) => row.hostUnitLabel === unitLabel);
     expect(match).toBeDefined();
   });
 
