@@ -36,6 +36,7 @@ export const maintenanceRequests = pgTable('maintenance_requests', {
   internalNotes: text('internal_notes'),
   resolutionDescription: text('resolution_description'),
   resolutionDate: timestamp('resolution_date', { withTimezone: true }),
+  unitLabel: text('unit_label'),
   // photos shape: Array<{ url: string; thumbnailUrl: string | null; storagePath: string; uploadedAt: string }>
   // thumbnailUrl is nullable — thumbnail generation is best-effort fire-and-forget
   // Max 5 entries enforced at API layer

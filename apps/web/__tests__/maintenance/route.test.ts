@@ -510,6 +510,7 @@ describe('maintenance requests route', () => {
           action: 'create',
           communityId: 42,
           title: 'Leaky pipe',
+          unitLabel: '4B',
           description: 'Water dripping from ceiling',
           category: 'plumbing',
           priority: 'high',
@@ -572,6 +573,7 @@ describe('maintenance requests route', () => {
           action: 'create',
           communityId: 42,
           title: 'With photo',
+          unitLabel: '4B',
           description: 'Photo from another community',
           storagePaths: ['maintenance/99/tmp/photo.jpg'], // wrong communityId
         }),
@@ -591,6 +593,7 @@ describe('maintenance requests route', () => {
           action: 'create',
           communityId: 42,
           title: 'Too many photos',
+          unitLabel: '4B',
           description: 'Six photos provided',
           storagePaths: [
             'maintenance/42/tmp/1.jpg',
@@ -608,6 +611,49 @@ describe('maintenance requests route', () => {
       expect(res.status).toBe(400);
     });
 
+    it('returns 400 when unitLabel is missing', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          communityId: 42,
+          title: 'No unit',
+          description: 'Missing apartment/unit',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { details?: { fields?: Array<{ field: string }> } } };
+      const fields = json.error.details?.fields ?? [];
+      expect(fields.some((f) => f.field === 'unitLabel')).toBe(true);
+    });
+
+    it('persists unitLabel on the inserted row', async () => {
+      const insert = vi.fn().mockResolvedValue([{ id: 77, communityId: 42 }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+
+      const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          communityId: 42,
+          title: 'Bathroom leak',
+          unitLabel: 'Apt 312',
+          description: 'Sink dripping',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(201);
+      expect(insert).toHaveBeenCalledWith(
+        maintenanceRequestsTableMock,
+        expect.objectContaining({ unitLabel: 'Apt 312' }),
+      );
+    });
+
     it("coerces priority 'emergency' to 'urgent'", async () => {
       const insert = vi.fn().mockResolvedValue([{ id: 55, communityId: 42 }]);
       createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
@@ -618,6 +664,7 @@ describe('maintenance requests route', () => {
           action: 'create',
           communityId: 42,
           title: 'Emergency flood',
+          unitLabel: '4B',
           description: 'Water everywhere',
           priority: 'emergency',
         }),

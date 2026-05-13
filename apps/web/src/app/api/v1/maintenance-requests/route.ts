@@ -62,6 +62,7 @@ const createRequestSchema = z.object({
   category: z.enum(categoryValues).default('general'),
   priority: prioritySchema.default('normal'),
   unitId: z.number().int().positive().nullable().optional(),
+  unitLabel: z.string().trim().min(1, 'Apartment/Unit is required').max(50),
   storagePaths: z.array(z.string().min(1)).max(5).optional(),
 });
 
@@ -261,6 +262,7 @@ async function handleCreateRequest(
   const created = await createMaintenanceRequestForCommunity(scoped, {
     submittedById: actorUserId,
     unitId: payload.unitId ?? null,
+    unitLabel: payload.unitLabel,
     title: payload.title,
     description: payload.description,
     category: payload.category,

@@ -24,6 +24,7 @@ export function formatRequest(
     id: r['id'],
     communityId: r['communityId'],
     unitId: r['unitId'] ?? null,
+    unitLabel: r['unitLabel'] ?? null,
     submittedById: r['submittedById'],
     title: r['title'],
     description: r['description'],
