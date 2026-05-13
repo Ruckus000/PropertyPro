@@ -322,6 +322,24 @@ describe('checkRateLimit', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null when PLAYWRIGHT_TENANT_E2E is set (tenant subdomain browser tests)', () => {
+    const prev = process.env.PLAYWRIGHT_TENANT_E2E;
+    process.env.PLAYWRIGHT_TENANT_E2E = '1';
+    try {
+      const request = createRequest('http://localhost:3000/auth/login', {
+        method: 'POST',
+        headers: { 'x-real-ip': '10.0.0.1' },
+      });
+      expect(checkRateLimit(request, null)).toBeNull();
+    } finally {
+      if (prev === undefined) {
+        delete process.env.PLAYWRIGHT_TENANT_E2E;
+      } else {
+        process.env.PLAYWRIGHT_TENANT_E2E = prev;
+      }
+    }
+  });
+
   it('allows requests under the limit for auth routes', () => {
     const request = createRequest('http://localhost:3000/auth/login', {
       method: 'POST',

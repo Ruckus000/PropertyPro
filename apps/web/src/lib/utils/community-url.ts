@@ -8,7 +8,12 @@
  */
 export function buildCommunityUrl(slug: string, path: string = '/dashboard'): string {
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
-  const isLocal = rootDomain.startsWith('localhost') || rootDomain.startsWith('127.');
+  const hostOnly = rootDomain.split(':')[0]?.toLowerCase() ?? rootDomain.toLowerCase();
+  const isLocal =
+    rootDomain.startsWith('localhost') ||
+    rootDomain.startsWith('127.') ||
+    hostOnly === 'localtest.me' ||
+    hostOnly.endsWith('.localtest.me');
   const scheme = isLocal ? 'http' : 'https';
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${scheme}://${slug}.${rootDomain}${normalizedPath}`;

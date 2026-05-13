@@ -198,6 +198,12 @@ export function checkRateLimit(
   request: NextRequest,
   userId: string | null,
 ): RateLimitCheckResult | null {
+  // Tenant subdomain Playwright polls the webServer URL aggressively; exempt that
+  // dev-only server so readiness checks are not rate-limited into 429 timeouts.
+  if (process.env.PLAYWRIGHT_TENANT_E2E === '1') {
+    return null;
+  }
+
   const { pathname } = request.nextUrl;
   const method = request.method;
   const category = classifyRoute(pathname, method);

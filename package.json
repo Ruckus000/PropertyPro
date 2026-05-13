@@ -26,6 +26,7 @@
     "test:e2e": "pnpm --filter @propertypro/web test:e2e",
     "test:e2e:esign": "pnpm --filter @propertypro/web test:e2e -- e2e/esign-and-documents-flow.spec.ts",
     "test:e2e:headed": "pnpm --filter @propertypro/web test:e2e:headed",
+    "test:e2e:tenant": "pnpm --filter @propertypro/web test:e2e:tenant",
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
