@@ -63,6 +63,7 @@ async function createRequest(
       action: 'create',
       communityId,
       title,
+      unitLabel: '4B',
       description: `${title} description`,
       category: 'general',
       priority: 'normal',
