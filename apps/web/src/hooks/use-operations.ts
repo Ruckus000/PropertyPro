@@ -412,12 +412,12 @@ export const AMENITY_KEYS = {
 export function useAmenities(communityId: number) {
   return useQuery({
     queryKey: AMENITY_KEYS.list(communityId),
-    queryFn: async () => {
-      const res = await requestJson<AmenityListItem[]>(
-        `/api/v1/amenities?communityId=${communityId}`,
-      );
-      return res;
-    },
+    queryFn: ({ signal }) =>
+      walkPaginated<AmenityListItem>(
+        '/api/v1/amenities',
+        { communityId: String(communityId) },
+        { signal },
+      ),
     enabled: communityId > 0,
     staleTime: 5 * 60_000,
   });

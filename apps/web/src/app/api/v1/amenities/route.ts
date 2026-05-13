@@ -12,9 +12,14 @@ import {
   requireAmenitiesReadPermission,
   requireAmenitiesWritePermission,
 } from '@/lib/work-orders/common';
-import { createAmenityForCommunity, listAmenitiesForCommunity } from '@/lib/services/work-orders-service';
+import { createAmenityForCommunity, paginateAmenitiesForCommunity } from '@/lib/services/work-orders-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+
+const listAmenitiesQuerySchema = z.object({
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
 
 const bookingRulesSchema = z.object({
   minDurationMinutes: z.number().int().positive().optional(),
@@ -42,8 +47,28 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requirePlanFeature(communityId, 'hasAmenities');
   requireAmenitiesReadPermission(membership);
 
-  const data = await listAmenitiesForCommunity(communityId);
-  return NextResponse.json({ data });
+  const { searchParams } = new URL(req.url);
+  const parsedQuery = listAmenitiesQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid amenities query', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
+
+  const result = await paginateAmenitiesForCommunity(communityId, {
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
+  });
+  return NextResponse.json({
+    data: {
+      data: result.data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
