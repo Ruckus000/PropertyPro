@@ -24,12 +24,12 @@ const FULL_PERMISSIONS = {
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  listVisitorsForCommunityMock,
+  paginateVisitorsForCommunityMock,
   requireActorUnitIdsMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  listVisitorsForCommunityMock: vi.fn(),
+  paginateVisitorsForCommunityMock: vi.fn(),
   requireActorUnitIdsMock: vi.fn(),
 }));
 
@@ -47,7 +47,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 vi.mock('@/lib/services/package-visitor-service', () => ({
   createVisitorForCommunity: vi.fn(),
-  listVisitorsForCommunity: listVisitorsForCommunityMock,
+  paginateVisitorsForCommunity: paginateVisitorsForCommunityMock,
 }));
 vi.mock('@/lib/logistics/common', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/logistics/common')>();
@@ -74,7 +74,10 @@ describe('visitors GET — passCode field stripping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
-    listVisitorsForCommunityMock.mockResolvedValue(MOCK_VISITORS);
+    paginateVisitorsForCommunityMock.mockResolvedValue({
+      data: MOCK_VISITORS,
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
     requireActorUnitIdsMock.mockResolvedValue([10]);
   });
 
@@ -89,12 +92,13 @@ describe('visitors GET — passCode field stripping', () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.data).toHaveLength(2);
-    for (const visitor of json.data) {
+    expect(json.data.data).toHaveLength(2);
+    for (const visitor of json.data.data) {
       expect(visitor).not.toHaveProperty('passCode');
       expect(visitor).toHaveProperty('visitorName');
       expect(visitor).toHaveProperty('purpose');
     }
+    expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
   });
 
   it('strips passCode from response for owner role', async () => {
@@ -108,7 +112,7 @@ describe('visitors GET — passCode field stripping', () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    for (const visitor of json.data) {
+    for (const visitor of json.data.data) {
       expect(visitor).not.toHaveProperty('passCode');
     }
   });
@@ -126,7 +130,7 @@ describe('visitors GET — passCode field stripping', () => {
 
     expect(res.status).toBe(200);
     // manager is not 'resident', so passCode is preserved
-    expect(json.data[0].passCode).toBe('SECRET-ABC-123');
+    expect(json.data.data[0].passCode).toBe('SECRET-ABC-123');
   });
 
   it('preserves passCode in response for cam (staff) role', async () => {
@@ -141,9 +145,9 @@ describe('visitors GET — passCode field stripping', () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.data).toHaveLength(2);
-    expect(json.data[0].passCode).toBe('SECRET-ABC-123');
-    expect(json.data[1].passCode).toBe('SECRET-XYZ-789');
+    expect(json.data.data).toHaveLength(2);
+    expect(json.data.data[0].passCode).toBe('SECRET-ABC-123');
+    expect(json.data.data[1].passCode).toBe('SECRET-XYZ-789');
   });
 
   it('preserves passCode in response for site_manager role', async () => {
@@ -158,7 +162,7 @@ describe('visitors GET — passCode field stripping', () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.data[0].passCode).toBe('SECRET-ABC-123');
+    expect(json.data.data[0].passCode).toBe('SECRET-ABC-123');
   });
 
   it('preserves passCode in response for property_manager_admin role', async () => {
@@ -172,6 +176,46 @@ describe('visitors GET — passCode field stripping', () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.data[0].passCode).toBe('SECRET-ABC-123');
+    expect(json.data.data[0].passCode).toBe('SECRET-ABC-123');
+  });
+
+  it('passes empty cursor and pageSize as missing values to pagination', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'manager', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam',
+      permissions: FULL_PERMISSIONS,
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1&cursor=&pageSize=');
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
+    expect(paginateVisitorsForCommunityMock).toHaveBeenCalledWith(1, {
+      cursor: undefined,
+      pageSize: undefined,
+      hostUnitId: undefined,
+      onlyActive: false,
+      allowedUnitIds: undefined,
+      guestType: undefined,
+      status: undefined,
+    });
+  });
+
+  it('rejects resident hostUnitId outside allowed units before listing', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident', communityId: 1, userId: 'user-1', communityType: 'apartment',
+      isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+    });
+    requireActorUnitIdsMock.mockResolvedValue([10]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/visitors?communityId=1&hostUnitId=11');
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(json.error.message).toMatch(/own unit/i);
+    expect(paginateVisitorsForCommunityMock).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { walkPaginated } from '@/lib/api/walk-paginated';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,13 +82,13 @@ export const VISITOR_KEYS = {
 export function useVisitors(communityId: number, filters?: VisitorFilters) {
   return useQuery({
     queryKey: VISITOR_KEYS.list(communityId, filters),
-    queryFn: async () => {
-      const params = new URLSearchParams({ communityId: String(communityId) });
-      if (filters?.hostUnitId) params.set('hostUnitId', String(filters.hostUnitId));
-      if (filters?.active) params.set('active', 'true');
-      if (filters?.guestType) params.set('guestType', filters.guestType);
-      if (filters?.status) params.set('status', filters.status);
-      return requestJson<VisitorListItem[]>(`/api/v1/visitors?${params.toString()}`);
+    queryFn: async ({ signal }) => {
+      const params: Record<string, string> = { communityId: String(communityId) };
+      if (filters?.hostUnitId) params.hostUnitId = String(filters.hostUnitId);
+      if (filters?.active) params.active = 'true';
+      if (filters?.guestType) params.guestType = filters.guestType;
+      if (filters?.status) params.status = filters.status;
+      return walkPaginated<VisitorListItem>('/api/v1/visitors', params, { signal });
     },
     enabled: communityId > 0,
   });

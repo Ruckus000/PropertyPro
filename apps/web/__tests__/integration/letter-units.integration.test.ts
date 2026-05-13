@@ -120,7 +120,9 @@ describeDb('letter-suffixed units across search and visitor flow', () => {
       new NextRequest(apiUrl(`/api/v1/visitors?communityId=${communityId}`)),
     );
     expect(listResponse.status).toBe(200);
-    const listJson = await parseJson<{ data: Array<{ hostUnitLabel: string | null }> }>(listResponse);
-    expect(listJson.data.some((row) => row.hostUnitLabel === unitA101)).toBe(true);
+    const listJson = await parseJson<{
+      data: { data: Array<{ hostUnitLabel: string | null }>; pagination: unknown };
+    }>(listResponse);
+    expect(listJson.data.data.some((row) => row.hostUnitLabel === unitA101)).toBe(true);
   });
 });

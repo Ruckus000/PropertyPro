@@ -4,13 +4,16 @@ import {
   visitorLog,
   deniedVisitors,
   communities,
+  clampPageSize,
   createScopedClient,
   paginate,
   logAuditEvent,
   userRoles,
+  type PaginatedResult,
   type PackageLogStatus,
+  type PaginationInput,
 } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
@@ -65,6 +68,16 @@ interface VisitorLogRow {
   revokedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface VisitorOrderedCursorPayload {
+  expectedArrival: string;
+  id: number;
+}
+
+export interface PaginatedVisitors {
+  data: VisitorLogRow[];
+  pagination: PaginatedResult<VisitorLogRow>['pagination'];
 }
 
 async function attachUnitLabel(
@@ -171,6 +184,8 @@ function buildVisitorWhereClause(options: {
   }
   if (options.allowedUnitIds && options.allowedUnitIds.length > 0) {
     clauses.push(inArray(visitorLog.hostUnitId, [...options.allowedUnitIds]));
+  } else if (options.allowedUnitIds && options.allowedUnitIds.length === 0) {
+    clauses.push(sql`false`);
   }
   if (options.guestType) {
     clauses.push(eq(visitorLog.guestType, options.guestType));
@@ -190,6 +205,7 @@ function buildVisitorWhereClause(options: {
           isNotNull(visitorLog.checkedInAt),
           isNull(visitorLog.checkedOutAt),
           isNull(visitorLog.revokedAt),
+          or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now)),
         );
         break;
       case 'checked_out':
@@ -200,6 +216,14 @@ function buildVisitorWhereClause(options: {
           lt(visitorLog.validUntil, now),
           isNull(visitorLog.checkedInAt),
           isNull(visitorLog.revokedAt),
+        );
+        break;
+      case 'overstayed':
+        clauses.push(
+          isNotNull(visitorLog.checkedInAt),
+          isNull(visitorLog.checkedOutAt),
+          isNull(visitorLog.revokedAt),
+          lt(visitorLog.validUntil, now),
         );
         break;
       case 'revoked':
@@ -220,6 +244,54 @@ function buildVisitorWhereClause(options: {
   if (clauses.length === 0) return undefined;
   if (clauses.length === 1) return clauses[0];
   return and(...clauses);
+}
+
+function encodeVisitorOrderedCursor(payload: VisitorOrderedCursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeVisitorOrderedCursor(
+  cursor: string | null | undefined,
+): VisitorOrderedCursorPayload | null {
+  if (!cursor) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof parsed === 'object'
+      && parsed !== null
+      && typeof (parsed as { expectedArrival?: unknown }).expectedArrival === 'string'
+      && Number.isInteger((parsed as { id?: unknown }).id)
+    ) {
+      const expectedArrival = (parsed as { expectedArrival: string }).expectedArrival;
+      const parsedDate = new Date(expectedArrival);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        return {
+          expectedArrival,
+          id: (parsed as { id: number }).id,
+        };
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildVisitorOrderedCursorWhere(
+  cursor: VisitorOrderedCursorPayload | null,
+) {
+  if (!cursor) return undefined;
+
+  const expectedArrival = new Date(cursor.expectedArrival);
+  return or(
+    lt(visitorLog.expectedArrival, expectedArrival),
+    and(
+      eq(visitorLog.expectedArrival, expectedArrival),
+      lt(visitorLog.id, cursor.id),
+    ),
+  );
 }
 
 async function resolveUnitResidents(
@@ -540,6 +612,71 @@ export async function listVisitorsForCommunity(
     .orderBy(desc(visitorLog.expectedArrival), desc(visitorLog.id))) as VisitorLogRow[];
 
   return attachUnitLabels(communityId, rows);
+}
+
+/**
+ * Ordered-keyset paginated visitor list.
+ *
+ * Sort contract:
+ *   ORDER BY expected_arrival DESC, id DESC
+ *
+ * AUTHZ: tenant-scoped - caller MUST have already verified visitor logging
+ * is enabled and the actor has visitor read permission. For resident callers,
+ * caller MUST pass `allowedUnitIds` so unit visibility is applied before
+ * pagination, and MUST strip `passCode` before returning the response.
+ */
+export async function paginateVisitorsForCommunity(
+  communityId: number,
+  input: PaginationInput & {
+    hostUnitId?: number;
+    onlyActive?: boolean;
+    allowedUnitIds?: readonly number[];
+    hostUserId?: string;
+    guestType?: string;
+    status?: string;
+  } = {},
+): Promise<PaginatedVisitors> {
+  const pageSize = clampPageSize(input.pageSize);
+  const baseWhere = buildVisitorWhereClause({
+    hostUnitId: input.hostUnitId,
+    onlyActive: input.onlyActive,
+    allowedUnitIds: input.allowedUnitIds,
+    hostUserId: input.hostUserId,
+    guestType: input.guestType,
+    status: input.status,
+  });
+  const cursorWhere = buildVisitorOrderedCursorWhere(
+    decodeVisitorOrderedCursor(input.cursor),
+  );
+  const where = baseWhere && cursorWhere
+    ? and(baseWhere, cursorWhere)
+    : (baseWhere ?? cursorWhere);
+
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<VisitorLogRow>(visitorLog, {}, where)
+    .orderBy(desc(visitorLog.expectedArrival), desc(visitorLog.id))
+    .limit(pageSize + 1);
+
+  const hasMore = rows.length > pageSize;
+  const dataRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const lastRow = dataRows[dataRows.length - 1];
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeVisitorOrderedCursor({
+          expectedArrival: lastRow.expectedArrival.toISOString(),
+          id: lastRow.id,
+        })
+      : null;
+
+  return {
+    data: await attachUnitLabels(communityId, dataRows),
+    pagination: {
+      nextCursor,
+      hasMore: nextCursor !== null,
+      pageSize,
+    },
+  };
 }
 
 export async function checkInVisitorForCommunity(

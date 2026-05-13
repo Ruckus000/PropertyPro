@@ -19,7 +19,7 @@ import {
 } from '@/lib/logistics/common';
 import {
   createVisitorForCommunity,
-  listVisitorsForCommunity,
+  paginateVisitorsForCommunity,
 } from '@/lib/services/package-visitor-service';
 import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
 
@@ -148,6 +148,11 @@ const createVisitorSchema = z
     }
   });
 
+const listVisitorsQuerySchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const communityId = parseCommunityIdFromQuery(req);
@@ -166,6 +171,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const rawStatus = searchParams.get('status');
   const guestType = rawGuestType && validGuestTypes.has(rawGuestType) ? rawGuestType : undefined;
   const status = rawStatus && validStatuses.has(rawStatus) ? rawStatus : undefined;
+  const parsedQuery = listVisitorsQuerySchema.safeParse({
+    cursor: searchParams.get('cursor') || undefined,
+    pageSize: searchParams.get('pageSize') || undefined,
+  });
+  if (!parsedQuery.success) {
+    throw new ValidationError('Invalid visitors query', {
+      fields: formatZodErrors(parsedQuery.error),
+    });
+  }
 
   let allowedUnitIds: number[] | undefined;
   if (isResidentRole(membership.role)) {
@@ -177,7 +191,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  const visitors = await listVisitorsForCommunity(communityId, {
+  const result = await paginateVisitorsForCommunity(communityId, {
+    cursor: parsedQuery.data.cursor,
+    pageSize: parsedQuery.data.pageSize,
     hostUnitId,
     onlyActive,
     allowedUnitIds,
@@ -186,12 +202,23 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   });
 
   // Strip sensitive access-control field from resident responses
+  const data = result.data;
   if (isResidentRole(membership.role)) {
-    const sanitized = visitors.map(({ passCode: _, ...rest }) => rest);
-    return NextResponse.json({ data: sanitized });
+    const sanitized = data.map(({ passCode: _, ...rest }) => rest);
+    return NextResponse.json({
+      data: {
+        data: sanitized,
+        pagination: result.pagination,
+      },
+    });
   }
 
-  return NextResponse.json({ data: visitors });
+  return NextResponse.json({
+    data: {
+      data,
+      pagination: result.pagination,
+    },
+  });
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
