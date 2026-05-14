@@ -1,22 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { FINANCE_KEYS, useAssessments, type Assessment } from '@/hooks/use-finance';
+import {
+  useAssessmentLineItems,
+  useAssessments,
+  useCreateAssessment,
+  useDeleteAssessment,
+  useUpdateAssessment,
+  type Assessment,
+} from '@/hooks/use-finance';
 
 /* ─────── Types ─────── */
-
-interface LineItem {
-  id: number;
-  assessmentId: number | null;
-  unitId: number;
-  amountCents: number;
-  dueDate: string;
-  status: 'pending' | 'paid' | 'overdue' | 'waived';
-  lateFeeCents: number;
-  paidAt: string | null;
-}
 
 interface AssessmentManagerProps {
   communityId: number;
@@ -52,44 +47,9 @@ const STATUS_STYLES: Record<string, string> = {
   waived: 'bg-surface-muted text-content-secondary',
 };
 
-/* ─────── Fetch ─────── */
-
-async function fetchLineItems(communityId: number, assessmentId: number): Promise<LineItem[]> {
-  const res = await fetch(`/api/v1/assessments/${assessmentId}/line-items?communityId=${communityId}`);
-  if (!res.ok) throw new Error('Failed to load line items');
-  const json = await res.json();
-  return json.data;
-}
-
-async function createAssessment(
-  communityId: number,
-  data: {
-    title: string;
-    description: string;
-    amountCents: number;
-    frequency: string;
-    dueDay: number | null;
-    lateFeeAmountCents: number;
-    lateFeeDaysGrace: number;
-  },
-): Promise<Assessment> {
-  const res = await fetch('/api/v1/assessments', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, ...data }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error?.message || 'Failed to create assessment');
-  }
-  const json = await res.json();
-  return json.data;
-}
-
 /* ─────── Main Component ─────── */
 
 export function AssessmentManager({ communityId, userId, userRole }: AssessmentManagerProps) {
-  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
@@ -168,7 +128,6 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
-            queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
           }}
         />
       )}
@@ -182,7 +141,6 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
           onUpdated={() => {
             setEditingAssessment(null);
             setSelectedAssessment(null);
-            queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
           }}
         />
       )}
@@ -255,11 +213,7 @@ function LineItemsPanel({
   assessment: Assessment;
   onClose: () => void;
 }) {
-  const { data: lineItems, isLoading } = useQuery({
-    queryKey: ['line-items', communityId, assessment.id],
-    queryFn: () => fetchLineItems(communityId, assessment.id),
-    staleTime: 30_000,
-  });
+  const { data: lineItems, isLoading } = useAssessmentLineItems(communityId, assessment.id);
 
   const statusCounts = lineItems?.reduce(
     (acc, li) => {
@@ -368,24 +322,7 @@ function CreateAssessmentDialog({
   });
   const [error, setError] = useState<string | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createAssessment(communityId, {
-        title: formData.title,
-        description: formData.description,
-        amountCents: Math.round(parseFloat(formData.amountDollars) * 100),
-        frequency: formData.frequency,
-        dueDay: formData.dueDay ? parseInt(formData.dueDay, 10) : null,
-        lateFeeAmountCents: formData.lateFeeDollars
-          ? Math.round(parseFloat(formData.lateFeeDollars) * 100)
-          : 0,
-        lateFeeDaysGrace: parseInt(formData.lateFeeDaysGrace, 10) || 0,
-      }),
-    onSuccess: () => onCreated(),
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : 'Failed to create assessment');
-    },
-  });
+  const mutation = useCreateAssessment(communityId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -401,7 +338,22 @@ function CreateAssessmentDialog({
       return;
     }
 
-    mutation.mutate();
+    mutation.mutate({
+      title: formData.title,
+      description: formData.description || null,
+      amountCents: Math.round(amount * 100),
+      frequency: formData.frequency as Assessment['frequency'],
+      dueDay: formData.dueDay ? parseInt(formData.dueDay, 10) : null,
+      lateFeeAmountCents: formData.lateFeeDollars
+        ? Math.round(parseFloat(formData.lateFeeDollars) * 100)
+        : 0,
+      lateFeeDaysGrace: parseInt(formData.lateFeeDaysGrace, 10) || 0,
+    }, {
+      onSuccess: () => onCreated(),
+      onError: (err) => {
+        setError(err instanceof Error ? err.message : 'Failed to create assessment');
+      },
+    });
   };
 
   const updateField = (field: string, value: string) => {
@@ -559,50 +511,9 @@ function EditAssessmentDialog({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/v1/assessments/${assessment.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          title: formData.title,
-          description: formData.description || null,
-          amountCents: Math.round(parseFloat(formData.amountDollars) * 100),
-          frequency: formData.frequency,
-          dueDay: formData.dueDay ? parseInt(formData.dueDay, 10) : null,
-          lateFeeAmountCents: formData.lateFeeDollars
-            ? Math.round(parseFloat(formData.lateFeeDollars) * 100)
-            : 0,
-          lateFeeDaysGrace: parseInt(formData.lateFeeDaysGrace, 10) || 0,
-          isActive: formData.isActive,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error?.message || 'Failed to update assessment');
-      }
-    },
-    onSuccess: () => onUpdated(),
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : 'Failed to update');
-    },
-  });
+  const updateMutation = useUpdateAssessment(communityId, assessment.id);
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/v1/assessments/${assessment.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ communityId }),
-      });
-      if (!res.ok) throw new Error('Failed to delete assessment');
-    },
-    onSuccess: () => onUpdated(),
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
-    },
-  });
+  const deleteMutation = useDeleteAssessment(communityId, assessment.id);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -618,7 +529,23 @@ function EditAssessmentDialog({
       return;
     }
 
-    updateMutation.mutate();
+    updateMutation.mutate({
+      title: formData.title,
+      description: formData.description || null,
+      amountCents: Math.round(parseFloat(formData.amountDollars) * 100),
+      frequency: formData.frequency as Assessment['frequency'],
+      dueDay: formData.dueDay ? parseInt(formData.dueDay, 10) : null,
+      lateFeeAmountCents: formData.lateFeeDollars
+        ? Math.round(parseFloat(formData.lateFeeDollars) * 100)
+        : 0,
+      lateFeeDaysGrace: parseInt(formData.lateFeeDaysGrace, 10) || 0,
+      isActive: formData.isActive,
+    }, {
+      onSuccess: () => onUpdated(),
+      onError: (err) => {
+        setError(err instanceof Error ? err.message : 'Failed to update');
+      },
+    });
   };
 
   const updateField = (field: string, value: string | boolean) => {
@@ -741,7 +668,14 @@ function EditAssessmentDialog({
                 <span className="text-xs text-status-danger">Delete this assessment?</span>
                 <button
                   type="button"
-                  onClick={() => deleteMutation.mutate()}
+                  onClick={() => {
+                    deleteMutation.mutate(undefined, {
+                      onSuccess: () => onUpdated(),
+                      onError: (err) => {
+                        setError(err instanceof Error ? err.message : 'Failed to delete');
+                      },
+                    });
+                  }}
                   disabled={deleteMutation.isPending}
                   className="rounded-md bg-status-danger px-3 py-1.5 text-xs font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
                 >

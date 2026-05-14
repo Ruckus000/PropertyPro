@@ -11,11 +11,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import {
   useAssessments,
+  useAssessmentLineItems,
+  useCreateAssessment,
+  useDeleteAssessment,
   useDelinquency,
+  useGenerateAssessmentLineItems,
   useLedger,
   useRecentPayments,
+  useUpdateAssessment,
   FINANCE_KEYS,
   type Assessment,
+  type AssessmentLineItem,
+  type AssessmentMutationPayload,
   type DelinquentUnit,
   type PaymentHistoryItem,
 } from '../use-finance';
@@ -38,6 +45,7 @@ function createWrapper() {
     },
   });
   return {
+    queryClient,
     wrapper: ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
@@ -90,6 +98,11 @@ describe('FINANCE_KEYS factory', () => {
   it('produces correct payments key shape', () => {
     const key = FINANCE_KEYS.payments(42);
     expect(key).toEqual(['finance', 'payments', 42]);
+  });
+
+  it('produces correct assessment line-item key shape', () => {
+    const key = FINANCE_KEYS.assessmentLineItems(42, 7);
+    expect(key).toEqual(['finance', 'assessments', 42, 7, 'line-items']);
   });
 });
 
@@ -313,6 +326,135 @@ describe('useAssessments', () => {
       '/api/v1/assessments?communityId=42&pageSize=100&cursor=cursor-2',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+});
+
+// =============================================================================
+// Assessment mutations and line items
+// =============================================================================
+
+describe('assessment mutation hooks', () => {
+  const payload: AssessmentMutationPayload = {
+    title: 'Monthly Maintenance',
+    description: null,
+    amountCents: 35000,
+    frequency: 'monthly',
+    dueDay: 1,
+    lateFeeAmountCents: 2500,
+    lateFeeDaysGrace: 15,
+  };
+
+  const assessment: Assessment = {
+    id: 7,
+    communityId: 42,
+    ...payload,
+    startDate: '2026-01-01',
+    endDate: null,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00Z',
+  };
+
+  it('loads assessment line items through the finance hook', async () => {
+    const { wrapper } = createWrapper();
+    const lineItems: AssessmentLineItem[] = [
+      {
+        id: 10,
+        assessmentId: 7,
+        unitId: 101,
+        amountCents: 35000,
+        dueDate: '2026-06-01',
+        status: 'pending',
+        lateFeeCents: 0,
+        paidAt: null,
+      },
+    ];
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: lineItems }),
+    });
+
+    const { result } = renderHook(() => useAssessmentLineItems(42, 7), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual(lineItems);
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/assessments/7/line-items?communityId=42', undefined);
+  });
+
+  it('creates assessments with the standard requestJson envelope', async () => {
+    const { wrapper } = createWrapper();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: assessment }),
+    });
+
+    const { result } = renderHook(() => useCreateAssessment(42), { wrapper });
+    await result.current.mutateAsync(payload);
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/assessments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ communityId: 42, ...payload }),
+    });
+  });
+
+  it('updates assessments with the standard requestJson envelope', async () => {
+    const { wrapper } = createWrapper();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: assessment }),
+    });
+
+    const { result } = renderHook(() => useUpdateAssessment(42, 7), { wrapper });
+    await result.current.mutateAsync({ ...payload, isActive: false });
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/assessments/7', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ communityId: 42, ...payload, isActive: false }),
+    });
+  });
+
+  it('deletes assessments using the route query-string community id contract', async () => {
+    const { wrapper } = createWrapper();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { success: true } }),
+    });
+
+    const { result } = renderHook(() => useDeleteAssessment(42, 7), { wrapper });
+    await result.current.mutateAsync();
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/assessments/7?communityId=42', {
+      method: 'DELETE',
+    });
+  });
+
+  it('generates line items and invalidates finance query families', async () => {
+    const { wrapper } = createWrapper();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: { insertedCount: 2, skippedCount: 0, dueDate: '2026-06-01' },
+        }),
+    });
+
+    const { result } = renderHook(() => useGenerateAssessmentLineItems(42, 7), { wrapper });
+    await result.current.mutateAsync('2026-06-01');
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/assessments/7/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ communityId: 42, dueDate: '2026-06-01' }),
+    });
   });
 });
 

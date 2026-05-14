@@ -248,6 +248,7 @@ describe('WS66 finance mutation routes', () => {
     );
 
     expect(deleteResponse.status).toBe(200);
+    await expect(deleteResponse.json()).resolves.toEqual({ data: { success: true } });
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
     expect(deleteAssessmentForCommunityMock).toHaveBeenCalledWith(
       communityId,
