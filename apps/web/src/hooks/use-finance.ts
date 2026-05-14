@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
@@ -20,6 +20,17 @@ export interface Assessment {
   endDate: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface AssessmentLineItem {
+  id: number;
+  assessmentId: number | null;
+  unitId: number;
+  amountCents: number;
+  dueDate: string;
+  status: 'pending' | 'paid' | 'overdue' | 'waived';
+  lateFeeCents: number;
+  paidAt: string | null;
 }
 
 export interface DelinquentUnit {
@@ -64,12 +75,27 @@ interface FinanceQueryOptions {
   enabled?: boolean;
 }
 
+export interface AssessmentMutationPayload {
+  title: string;
+  description: string | null;
+  amountCents: number;
+  frequency: 'monthly' | 'quarterly' | 'annual' | 'one_time';
+  dueDay: number | null;
+  lateFeeAmountCents: number;
+  lateFeeDaysGrace: number;
+  startDate?: string;
+  endDate?: string | null;
+  isActive?: boolean;
+}
+
 /* ─────── Query Keys ─────── */
 
 export const FINANCE_KEYS = {
   all: ['finance'] as const,
   assessments: (communityId: number) =>
     [...FINANCE_KEYS.all, 'assessments', communityId] as const,
+  assessmentLineItems: (communityId: number, assessmentId: number) =>
+    [...FINANCE_KEYS.assessments(communityId), assessmentId, 'line-items'] as const,
   delinquency: (communityId: number) =>
     [...FINANCE_KEYS.all, 'delinquency', communityId] as const,
   ledger: (communityId: number, filters?: LedgerFilters) =>
@@ -94,6 +120,99 @@ export function useAssessments(
       ),
     staleTime: 30_000,
     enabled: communityId > 0 && options?.enabled !== false,
+  });
+}
+
+export function useAssessmentLineItems(
+  communityId: number,
+  assessmentId: number,
+  options?: FinanceQueryOptions,
+) {
+  return useQuery({
+    queryKey: FINANCE_KEYS.assessmentLineItems(communityId, assessmentId),
+    queryFn: () =>
+      requestJson<AssessmentLineItem[]>(
+        `/api/v1/assessments/${assessmentId}/line-items?communityId=${communityId}`,
+      ),
+    staleTime: 30_000,
+    enabled: communityId > 0 && assessmentId > 0 && options?.enabled !== false,
+  });
+}
+
+export function useCreateAssessment(communityId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: AssessmentMutationPayload) =>
+      requestJson<Assessment>('/api/v1/assessments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, ...payload }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
+    },
+  });
+}
+
+export function useUpdateAssessment(communityId: number, assessmentId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: AssessmentMutationPayload) =>
+      requestJson<Assessment>(`/api/v1/assessments/${assessmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, ...payload }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
+    },
+  });
+}
+
+export function useDeleteAssessment(communityId: number, assessmentId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
+        `/api/v1/assessments/${assessmentId}?communityId=${communityId}`,
+        { method: 'DELETE' },
+      );
+      if (!response.ok) {
+        throw new Error('Failed to delete assessment');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
+      queryClient.invalidateQueries({
+        queryKey: FINANCE_KEYS.assessmentLineItems(communityId, assessmentId),
+      });
+    },
+  });
+}
+
+export function useGenerateAssessmentLineItems(communityId: number, assessmentId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dueDate?: string) =>
+      requestJson<{ insertedCount: number; skippedCount: number; dueDate: string }>(
+        `/api/v1/assessments/${assessmentId}/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ communityId, dueDate }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: FINANCE_KEYS.assessmentLineItems(communityId, assessmentId),
+      });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.ledger(communityId) });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.payments(communityId) });
+    },
   });
 }
 
