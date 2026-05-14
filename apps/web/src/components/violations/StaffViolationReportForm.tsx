@@ -74,9 +74,10 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
   const [submitted, setSubmitted] = useState(false);
 
   const units = useMemo<UnitOption[]>(() => {
-    return [...(unitsQuery.data ?? [])].sort((a, b) =>
-      formatUnitLabel(a).localeCompare(formatUnitLabel(b), undefined, { numeric: true }),
-    );
+    return (unitsQuery.data ?? [])
+      .map((unit) => ({ unit, label: formatUnitLabel(unit) }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+      .map(({ unit }) => unit);
   }, [unitsQuery.data]);
 
   const unitsLoading = unitsQuery.isLoading;
