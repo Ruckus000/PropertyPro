@@ -17,16 +17,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  meetsUserSearchMinLength,
+  useUserSearch,
+  type UserSearchResult,
+} from '@/hooks/use-user-search';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface UserResult {
-  id: string;
-  title: string;
-  subtitle?: string;
-}
 
 export interface UserSearchComboboxProps {
   communityId: number;
@@ -41,14 +40,6 @@ export interface UserSearchComboboxProps {
 // ---------------------------------------------------------------------------
 
 const DEBOUNCE_MS = 300;
-const FETCH_LIMIT = 10;
-
-function meetsMinLength(q: string): boolean {
-  const trimmed = q.trim();
-  if (!trimmed) return false;
-  if (/^\d/.test(trimmed)) return trimmed.length >= 1;
-  return trimmed.length >= 2;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -62,16 +53,17 @@ export function UserSearchCombobox({
 }: UserSearchComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<UserResult[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTitle, setSelectedTitle] = useState<string>('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const searchUsers = useUserSearch(communityId);
 
   const search = useCallback(
     async (q: string, signal: AbortSignal) => {
-      if (!meetsMinLength(q)) {
+      if (!meetsUserSearchMinLength(q)) {
         setResults([]);
         setError(null);
         return;
@@ -79,16 +71,9 @@ export function UserSearchCombobox({
       setIsLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({
-          communityId: String(communityId),
-          q: q.trim(),
-          limit: String(FETCH_LIMIT),
-        });
-        const res = await fetch(`/api/v1/search/users?${params.toString()}`, { signal });
-        if (!res.ok) throw new Error('Search failed');
-        const json = (await res.json()) as { results: UserResult[] };
+        const nextResults = await searchUsers(q, signal);
         if (signal.aborted) return;
-        setResults(json.results ?? []);
+        setResults(nextResults);
       } catch (err) {
         if ((err as { name?: string } | undefined)?.name === 'AbortError') return;
         setResults([]);
@@ -97,7 +82,7 @@ export function UserSearchCombobox({
         if (!signal.aborted) setIsLoading(false);
       }
     },
-    [communityId],
+    [searchUsers],
   );
 
   useEffect(() => {
@@ -114,7 +99,7 @@ export function UserSearchCombobox({
     };
   }, [query, search]);
 
-  function handleSelect(result: UserResult) {
+  function handleSelect(result: UserSearchResult) {
     setSelectedTitle(result.title);
     onChange(result.id, result.title);
     setOpen(false);
@@ -171,7 +156,7 @@ export function UserSearchCombobox({
                     {error}
                   </div>
                 )}
-                {!isLoading && !error && meetsMinLength(query) && results.length === 0 && (
+                {!isLoading && !error && meetsUserSearchMinLength(query) && results.length === 0 && (
                   <CommandEmpty>No users found</CommandEmpty>
                 )}
                 {!isLoading && results.length > 0 && (
