@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 
 export interface Unit {
   id: number;
@@ -20,10 +21,7 @@ export function useUnits(communityId: number) {
     queryKey: ['units', communityId],
     enabled: communityId > 0,
     queryFn: async () => {
-      const res = await fetch(`/api/v1/units?communityId=${communityId}`);
-      if (!res.ok) throw new Error(`Failed to load units: ${res.status}`);
-      const body = (await res.json()) as { data: Unit[] };
-      return body.data;
+      return requestJson<Unit[]>(`/api/v1/units?communityId=${communityId}`);
     },
   });
 }
