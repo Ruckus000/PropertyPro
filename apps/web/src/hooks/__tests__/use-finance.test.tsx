@@ -423,7 +423,10 @@ describe('assessment mutation hooks', () => {
   it('deletes assessments using the route query-string community id contract', async () => {
     const { wrapper } = createWrapper();
 
-    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { success: true } }),
+    });
 
     const { result } = renderHook(() => useDeleteAssessment(42, 7), { wrapper });
     await result.current.mutateAsync();

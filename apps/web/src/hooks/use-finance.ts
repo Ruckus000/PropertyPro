@@ -175,15 +175,11 @@ export function useDeleteAssessment(communityId: number, assessmentId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      const response = await fetch(
+    mutationFn: () =>
+      requestJson<{ success: true }>(
         `/api/v1/assessments/${assessmentId}?communityId=${communityId}`,
         { method: 'DELETE' },
-      );
-      if (!response.ok) {
-        throw new Error('Failed to delete assessment');
-      }
-    },
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.assessments(communityId) });
       queryClient.invalidateQueries({

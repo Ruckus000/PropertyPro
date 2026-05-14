@@ -93,5 +93,5 @@ export const DELETE = withErrorHandler(async (
   const requestId = req.headers.get('x-request-id');
   await deleteAssessmentForCommunity(communityId, assessmentId, actorUserId, requestId);
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ data: { success: true } });
 });
