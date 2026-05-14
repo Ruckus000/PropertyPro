@@ -186,9 +186,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/settings/sms-consent-form.tsx',
   'apps/web/src/components/shared/ResidentSearchCombobox.tsx',
   'apps/web/src/components/shared/UnitSearchCombobox.tsx',
-  // Added on origin/main after da059ba7 was authored; grandfathered to land
-  // the strengthened guard. Refactor to hooks/requestJson when next touched.
-  'apps/web/src/components/shared/UserSearchCombobox.tsx',
   'apps/web/src/components/signup/signup-form.tsx',
   'apps/web/src/components/signup/subdomain-checker.tsx',
   'apps/web/src/components/signup/verify-email-content.tsx',
