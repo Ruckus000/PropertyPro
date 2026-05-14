@@ -190,7 +190,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/signup/subdomain-checker.tsx',
   'apps/web/src/components/signup/verify-email-content.tsx',
   'apps/web/src/components/transparency/transparency-toggle.tsx',
-  'apps/web/src/components/violations/StaffViolationReportForm.tsx',
 ]);
 
 // ---------------------------------------------------------------------------

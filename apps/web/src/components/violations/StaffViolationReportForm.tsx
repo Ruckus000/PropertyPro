@@ -2,15 +2,16 @@
 
 /**
  * Staff-only report form for filing a violation on behalf of a resident.
- * Fetches the scoped unit list via GET /api/v1/units and requires the operator
- * to explicitly pick the target unit. The server stamps the operator's userId
- * as reportedByUserId, surfacing the "staff" attribution on reads.
+ * Requires the operator to explicitly pick the target unit. The server stamps
+ * the operator's userId as reportedByUserId, surfacing the "staff" attribution
+ * on reads.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { createViolation } from '@/lib/api/violations';
 import { uploadEvidencePhoto } from '@/lib/violations/evidence-upload';
+import { useUnits } from '@/hooks/use-units';
 import type { ViolationSeverity } from '@propertypro/db';
 
 const MAX_PHOTOS = 3;
@@ -50,10 +51,6 @@ interface UnitOption {
   unitNumber: string;
   building: string | null;
 }
-interface UnitsListResponse {
-  data: Array<{ id: number; unitNumber: string; building: string | null }>;
-}
-
 interface StaffViolationReportFormProps {
   communityId: number;
 }
@@ -64,9 +61,7 @@ function formatUnitLabel(unit: UnitOption): string {
 
 export function StaffViolationReportForm({ communityId }: StaffViolationReportFormProps) {
   const router = useRouter();
-  const [units, setUnits] = useState<UnitOption[]>([]);
-  const [unitsLoading, setUnitsLoading] = useState(true);
-  const [unitsError, setUnitsError] = useState('');
+  const unitsQuery = useUnits(communityId);
   const [unitId, setUnitId] = useState<number | ''>('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -78,30 +73,18 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/v1/units?communityId=${communityId}`);
-        if (!res.ok) throw new Error('Failed to load units');
-        const body = (await res.json()) as UnitsListResponse;
-        if (cancelled) return;
-        const sorted = [...body.data].sort((a, b) =>
-          formatUnitLabel(a).localeCompare(formatUnitLabel(b), undefined, { numeric: true }),
-        );
-        setUnits(sorted);
-      } catch (err) {
-        if (!cancelled) {
-          setUnitsError(err instanceof Error ? err.message : 'Failed to load units');
-        }
-      } finally {
-        if (!cancelled) setUnitsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId]);
+  const units = useMemo<UnitOption[]>(() => {
+    return [...(unitsQuery.data ?? [])].sort((a, b) =>
+      formatUnitLabel(a).localeCompare(formatUnitLabel(b), undefined, { numeric: true }),
+    );
+  }, [unitsQuery.data]);
+
+  const unitsLoading = unitsQuery.isLoading;
+  const unitsError = unitsQuery.error
+    ? unitsQuery.error instanceof Error
+      ? unitsQuery.error.message
+      : 'Failed to load units'
+    : '';
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
