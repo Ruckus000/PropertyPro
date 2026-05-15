@@ -1,27 +1,14 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { PropertyCards } from '@/components/overview/property-cards';
 import { ActivityFeed } from '@/components/overview/activity-feed';
 import { UpcomingEvents } from '@/components/overview/upcoming-events';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import type { OverviewPayload } from '@/lib/queries/cross-community.types';
-
-interface OverviewResponse {
-  data: OverviewPayload;
-}
+import { useOverview } from '@/hooks/use-overview';
 
 export function OverviewClient() {
-  const { data, isLoading, error } = useQuery<OverviewResponse>({
-    queryKey: ['overview'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/overview');
-      if (!res.ok) throw new Error('Failed to load overview');
-      return res.json();
-    },
-    staleTime: 30_000,
-  });
+  const { data, isLoading, error } = useOverview();
 
   if (isLoading) {
     return (
@@ -63,11 +50,11 @@ export function OverviewClient() {
           <h2 id="properties-heading" className="text-lg font-semibold">
             My Properties
           </h2>
-          <PropertyCards cards={data.data.cards} />
+          <PropertyCards cards={data.cards} />
         </section>
         <div className="space-y-6">
-          <ActivityFeed items={data.data.activity} />
-          <UpcomingEvents events={data.data.events} />
+          <ActivityFeed items={data.activity} />
+          <UpcomingEvents events={data.events} />
         </div>
       </div>
     </div>
