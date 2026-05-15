@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
@@ -153,4 +153,33 @@ export function useContextualHelp(path: string, communityId: number) {
     // renders its "browse the full help center" fallback in the no-data case.
     retry: false,
   });
+}
+
+export function useTrackArticleView({
+  communityId,
+  articleSlug,
+  articleCategory,
+}: {
+  communityId: number;
+  articleSlug: string;
+  articleCategory: string;
+}) {
+  const lastTrackedKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentKey = JSON.stringify([communityId, articleSlug, articleCategory]);
+    if (lastTrackedKey.current === currentKey) return;
+    lastTrackedKey.current = currentKey;
+
+    // /api/v1/help/view returns `{ ok: true }`, not the standard `{ data }`
+    // envelope, so this intentionally stays on raw fetch.
+    void fetch('/api/v1/help/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ communityId, articleSlug, articleCategory }),
+      keepalive: true,
+    }).catch(() => {
+      /* best-effort: ignore tracking failures */
+    });
+  }, [communityId, articleSlug, articleCategory]);
 }
