@@ -17,17 +17,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ResidentResult {
-  id: string;
-  title: string;
-  subtitle: string;
-  unitNumber: string | null;
-}
+import {
+  meetsResidentSearchMinLength,
+  useResidentSearch,
+  type ResidentSearchResult,
+} from '@/hooks/use-resident-search';
 
 export interface ResidentSearchComboboxProps {
   communityId: number;
@@ -41,15 +35,6 @@ export interface ResidentSearchComboboxProps {
 // ---------------------------------------------------------------------------
 
 const DEBOUNCE_MS = 300;
-const FETCH_LIMIT = 10;
-
-// Minimum query length: 2 chars for alpha input, 1 char for numeric input
-function meetsMinLength(q: string): boolean {
-  const trimmed = q.trim();
-  if (!trimmed) return false;
-  if (/^\d/.test(trimmed)) return trimmed.length >= 1;
-  return trimmed.length >= 2;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -63,45 +48,51 @@ export function ResidentSearchCombobox({
 }: ResidentSearchComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<ResidentResult[]>([]);
+  const [results, setResults] = useState<ResidentSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState<string>('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const searchResidents = useResidentSearch(communityId);
 
-  const search = useCallback(async (q: string) => {
-    if (!meetsMinLength(q)) {
-      setResults([]);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        communityId: String(communityId),
-        q: q.trim(),
-        limit: String(FETCH_LIMIT),
-      });
-      const res = await fetch(`/api/v1/search/residents?${params.toString()}`);
-      if (!res.ok) throw new Error('Search failed');
-      const json = (await res.json()) as { results: ResidentResult[] };
-      setResults(json.results ?? []);
-    } catch {
-      setResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [communityId]);
+  const search = useCallback(
+    async (q: string, signal: AbortSignal) => {
+      if (!meetsResidentSearchMinLength(q)) {
+        setResults([]);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const nextResults = await searchResidents(q, signal);
+        if (signal.aborted) return;
+        setResults(nextResults);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setResults([]);
+      } finally {
+        if (!signal.aborted) setIsLoading(false);
+      }
+    },
+    [searchResidents],
+  );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      void search(query);
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      void search(query, controller.signal);
     }, DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, [query, search]);
 
-  function handleSelect(result: ResidentResult) {
+  function handleSelect(result: ResidentSearchResult) {
     setSelectedTitle(result.title);
     onChange(result.id, result.title);
     setOpen(false);
@@ -137,10 +128,10 @@ export function ResidentSearchCombobox({
                 aria-busy="true"
               >
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-                <span className="sr-only">Loading residents&hellip;</span>
+                <span className="sr-only">Loading residents...</span>
               </div>
             )}
-            {!isLoading && meetsMinLength(query) && results.length === 0 && (
+            {!isLoading && meetsResidentSearchMinLength(query) && results.length === 0 && (
               <CommandEmpty>No residents found</CommandEmpty>
             )}
             {!isLoading && results.length > 0 && (
