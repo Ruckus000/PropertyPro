@@ -52,6 +52,7 @@ export function UnitSearchCombobox({
     async (q: string, signal: AbortSignal) => {
       if (!meetsUnitSearchMinLength(q)) {
         setResults([]);
+        setIsLoading(false);
         return;
       }
       setIsLoading(true);
@@ -60,7 +61,8 @@ export function UnitSearchCombobox({
         if (signal.aborted) return;
         setResults(nextResults);
       } catch (err) {
-        if ((err as { name?: string } | undefined)?.name === 'AbortError') return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
         setResults([]);
       } finally {
         if (!signal.aborted) setIsLoading(false);

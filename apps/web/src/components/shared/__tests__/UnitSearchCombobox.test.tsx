@@ -81,6 +81,24 @@ describe('UnitSearchCombobox', () => {
     expect(screen.getByText('Tower · Floor 12')).toBeTruthy();
   });
 
+  it('clears loading when a pending search is followed by a below-minimum query', async () => {
+    searchUnitsMock.mockReturnValue(new Promise(() => undefined));
+    const onChange = vi.fn();
+    render(<UnitSearchCombobox communityId={7} value={null} onChange={onChange} />);
+
+    const input = getSearchInput();
+    typeQuery(input, 'PH');
+    await flushAndSettle();
+
+    expect(screen.getByText('Loading units...')).toBeTruthy();
+
+    typeQuery(input, '   ');
+    await flushAndSettle();
+
+    expect(screen.queryByText('Loading units...')).toBeNull();
+    expect(searchUnitsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('selects the unit label and closes through onChange', async () => {
     searchUnitsMock.mockResolvedValue([
       { id: 101, label: 'PH-A', building: null, floor: null },
