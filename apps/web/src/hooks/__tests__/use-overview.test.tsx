@@ -75,7 +75,10 @@ describe('useOverview', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(result.current.data).toEqual(payload);
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/overview', undefined);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/overview',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(result.current.dataUpdatedAt).toBeGreaterThan(0);
   });
 

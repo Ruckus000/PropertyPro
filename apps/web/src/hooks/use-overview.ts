@@ -9,7 +9,7 @@ export const OVERVIEW_QUERY_KEY = ['overview'] as const;
 export function useOverview() {
   return useQuery<OverviewPayload>({
     queryKey: OVERVIEW_QUERY_KEY,
-    queryFn: () => requestJson<OverviewPayload>('/api/v1/overview'),
+    queryFn: ({ signal }) => requestJson<OverviewPayload>('/api/v1/overview', { signal }),
     staleTime: 30_000,
   });
 }
