@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useTrackArticleView } from '@/hooks/use-help';
 
 interface ArticleViewTrackerProps {
   communityId: number;
@@ -9,7 +9,7 @@ interface ArticleViewTrackerProps {
 }
 
 /**
- * Fires a POST to /api/v1/help/view on mount to log a page view.
+ * Logs a best-effort help article view on mount.
  *
  * - Best-effort only — failures are swallowed.
  * - Uses a ref guard to avoid duplicate posts under React strict-mode double-render.
@@ -19,21 +19,7 @@ export function ArticleViewTracker({
   articleSlug,
   articleCategory,
 }: ArticleViewTrackerProps) {
-  const fired = useRef(false);
-
-  useEffect(() => {
-    if (fired.current) return;
-    fired.current = true;
-
-    void fetch('/api/v1/help/view', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ communityId, articleSlug, articleCategory }),
-      keepalive: true,
-    }).catch(() => {
-      /* best-effort: ignore tracking failures */
-    });
-  }, [communityId, articleSlug, articleCategory]);
+  useTrackArticleView({ communityId, articleSlug, articleCategory });
 
   return null;
 }
