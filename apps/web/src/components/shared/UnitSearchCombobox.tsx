@@ -17,13 +17,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-
-interface UnitResult {
-  id: number;
-  label: string;
-  building: string | null;
-  floor: number | null;
-}
+import {
+  meetsUnitSearchMinLength,
+  useUnitSearch,
+  type UnitSearchResult,
+} from '@/hooks/use-unit-search';
 
 export interface UnitSearchComboboxProps {
   communityId: number;
@@ -34,7 +32,6 @@ export interface UnitSearchComboboxProps {
 }
 
 const DEBOUNCE_MS = 300;
-const FETCH_LIMIT = 10;
 
 export function UnitSearchCombobox({
   communityId,
@@ -45,44 +42,48 @@ export function UnitSearchCombobox({
 }: UnitSearchComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<UnitResult[]>([]);
+  const [results, setResults] = useState<UnitSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const searchUnits = useUnitSearch(communityId);
 
-  const search = useCallback(async (q: string) => {
-    if (q.trim().length < 1) {
-      setResults([]);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        communityId: String(communityId),
-        q: q.trim(),
-        limit: String(FETCH_LIMIT),
-      });
-      const res = await fetch(`/api/v1/search/units?${params.toString()}`);
-      if (!res.ok) throw new Error('search failed');
-      const json = (await res.json()) as { results: UnitResult[] };
-      setResults(json.results ?? []);
-    } catch {
-      setResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [communityId]);
+  const search = useCallback(
+    async (q: string, signal: AbortSignal) => {
+      if (!meetsUnitSearchMinLength(q)) {
+        setResults([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const nextResults = await searchUnits(q, signal);
+        if (signal.aborted) return;
+        setResults(nextResults);
+      } catch (err) {
+        if ((err as { name?: string } | undefined)?.name === 'AbortError') return;
+        setResults([]);
+      } finally {
+        if (!signal.aborted) setIsLoading(false);
+      }
+    },
+    [searchUnits],
+  );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      void search(query);
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      void search(query, controller.signal);
     }, DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, [query, search]);
 
-  function handleSelect(result: UnitResult) {
+  function handleSelect(result: UnitSearchResult) {
     onChange(result.label);
     setOpen(false);
   }
@@ -120,7 +121,7 @@ export function UnitSearchCombobox({
                 <span className="sr-only">Loading units...</span>
               </div>
             )}
-            {!isLoading && query.trim().length >= 1 && results.length === 0 && (
+            {!isLoading && meetsUnitSearchMinLength(query) && results.length === 0 && (
               <CommandEmpty>No units found</CommandEmpty>
             )}
             {!isLoading && results.length > 0 && (
