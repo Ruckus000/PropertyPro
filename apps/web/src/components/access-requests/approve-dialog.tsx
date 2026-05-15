@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import {
   Dialog,
@@ -11,22 +10,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { useApproveAccessRequest } from '@/hooks/use-access-requests';
 import { cn } from '@/lib/utils';
-
-/* ─────── API helper ─────── */
-
-async function approveRequest(requestId: number, unitId?: number): Promise<void> {
-  const response = await fetch(`/api/v1/access-requests/${requestId}/approve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ unitId: unitId ?? undefined }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Failed to approve request');
-  }
-}
 
 /* ─────── Props ─────── */
 
@@ -45,21 +30,23 @@ export function ApproveDialog({
 }: ApproveDialogProps) {
   const [open, setOpen] = useState(false);
   const [unitIdInput, setUnitIdInput] = useState('');
-  const queryClient = useQueryClient();
+  const mutation = useApproveAccessRequest();
 
-  const mutation = useMutation({
-    mutationFn: () => {
-      const parsed = parseInt(unitIdInput, 10);
-      const unitId = unitIdInput.trim() && !isNaN(parsed) ? parsed : undefined;
-      return approveRequest(requestId, unitId);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['access-requests'] });
-      setOpen(false);
-      setUnitIdInput('');
-      onSuccess();
-    },
-  });
+  const handleApprove = () => {
+    const parsed = parseInt(unitIdInput, 10);
+    const unitId = unitIdInput.trim() && !isNaN(parsed) ? parsed : undefined;
+
+    mutation.mutate(
+      { requestId, unitId },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          setUnitIdInput('');
+          onSuccess();
+        },
+      },
+    );
+  };
 
   const handleOpenChange = (value: boolean) => {
     if (!mutation.isPending) {
@@ -153,7 +140,7 @@ export function ApproveDialog({
               </button>
               <button
                 type="button"
-                onClick={() => mutation.mutate()}
+                onClick={handleApprove}
                 disabled={mutation.isPending}
                 className={cn(
                   'inline-flex min-h-[40px] items-center gap-2 rounded-md bg-interactive px-4',
