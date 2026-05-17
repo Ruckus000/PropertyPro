@@ -67,6 +67,10 @@ export interface SubmitArticleFeedbackInput {
   comment: string | null;
 }
 
+interface SubmitArticleFeedbackResponse extends ArticleFeedbackSnapshot {
+  id: number;
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
@@ -200,19 +204,19 @@ export function useArticleFeedback({
 export function useSubmitArticleFeedback() {
   const queryClient = useQueryClient();
 
-  return useMutation<unknown, Error, SubmitArticleFeedbackInput>({
+  return useMutation<SubmitArticleFeedbackResponse, Error, SubmitArticleFeedbackInput>({
     mutationFn: (input) =>
-      requestJson('/api/v1/help/feedback', {
+      requestJson<SubmitArticleFeedbackResponse>('/api/v1/help/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       }),
-    onSuccess: (_data, input) => {
+    onSuccess: (data, input) => {
       queryClient.setQueryData<ArticleFeedbackSnapshot | null>(
         HELP_KEYS.articleFeedback(input.communityId, input.articleSlug),
         {
-          rating: input.rating,
-          comment: input.comment,
+          rating: data.rating,
+          comment: data.comment,
         },
       );
     },

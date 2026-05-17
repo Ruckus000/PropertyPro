@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,8 +25,10 @@ export function ArticleFeedback({
   articleSlug,
   articleCategory,
 }: ArticleFeedbackProps) {
+  const articleKey = `${communityId}:${articleSlug}`;
   const feedbackQuery = useArticleFeedback({ communityId, articleSlug });
   const submitFeedback = useSubmitArticleFeedback();
+  const hydratedArticleKeyRef = useRef<string | null>(null);
   const [rating, setRating] = useState<Rating>(null);
   const [comment, setComment] = useState('');
   const [showComment, setShowComment] = useState(false);
@@ -35,14 +37,24 @@ export function ArticleFeedback({
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (feedbackQuery.data) {
-      setRating(feedbackQuery.data.rating);
-      setComment(feedbackQuery.data.comment ?? '');
-    }
-    if (feedbackQuery.isFetched || feedbackQuery.isError) {
-      setHydrated(true);
-    }
-  }, [feedbackQuery.data, feedbackQuery.isError, feedbackQuery.isFetched]);
+    hydratedArticleKeyRef.current = null;
+    setRating(null);
+    setComment('');
+    setShowComment(false);
+    setState('idle');
+    setErrorMessage(null);
+    setHydrated(false);
+  }, [articleKey]);
+
+  useEffect(() => {
+    if (!feedbackQuery.isFetched && !feedbackQuery.isError) return;
+    if (hydratedArticleKeyRef.current === articleKey) return;
+    hydratedArticleKeyRef.current = articleKey;
+
+    setRating(feedbackQuery.data?.rating ?? null);
+    setComment(feedbackQuery.data?.comment ?? '');
+    setHydrated(true);
+  }, [articleKey, feedbackQuery.data, feedbackQuery.isError, feedbackQuery.isFetched]);
 
   async function submit(nextRating: 1 | -1, withComment = false): Promise<void> {
     setState('submitting');

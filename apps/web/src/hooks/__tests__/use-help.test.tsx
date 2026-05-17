@@ -78,10 +78,10 @@ describe('useArticleFeedback', () => {
 });
 
 describe('useSubmitArticleFeedback', () => {
-  it('posts feedback through requestJson and warms the article feedback cache', async () => {
+  it('posts feedback through requestJson and warms the article feedback cache from the server response', async () => {
     const { queryClient, wrapper } = createWrapper();
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ data: { id: 9, rating: 1, comment: null } }, 201),
+      jsonResponse({ data: { id: 9, rating: -1, comment: 'Server-trimmed' } }, 201),
     );
 
     const { result } = renderHook(() => useSubmitArticleFeedback(), { wrapper });
@@ -90,8 +90,8 @@ describe('useSubmitArticleFeedback', () => {
       communityId: 42,
       articleSlug: 'start-here',
       articleCategory: 'getting-started',
-      rating: 1,
-      comment: null,
+      rating: -1,
+      comment: '  Server-trimmed  ',
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/help/feedback', {
@@ -101,13 +101,13 @@ describe('useSubmitArticleFeedback', () => {
         communityId: 42,
         articleSlug: 'start-here',
         articleCategory: 'getting-started',
-        rating: 1,
-        comment: null,
+        rating: -1,
+        comment: '  Server-trimmed  ',
       }),
     });
     expect(
       queryClient.getQueryData(HELP_KEYS.articleFeedback(42, 'start-here')),
-    ).toEqual({ rating: 1, comment: null });
+    ).toEqual({ rating: -1, comment: 'Server-trimmed' });
   });
 
   it('surfaces API envelope errors to the component', async () => {
