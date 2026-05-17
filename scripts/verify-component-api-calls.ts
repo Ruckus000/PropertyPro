@@ -139,7 +139,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx',
   'apps/web/src/app/(authenticated)/settings/payments/connected/page.tsx',
   'apps/web/src/app/demo/[slug]/upgrade/upgrade-form.tsx',
-  'apps/web/src/components/access-requests/deny-dialog.tsx',
   'apps/web/src/components/access-requests/request-access-form.tsx',
   'apps/web/src/components/announcements/announcement-authoring-form.tsx',
   'apps/web/src/components/auth/set-password-form.tsx',

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { XCircle } from 'lucide-react';
 import {
   Dialog,
@@ -12,22 +11,8 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { useDenyAccessRequest } from '@/hooks/use-access-requests';
 import { cn } from '@/lib/utils';
-
-/* ─────── API helper ─────── */
-
-async function denyRequest(requestId: number, reason?: string): Promise<void> {
-  const response = await fetch(`/api/v1/access-requests/${requestId}/deny`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason: reason?.trim() || undefined }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Failed to deny request');
-  }
-}
 
 /* ─────── Props ─────── */
 
@@ -42,17 +27,20 @@ interface DenyDialogProps {
 export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
-  const queryClient = useQueryClient();
+  const mutation = useDenyAccessRequest();
 
-  const mutation = useMutation({
-    mutationFn: () => denyRequest(requestId, reason),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['access-requests'] });
-      setOpen(false);
-      setReason('');
-      onSuccess();
-    },
-  });
+  const handleDeny = () => {
+    mutation.mutate(
+      { requestId, reason },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          setReason('');
+          onSuccess();
+        },
+      },
+    );
+  };
 
   const handleOpenChange = (value: boolean) => {
     if (!mutation.isPending) {
@@ -140,7 +128,7 @@ export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProp
               </button>
               <button
                 type="button"
-                onClick={() => mutation.mutate()}
+                onClick={handleDeny}
                 disabled={mutation.isPending}
                 className={cn(
                   'inline-flex min-h-[40px] items-center gap-2 rounded-md border border-status-danger-border bg-status-danger-bg px-4',
