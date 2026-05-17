@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,8 @@ export const HELP_KEYS = {
   contextual: (path: string, communityId: number) =>
     ['help', 'contextual', path, communityId] as const,
   readArticles: (communityId: number) => ['help', 'read', communityId] as const,
+  articleFeedback: (communityId: number, articleSlug: string) =>
+    ['help', 'feedback', communityId, articleSlug] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -48,6 +50,21 @@ export interface HelpFaqResult {
 interface HelpSearchResponse {
   articles: HelpArticleResult[];
   faqs: HelpFaqResult[];
+}
+
+export type ArticleFeedbackRating = 1 | -1;
+
+export interface ArticleFeedbackSnapshot {
+  rating: ArticleFeedbackRating;
+  comment: string | null;
+}
+
+export interface SubmitArticleFeedbackInput {
+  communityId: number;
+  articleSlug: string;
+  articleCategory: string;
+  rating: ArticleFeedbackRating;
+  comment: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +169,53 @@ export function useContextualHelp(path: string, communityId: number) {
     // A timeout abort still surfaces as `error` to the consumer; the widget
     // renders its "browse the full help center" fallback in the no-data case.
     retry: false,
+  });
+}
+
+export function useArticleFeedback({
+  communityId,
+  articleSlug,
+}: {
+  communityId: number;
+  articleSlug: string;
+}) {
+  return useQuery<ArticleFeedbackSnapshot | null>({
+    queryKey: HELP_KEYS.articleFeedback(communityId, articleSlug),
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({
+        communityId: String(communityId),
+        articleSlug,
+      });
+      return requestJson<ArticleFeedbackSnapshot | null>(
+        `/api/v1/help/feedback?${query.toString()}`,
+        { signal },
+      );
+    },
+    enabled: communityId > 0 && articleSlug.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useSubmitArticleFeedback() {
+  const queryClient = useQueryClient();
+
+  return useMutation<unknown, Error, SubmitArticleFeedbackInput>({
+    mutationFn: (input) =>
+      requestJson('/api/v1/help/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, input) => {
+      queryClient.setQueryData<ArticleFeedbackSnapshot | null>(
+        HELP_KEYS.articleFeedback(input.communityId, input.articleSlug),
+        {
+          rating: input.rating,
+          comment: input.comment,
+        },
+      );
+    },
   });
 }
 

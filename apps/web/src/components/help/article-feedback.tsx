@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  useArticleFeedback,
+  useSubmitArticleFeedback,
+  type ArticleFeedbackRating,
+} from '@/hooks/use-help';
 import { cn } from '@/lib/utils';
 
 interface ArticleFeedbackProps {
@@ -12,19 +17,16 @@ interface ArticleFeedbackProps {
   articleCategory: string;
 }
 
-type Rating = 1 | -1 | null;
+type Rating = ArticleFeedbackRating | null;
 type SubmitState = 'idle' | 'submitting' | 'submitted' | 'error';
-
-interface FeedbackSnapshot {
-  rating: Rating;
-  comment: string;
-}
 
 export function ArticleFeedback({
   communityId,
   articleSlug,
   articleCategory,
 }: ArticleFeedbackProps) {
+  const feedbackQuery = useArticleFeedback({ communityId, articleSlug });
+  const submitFeedback = useSubmitArticleFeedback();
   const [rating, setRating] = useState<Rating>(null);
   const [comment, setComment] = useState('');
   const [showComment, setShowComment] = useState(false);
@@ -33,49 +35,26 @@ export function ArticleFeedback({
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    async function hydrate(): Promise<void> {
-      try {
-        const query = new URLSearchParams({
-          communityId: String(communityId),
-          articleSlug,
-        });
-        const response = await fetch(`/api/v1/help/feedback?${query.toString()}`);
-        if (!response.ok) return;
-        const payload = (await response.json()) as { data: FeedbackSnapshot | null };
-        if (cancelled || !payload.data) return;
-        setRating(payload.data.rating as Rating);
-        setComment(payload.data.comment ?? '');
-      } catch {
-        /* best-effort hydration — failures keep the widget in pristine state */
-      } finally {
-        if (!cancelled) setHydrated(true);
-      }
+    if (feedbackQuery.data) {
+      setRating(feedbackQuery.data.rating);
+      setComment(feedbackQuery.data.comment ?? '');
     }
-    void hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId, articleSlug]);
+    if (feedbackQuery.isFetched || feedbackQuery.isError) {
+      setHydrated(true);
+    }
+  }, [feedbackQuery.data, feedbackQuery.isError, feedbackQuery.isFetched]);
 
   async function submit(nextRating: 1 | -1, withComment = false): Promise<void> {
     setState('submitting');
     setErrorMessage(null);
     try {
-      const response = await fetch('/api/v1/help/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          articleSlug,
-          articleCategory,
-          rating: nextRating,
-          comment: withComment ? comment.trim() || null : null,
-        }),
+      await submitFeedback.mutateAsync({
+        communityId,
+        articleSlug,
+        articleCategory,
+        rating: nextRating,
+        comment: withComment ? comment.trim() || null : null,
       });
-      if (!response.ok) {
-        throw new Error(`Failed: ${response.status}`);
-      }
       setRating(nextRating);
       setState('submitted');
       // Open the comment box the first time the user reacts negatively.

@@ -1,0 +1,131 @@
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { PropsWithChildren } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  HELP_KEYS,
+  useArticleFeedback,
+  useSubmitArticleFeedback,
+} from '../use-help';
+
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return {
+    queryClient,
+    wrapper: ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  };
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+beforeEach(() => {
+  fetchMock.mockReset();
+});
+
+describe('useArticleFeedback', () => {
+  it('hydrates the current article feedback through the standard data envelope', async () => {
+    const { wrapper } = createWrapper();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: { rating: -1, comment: 'Needs screenshots' } }),
+    );
+
+    const { result } = renderHook(
+      () => useArticleFeedback({ communityId: 42, articleSlug: 'start-here' }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/help/feedback?communityId=42&articleSlug=start-here',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(result.current.data).toEqual({
+      rating: -1,
+      comment: 'Needs screenshots',
+    });
+  });
+
+  it('preserves null feedback responses as an empty prior rating', async () => {
+    const { wrapper } = createWrapper();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: null }));
+
+    const { result } = renderHook(
+      () => useArticleFeedback({ communityId: 42, articleSlug: 'start-here' }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toBeNull();
+  });
+});
+
+describe('useSubmitArticleFeedback', () => {
+  it('posts feedback through requestJson and warms the article feedback cache', async () => {
+    const { queryClient, wrapper } = createWrapper();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: { id: 9, rating: 1, comment: null } }, 201),
+    );
+
+    const { result } = renderHook(() => useSubmitArticleFeedback(), { wrapper });
+
+    await result.current.mutateAsync({
+      communityId: 42,
+      articleSlug: 'start-here',
+      articleCategory: 'getting-started',
+      rating: 1,
+      comment: null,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/help/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        articleSlug: 'start-here',
+        articleCategory: 'getting-started',
+        rating: 1,
+        comment: null,
+      }),
+    });
+    expect(
+      queryClient.getQueryData(HELP_KEYS.articleFeedback(42, 'start-here')),
+    ).toEqual({ rating: 1, comment: null });
+  });
+
+  it('surfaces API envelope errors to the component', async () => {
+    const { wrapper } = createWrapper();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: { message: 'Unable to save feedback' } }, 500),
+    );
+
+    const { result } = renderHook(() => useSubmitArticleFeedback(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({
+        communityId: 42,
+        articleSlug: 'start-here',
+        articleCategory: 'getting-started',
+        rating: -1,
+        comment: 'Missing the setup step',
+      }),
+    ).rejects.toThrow('Unable to save feedback');
+  });
+});
