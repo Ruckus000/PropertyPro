@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import type {
   CalendarReminderPreset,
@@ -35,12 +35,19 @@ export function useNotificationPreferences(communityId: number) {
 }
 
 export function useUpdateNotificationPreferences(communityId: number) {
+  const queryClient = useQueryClient();
+
   return useMutation<void, Error, NotificationPreferences>({
     mutationFn: async (values) => {
       await requestJson<unknown>('/api/v1/notification-preferences', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId, ...values }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: notificationPreferencesKey(communityId),
       });
     },
   });

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, type FormEvent } from 'react';
+import React, { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   type CalendarReminderPreset,
   type EmailFrequency,
@@ -36,11 +36,16 @@ export function NotificationPreferencesForm({ communityId, reminderVisibility }:
   const prefsQuery = useNotificationPreferences(communityId);
   const updateMutation = useUpdateNotificationPreferences(communityId);
 
+  // Seed the editable form state from the server once per community. A
+  // guard ref prevents a background refetch (e.g. the post-save
+  // invalidation, or window-focus refetch) from clobbering unsaved edits.
+  const seededCommunityRef = useRef<number | null>(null);
   useEffect(() => {
-    if (prefsQuery.data) {
+    if (prefsQuery.data && seededCommunityRef.current !== communityId) {
+      seededCommunityRef.current = communityId;
       setValues(prefsQuery.data);
     }
-  }, [prefsQuery.data]);
+  }, [prefsQuery.data, communityId]);
 
   const loading = prefsQuery.isLoading;
   const saving = updateMutation.isPending;
