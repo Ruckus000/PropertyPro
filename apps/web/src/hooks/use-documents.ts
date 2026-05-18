@@ -19,6 +19,9 @@ export const documentsKey = (communityId: number, categoryId: number | null | un
 export const documentDownloadKey = (communityId: number, documentId: number | null | undefined) =>
   ['document-download', communityId, documentId ?? 'none'] as const;
 
+export const documentVersionsKey = (communityId: number, documentId: number | null | undefined) =>
+  ['document-versions', communityId, documentId ?? 'none'] as const;
+
 const DOCUMENT_DOWNLOAD_FALLBACK_ERROR = 'Unable to load document preview';
 const MAX_SURFACED_DOWNLOAD_ERROR_LENGTH = 200;
 
@@ -29,6 +32,22 @@ interface UseDocumentsOptions {
 }
 
 interface UseDocumentDownloadUrlOptions {
+  communityId: number;
+  documentId: number | null;
+  enabled?: boolean;
+}
+
+export interface DocumentVersionItem {
+  id: number;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  createdAt: string;
+  uploadedBy: string | null;
+}
+
+interface UseDocumentVersionsOptions {
   communityId: number;
   documentId: number | null;
   enabled?: boolean;
@@ -92,6 +111,22 @@ export function useDocumentDownloadUrl({
     },
     enabled: enabled && communityId > 0 && documentId != null,
     retry: 0,
+  });
+}
+
+export function useDocumentVersions({
+  communityId,
+  documentId,
+  enabled = true,
+}: UseDocumentVersionsOptions) {
+  return useQuery({
+    queryKey: documentVersionsKey(communityId, documentId),
+    queryFn: ({ signal }) =>
+      requestJson<DocumentVersionItem[]>(
+        `/api/v1/documents/${documentId}/versions?communityId=${communityId}`,
+        { signal },
+      ),
+    enabled: enabled && communityId > 0 && documentId != null && documentId > 0,
   });
 }
 
