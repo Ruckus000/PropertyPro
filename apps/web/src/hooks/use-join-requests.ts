@@ -32,8 +32,8 @@ export function useCreateJoinRequest() {
           residentType,
         }),
       });
-      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
         const reason =
           (body?.error?.details?.reason as string | undefined) ??
           (body?.error?.code as string | undefined) ??
