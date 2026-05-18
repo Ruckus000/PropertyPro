@@ -4,17 +4,11 @@ import {
   type CalendarReminderPreset,
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
-
-interface PreferencesState {
-  emailFrequency: EmailFrequency;
-  emailAnnouncements: boolean;
-  emailMeetings: boolean;
-  calendarReminderPreset: CalendarReminderPreset;
-  calendarReminderMeetings: boolean;
-  calendarReminderPersonalAssessments: boolean;
-  calendarReminderCommunityAssessments: boolean;
-  inAppEnabled: boolean;
-}
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+  type NotificationPreferences as PreferencesState,
+} from '@/hooks/use-notification-preferences';
 
 interface Props {
   communityId: number;
@@ -36,51 +30,31 @@ export function NotificationPreferencesForm({ communityId, reminderVisibility }:
     calendarReminderCommunityAssessments: false,
     inAppEnabled: true,
   });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchPrefs() {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/v1/notification-preferences?communityId=${communityId}`);
-        const json = (await res.json()) as { data: PreferencesState };
-        if (!cancelled) {
-          setValues(json.data);
-        }
-      } catch {
-        if (!cancelled) setError('Failed to load preferences');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void fetchPrefs();
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId]);
+  const prefsQuery = useNotificationPreferences(communityId);
+  const updateMutation = useUpdateNotificationPreferences(communityId);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
-    try {
-      const res = await fetch('/api/v1/notification-preferences', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, ...values }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      setSuccess(true);
-    } catch {
-      setError('Failed to save preferences');
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (prefsQuery.data) {
+      setValues(prefsQuery.data);
     }
+  }, [prefsQuery.data]);
+
+  const loading = prefsQuery.isLoading;
+  const saving = updateMutation.isPending;
+  const error =
+    saveError ?? (prefsQuery.isError ? 'Failed to load preferences' : null);
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaveError(null);
+    setSuccess(false);
+    updateMutation.mutate(values, {
+      onSuccess: () => setSuccess(true),
+      onError: () => setSaveError('Failed to save preferences'),
+    });
   }
 
   if (loading) return <div>Loading preferences...</div>;
