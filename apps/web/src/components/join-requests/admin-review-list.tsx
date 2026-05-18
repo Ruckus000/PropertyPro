@@ -1,60 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface PendingRequest {
-  id: number;
-  userId: string;
-  communityId: number;
-  unitIdentifier: string;
-  residentType: 'owner' | 'tenant' | string;
-  status: string;
-  createdAt: string;
-}
+import {
+  useAdminJoinRequests,
+  useReviewJoinRequest,
+  type ReviewJoinRequestInput,
+} from '@/hooks/use-admin-join-requests';
 
 export function AdminReviewList() {
-  const qc = useQueryClient();
   const [actingId, setActingId] = useState<number | null>(null);
   const [denyDraftId, setDenyDraftId] = useState<number | null>(null);
   const [denyNotes, setDenyNotes] = useState('');
 
-  const { data, isLoading, isError } = useQuery<{ data: PendingRequest[] }>({
-    queryKey: ['admin-join-requests'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/admin/join-requests');
-      if (!res.ok) throw new Error('Failed to load');
-      return res.json();
-    },
-  });
+  const { data, isLoading, isError } = useAdminJoinRequests();
+  const act = useReviewJoinRequest();
 
-  const act = useMutation({
-    mutationFn: async (input: { id: number; action: 'approve' | 'deny'; notes?: string }) => {
-      setActingId(input.id);
-      const res = await fetch(
-        `/api/v1/admin/join-requests/${input.id}/${input.action}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes: input.notes }),
-        },
-      );
-      if (!res.ok) throw new Error(`${input.action} failed`);
-      return res.json();
-    },
-    onSettled: () => {
-      setActingId(null);
-      setDenyDraftId(null);
-      setDenyNotes('');
-      qc.invalidateQueries({ queryKey: ['admin-join-requests'] });
-    },
-  });
+  const runReview = (input: ReviewJoinRequestInput) => {
+    setActingId(input.id);
+    act.mutate(input, {
+      onSettled: () => {
+        setActingId(null);
+        setDenyDraftId(null);
+        setDenyNotes('');
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -75,7 +51,7 @@ export function AdminReviewList() {
     );
   }
 
-  const requests = data?.data ?? [];
+  const requests = data ?? [];
 
   if (requests.length === 0) {
     return (
@@ -122,7 +98,7 @@ export function AdminReviewList() {
               <Button
                 size="sm"
                 disabled={actingId === r.id}
-                onClick={() => act.mutate({ id: r.id, action: 'approve' })}
+                onClick={() => runReview({ id: r.id, action: 'approve' })}
               >
                 {actingId === r.id ? 'Working…' : 'Approve'}
               </Button>
@@ -161,7 +137,7 @@ export function AdminReviewList() {
                   variant="destructive"
                   disabled={actingId === r.id}
                   onClick={() =>
-                    act.mutate({
+                    runReview({
                       id: r.id,
                       action: 'deny',
                       notes: denyNotes.trim() || undefined,

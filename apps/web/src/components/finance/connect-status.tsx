@@ -1,64 +1,39 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertBanner } from '@/components/shared/alert-banner';
-
-interface ConnectStatusData {
-  connected: boolean;
-  stripeAccountId: string | null;
-  onboardingComplete: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-}
-
-async function fetchConnectStatus(communityId: number): Promise<ConnectStatusData> {
-  const res = await fetch(`/api/v1/stripe/connect/status?communityId=${communityId}`);
-  if (!res.ok) throw new Error('Failed to fetch connect status');
-  const json = await res.json();
-  return json.data;
-}
-
-async function initiateOnboarding(communityId: number): Promise<{ onboardingUrl: string }> {
-  const res = await fetch('/api/v1/stripe/connect/onboard', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId }),
-  });
-  if (!res.ok) throw new Error('Failed to initiate onboarding');
-  const json = await res.json();
-  return json.data;
-}
+import {
+  useStripeConnectStatus,
+  useStartStripeOnboarding,
+  stripeConnectStatusKey,
+} from '@/hooks/use-stripe-connect';
 
 export function ConnectStatus({ communityId }: { communityId: number }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
-  const { data, isPending, isError } = useQuery({
-    queryKey: ['stripe-connect-status', communityId],
-    queryFn: () => fetchConnectStatus(communityId),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const { data, isPending, isError } = useStripeConnectStatus(communityId);
 
-  const onboardMutation = useMutation({
-    mutationFn: () => initiateOnboarding(communityId),
-    onSuccess: (result) => {
-      if (result.onboardingUrl) {
-        window.location.href = result.onboardingUrl;
-      } else {
-        queryClient.invalidateQueries({ queryKey: ['stripe-connect-status', communityId] });
-      }
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : 'Failed to start onboarding');
-    },
-  });
+  const onboardMutation = useStartStripeOnboarding(communityId);
 
   const handleConnect = useCallback(() => {
     setError(null);
-    onboardMutation.mutate();
-  }, [onboardMutation]);
+    onboardMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.onboardingUrl) {
+          window.location.href = result.onboardingUrl;
+        } else {
+          queryClient.invalidateQueries({
+            queryKey: stripeConnectStatusKey(communityId),
+          });
+        }
+      },
+      onError: (err) => {
+        setError(err instanceof Error ? err.message : 'Failed to start onboarding');
+      },
+    });
+  }, [onboardMutation, queryClient, communityId]);
 
   if (isPending) {
     return (
