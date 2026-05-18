@@ -32,6 +32,8 @@ Drain ~3 components off the `KNOWN_DIRECT_API_CALL_FILES` allowlist in `scripts/
 
 ## Read these FIRST, in parallel (multiple tool calls in one message)
 
+(The `~/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro` segment below is this environment's memory slug — the project's absolute path with `/`→`-`. On a different machine, substitute your own `~/.claude/projects/<slug>/…`. The literal path is kept here so the continuation agent can read these files directly without resolving a placeholder.)
+
 1. `~/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro/memory/MEMORY.md` — esp. the "Continuation Prompt" + `KNOWN_DIRECT_API_CALL_FILES` drain-progress sections (full do-not-restart list, batching rules).
 2. `~/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro/memory/project_architectural_standardization_plan.md`
 3. `~/.claude/plans/draft-a-plan-that-reflective-pie.md`
