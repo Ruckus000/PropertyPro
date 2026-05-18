@@ -18,6 +18,14 @@ function createWrapper() {
   );
 }
 
+function expectedUrl(communityId: number, roles: string) {
+  const params = new URLSearchParams({
+    communityId: String(communityId),
+    roles,
+  });
+  return `/api/v1/residents?${params.toString()}`;
+}
+
 beforeEach(() => {
   fetchMock.mockReset();
 });
@@ -60,7 +68,7 @@ describe('useResidents', () => {
       { userId: 'u2', fullName: 'Bob Board', role: 'board_member' },
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/v1/residents?communityId=42&roles=${ADMIN_ROLES_PARAM}`,
+      expectedUrl(42, ADMIN_ROLES_PARAM),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
@@ -110,7 +118,7 @@ describe('useResidents', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/v1/residents?communityId=1&roles=${ADMIN_ROLES_PARAM}`,
+      expectedUrl(1, ADMIN_ROLES_PARAM),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
@@ -118,7 +126,7 @@ describe('useResidents', () => {
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenLastCalledWith(
-        `/api/v1/residents?communityId=2&roles=${ADMIN_ROLES_PARAM}`,
+        expectedUrl(2, ADMIN_ROLES_PARAM),
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );

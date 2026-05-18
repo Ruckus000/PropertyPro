@@ -15,8 +15,12 @@ export function useResidents(communityId: number, roles: string) {
     queryKey: ['residents', communityId, roles],
     enabled: communityId > 0,
     queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        communityId: String(communityId),
+        roles,
+      });
       const data = await requestJson<Record<string, unknown>[]>(
-        `/api/v1/residents?communityId=${communityId}&roles=${roles}`,
+        `/api/v1/residents?${params.toString()}`,
         { signal },
       );
       return data.map((r) => ({
