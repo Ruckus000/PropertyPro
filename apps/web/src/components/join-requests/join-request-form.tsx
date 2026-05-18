@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { useCreateJoinRequest } from '@/hooks/use-join-requests';
 
 interface JoinRequestFormProps {
   communityId: number;
@@ -12,13 +12,6 @@ interface JoinRequestFormProps {
   onDone: () => void;
   onBack: () => void;
 }
-
-const REASON_MESSAGES: Record<string, string> = {
-  already_member: "You're already a member of this community.",
-  pending_request: 'You already have a pending request for this community.',
-  recently_denied:
-    'A previous request for this community was denied in the last 30 days. Please contact your community admin.',
-};
 
 export function JoinRequestForm({
   communityId,
@@ -29,32 +22,16 @@ export function JoinRequestForm({
   const [unit, setUnit] = useState('');
   const [residentType, setResidentType] = useState<'owner' | 'tenant'>('owner');
 
-  const submit = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/v1/account/join-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          unitIdentifier: unit.trim(),
-          residentType,
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const reason =
-          (body?.error?.details?.reason as string | undefined) ??
-          (body?.error?.code as string | undefined) ??
-          '';
-        const message = REASON_MESSAGES[reason] ?? body?.error?.message ?? 'Submission failed. Please try again.';
-        throw new Error(message);
-      }
-      return body;
-    },
-    onSuccess: onDone,
-  });
+  const submit = useCreateJoinRequest();
 
   const canSubmit = unit.trim().length > 0 && !submit.isPending;
+
+  const handleSubmit = () => {
+    submit.mutate(
+      { communityId, unitIdentifier: unit.trim(), residentType },
+      { onSuccess: onDone },
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -105,7 +82,7 @@ export function JoinRequestForm({
         <Button variant="ghost" onClick={onBack} disabled={submit.isPending}>
           Back
         </Button>
-        <Button onClick={() => submit.mutate()} disabled={!canSubmit}>
+        <Button onClick={handleSubmit} disabled={!canSubmit}>
           {submit.isPending ? 'Submitting…' : 'Submit Request'}
         </Button>
       </div>

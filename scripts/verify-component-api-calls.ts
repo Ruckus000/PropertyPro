@@ -152,7 +152,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/finance/payment-portal.tsx',
   'apps/web/src/components/help/help-faq-manage-client.tsx',
   'apps/web/src/components/join-requests/admin-review-list.tsx',
-  'apps/web/src/components/join-requests/join-request-form.tsx',
   'apps/web/src/components/mobile/MobileFaqManageContent.tsx',
   'apps/web/src/components/mobile/MobileSettingsContent.tsx',
   'apps/web/src/components/onboarding/apartment-wizard.tsx',
