@@ -1,16 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { assignRequest } from '@/lib/api/admin-maintenance';
 import type { MaintenanceRequestItem } from '@/lib/api/maintenance-requests';
-
-interface ResidentRow {
-  userId: string;
-  fullName: string;
-  role: string;
-}
-
-const ADMIN_ROLES_PARAM = 'board_member,board_president,cam,site_manager,property_manager_admin';
+import { useResidents, ADMIN_ROLES_PARAM } from '@/hooks/use-residents';
 
 interface AssignmentModalProps {
   request: MaintenanceRequestItem;
@@ -25,30 +18,18 @@ export function AssignmentModal({
   onClose,
   onAssigned,
 }: AssignmentModalProps) {
-  const [residents, setResidents] = useState<ResidentRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: residentsData,
+    isLoading: loading,
+    isError: residentsError,
+  } = useResidents(communityId, ADMIN_ROLES_PARAM);
+  const residents = residentsData ?? [];
   const [selectedUserId, setSelectedUserId] = useState<string>(request.assignedToId ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/v1/residents?communityId=${communityId}&roles=${ADMIN_ROLES_PARAM}`)
-      .then((res) => res.json())
-      .then((body: unknown) => {
-        const data = (body as Record<string, unknown>)['data'];
-        if (Array.isArray(data)) {
-          setResidents(
-            (data as Record<string, unknown>[]).map((r) => ({
-              userId: r['userId'] as string,
-              fullName: r['fullName'] as string,
-              role: r['role'] as string,
-            })),
-          );
-        }
-      })
-      .catch(() => setError('Failed to load assignable users'))
-      .finally(() => setLoading(false));
-  }, [communityId]);
+  const displayError =
+    error ?? (residentsError ? 'Failed to load assignable users' : null);
 
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
@@ -108,7 +89,7 @@ export function AssignmentModal({
               </select>
             </div>
 
-            {error && <p className="text-xs text-status-danger">{error}</p>}
+            {displayError && <p className="text-xs text-status-danger">{displayError}</p>}
 
             <div className="flex gap-2 justify-end">
               <button
