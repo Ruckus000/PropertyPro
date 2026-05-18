@@ -7,8 +7,8 @@
  * and which target communities to apply them to.
  */
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import type { CommunityBranding } from '@propertypro/shared';
+import { useCopyBranding, type BrandingProperty } from '@/hooks/use-pm-branding';
 import {
   Dialog,
   DialogContent,
@@ -35,8 +35,6 @@ interface BrandingCopyDialogProps {
   open: boolean;
   onClose: () => void;
 }
-
-type BrandingProperty = 'logoPath' | 'primaryColor' | 'secondaryColor' | 'accentColor' | 'fontHeading' | 'fontBody';
 
 const BRANDING_PROPERTIES: Array<{ key: BrandingProperty; label: string }> = [
   { key: 'logoPath', label: 'Logo' },
@@ -67,52 +65,7 @@ export function BrandingCopyDialog({
   // Exclude source community from targets
   const targetCommunities = managedCommunities.filter((c) => c.id !== sourceCommunity.id);
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      // Build the branding patch from selected properties
-      const patch: Record<string, unknown> = {};
-      for (const prop of selectedProperties) {
-        const value = sourceCommunity.branding[prop];
-        if (value !== undefined) {
-          // Map logoPath to logoStoragePath for the branding API
-          if (prop === 'logoPath') {
-            patch['logoStoragePath'] = value;
-          } else {
-            patch[prop] = value;
-          }
-        }
-      }
-
-      // PATCH each target community's branding
-      const results = await Promise.allSettled(
-        Array.from(selectedCommunityIds).map(async (communityId) => {
-          const res = await fetch('/api/v1/pm/branding', {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ communityId, ...patch }),
-          });
-
-          if (!res.ok) {
-            const json = (await res.json()) as { error?: { message?: string } };
-            throw new Error(json.error?.message ?? `Failed for community ${communityId}`);
-          }
-
-          return communityId;
-        }),
-      );
-
-      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-      return { succeeded, total: results.length };
-    },
-    onSuccess: (data) => {
-      setResultMessage(`Branding copied to ${data.succeeded}/${data.total} communities`);
-      setShowConfirm(false);
-    },
-    onError: (error: Error) => {
-      setResultMessage(`Error: ${error.message}`);
-      setShowConfirm(false);
-    },
-  });
+  const mutation = useCopyBranding();
 
   function resetForm() {
     setSelectedCommunityIds(new Set());
@@ -159,7 +112,25 @@ export function BrandingCopyDialog({
   }
 
   function handleConfirm() {
-    mutation.mutate();
+    mutation.mutate(
+      {
+        sourceBranding: sourceCommunity.branding,
+        properties: selectedProperties,
+        communityIds: selectedCommunityIds,
+      },
+      {
+        onSuccess: (data) => {
+          setResultMessage(
+            `Branding copied to ${data.succeeded}/${data.total} communities`,
+          );
+          setShowConfirm(false);
+        },
+        onError: (error: Error) => {
+          setResultMessage(`Error: ${error.message}`);
+          setShowConfirm(false);
+        },
+      },
+    );
   }
 
   const canSubmit = selectedCommunityIds.size > 0 && selectedProperties.size > 0;

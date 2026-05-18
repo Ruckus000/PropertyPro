@@ -1,100 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Button, Card, StatusBadge } from '@propertypro/ui';
+import {
+  useTransparencySettings,
+  useUpdateTransparencySettings,
+} from '@/hooks/use-transparency';
 
 interface Props {
   communityId: number;
   subdomain: string;
 }
 
-interface SettingsResponse {
-  enabled: boolean;
-  acknowledgedAt: string | null;
-}
-
 export function TransparencyToggle({ communityId, subdomain }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [acknowledgedAt, setAcknowledgedAt] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const transparencyUrl = useMemo(() => `/${subdomain}/transparency`, [subdomain]);
 
+  const settingsQuery = useTransparencySettings(communityId);
+  const updateSettings = useUpdateTransparencySettings(communityId);
+
+  // Seed local form state from the query exactly once per community so a
+  // background/post-save refetch can't clobber unsaved edits.
+  const seededRef = useRef<number | null>(null);
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadSettings() {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/v1/transparency/settings?communityId=${communityId}`);
-        const json = (await response.json()) as { data: SettingsResponse };
-
-        if (!response.ok) {
-          throw new Error('Failed to load transparency settings');
-        }
-
-        if (!cancelled) {
-          setEnabled(json.data.enabled);
-          setAcknowledgedAt(json.data.acknowledgedAt);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Failed to load transparency settings.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+    if (settingsQuery.data && seededRef.current !== communityId) {
+      seededRef.current = communityId;
+      setEnabled(settingsQuery.data.enabled);
+      setAcknowledgedAt(settingsQuery.data.acknowledgedAt);
     }
+  }, [settingsQuery.data, communityId]);
 
-    void loadSettings();
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId]);
+  useEffect(() => {
+    if (settingsQuery.isError) {
+      setError('Failed to load transparency settings.');
+    }
+  }, [settingsQuery.isError]);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  const loading = settingsQuery.isLoading;
+  const saving = updateSettings.isPending;
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setSaving(true);
     setError(null);
     setSuccess(false);
 
-    try {
-      const response = await fetch('/api/v1/transparency/settings', {
-        method: 'PATCH',
-        headers: {
-          'content-type': 'application/json',
+    updateSettings.mutate(
+      { enabled, acknowledged },
+      {
+        onSuccess: (data) => {
+          setEnabled(data.enabled);
+          setAcknowledgedAt(data.acknowledgedAt);
+          setSuccess(true);
         },
-        body: JSON.stringify({
-          communityId,
-          enabled,
-          acknowledged,
-        }),
-      });
-
-      const json = (await response.json()) as {
-        data?: SettingsResponse;
-        error?: { message?: string };
-      };
-
-      if (!response.ok || !json.data) {
-        throw new Error(json.error?.message ?? 'Failed to save settings');
-      }
-
-      setEnabled(json.data.enabled);
-      setAcknowledgedAt(json.data.acknowledgedAt);
-      setSuccess(true);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save transparency settings.');
-    } finally {
-      setSaving(false);
-    }
+        onError: (saveError) => {
+          setError(
+            saveError instanceof Error
+              ? saveError.message
+              : 'Failed to save transparency settings.',
+          );
+        },
+      },
+    );
   }
 
   if (loading) {

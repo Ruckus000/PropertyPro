@@ -1,33 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
-
-async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
-  const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
-  if (!res.ok) throw new Error('Failed to fetch fee policy');
-  const json = await res.json();
-  return json.data.feePolicy;
-}
-
-async function updateFeePolicy(
-  communityId: number,
-  feePolicy: PaymentFeePolicy,
-): Promise<PaymentFeePolicy> {
-  const res = await fetch('/api/v1/payments/fee-policy', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, feePolicy }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error?.message || 'Failed to update fee policy');
-  }
-  const json = await res.json();
-  return json.data.feePolicy;
-}
+import { useFeePolicy, useUpdateFeePolicy } from '@/hooks/use-fee-policy';
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -42,22 +18,11 @@ const sampleCardFee = calculateConvenienceFee(SAMPLE_AMOUNT_CENTS, 'card');
 const sampleAchFee = calculateConvenienceFee(SAMPLE_AMOUNT_CENTS, 'us_bank_account');
 
 export function FeePolicySettings({ communityId }: { communityId: number }) {
-  const queryClient = useQueryClient();
   const [selectedPolicy, setSelectedPolicy] = useState<PaymentFeePolicy | null>(null);
 
-  const { data: currentPolicy, isPending, isError } = useQuery({
-    queryKey: ['fee-policy', communityId],
-    queryFn: () => fetchFeePolicy(communityId),
-    staleTime: 60_000,
-  });
+  const { data: currentPolicy, isPending, isError } = useFeePolicy(communityId);
 
-  const mutation = useMutation({
-    mutationFn: (policy: PaymentFeePolicy) => updateFeePolicy(communityId, policy),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fee-policy', communityId] });
-      setSelectedPolicy(null);
-    },
-  });
+  const mutation = useUpdateFeePolicy(communityId);
 
   if (isPending) {
     return <div className="h-32 animate-pulse rounded-md bg-surface-muted" />;
@@ -152,7 +117,12 @@ export function FeePolicySettings({ communityId }: { communityId: number }) {
             Cancel
           </button>
           <button
-            onClick={() => selectedPolicy && mutation.mutate(selectedPolicy)}
+            onClick={() =>
+              selectedPolicy &&
+              mutation.mutate(selectedPolicy, {
+                onSuccess: () => setSelectedPolicy(null),
+              })
+            }
             disabled={mutation.isPending}
             className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
           >
