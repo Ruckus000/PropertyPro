@@ -146,7 +146,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/command-palette/useDataSearch.ts',
   'apps/web/src/components/compliance/compliance-activity-feed.tsx',
   'apps/web/src/components/documents/document-search.tsx',
-  'apps/web/src/components/documents/document-version-history.tsx',
   'apps/web/src/components/finance/connect-status.tsx',
   'apps/web/src/components/finance/fee-policy-settings.tsx',
   'apps/web/src/components/finance/payment-dialog.tsx',

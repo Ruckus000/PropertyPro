@@ -1,28 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { DocumentListItem } from './document-list';
 import { DocumentViewerModal } from './DocumentViewerModal';
-
-interface VersionHistoryItem {
-  id: number;
-  title: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  createdAt: string;
-  uploadedBy: string | null;
-}
-
-interface VersionHistoryResponse {
-  data: VersionHistoryItem[];
-}
+import { useDocumentVersions, type DocumentVersionItem } from '@/hooks/use-documents';
 
 interface DocumentVersionHistoryProps {
   communityId: number;
   document: DocumentListItem;
   onClose?: () => void;
-  onSelectVersion?: (version: VersionHistoryItem) => void;
+  onSelectVersion?: (version: DocumentVersionItem) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -48,9 +35,6 @@ export function DocumentVersionHistory({
   onClose,
   onSelectVersion,
 }: DocumentVersionHistoryProps) {
-  const [versions, setVersions] = useState<VersionHistoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [viewerDocument, setViewerDocument] = useState<{ id: number; fileName: string } | null>(null);
 
   function isPreviewable(mimeType: string): boolean {
@@ -59,25 +43,10 @@ export function DocumentVersionHistory({
     return mimeType.includes('pdf') || mimeType.includes('image');
   }
 
-  useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-
-    fetch(`/api/v1/documents/${document.id}/versions?communityId=${communityId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load version history');
-        return res.json();
-      })
-      .then((json: VersionHistoryResponse) => {
-        setVersions(json.data);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load version history');
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, [document.id, communityId]);
+  const versionsQuery = useDocumentVersions({ communityId, documentId: document.id });
+  const versions = versionsQuery.data ?? [];
+  const isLoading = versionsQuery.isPending;
+  const error = versionsQuery.isError ? 'Failed to load version history' : null;
 
   return (
     <div className="flex h-full flex-col rounded-md border border-edge bg-surface-card">
