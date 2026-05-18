@@ -126,7 +126,7 @@ export function useDocumentVersions({
         `/api/v1/documents/${documentId}/versions?communityId=${communityId}`,
         { signal },
       ),
-    enabled: enabled && communityId > 0 && documentId != null,
+    enabled: enabled && communityId > 0 && documentId != null && documentId > 0,
   });
 }
 

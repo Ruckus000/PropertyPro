@@ -71,6 +71,14 @@ describe('useDocumentVersions', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('does not fetch when documentId is not positive', () => {
+    renderHook(
+      () => useDocumentVersions({ communityId: 1, documentId: 0 }),
+      { wrapper: createWrapper() },
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not fetch when explicitly disabled', () => {
     renderHook(
       () => useDocumentVersions({ communityId: 1, documentId: 2, enabled: false }),
