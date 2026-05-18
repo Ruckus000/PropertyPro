@@ -6,11 +6,12 @@
  * Preserves the existing lazy community-count lookup and logout flow while
  * fitting the compact avatar-only header chrome from the nav redesign.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRightLeft, CircleHelp, Download, LogOut, Settings } from 'lucide-react';
 import { toInitials } from '@propertypro/shared';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { useUserCommunityCount } from '@/hooks/use-user-community-count';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,22 +30,7 @@ interface ProfileMenuProps {
 export function ProfileMenu({ userName, userEmail, communityId }: ProfileMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [communityCount, setCommunityCount] = useState<number | null>(null);
-  const [hasFetchedCommunities, setHasFetchedCommunities] = useState(false);
-
-  useEffect(() => {
-    if (!open || hasFetchedCommunities) return;
-
-    setHasFetchedCommunities(true);
-    fetch('/api/v1/user/communities')
-      .then((res) => res.json())
-      .then((json: { data?: { count?: number } }) => {
-        setCommunityCount(json.data?.count ?? 0);
-      })
-      .catch(() => {
-        setCommunityCount(0);
-      });
-  }, [open, hasFetchedCommunities]);
+  const { data: communityCount } = useUserCommunityCount(open);
 
   async function handleLogout() {
     if (loggingOut) return;
