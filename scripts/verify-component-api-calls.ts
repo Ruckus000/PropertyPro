@@ -146,7 +146,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/command-palette/useDataSearch.ts',
   'apps/web/src/components/compliance/compliance-activity-feed.tsx',
   'apps/web/src/components/documents/document-search.tsx',
-  'apps/web/src/components/finance/fee-policy-settings.tsx',
   'apps/web/src/components/finance/payment-dialog.tsx',
   'apps/web/src/components/finance/payment-portal.tsx',
   'apps/web/src/components/help/help-faq-manage-client.tsx',
@@ -157,7 +156,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/onboarding/steps/profile-step.tsx',
   'apps/web/src/components/onboarding/steps/statutory-documents-step.tsx',
   'apps/web/src/components/onboarding/welcome-screen.tsx',
-  'apps/web/src/components/pm/BrandingCopyDialog.tsx',
   'apps/web/src/components/pm/BrandingForm.tsx',
   'apps/web/src/components/pm/BulkAnnouncementDialog.tsx',
   'apps/web/src/components/pm/BulkDocumentDialog.tsx',
@@ -174,7 +172,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/signup/signup-form.tsx',
   'apps/web/src/components/signup/subdomain-checker.tsx',
   'apps/web/src/components/signup/verify-email-content.tsx',
-  'apps/web/src/components/transparency/transparency-toggle.tsx',
 ]);
 
 // ---------------------------------------------------------------------------
