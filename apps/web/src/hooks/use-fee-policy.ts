@@ -36,12 +36,14 @@ export function useUpdateFeePolicy(communityId: number) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ communityId, feePolicy }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error?.message || 'Failed to update fee policy');
+      const json = (await res.json().catch(() => ({}))) as {
+        data?: { feePolicy: PaymentFeePolicy };
+        error?: { message?: string };
+      };
+      if (!res.ok || !json.data) {
+        throw new Error(json.error?.message || 'Failed to update fee policy');
       }
-      const json = await res.json();
-      return json.data.feePolicy as PaymentFeePolicy;
+      return json.data.feePolicy;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({

@@ -44,7 +44,7 @@ export function useUpdateTransparencySettings(communityId: number) {
         body: JSON.stringify({ communityId, enabled, acknowledged }),
       });
 
-      const json = (await response.json()) as {
+      const json = (await response.json().catch(() => ({}))) as {
         data?: TransparencySettings;
         error?: { message?: string };
       };

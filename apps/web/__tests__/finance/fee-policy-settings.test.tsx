@@ -104,6 +104,27 @@ describe('FeePolicySettings', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('clears an unsaved selection when communityId changes', () => {
+    useFeePolicyMock.mockReturnValue({
+      data: 'owner_pays',
+      isPending: false,
+      isError: false,
+    });
+    const { rerender } = render(<FeePolicySettings communityId={1} />);
+
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Association absorbs fees/ }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Save Changes' }),
+    ).toBeInTheDocument();
+
+    rerender(<FeePolicySettings communityId={2} />);
+    expect(
+      screen.queryByRole('button', { name: 'Save Changes' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('renders the mutation error message verbatim', () => {
     useFeePolicyMock.mockReturnValue({
       data: 'owner_pays',

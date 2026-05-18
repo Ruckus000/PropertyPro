@@ -136,6 +136,45 @@ describe('TransparencyToggle', () => {
     );
   });
 
+  it('resets transient state and reseeds when communityId changes', async () => {
+    useTransparencySettingsMock.mockReturnValue({
+      data: { enabled: true, acknowledgedAt: '2026-01-01T00:00:00.000Z' },
+      isLoading: false,
+      isError: false,
+    });
+    const { rerender } = render(
+      <TransparencyToggle communityId={1} subdomain="sunset" />,
+    );
+
+    // Tick the acknowledgment box for community 1.
+    fireEvent.click(
+      screen.getByLabelText('Acknowledge transparency page scope'),
+    );
+    const ack1 = screen.getByLabelText(
+      'Acknowledge transparency page scope',
+    ) as HTMLInputElement;
+    expect(ack1.checked).toBe(true);
+
+    // Switch to community 2 with different settings.
+    useTransparencySettingsMock.mockReturnValue({
+      data: { enabled: false, acknowledgedAt: null },
+      isLoading: false,
+      isError: false,
+    });
+    rerender(<TransparencyToggle communityId={2} subdomain="palm" />);
+
+    await waitFor(() => {
+      const ack2 = screen.getByLabelText(
+        'Acknowledge transparency page scope',
+      ) as HTMLInputElement;
+      expect(ack2.checked).toBe(false);
+    });
+    const enabled2 = screen.getByLabelText(
+      'Enable compliance transparency page',
+    ) as HTMLInputElement;
+    expect(enabled2.checked).toBe(false);
+  });
+
   it('blocks submit until the acknowledgment box is checked when enabling', () => {
     useTransparencySettingsMock.mockReturnValue({
       data: { enabled: false, acknowledgedAt: null },

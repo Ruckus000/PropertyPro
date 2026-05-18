@@ -132,4 +132,33 @@ describe('useUpdateFeePolicy', () => {
       new Error('Failed to update fee policy'),
     );
   });
+
+  it('throws the fallback literal when the response is OK but has no data', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+    const { result } = renderHook(() => useUpdateFeePolicy(9), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate('owner_pays');
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toEqual(
+      new Error('Failed to update fee policy'),
+    );
+  });
+
+  it('throws the fallback literal on a non-JSON error body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('<html>502</html>', {
+        status: 502,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+    const { result } = renderHook(() => useUpdateFeePolicy(9), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate('owner_pays');
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toEqual(
+      new Error('Failed to update fee policy'),
+    );
+  });
 });

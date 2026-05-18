@@ -28,10 +28,21 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
   // background/post-save refetch can't clobber unsaved edits.
   const seededRef = useRef<number | null>(null);
   useEffect(() => {
-    if (settingsQuery.data && seededRef.current !== communityId) {
-      seededRef.current = communityId;
-      setEnabled(settingsQuery.data.enabled);
-      setAcknowledgedAt(settingsQuery.data.acknowledgedAt);
+    if (seededRef.current !== communityId) {
+      // Reset transient local state immediately on community change so a
+      // banner/checkbox from the previous community can't bleed across.
+      setAcknowledged(false);
+      setSuccess(false);
+      setError(null);
+
+      if (settingsQuery.data) {
+        seededRef.current = communityId;
+        setEnabled(settingsQuery.data.enabled);
+        setAcknowledgedAt(settingsQuery.data.acknowledgedAt);
+      } else {
+        setEnabled(false);
+        setAcknowledgedAt(null);
+      }
     }
   }, [settingsQuery.data, communityId]);
 

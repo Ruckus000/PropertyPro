@@ -144,4 +144,19 @@ describe('useUpdateTransparencySettings', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toEqual(new Error('Failed to save settings'));
   });
+
+  it('falls back to the exact literal on a non-JSON error body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('<html>500</html>', {
+        status: 500,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+    const { result } = renderHook(() => useUpdateTransparencySettings(9), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate({ enabled: true, acknowledged: true });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toEqual(new Error('Failed to save settings'));
+  });
 });

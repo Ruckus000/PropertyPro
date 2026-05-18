@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useFeePolicy, useUpdateFeePolicy } from '@/hooks/use-fee-policy';
@@ -19,6 +19,12 @@ const sampleAchFee = calculateConvenienceFee(SAMPLE_AMOUNT_CENTS, 'us_bank_accou
 
 export function FeePolicySettings({ communityId }: { communityId: number }) {
   const [selectedPolicy, setSelectedPolicy] = useState<PaymentFeePolicy | null>(null);
+
+  // Drop an unsaved selection when switching communities so it can't be
+  // accidentally applied to the wrong community.
+  useEffect(() => {
+    setSelectedPolicy(null);
+  }, [communityId]);
 
   const { data: currentPolicy, isPending, isError } = useFeePolicy(communityId);
 
