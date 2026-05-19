@@ -73,6 +73,48 @@ describe('useExportData', () => {
     });
   });
 
+  it('parses a case-insensitive Attachment + UNquoted filename', async () => {
+    const blob = new Blob(['zip-bytes'], { type: 'application/zip' });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (h: string) =>
+          h === 'Content-Disposition'
+            ? 'Attachment; filename=community-export-7.zip'
+            : null,
+      },
+      blob: async () => blob,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useExportData(), { wrapper });
+    result.current.mutate({ communityId: 7 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.filename).toBe('community-export-7.zip');
+  });
+
+  it('still parses the canonical quoted form (happy path unchanged)', async () => {
+    const blob = new Blob(['zip-bytes'], { type: 'application/zip' });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (h: string) =>
+          h === 'Content-Disposition'
+            ? 'attachment; filename="community-export-12.zip"'
+            : null,
+      },
+      blob: async () => blob,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useExportData(), { wrapper });
+    result.current.mutate({ communityId: 12 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.filename).toBe('community-export-12.zip');
+  });
+
   it('falls back to community-export-<id>.zip when no usable Content-Disposition', async () => {
     const blob = new Blob(['zip-bytes'], { type: 'application/zip' });
     const fetchMock = vi.fn().mockResolvedValue({

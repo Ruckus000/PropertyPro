@@ -48,10 +48,14 @@ export function useExportData() {
       const blob = await res.blob();
       const disposition = res.headers.get('Content-Disposition');
       let filename = `community-export-${communityId}.zip`;
-      if (disposition && disposition.includes('attachment')) {
-        const filenameMatch = /filename="([^"]+)"/.exec(disposition);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1];
+      // Case-insensitive `attachment` + quoted-or-unquoted filename — a
+      // strict superset of the original parsing (the real route always
+      // sends `attachment; filename="..."`, so the happy path is unchanged;
+      // this only adds robustness against other server spellings).
+      if (disposition && disposition.toLowerCase().includes('attachment')) {
+        const filenameMatch = /filename=(?:"([^"]+)"|([^;\n]+))/.exec(disposition);
+        if (filenameMatch) {
+          filename = filenameMatch[1] ?? filenameMatch[2] ?? filename;
         }
       }
 
