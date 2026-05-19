@@ -1,24 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-export interface DocumentSearchRecord {
-  id: number;
-  title: string;
-  description: string | null;
-  fileName: string;
-  mimeType: string;
-  createdAt: string;
-  rank: number;
-}
+import { useDocumentSearch } from '@/hooks/use-document-search';
 
-interface DocumentSearchResponse {
-  data: DocumentSearchRecord[];
-  pagination: {
-    nextCursor: number | null;
-    limit: number;
-  };
-}
+export type { DocumentSearchRecord } from '@/hooks/use-document-search';
 
 export interface DocumentSearchProps {
   communityId: number;
@@ -29,42 +15,13 @@ export interface DocumentSearchProps {
 export function DocumentSearch({ communityId, initialQuery }: DocumentSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? '');
   const didAutoSearch = useRef(false);
-  const [items, setItems] = useState<DocumentSearchRecord[]>([]);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  const fetchResults = (cursor?: number | null) => {
-    startTransition(async () => {
-      try {
-        setError(null);
-        const params = new URLSearchParams({
-          communityId: String(communityId),
-          q: query,
-        });
-        if (cursor) {
-          params.set('cursor', String(cursor));
-        }
-
-        const res = await fetch(`/api/v1/documents/search?${params.toString()}`);
-        if (!res.ok) {
-          throw new Error(`Search failed (${res.status})`);
-        }
-
-        const json = (await res.json()) as DocumentSearchResponse;
-        setItems((prev) => (cursor ? [...prev, ...json.data] : json.data));
-        setNextCursor(json.pagination.nextCursor);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Search failed');
-      }
-    });
-  };
+  const { items, nextCursor, error, isPending, runSearch } = useDocumentSearch(communityId);
 
   // Auto-trigger search when initialQuery is provided
   useEffect(() => {
     if (initialQuery && !didAutoSearch.current) {
       didAutoSearch.current = true;
-      fetchResults(null);
+      runSearch(query, null);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -74,7 +31,7 @@ export function DocumentSearch({ communityId, initialQuery }: DocumentSearchProp
         className="flex gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          fetchResults(null);
+          runSearch(query, null);
         }}
       >
         <input
@@ -106,7 +63,7 @@ export function DocumentSearch({ communityId, initialQuery }: DocumentSearchProp
       {nextCursor ? (
         <button
           type="button"
-          onClick={() => fetchResults(nextCursor)}
+          onClick={() => runSearch(query, nextCursor)}
           className="rounded-md border border-edge-strong px-4 py-2 text-sm"
           disabled={isPending}
         >
