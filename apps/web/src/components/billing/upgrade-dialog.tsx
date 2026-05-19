@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useUpgradeRequest } from '@/hooks/use-upgrade-request';
 
 export interface UpgradeDialogProps {
   open: boolean;
@@ -58,11 +59,6 @@ export interface UpgradeDialogProps {
   communityId: number | null;
 }
 
-interface UpgradeRequestResponse {
-  ok: true;
-  notified: number;
-}
-
 export function UpgradeDialog({
   open,
   onOpenChange,
@@ -76,6 +72,7 @@ export function UpgradeDialog({
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [requestSent, setRequestSent] = React.useState(false);
+  const upgradeRequest = useUpgradeRequest();
 
   React.useEffect(() => {
     if (!open) {
@@ -123,22 +120,11 @@ export function UpgradeDialog({
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/billing/upgrade-requests${tenantQuery}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          featureKey,
-          requestedPlan: recommendedPlanId,
-        }),
+      await upgradeRequest.mutateAsync({
+        communityId,
+        featureKey,
+        requestedPlan: recommendedPlanId,
       });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(
-          (json as { message?: string })?.message ??
-            'We couldn’t send your request. Please try again.',
-        );
-      }
-      (await res.json()) as UpgradeRequestResponse;
       setRequestSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
