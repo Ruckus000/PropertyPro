@@ -98,4 +98,13 @@ describe('useCancelCommunity', () => {
     });
     await expect(result.current.mutateAsync()).rejects.toThrow('Cancel failed');
   });
+
+  it('throws "Failed to load impact" when a 200 preview body lacks the data envelope', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { notData: true }));
+    const { result } = renderHook(() => useCancelPreview(5, true), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Failed to load impact');
+  });
 });

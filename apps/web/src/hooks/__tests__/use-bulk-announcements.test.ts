@@ -122,7 +122,7 @@ describe('useBulkAnnouncements', () => {
     );
   });
 
-  it('defaults results to [] when success body is non-JSON', async () => {
+  it('throws the literal when a 200 success body is non-JSON (no misleading 0/0)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -136,7 +136,24 @@ describe('useBulkAnnouncements', () => {
     const { result } = renderHook(() => useBulkAnnouncements(), { wrapper });
     result.current.mutate(input);
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ results: [] });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Failed to send bulk announcement',
+    );
+  });
+
+  it('throws the literal when a 200 body is missing the results field', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+    );
+
+    const { result } = renderHook(() => useBulkAnnouncements(), { wrapper });
+    result.current.mutate(input);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Failed to send bulk announcement',
+    );
   });
 });

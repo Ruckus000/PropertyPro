@@ -51,18 +51,26 @@ export function useBulkAnnouncements() {
         }),
       });
 
-      const json = (await res.json().catch(() => ({}))) as {
+      const json = (await res.json().catch(() => null)) as {
         error?: { message?: string };
         results?: BulkAnnouncementResult[];
-      };
+      } | null;
 
       if (!res.ok) {
         throw new Error(
-          json.error?.message ?? 'Failed to send bulk announcement',
+          json?.error?.message ?? 'Failed to send bulk announcement',
         );
       }
 
-      return { results: json.results ?? [] };
+      // A 200 whose body is unparseable or missing `results` is an API
+      // error, not an empty success — surface it (matches the original
+      // inline mutation, which threw on a bad success body) instead of
+      // showing a misleading "Sent to 0/0".
+      if (!json?.results) {
+        throw new Error('Failed to send bulk announcement');
+      }
+
+      return { results: json.results };
     },
   });
 }

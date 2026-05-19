@@ -46,7 +46,10 @@ export function useCancelPreview(communityId: number, enabled: boolean) {
         { signal },
       );
       if (!res.ok) throw new Error('Failed to load impact');
-      const json = (await res.json()) as { data: CancelPreview };
+      const json = (await res.json().catch(() => null)) as {
+        data?: CancelPreview;
+      } | null;
+      if (!json?.data) throw new Error('Failed to load impact');
       return json.data;
     },
     enabled,

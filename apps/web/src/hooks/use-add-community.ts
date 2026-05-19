@@ -87,13 +87,21 @@ export function useBillingGroupPreview({
   return useQuery<{ data: PricingPreview }>({
     queryKey: pricingPreviewKey(billingGroupId, planId, communityType),
     queryFn: async ({ signal }) => {
+      // The query is `enabled` only when billingGroupId is set, but guard
+      // defensively against a manual refetch with a missing id — surface
+      // the same literal rather than fetching `/billing-groups/null/...`.
+      if (billingGroupId === null) {
+        throw new Error('Failed to fetch pricing preview');
+      }
       const params = new URLSearchParams({ planId, communityType });
       const res = await fetch(
         `/api/v1/billing-groups/${billingGroupId}/preview?${params.toString()}`,
         { signal },
       );
       if (!res.ok) throw new Error('Failed to fetch pricing preview');
-      return res.json() as Promise<{ data: PricingPreview }>;
+      const json = (await res.json()) as { data?: PricingPreview };
+      if (!json.data) throw new Error('Failed to fetch pricing preview');
+      return { data: json.data };
     },
     enabled: enabled && !!billingGroupId,
   });
@@ -109,11 +117,15 @@ export function useAddCommunity() {
       });
       if (!res.ok) throw new Error('Checkout creation failed');
       const json = (await res.json()) as {
-        data: { clientSecret: string };
+        data?: { clientSecret?: string };
       };
       // The route returns { data: { clientSecret, pendingSignupId,
       // billingGroupId } }; the modal only consumes clientSecret, so narrow
-      // to match the mutation's declared result type exactly.
+      // to match the mutation's declared result type exactly. Guard a
+      // malformed/missing envelope with the same user-facing literal.
+      if (!json.data?.clientSecret) {
+        throw new Error('Checkout creation failed');
+      }
       return { clientSecret: json.data.clientSecret };
     },
   });

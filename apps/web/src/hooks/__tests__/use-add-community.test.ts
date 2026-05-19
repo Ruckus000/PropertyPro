@@ -248,4 +248,38 @@ describe('useAddCommunity', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe('Checkout creation failed');
   });
+
+  it('throws the preview literal when a 200 body is missing the data envelope', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(
+      () =>
+        useBillingGroupPreview({
+          billingGroupId: 7,
+          planId: 'essentials',
+          communityType: 'condo_718',
+          enabled: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Failed to fetch pricing preview');
+  });
+
+  it('throws the checkout literal when a 200 body lacks clientSecret', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useAddCommunity(), { wrapper });
+    result.current.mutate(form);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Checkout creation failed');
+  });
 });
