@@ -143,7 +143,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/onboarding/apartment-wizard.tsx',
   'apps/web/src/components/onboarding/condo-wizard.tsx',
   'apps/web/src/components/pm/BulkDocumentDialog.tsx',
-  'apps/web/src/components/pm/PmDashboardClient.tsx',
   'apps/web/src/components/residents/residents-page-client.tsx',
   'apps/web/src/components/signup/signup-form.tsx',
 ]);
