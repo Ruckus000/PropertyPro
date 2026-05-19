@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -13,21 +12,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { useCancelPreview, useCancelCommunity } from '@/hooks/use-cancel-community';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface CancelPreview {
-  previousTier: string;
-  newTier: string;
-  perCommunityBreakdown: Array<{
-    basePriceUsd: number;
-    discountedPriceUsd: number;
-    discountPercent: number;
-  }>;
-  portfolioMonthlyDeltaUsd: number;
-}
 
 interface CancelCommunityDialogProps {
   open: boolean;
@@ -50,28 +39,19 @@ export function CancelCommunityDialog({
 }: CancelCommunityDialogProps) {
   const [confirmText, setConfirmText] = useState('');
 
-  const preview = useQuery<{ data: CancelPreview }>({
-    queryKey: ['cancel-preview', communityId],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/communities/${communityId}/cancel-preview`);
-      if (!res.ok) throw new Error('Failed to load impact');
-      return res.json() as Promise<{ data: CancelPreview }>;
-    },
-    enabled: open,
-  });
+  const preview = useCancelPreview(communityId, open);
 
-  const cancel = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/v1/communities/${communityId}/cancel`, { method: 'POST' });
-      if (!res.ok) throw new Error('Cancel failed');
-      return res.json() as Promise<unknown>;
-    },
-    onSuccess: () => {
-      setConfirmText('');
-      onCanceled?.();
-      onClose();
-    },
-  });
+  const cancel = useCancelCommunity(communityId);
+
+  const handleCancel = () => {
+    cancel.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmText('');
+        onCanceled?.();
+        onClose();
+      },
+    });
+  };
 
   const handleClose = () => {
     setConfirmText('');
@@ -79,7 +59,7 @@ export function CancelCommunityDialog({
     onClose();
   };
 
-  const impact = preview.data?.data;
+  const impact = preview.data;
   const hasDowngrade = impact && impact.previousTier !== impact.newTier;
   const canConfirm = confirmText === 'CONFIRM';
 
@@ -139,7 +119,7 @@ export function CancelCommunityDialog({
           <Button
             variant="destructive"
             disabled={!canConfirm || cancel.isPending}
-            onClick={() => cancel.mutate()}
+            onClick={handleCancel}
           >
             {cancel.isPending ? 'Canceling…' : 'Cancel Community'}
           </Button>

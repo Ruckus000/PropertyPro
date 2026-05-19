@@ -1,7 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import {
+  useAddCommunity,
+  useBillingGroupPreview,
+  type AddCommunityFormState,
+} from '@/hooks/use-add-community';
 import {
   Dialog,
   DialogContent,
@@ -27,30 +31,6 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface PricingPreview {
-  previousTier: string;
-  newTier: string;
-  perCommunityBreakdown: Array<{
-    basePriceUsd: number;
-    discountedPriceUsd: number;
-    discountPercent: number;
-  }>;
-  portfolioMonthlyDeltaUsd: number;
-}
-
-interface AddCommunityFormState {
-  name: string;
-  communityType: 'condo_718' | 'hoa_720' | 'apartment';
-  planId: 'essentials' | 'professional' | 'operations_plus';
-  addressLine1: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  subdomain: string;
-  unitCount: number;
-  timezone: string;
-}
 
 interface AddCommunityModalProps {
   open: boolean;
@@ -81,30 +61,20 @@ export function AddCommunityModal({
   });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
-  const preview = useQuery<{ data: PricingPreview }>({
-    queryKey: ['pricing-preview', billingGroupId, form.planId, form.communityType],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/v1/billing-groups/${billingGroupId}/preview?planId=${form.planId}&communityType=${form.communityType}`,
-      );
-      if (!res.ok) throw new Error('Failed to fetch pricing preview');
-      return res.json() as Promise<{ data: PricingPreview }>;
-    },
-    enabled: !!billingGroupId && open,
+  const preview = useBillingGroupPreview({
+    billingGroupId,
+    planId: form.planId,
+    communityType: form.communityType,
+    enabled: open,
   });
 
-  const submit = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/v1/pm/communities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error('Checkout creation failed');
-      return res.json() as Promise<{ data: { clientSecret: string } }>;
-    },
-    onSuccess: (data) => setClientSecret(data.data.clientSecret),
-  });
+  const submit = useAddCommunity();
+
+  const handleSubmit = () => {
+    submit.mutate(form, {
+      onSuccess: (data) => setClientSecret(data.clientSecret),
+    });
+  };
 
   const handleClose = () => {
     setClientSecret(null);
@@ -264,7 +234,7 @@ export function AddCommunityModal({
                 Cancel
               </Button>
               <Button
-                onClick={() => submit.mutate()}
+                onClick={handleSubmit}
                 disabled={submit.isPending || !form.name || !form.subdomain}
               >
                 {submit.isPending ? 'Starting checkout…' : 'Continue to Payment'}
