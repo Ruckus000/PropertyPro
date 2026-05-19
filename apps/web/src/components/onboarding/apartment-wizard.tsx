@@ -17,6 +17,10 @@ import type {
   ProfileStepData,
   WizardStepData,
 } from '@/lib/onboarding/apartment-wizard-types';
+import {
+  useSaveApartmentStep,
+  useCompleteApartmentOnboarding,
+} from '@/hooks/use-apartment-onboarding';
 
 interface ApartmentWizardProps {
   communityId: number;
@@ -25,10 +29,6 @@ interface ApartmentWizardProps {
 }
 
 const STEP_TITLES = ['Community Profile', 'Compliance Preview'];
-
-interface ApiErrorResponse {
-  error?: string | { code?: string; message?: string };
-}
 
 function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>): WizardStepData {
   return {
@@ -41,17 +41,6 @@ function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>)
   };
 }
 
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const body = (await response.json()) as ApiErrorResponse;
-    if (typeof body.error === 'string') return body.error;
-    if (body.error && typeof body.error === 'object') return body.error.message ?? 'Request failed';
-    return 'Request failed';
-  } catch {
-    return 'Request failed';
-  }
-}
-
 export function ApartmentWizard({ communityId, communityType, initialState }: ApartmentWizardProps) {
   const router = useRouter();
   const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEP_TITLES.length - 1));
@@ -59,6 +48,9 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
   const [stepData, setStepData] = useState<WizardStepData>(initialState?.stepData ?? {});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const saveStepMutation = useSaveApartmentStep(communityId);
+  const completeMutation = useCompleteApartmentOnboarding(communityId);
 
   const complianceCategories = getComplianceTemplate(
     communityType as 'condo_718' | 'hoa_720' | 'apartment',
@@ -74,21 +66,7 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/onboarding/apartment?communityId=${communityId}`, {
-        method: 'PATCH',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          communityId,
-          step,
-          stepData: patch,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await readApiError(response));
-      }
+      await saveStepMutation.mutateAsync({ step, patch });
 
       setStepData((previous) => mergeStepData(previous, patch));
       setCurrentStep(Math.min(step + 1, STEP_TITLES.length - 1));
@@ -102,20 +80,7 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/onboarding/apartment?communityId=${communityId}`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          communityId,
-          action: 'complete',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await readApiError(response));
-      }
+      await completeMutation.mutateAsync();
 
       router.push(`/dashboard?communityId=${communityId}`);
       return;
