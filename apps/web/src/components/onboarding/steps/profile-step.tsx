@@ -2,13 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import type { ProfileStepData } from '@/lib/onboarding/apartment-wizard-types';
-
-interface PresignResponse {
-  data: {
-    path: string;
-    uploadUrl: string;
-  };
-}
+import { useUploadLogo } from '@/hooks/use-upload-logo';
 
 interface ProfileStepProps {
   communityId: number;
@@ -19,42 +13,8 @@ interface ProfileStepProps {
 const MAX_LOGO_BYTES = 10 * 1024 * 1024;
 const ALLOWED_LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml']);
 
-async function uploadLogoFile(communityId: number, file: File): Promise<string> {
-  const presignResponse = await fetch('/api/v1/upload', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      communityId,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    }),
-  });
-
-  if (!presignResponse.ok) {
-    throw new Error('Failed to prepare logo upload');
-  }
-
-  const presignBody = (await presignResponse.json()) as PresignResponse;
-
-  const uploadResponse = await fetch(presignBody.data.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'content-type': file.type || 'application/octet-stream',
-    },
-    body: file,
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error('Failed to upload logo image');
-  }
-
-  return presignBody.data.path;
-}
-
 export function ProfileStep({ communityId, onNext, initialData }: ProfileStepProps) {
+  const uploadLogo = useUploadLogo();
   const [name, setName] = useState(initialData?.name ?? '');
   const [addressLine1, setAddressLine1] = useState(initialData?.addressLine1 ?? '');
   const [addressLine2, setAddressLine2] = useState(initialData?.addressLine2 ?? '');
@@ -98,7 +58,7 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
     try {
       let resolvedLogoPath = logoPath;
       if (logoFile) {
-        resolvedLogoPath = await uploadLogoFile(communityId, logoFile);
+        resolvedLogoPath = await uploadLogo.mutateAsync({ communityId, file: logoFile });
         setLogoPath(resolvedLogoPath);
       }
 

@@ -2,11 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProfileStep } from '../../../../src/components/onboarding/steps/profile-step';
 
+// `ProfileStep` now consumes `useUploadLogo()` (TanStack `useMutation`), so it
+// must render inside a `QueryClientProvider`. Behavior is otherwise unchanged
+// — the validation literals and submit flow stay in the component.
 async function flushEffects(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function renderWithClient(element: React.ReactElement): React.ReactElement {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return <QueryClientProvider client={qc}>{element}</QueryClientProvider>;
 }
 
 describe('profile step', () => {
@@ -43,18 +54,20 @@ describe('profile step', () => {
 
     await act(async () => {
       root.render(
-        <ProfileStep
-          communityId={42}
-          onNext={onNext}
-          initialData={{
-            name: 'Metro Apartments',
-            addressLine1: '123 Main St',
-            city: 'Miami',
-            state: 'FL',
-            zipCode: '33101',
-            timezone: 'America/New_York',
-          }}
-        />,
+        renderWithClient(
+          <ProfileStep
+            communityId={42}
+            onNext={onNext}
+            initialData={{
+              name: 'Metro Apartments',
+              addressLine1: '123 Main St',
+              city: 'Miami',
+              state: 'FL',
+              zipCode: '33101',
+              timezone: 'America/New_York',
+            }}
+          />,
+        ),
       );
       await flushEffects();
     });
@@ -88,7 +101,7 @@ describe('profile step', () => {
     const onNext = vi.fn();
 
     await act(async () => {
-      root.render(<ProfileStep communityId={42} onNext={onNext} />);
+      root.render(renderWithClient(<ProfileStep communityId={42} onNext={onNext} />));
       await flushEffects();
     });
 
