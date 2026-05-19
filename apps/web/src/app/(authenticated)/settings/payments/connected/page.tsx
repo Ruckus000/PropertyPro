@@ -20,7 +20,11 @@ export default function StripeConnectCallbackPage() {
   const [status, setStatus] = useState<Status>('exchanging');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const exchanged = useRef(false);
-  const completeMutation = useCompleteStripeConnect();
+  // Depend on the stable `mutateAsync` (referentially stable in TanStack
+  // Query) rather than the whole mutation result object (which is NOT
+  // stable across renders) — lets the effect satisfy exhaustive-deps
+  // without an eslint suppression.
+  const { mutateAsync: completeStripeConnect } = useCompleteStripeConnect();
 
   useEffect(() => {
     if (exchanged.current) return;
@@ -51,8 +55,7 @@ export default function StripeConnectCallbackPage() {
       return;
     }
 
-    completeMutation
-      .mutateAsync({ communityId, code, state: stateRaw })
+    completeStripeConnect({ communityId, code, state: stateRaw })
       .then(() => {
         setStatus('success');
         // Redirect to payments settings after short delay
@@ -64,8 +67,7 @@ export default function StripeConnectCallbackPage() {
         setStatus('error');
         setErrorMsg(err instanceof Error ? err.message : 'Something went wrong');
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router]);
+  }, [searchParams, router, completeStripeConnect]);
 
   if (status === 'exchanging') {
     return (
