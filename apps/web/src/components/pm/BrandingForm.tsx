@@ -13,6 +13,7 @@ import type { CommunityBranding } from '@propertypro/shared';
 import { ALLOWED_FONTS } from '@propertypro/theme';
 import { BrandingPreview } from './BrandingPreview';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { useSaveBranding } from '@/hooks/use-branding-form';
 
 const MAX_LOGO_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -44,10 +45,6 @@ async function detectImageMimeFromMagicBytes(file: File): Promise<string | null>
   return null;
 }
 
-interface PresignResponse {
-  data: { path: string; uploadUrl: string };
-}
-
 interface BrandingFormProps {
   communityId: number;
   initialBranding: CommunityBranding;
@@ -64,9 +61,10 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const objectUrlRef = useRef<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveBranding = useSaveBranding();
+  const isSubmitting = saveBranding.isPending;
 
   // Revoke previous object URL on unmount or file change
   useEffect(() => {
@@ -110,76 +108,29 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
     setLogoObjectUrl(url);
   }
 
-  async function uploadLogo(file: File): Promise<string> {
-    const presignRes = await fetch('/api/v1/upload', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
-      }),
-    });
-
-    if (!presignRes.ok) {
-      throw new Error('Failed to prepare logo upload');
-    }
-
-    const { data } = (await presignRes.json()) as PresignResponse;
-
-    const uploadRes = await fetch(data.uploadUrl, {
-      method: 'PUT',
-      headers: { 'content-type': file.type },
-      body: file,
-    });
-
-    if (!uploadRes.ok) {
-      throw new Error('Failed to upload logo');
-    }
-
-    return data.path;
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
-    setIsSubmitting(true);
 
     try {
-      let logoStoragePath: string | undefined;
-      if (logoFile) {
-        logoStoragePath = await uploadLogo(logoFile);
-      }
-
-      const res = await fetch('/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          primaryColor,
-          secondaryColor,
-          accentColor,
-          fontHeading,
-          fontBody,
-          customEmailFooter: customEmailFooter || undefined,
-          ...(logoStoragePath !== undefined && { logoStoragePath }),
-        }),
+      await saveBranding.mutateAsync({
+        communityId,
+        primaryColor,
+        secondaryColor,
+        accentColor,
+        fontHeading,
+        fontBody,
+        customEmailFooter,
+        logoFile,
       });
 
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: { message?: string } };
-        throw new Error(json.error?.message ?? 'Failed to save branding');
-      }
-
+      // DOM/state side-effects stay in the component (not data).
       setSuccess(true);
       setLogoFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-    } finally {
-      setIsSubmitting(false);
     }
   }
 

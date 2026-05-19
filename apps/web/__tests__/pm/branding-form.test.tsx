@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -8,6 +10,15 @@ vi.mock('next/navigation', () => ({
 
 import { BrandingForm } from '../../src/components/pm/BrandingForm';
 import { BrandingPreview } from '../../src/components/pm/BrandingPreview';
+
+// The drained hook uses TanStack useMutation, so BrandingForm renders need a
+// QueryClientProvider. Fresh client per render; retries off.
+function renderWithClient(ui: ReactElement) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 describe('BrandingPreview', () => {
   it('renders color swatches and portal mockup', () => {
@@ -40,14 +51,14 @@ describe('BrandingForm', () => {
   });
 
   it('renders logo, primary color, and secondary color fields', () => {
-    render(<BrandingForm communityId={1} initialBranding={{}} />);
+    renderWithClient(<BrandingForm communityId={1} initialBranding={{}} />);
     expect(screen.getByText('Company Logo')).toBeInTheDocument();
     expect(screen.getByText('Primary Brand Color')).toBeInTheDocument();
     expect(screen.getByText('Secondary Brand Color')).toBeInTheDocument();
   });
 
   it('populates color inputs from initialBranding', () => {
-    render(
+    renderWithClient(
       <BrandingForm
         communityId={1}
         initialBranding={{ primaryColor: '#aabbcc', secondaryColor: '#112233' }}
@@ -58,12 +69,12 @@ describe('BrandingForm', () => {
   });
 
   it('shows save button', () => {
-    render(<BrandingForm communityId={1} initialBranding={{}} />);
+    renderWithClient(<BrandingForm communityId={1} initialBranding={{}} />);
     expect(screen.getByRole('button', { name: /save branding/i })).toBeInTheDocument();
   });
 
   it('shows error when logo file type is invalid', async () => {
-    render(<BrandingForm communityId={1} initialBranding={{}} />);
+    renderWithClient(<BrandingForm communityId={1} initialBranding={{}} />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(['data'], 'test.gif', { type: 'image/gif' });
     Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
@@ -72,7 +83,7 @@ describe('BrandingForm', () => {
   });
 
   it('shows error when logo file is too large', async () => {
-    render(<BrandingForm communityId={1} initialBranding={{}} />);
+    renderWithClient(<BrandingForm communityId={1} initialBranding={{}} />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const bigFile = new File([new ArrayBuffer(11 * 1024 * 1024)], 'big.png', {
       type: 'image/png',
