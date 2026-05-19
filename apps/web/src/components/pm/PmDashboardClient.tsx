@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import type { PaginationState, SortingState } from '@tanstack/react-table';
 import type { CommunityType } from '@propertypro/shared';
 import { usePortfolioDashboard } from '@/hooks/use-portfolio-dashboard';
+import { useBillingGroup } from '@/hooks/use-billing-group';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
 import { CommunityFilters } from './CommunityFilters';
@@ -17,24 +17,6 @@ import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './V
 import { AddCommunityModal } from './add-community-modal';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
-
-async function fetchBillingGroup(): Promise<{ data: { billingGroupId: number } }> {
-  const res = await fetch('/api/v1/billing-groups/mine');
-  if (!res.ok) {
-    let message = 'Failed to fetch billing group';
-    try {
-      const body = await res.json() as { error?: { message?: string } };
-      if (body.error?.message) {
-        message = body.error.message;
-      }
-    } catch {
-      // Ignore parse failures and use the generic fallback above.
-    }
-    throw new Error(message);
-  }
-
-  return res.json();
-}
 
 export function PmDashboardClient() {
   const searchParams = useSearchParams();
@@ -47,10 +29,7 @@ export function PmDashboardClient() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  const billingGroupQuery = useQuery<{ data: { billingGroupId: number } }, Error>({
-    queryKey: ['billing-group', 'mine'],
-    queryFn: fetchBillingGroup,
-  });
+  const billingGroupQuery = useBillingGroup();
   const billingGroupId = billingGroupQuery.data?.data.billingGroupId ?? null;
 
   const [pagination, setPagination] = useState<PaginationState>({
