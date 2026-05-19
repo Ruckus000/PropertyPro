@@ -6,6 +6,7 @@ import {
   AnnouncementComposer,
   type AnnouncementComposerValues,
 } from '@/components/announcements/announcement-composer';
+import { useMutateAnnouncement } from '@/hooks/use-mutate-announcement';
 
 interface EditableAnnouncement {
   id: number;
@@ -20,55 +21,26 @@ interface AnnouncementAuthoringFormProps {
   announcement?: EditableAnnouncement;
 }
 
-async function readErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
-  const errorBody = await response.json().catch(() => null) as
-    | { message?: string; error?: { message?: string } }
-    | null;
-
-  return errorBody?.error?.message ?? errorBody?.message ?? fallbackMessage;
-}
-
 export function AnnouncementAuthoringForm({
   communityId,
   announcement,
 }: AnnouncementAuthoringFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const mutateAnnouncement = useMutateAnnouncement();
 
   async function handleSubmit(values: AnnouncementComposerValues) {
     setIsSubmitting(true);
 
     try {
-      const payload: Record<string, unknown> = {
+      const json = await mutateAnnouncement.mutateAsync({
         communityId,
         ...values,
-      };
-
-      if (announcement) {
-        payload['action'] = 'update';
-        payload['id'] = announcement.id;
-      }
-
-      const response = await fetch('/api/v1/announcements', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        ...(announcement
+          ? { action: 'update' as const, id: announcement.id }
+          : {}),
       });
 
-      if (!response.ok) {
-        throw new Error(
-          await readErrorMessage(
-            response,
-            announcement
-              ? 'We could not update this announcement.'
-              : 'We could not create this announcement.',
-          ),
-        );
-      }
-
-      const json = await response.json() as { data?: { id?: number } };
       const announcementId = announcement?.id ?? json.data?.id;
 
       if (!announcementId) {

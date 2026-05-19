@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Badge } from '@propertypro/ui';
 import { DocumentUploader } from '@/components/documents/document-uploader';
 import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
 import type { StatutoryStepData } from '@/lib/onboarding/condo-wizard-types';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
@@ -19,9 +20,6 @@ export function StatutoryDocumentsStep({
     onNext,
     initialData,
 }: StatutoryDocumentsStepProps) {
-    const [items, setItems] = useState<ChecklistItemData[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [nextError, setNextError] = useState<string | null>(null);
 
     // Map of templateKey -> documentId (uploaded so far)
@@ -33,63 +31,32 @@ export function StatutoryDocumentsStep({
         resolveCategoryId,
     } = useDocumentCategories(communityId);
 
+    const {
+        data: checklistData,
+        isPending: checklistPending,
+        isError: checklistIsError,
+        error: checklistError,
+        isSuccess: checklistIsSuccess,
+    } = useComplianceChecklist(communityId);
+
+    const items: ChecklistItemData[] = checklistData ?? [];
+    const loading = checklistPending;
+    const loadError = checklistIsError
+        ? checklistError instanceof Error
+            ? checklistError.message
+            : String(checklistError)
+        : null;
+
     useEffect(() => {
-        let mounted = true;
-
-        async function initialize() {
-            try {
-                setLoading(true);
-                setLoadError(null);
-
-                // 1. Ensure checklist items are generated
-                const postRes = await fetch('/api/v1/compliance', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ communityId }),
-                });
-                if (!postRes.ok) {
-                    const errorJson = await postRes.json().catch(() => null) as
-                        { error?: { message?: string } } | null;
-                    const serverMessage = errorJson?.error?.message;
-
-                    if (postRes.status === 403) {
-                        throw new Error(serverMessage ?? 'Compliance checklist is only available for condo/HOA communities.');
-                    }
-                    throw new Error(serverMessage ?? 'Failed to initialize compliance checklist');
-                }
-
-                // 2. Fetch checklist items
-                const getRes = await fetch(`/api/v1/compliance?communityId=${communityId}`);
-                if (!getRes.ok) {
-                    throw new Error('Failed to load compliance checklist');
-                }
-                const json = (await getRes.json()) as { data: ChecklistItemData[] };
-
-                if (mounted) {
-                    setItems(json.data ?? []);
-                    if (initialData?.items) {
-                        const initialMap: Record<string, number> = {};
-                        for (const item of initialData.items) {
-                            initialMap[item.templateKey] = item.documentId;
-                        }
-                        setUploadedDocs(initialMap);
-                    }
-                }
-            } catch (err) {
-                if (mounted) {
-                    setLoadError(err instanceof Error ? err.message : String(err));
-                }
-            } finally {
-                if (mounted) setLoading(false);
+        if (!checklistIsSuccess) return;
+        if (initialData?.items) {
+            const initialMap: Record<string, number> = {};
+            for (const item of initialData.items) {
+                initialMap[item.templateKey] = item.documentId;
             }
+            setUploadedDocs(initialMap);
         }
-
-        initialize();
-
-        return () => {
-            mounted = false;
-        };
-    }, [communityId, initialData]);
+    }, [checklistIsSuccess, initialData]);
 
     // We only require them to upload documents that have a 'deadline' indicating statutory requirement,
     // or maybe all generated items are statutory. Let's show all items, but mark them as required.

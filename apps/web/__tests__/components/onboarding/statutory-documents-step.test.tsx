@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import React, { act } from 'react';
+import React, { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatutoryDocumentsStep } from '@/components/onboarding/steps/statutory-documents-step';
+
+function renderWithClient(element: ReactNode): ReactNode {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return (
+        <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>
+    );
+}
 
 vi.mock('@/components/documents/document-uploader', () => {
     const R = require('react');
@@ -81,7 +91,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
+                renderWithClient(<StatutoryDocumentsStep communityId={1} onNext={onNext} />)
             );
             await flushEffects();
             // wait for use-compliance-items hook fetch
@@ -164,7 +174,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
+                renderWithClient(<StatutoryDocumentsStep communityId={1} onNext={onNext} />)
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -202,7 +212,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />
+                renderWithClient(<StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />)
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -230,7 +240,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />
+                renderWithClient(<StatutoryDocumentsStep communityId={1} onNext={vi.fn()} />)
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -275,7 +285,7 @@ describe('StatutoryDocumentsStep', () => {
 
         await act(async () => {
             root.render(
-                <StatutoryDocumentsStep communityId={1} onNext={onNext} />
+                renderWithClient(<StatutoryDocumentsStep communityId={1} onNext={onNext} />)
             );
             await flushEffects();
             await new Promise(resolve => setTimeout(resolve, 50));
