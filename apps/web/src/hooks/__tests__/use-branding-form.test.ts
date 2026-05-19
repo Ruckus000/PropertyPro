@@ -210,4 +210,20 @@ describe('useSaveBranding', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe('Failed to save branding');
   });
+
+  it('PATCH non-OK with a NON-JSON error body still rejects with "Failed to save branding"', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error('Unexpected token < in JSON');
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useSaveBranding(), { wrapper });
+    result.current.mutate(noLogoInput);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Failed to save branding');
+  });
 });

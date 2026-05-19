@@ -98,7 +98,12 @@ async function saveBranding(input: SaveBrandingInput): Promise<void> {
   });
 
   if (!res.ok) {
-    const json = (await res.json()) as { error?: { message?: string } };
+    // `.catch(() => ({}))`: a non-JSON error body (proxy/LB HTML) must
+    // still surface the intended 'Failed to save branding' literal, not a
+    // raw SyntaxError.
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: { message?: string };
+    };
     throw new Error(json.error?.message ?? 'Failed to save branding');
   }
 }
