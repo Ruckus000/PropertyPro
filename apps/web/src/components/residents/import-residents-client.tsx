@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   Upload,
@@ -16,37 +15,19 @@ import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
+import {
+  useDryRunImport,
+  useImportResidents,
+  type DryRunRow,
+  type CsvError,
+  type DryRunResponse,
+  type ImportResponse,
+} from '@/hooks/use-import-residents';
 
 /* ─────── Types ─────── */
 
-interface DryRunRow {
-  name: string;
-  email: string;
-  role: string;
-  unit_number: string | null;
-}
-
-interface CsvError {
-  rowNumber: number;
-  column: string | null;
-  message: string;
-}
-
-interface DryRunResponse {
-  data: {
-    preview: DryRunRow[];
-    errors: CsvError[];
-    header: string[];
-  };
-}
-
-interface ImportResponse {
-  data: {
-    importedCount: number;
-    skippedCount: number;
-    errors: CsvError[];
-  };
-}
+// Re-exported so existing import sites of these types keep working.
+export type { DryRunRow, CsvError, DryRunResponse, ImportResponse };
 
 interface ImportResidentsClientProps {
   communityId: number;
@@ -70,34 +51,6 @@ function downloadCsvTemplate() {
   URL.revokeObjectURL(url);
 }
 
-/* ─────── API helpers ─────── */
-
-async function dryRunImport(communityId: number, csvText: string): Promise<DryRunResponse> {
-  const response = await fetch('/api/v1/import-residents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, csv: csvText, dryRun: true }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(err?.message ?? 'Failed to validate CSV');
-  }
-  return response.json() as Promise<DryRunResponse>;
-}
-
-async function executeImport(communityId: number, csvText: string): Promise<ImportResponse> {
-  const response = await fetch('/api/v1/import-residents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, csv: csvText, dryRun: false }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(err?.message ?? 'Failed to import residents');
-  }
-  return response.json() as Promise<ImportResponse>;
-}
-
 /* ─────── Component ─────── */
 
 export function ImportResidentsClient({ communityId }: ImportResidentsClientProps) {
@@ -109,21 +62,8 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const dryRunMutation = useMutation({
-    mutationFn: (csv: string) => dryRunImport(communityId, csv),
-    onSuccess: (data) => {
-      setDryRunData(data.data);
-      setStep('preview');
-    },
-  });
-
-  const importMutation = useMutation({
-    mutationFn: () => executeImport(communityId, csvText),
-    onSuccess: (data) => {
-      setImportResult(data.data);
-      setStep('results');
-    },
-  });
+  const dryRunMutation = useDryRunImport(communityId);
+  const importMutation = useImportResidents(communityId);
 
   const handleFileRead = useCallback((file: File) => {
     setFileName(file.name);
@@ -131,7 +71,12 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     reader.onload = (e) => {
       const text = e.target?.result as string;
       setCsvText(text);
-      dryRunMutation.mutate(text);
+      dryRunMutation.mutate(text, {
+        onSuccess: (data) => {
+          setDryRunData(data.data);
+          setStep('preview');
+        },
+      });
     };
     reader.readAsText(file);
   }, [dryRunMutation]);
@@ -175,8 +120,13 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
 
   const handleImport = useCallback(() => {
     setStep('importing');
-    importMutation.mutate();
-  }, [importMutation]);
+    importMutation.mutate(csvText, {
+      onSuccess: (data) => {
+        setImportResult(data.data);
+        setStep('results');
+      },
+    });
+  }, [importMutation, csvText]);
 
   // Compute preview stats
   const validRows = dryRunData?.preview.length ?? 0;
