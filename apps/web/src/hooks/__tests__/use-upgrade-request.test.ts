@@ -64,7 +64,7 @@ describe('useUpgradeRequest', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ ok: true, notified: 0 });
-    const [url] = fetchMock.mock.calls[0];
+    const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/billing/upgrade-requests');
     expect(url).not.toContain('?');
   });
@@ -80,7 +80,7 @@ describe('useUpgradeRequest', () => {
       requestedPlan: 'plus',
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    const [url] = fetchMock.mock.calls[0];
+    const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/billing/upgrade-requests');
   });
 
