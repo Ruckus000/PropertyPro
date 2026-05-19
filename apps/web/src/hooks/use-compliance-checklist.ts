@@ -55,7 +55,15 @@ async function fetchComplianceChecklist(
   if (!getRes.ok) {
     throw new Error('Failed to load compliance checklist');
   }
-  const json = (await getRes.json()) as { data: ChecklistItemData[] };
+  // A 200 whose body is unparseable is a load failure, not an empty list —
+  // surface the same literal as a non-OK GET (the original inline code let
+  // res.json() throw into its catch, which set the load error).
+  const json = (await getRes.json().catch(() => null)) as
+    | { data?: ChecklistItemData[] }
+    | null;
+  if (json === null) {
+    throw new Error('Failed to load compliance checklist');
+  }
   return json.data ?? [];
 }
 

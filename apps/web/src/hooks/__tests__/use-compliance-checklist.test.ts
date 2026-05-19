@@ -175,6 +175,28 @@ describe('useComplianceChecklist', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('throws the load literal when the GET 200 body is unparseable (no silent [])', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(201, { data: [] }))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error('not json');
+        },
+      });
+
+    const { result } = renderHook(() => useComplianceChecklist(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Failed to load compliance checklist',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('refetches when communityId changes', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(201, { data: [] }))
