@@ -41,11 +41,16 @@ export interface UpdateMobileSettingsInput {
  */
 export function useUpdateMobileSettings() {
   return useMutation<void, Error, UpdateMobileSettingsInput>({
-    // Documented exception to the requestJson rule: this flow needs the raw
-    // `res.ok` short-circuit (skip the second PATCH when the first fails) and
-    // only reads the error envelope (`{ error: { message } }`) — it never
-    // consumes the success `{ data }` payload — so requestJson's `.data`
-    // unwrap does not fit.
+    // Documented exception to the requestJson rule: the component shows the
+    // thrown error's message verbatim, and the two failure paths must keep
+    // their EXACT fallback literals 'Failed to update profile' /
+    // 'Failed to update notification preferences' when the error body has no
+    // message. requestJson's non-OK fallback is the generic 'Request failed',
+    // which would change that user-facing copy — and the no-message path is
+    // real here: `/api/v1/profile` does not exist (pre-existing bug; the real
+    // route is /api/v1/account/profile), so the profile PATCH 404s with no
+    // `{ error: { message } }` body. (await-throw already short-circuits the
+    // second PATCH, so that is not the reason for the exception.)
     mutationFn: async ({ profile, notificationPreferences }) => {
       // Update profile
       const profileRes = await fetch('/api/v1/profile', {
