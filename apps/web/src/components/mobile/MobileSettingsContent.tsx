@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Save, Check, AlertCircle, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLargeText } from '@/hooks/useLargeText';
+import { useUpdateMobileSettings } from '@/hooks/use-mobile-settings';
 import { MobileBackHeader } from '@/components/mobile/MobileBackHeader';
 import { PageTransition, SlideUp } from '@/components/motion';
 import type { CalendarReminderPreset } from '@/lib/utils/email-preferences';
@@ -163,39 +164,24 @@ export function MobileSettingsContent({
   const { largeText, toggleLargeText } = useLargeText();
 
   // Save state
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSave() {
-    setSaving(true);
+  const updateMobileSettings = useUpdateMobileSettings();
+  const saving = updateMobileSettings.isPending;
+
+  function handleSave() {
     setSaved(false);
     setError(null);
 
-    try {
-      // Update profile
-      const profileRes = await fetch('/api/v1/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    updateMobileSettings.mutate(
+      {
+        profile: {
           communityId,
           fullName: name || undefined,
           phone: phone || null,
-        }),
-      });
-
-      if (!profileRes.ok) {
-        const body = await profileRes.json().catch(() => null);
-        throw new Error(
-          body?.error?.message ?? 'Failed to update profile',
-        );
-      }
-
-      // Update notification preferences
-      const prefsRes = await fetch('/api/v1/notification-preferences', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        },
+        notificationPreferences: {
           communityId,
           emailFrequency,
           emailAnnouncements,
@@ -206,25 +192,22 @@ export function MobileSettingsContent({
           calendarReminderCommunityAssessments,
           inAppEnabled,
           smsEnabled,
-        }),
-      });
-
-      if (!prefsRes.ok) {
-        const body = await prefsRes.json().catch(() => null);
-        throw new Error(
-          body?.error?.message ?? 'Failed to update notification preferences',
-        );
-      }
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
-      );
-    } finally {
-      setSaving(false);
-    }
+        },
+      },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3000);
+        },
+        onError: (err) => {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Something went wrong. Please try again.',
+          );
+        },
+      },
+    );
   }
 
   return (

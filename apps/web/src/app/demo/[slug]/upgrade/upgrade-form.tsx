@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
+import { useDemoSelfServiceUpgrade } from '@/hooks/use-demo-self-service-upgrade';
 
 interface PlanOption {
   id: string;
@@ -36,40 +37,39 @@ export function UpgradeForm({
   );
   const [email, setEmail] = useState('');
   const [customerName, setCustomerName] = useState(communityName);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const upgrade = useDemoSelfServiceUpgrade();
+  const isSubmitting = upgrade.isPending;
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedPlan || !email.trim()) return;
 
-    setIsSubmitting(true);
     setError(null);
 
-    try {
-      const res = await fetch(`/api/v1/demo/${slug}/self-service-upgrade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: selectedPlan,
-          customerEmail: email.trim(),
-          customerName: customerName.trim(),
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed (${res.status})`);
-      }
-
-      const { checkoutUrl } = await res.json();
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
-      setIsSubmitting(false);
-    }
+    upgrade.mutate(
+      {
+        slug,
+        planId: selectedPlan,
+        customerEmail: email.trim(),
+        customerName: customerName.trim(),
+      },
+      {
+        onSuccess: ({ checkoutUrl }) => {
+          if (checkoutUrl) {
+            window.location.href = checkoutUrl;
+          }
+        },
+        onError: (err) => {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Something went wrong. Please try again.',
+          );
+        },
+      },
+    );
   }
 
   return (

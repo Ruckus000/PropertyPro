@@ -135,10 +135,8 @@ function walkDirectory(dir: string, files: string[]): void {
 // ---------------------------------------------------------------------------
 
 const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
-  'apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx',
   'apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx',
   'apps/web/src/app/(authenticated)/settings/payments/connected/page.tsx',
-  'apps/web/src/app/demo/[slug]/upgrade/upgrade-form.tsx',
   'apps/web/src/components/access-requests/request-access-form.tsx',
   'apps/web/src/components/announcements/announcement-authoring-form.tsx',
   'apps/web/src/components/command-palette/useDataSearch.ts',
@@ -147,7 +145,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/finance/payment-portal.tsx',
   'apps/web/src/components/help/help-faq-manage-client.tsx',
   'apps/web/src/components/mobile/MobileFaqManageContent.tsx',
-  'apps/web/src/components/mobile/MobileSettingsContent.tsx',
   'apps/web/src/components/onboarding/apartment-wizard.tsx',
   'apps/web/src/components/onboarding/condo-wizard.tsx',
   'apps/web/src/components/onboarding/steps/profile-step.tsx',
