@@ -3,20 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-interface ResendSuccessData {
-  sent?: boolean;
-  cooldownSeconds?: number;
-  alreadyVerified?: boolean;
-  signupRequestId?: string;
-}
-
-interface ResendErrorData {
-  message?: string;
-  cooldownRemainingSeconds?: number;
-}
+import {
+  useConfirmVerification,
+  useResendVerification,
+} from '@/hooks/use-email-verification';
 
 const POLL_INTERVAL_MS = 5000;
+const DEFAULT_COOLDOWN_SECONDS = 120;
 
 export function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -33,23 +26,22 @@ export function VerifyEmailContent() {
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // TanStack's mutateAsync is referentially stable, so depend on it directly
+  // in the effect/callback dep arrays (no render-phase ref writes).
+  const { mutateAsync: confirmVerification } = useConfirmVerification();
+  const { mutateAsync: resendVerification } = useResendVerification();
+
   // Poll for email verification — auto-navigate to checkout when confirmed
   useEffect(() => {
     if (!signupRequestId || verified) return;
 
     async function checkVerification() {
       try {
-        const response = await fetch('/api/v1/auth/confirm-verification', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ signupRequestId }),
-        });
+        const response = await confirmVerification(signupRequestId);
 
         if (!response.ok) return; // Not verified yet or error — keep polling
 
-        const payload = (await response.json()) as {
-          data?: { success: boolean; signupRequestId: string };
-        };
+        const payload = response.body;
 
         if (payload.data?.success) {
           setVerified(true);
@@ -71,7 +63,7 @@ export function VerifyEmailContent() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [signupRequestId, verified, router]);
+  }, [signupRequestId, verified, router, confirmVerification]);
 
   // Cooldown tick
   useEffect(() => {
@@ -106,15 +98,11 @@ export function VerifyEmailContent() {
     setResendError(null);
 
     try {
-      const response = await fetch('/api/v1/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ signupRequestId }),
-      });
+      const response = await resendVerification(signupRequestId);
 
       if (response.status === 409) {
         // Already verified — redirect to checkout
-        const payload = (await response.json()) as { data?: ResendSuccessData };
+        const payload = response.body;
         if (payload.data?.alreadyVerified) {
           router.push(
             `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
@@ -124,32 +112,32 @@ export function VerifyEmailContent() {
       }
 
       if (response.status === 429) {
-        const payload = (await response.json()) as { error?: ResendErrorData };
-        const remaining = payload.error?.cooldownRemainingSeconds ?? 120;
+        const payload = response.body;
+        const remaining = payload.error?.cooldownRemainingSeconds ?? DEFAULT_COOLDOWN_SECONDS;
         setCooldownSeconds(remaining);
         return;
       }
 
       if (!response.ok) {
-        const payload = (await response.json()) as { error?: ResendErrorData };
+        const payload = response.body;
         setResendError(payload.error?.message ?? 'Unable to resend verification email.');
         return;
       }
 
-      const payload = (await response.json()) as { data?: ResendSuccessData };
+      const payload = response.body;
 
       // Show confirmation
       setShowResent(true);
       setTimeout(() => setShowResent(false), 4000);
 
       // Start cooldown
-      setCooldownSeconds(payload.data?.cooldownSeconds ?? 120);
+      setCooldownSeconds(payload.data?.cooldownSeconds ?? DEFAULT_COOLDOWN_SECONDS);
     } catch {
       setResendError('Unable to resend verification email. Please try again.');
     } finally {
       setIsResending(false);
     }
-  }, [signupRequestId, isResending, cooldownSeconds, router]);
+  }, [signupRequestId, isResending, cooldownSeconds, router, resendVerification]);
 
   // Missing signupRequestId
   if (!signupRequestId) {
