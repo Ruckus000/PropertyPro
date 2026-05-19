@@ -191,7 +191,17 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       const { ExportButton } = await import(
         '@/components/settings/export-button'
       );
-      const { container } = render(<ExportButton communityId={1} />);
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { container } = render(
+        <QueryClientProvider client={queryClient}>
+          <ExportButton communityId={1} />
+        </QueryClientProvider>,
+      );
       const results = await axe(container);
       expect(results).toHaveNoViolations();
     });
