@@ -96,6 +96,7 @@ export function useDataSearch(
         params.set('communityId', String(communityId));
       }
 
+      // Documented exception to the requestJson rule: abortable search — preserves AbortController swallow + bare status-code error
       fetch(`/api/v1/search?${params.toString()}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) {

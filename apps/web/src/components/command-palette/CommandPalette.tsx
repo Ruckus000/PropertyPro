@@ -33,7 +33,7 @@ import { CommandGroup } from './CommandGroup';
 import { CommandItem } from './CommandItem';
 import { CommandEmpty } from './CommandEmpty';
 import { CommandLoading } from './CommandLoading';
-import { useDataSearch, type DataSearchResult } from './useDataSearch';
+import { useDataSearch, type DataSearchResult } from '@/hooks/use-data-search';
 import { getEntityListPath } from './command-palette-paths';
 
 // ---------------------------------------------------------------------------
