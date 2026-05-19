@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useCompleteStripeConnect } from '@/hooks/use-stripe-connect-complete';
 
 type Status = 'exchanging' | 'success' | 'error';
 
@@ -19,6 +20,7 @@ export default function StripeConnectCallbackPage() {
   const [status, setStatus] = useState<Status>('exchanging');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const exchanged = useRef(false);
+  const completeMutation = useCompleteStripeConnect();
 
   useEffect(() => {
     if (exchanged.current) return;
@@ -49,16 +51,9 @@ export default function StripeConnectCallbackPage() {
       return;
     }
 
-    fetch('/api/v1/stripe/connect/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ communityId, code, state: stateRaw }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error?.message || 'Failed to complete Stripe setup');
-        }
+    completeMutation
+      .mutateAsync({ communityId, code, state: stateRaw })
+      .then(() => {
         setStatus('success');
         // Redirect to payments settings after short delay
         setTimeout(() => {
@@ -69,6 +64,7 @@ export default function StripeConnectCallbackPage() {
         setStatus('error');
         setErrorMsg(err instanceof Error ? err.message : 'Something went wrong');
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router]);
 
   if (status === 'exchanging') {
