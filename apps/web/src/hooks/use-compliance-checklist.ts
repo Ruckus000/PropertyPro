@@ -72,5 +72,11 @@ export function useComplianceChecklist(communityId: number) {
     queryKey: COMPLIANCE_CHECKLIST_QUERY_KEY(communityId),
     queryFn: ({ signal }) => fetchComplianceChecklist(communityId, signal),
     enabled: Number.isFinite(communityId) && communityId > 0,
+    // The queryFn POSTs to initialize server state, so it must NOT re-run on
+    // window focus (default TanStack behavior) — that would re-POST on every
+    // tab switch. The original inline `useEffect` ran only on mount / id
+    // change; mirror that with no focus refetch + a sensible stale window.
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }

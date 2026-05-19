@@ -1,5 +1,9 @@
 import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { createElement, type PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -195,6 +199,29 @@ describe('useComplianceChecklist', () => {
       'Failed to load compliance checklist',
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT re-POST on window refocus (queryFn has a POST side-effect)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(201, { data: [] }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: [] }));
+
+    const { result } = renderHook(() => useComplianceChecklist(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(2); // POST + GET, once
+
+    // Simulate the user blurring then refocusing the tab.
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // refetchOnWindowFocus:false + staleTime keeps it at the original 2 calls
+    // — no repeated POST init on every tab switch.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    focusManager.setFocused(undefined);
   });
 
   it('refetches when communityId changes', async () => {
