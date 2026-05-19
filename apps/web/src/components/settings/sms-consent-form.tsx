@@ -2,6 +2,11 @@
 import React, { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { formatPhoneDisplay } from '@/lib/utils/phone';
+import {
+  useSendPhoneVerification,
+  useConfirmPhoneVerification,
+  useSetSmsConsent,
+} from '@/hooks/use-phone-verification';
 
 interface Props {
   communityId: number;
@@ -36,22 +41,17 @@ export function SmsConsentForm({
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(phoneVerified);
 
+  const sendMutation = useSendPhoneVerification();
+  const confirmMutation = useConfirmPhoneVerification();
+  const consentMutation = useSetSmsConsent();
+
   async function handleSendOtp(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/v1/phone/verify/send', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? 'Failed to send verification code');
-      }
+      await sendMutation.mutateAsync({ phone });
 
       setStep('verify_otp');
     } catch (err) {
@@ -67,16 +67,7 @@ export function SmsConsentForm({
     setError(null);
 
     try {
-      const res = await fetch('/api/v1/phone/verify/confirm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone, code: otpCode }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? 'Invalid verification code');
-      }
+      await confirmMutation.mutateAsync({ phone, code: otpCode });
 
       setVerified(true);
       setStep('consent');
@@ -92,17 +83,7 @@ export function SmsConsentForm({
     setError(null);
 
     try {
-      const res = await fetch('/api/v1/notification-preferences', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          smsEnabled: enabled,
-          smsEmergencyOnly: true,
-        }),
-      });
-
-      if (!res.ok) throw new Error('Failed to update SMS preferences');
+      await consentMutation.mutateAsync({ communityId, smsEnabled: enabled });
 
       onConsentChange(enabled);
     } catch (err) {
