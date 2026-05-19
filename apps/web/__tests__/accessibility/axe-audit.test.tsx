@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { axe } from 'vitest-axe';
 
 // ---------------------------------------------------------------------------
@@ -88,8 +89,16 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       const { SetPasswordForm } = await import(
         '@/components/auth/set-password-form'
       );
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
       const { container } = render(
-        <SetPasswordForm token="test-token" communityId={1} />,
+        <QueryClientProvider client={queryClient}>
+          <SetPasswordForm token="test-token" communityId={1} />
+        </QueryClientProvider>,
       );
       const results = await axe(container);
       expect(results).toHaveNoViolations();

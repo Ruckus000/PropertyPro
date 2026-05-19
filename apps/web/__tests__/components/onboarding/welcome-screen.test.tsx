@@ -1,9 +1,23 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import type { PropsWithChildren } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../../src/components/onboarding/welcome-screen';
 
 const { mockPush } = vi.hoisted(() => ({ mockPush: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
+
+// WelcomeScreen now sources its checklist bootstrap from the
+// use-onboarding-checklist TanStack mutation hook, so it must render inside
+// a QueryClientProvider.
+function Wrapper({ children }: PropsWithChildren) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 const baseProps = {
   firstName: 'Alex',
@@ -30,11 +44,29 @@ describe('WelcomeScreen — dashboard CTA', () => {
   });
 
   it('navigates to the community-scoped dashboard', async () => {
-    render(<WelcomeScreen {...baseProps} />);
+    render(
+      <Wrapper>
+        <WelcomeScreen {...baseProps} />
+      </Wrapper>,
+    );
     fireEvent.click(screen.getByRole('button', { name: /go to your dashboard/i }));
-    // fetch resolves on the same tick; navigation happens next microtask
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(mockPush).toHaveBeenCalledWith('/dashboard?communityId=42');
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/dashboard?communityId=42'),
+    );
+  });
+
+  it('still navigates when the checklist bootstrap POST fails', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.reject(new Error('network')),
+    ) as unknown as typeof fetch;
+    render(
+      <Wrapper>
+        <WelcomeScreen {...baseProps} />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /go to your dashboard/i }));
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/dashboard?communityId=42'),
+    );
   });
 });

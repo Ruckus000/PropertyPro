@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   FileUp,
   Link2,
@@ -11,43 +10,7 @@ import {
   Clock,
 } from "lucide-react";
 import { ComplianceActivityHistoryModal } from "./compliance-activity-history-modal";
-
-// ── Types ───────────────────────────────────────────
-
-interface AuditEntry {
-  id: number;
-  userId: string | null;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  metadata: Record<string, unknown> | null;
-  createdAt: string; // ISO
-}
-
-interface ActivityFeedResponse {
-  data: AuditEntry[];
-  pagination: {
-    nextCursor: string | null;
-    hasMore: boolean;
-  };
-  users: Record<string, string>;
-}
-
-interface ActivityFeedEnvelope {
-  data:
-    | ActivityFeedResponse
-    | AuditEntry[];
-  pagination?: ActivityFeedResponse["pagination"];
-  users?: Record<string, string>;
-}
-
-class ActivityFetchError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+import { useComplianceActivityFeed } from "@/hooks/use-compliance-activity";
 
 // ── Helpers ─────────────────────────────────────────
 
@@ -101,44 +64,6 @@ function actionDotColor(action: string): string {
   }
 }
 
-function isAuditEntry(value: unknown): value is AuditEntry {
-  const entry = value as Partial<AuditEntry>;
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    typeof entry.id === "number" &&
-    (typeof entry.userId === "string" || entry.userId === null) &&
-    typeof entry.action === "string" &&
-    typeof entry.resourceType === "string" &&
-    typeof entry.resourceId === "string" &&
-    (entry.metadata === null || (typeof entry.metadata === "object" && !Array.isArray(entry.metadata))) &&
-    typeof entry.createdAt === "string"
-  );
-}
-
-function normalizeActivityFeedResponse(payload: unknown): ActivityFeedResponse {
-  const envelope = payload as ActivityFeedEnvelope;
-  const inner = envelope?.data;
-
-  if (Array.isArray(inner)) {
-    return {
-      data: inner.filter(isAuditEntry),
-      pagination: envelope.pagination ?? { nextCursor: null, hasMore: false },
-      users: envelope.users ?? {},
-    };
-  }
-
-  if (inner && typeof inner === "object" && Array.isArray(inner.data)) {
-    return {
-      data: inner.data.filter(isAuditEntry),
-      pagination: inner.pagination ?? { nextCursor: null, hasMore: false },
-      users: inner.users ?? {},
-    };
-  }
-
-  throw new ActivityFetchError(200, "Invalid activity response");
-}
-
 // ── Component ───────────────────────────────────────
 
 export interface ComplianceActivityFeedProps {
@@ -148,18 +73,7 @@ export interface ComplianceActivityFeedProps {
 export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedProps) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
 
-  const { data, isLoading, error } = useQuery<ActivityFeedResponse, ActivityFetchError>({
-    queryKey: ["compliance-activity", communityId],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/audit-trail?communityId=${communityId}&limit=8`);
-      if (!res.ok) {
-        throw new ActivityFetchError(res.status, "Failed to load activity");
-      }
-      return normalizeActivityFeedResponse(await res.json());
-    },
-    staleTime: 2 * 60_000, // 2 minutes
-    retry: false,
-  });
+  const { data, isLoading, error } = useComplianceActivityFeed(communityId);
 
   // Defensive: deduplicate by ID in case the API ever returns duplicate rows.
   const entries = React.useMemo(() => {
