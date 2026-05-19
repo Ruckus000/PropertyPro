@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CondoWizard } from '../../../src/components/onboarding/condo-wizard';
+
+function withClient(node: React.ReactNode) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>;
+}
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -63,7 +71,7 @@ describe('CondoWizard', () => {
 
     it('fresh state renders step 0 profile form', async () => {
         await act(async () => {
-            root.render(<CondoWizard communityId={42} communityType="condo_718" />);
+            root.render(withClient(<CondoWizard communityId={42} communityType="condo_718" />));
             await flushEffects();
         });
 
@@ -77,26 +85,28 @@ describe('CondoWizard', () => {
     it('resume from lastCompletedStep=1 (nextStep=1) lands on compliance preview', async () => {
         await act(async () => {
             root.render(
-                <CondoWizard
-                    communityId={42}
-                    communityType="condo_718"
-                    initialState={{
-                        status: 'in_progress',
-                        lastCompletedStep: 0,
-                        nextStep: 1,
-                        completedAt: null,
-                        stepData: {
-                            profile: {
-                                name: 'Test Condo',
-                                addressLine1: '123 Test St',
-                                city: 'Miami',
-                                state: 'FL',
-                                zipCode: '33101',
-                                timezone: 'America/New_York',
+                withClient(
+                    <CondoWizard
+                        communityId={42}
+                        communityType="condo_718"
+                        initialState={{
+                            status: 'in_progress',
+                            lastCompletedStep: 0,
+                            nextStep: 1,
+                            completedAt: null,
+                            stepData: {
+                                profile: {
+                                    name: 'Test Condo',
+                                    addressLine1: '123 Test St',
+                                    city: 'Miami',
+                                    state: 'FL',
+                                    zipCode: '33101',
+                                    timezone: 'America/New_York',
+                                },
                             },
-                        },
-                    }}
-                />,
+                        }}
+                    />,
+                ),
             );
             await flushEffects();
         });
@@ -112,26 +122,28 @@ describe('CondoWizard', () => {
     it('clamps malformed persisted nextStep to the last valid step (compliance preview)', async () => {
         await act(async () => {
             root.render(
-                <CondoWizard
-                    communityId={42}
-                    communityType="condo_718"
-                    initialState={{
-                        status: 'in_progress',
-                        lastCompletedStep: 0,
-                        nextStep: 99,
-                        completedAt: null,
-                        stepData: {
-                            profile: {
-                                name: 'Clamped Condo',
-                                addressLine1: '123 Test St',
-                                city: 'Miami',
-                                state: 'FL',
-                                zipCode: '33101',
-                                timezone: 'America/New_York',
+                withClient(
+                    <CondoWizard
+                        communityId={42}
+                        communityType="condo_718"
+                        initialState={{
+                            status: 'in_progress',
+                            lastCompletedStep: 0,
+                            nextStep: 99,
+                            completedAt: null,
+                            stepData: {
+                                profile: {
+                                    name: 'Clamped Condo',
+                                    addressLine1: '123 Test St',
+                                    city: 'Miami',
+                                    state: 'FL',
+                                    zipCode: '33101',
+                                    timezone: 'America/New_York',
+                                },
                             },
-                        },
-                    }}
-                />,
+                        }}
+                    />,
+                ),
             );
             await flushEffects();
         });
@@ -150,17 +162,19 @@ describe('CondoWizard', () => {
 
         await act(async () => {
             root.render(
-                <CondoWizard
-                    communityId={42}
-                    communityType="condo_718"
-                    initialState={{
-                        status: 'in_progress',
-                        lastCompletedStep: 0,
-                        nextStep: 1,
-                        completedAt: null,
-                        stepData: {},
-                    }}
-                />,
+                withClient(
+                    <CondoWizard
+                        communityId={42}
+                        communityType="condo_718"
+                        initialState={{
+                            status: 'in_progress',
+                            lastCompletedStep: 0,
+                            nextStep: 1,
+                            completedAt: null,
+                            stepData: {},
+                        }}
+                    />,
+                ),
             );
             await flushEffects();
         });
@@ -200,7 +214,7 @@ describe('CondoWizard', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         await act(async () => {
-            root.render(<CondoWizard communityId={42} communityType="condo_718" />);
+            root.render(withClient(<CondoWizard communityId={42} communityType="condo_718" />));
             await flushEffects();
         });
 

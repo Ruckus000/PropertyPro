@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApartmentWizard } from '../../../src/components/onboarding/apartment-wizard';
+
+function withClient(node: React.ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>;
+}
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -67,7 +75,7 @@ describe('apartment wizard', () => {
 
   it('fresh state renders step 0 profile form', async () => {
     await act(async () => {
-      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
+      root.render(withClient(<ApartmentWizard communityId={42} communityType="apartment" />));
       await flushEffects();
     });
 
@@ -81,26 +89,28 @@ describe('apartment wizard', () => {
   it('resume from nextStep=1 lands on compliance preview', async () => {
     await act(async () => {
       root.render(
-        <ApartmentWizard
-          communityId={42}
-          communityType="apartment"
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 0,
-            nextStep: 1,
-            completedAt: null,
-            stepData: {
-              profile: {
-                name: 'Test Community',
-                addressLine1: '123 Test St',
-                city: 'Miami',
-                state: 'FL',
-                zipCode: '33101',
-                timezone: 'America/New_York',
+        withClient(
+          <ApartmentWizard
+            communityId={42}
+            communityType="apartment"
+            initialState={{
+              status: 'in_progress',
+              lastCompletedStep: 0,
+              nextStep: 1,
+              completedAt: null,
+              stepData: {
+                profile: {
+                  name: 'Test Community',
+                  addressLine1: '123 Test St',
+                  city: 'Miami',
+                  state: 'FL',
+                  zipCode: '33101',
+                  timezone: 'America/New_York',
+                },
               },
-            },
-          }}
-        />,
+            }}
+          />,
+        ),
       );
       await flushEffects();
     });
@@ -116,17 +126,19 @@ describe('apartment wizard', () => {
   it('clamps malformed persisted nextStep to the last valid step (compliance preview)', async () => {
     await act(async () => {
       root.render(
-        <ApartmentWizard
-          communityId={42}
-          communityType="apartment"
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 0,
-            nextStep: 99,
-            completedAt: null,
-            stepData: {},
-          }}
-        />,
+        withClient(
+          <ApartmentWizard
+            communityId={42}
+            communityType="apartment"
+            initialState={{
+              status: 'in_progress',
+              lastCompletedStep: 0,
+              nextStep: 99,
+              completedAt: null,
+              stepData: {},
+            }}
+          />,
+        ),
       );
       await flushEffects();
     });
@@ -145,17 +157,19 @@ describe('apartment wizard', () => {
 
     await act(async () => {
       root.render(
-        <ApartmentWizard
-          communityId={42}
-          communityType="apartment"
-          initialState={{
-            status: 'in_progress',
-            lastCompletedStep: 0,
-            nextStep: 1,
-            completedAt: null,
-            stepData: {},
-          }}
-        />,
+        withClient(
+          <ApartmentWizard
+            communityId={42}
+            communityType="apartment"
+            initialState={{
+              status: 'in_progress',
+              lastCompletedStep: 0,
+              nextStep: 1,
+              completedAt: null,
+              stepData: {},
+            }}
+          />,
+        ),
       );
       await flushEffects();
     });
@@ -189,7 +203,7 @@ describe('apartment wizard', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await act(async () => {
-      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
+      root.render(withClient(<ApartmentWizard communityId={42} communityType="apartment" />));
       await flushEffects();
     });
 
@@ -246,7 +260,7 @@ describe('apartment wizard', () => {
 
   it('only 2 steps are shown in the progress indicator', async () => {
     await act(async () => {
-      root.render(<ApartmentWizard communityId={42} communityType="apartment" />);
+      root.render(withClient(<ApartmentWizard communityId={42} communityType="apartment" />));
       await flushEffects();
     });
 
