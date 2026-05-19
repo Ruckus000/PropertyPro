@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  useSubmitAccessRequest,
+  useVerifyAccessRequest,
+} from '@/hooks/use-access-request-form';
 
 type FormState = 'idle' | 'submitting' | 'otp_input' | 'verifying' | 'success';
 
@@ -35,6 +39,9 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const submitMutation = useSubmitAccessRequest();
+  const verifyMutation = useVerifyAccessRequest();
+
   function validateForm(): boolean {
     const errors: FieldErrors = {};
     if (!fullName.trim()) errors.fullName = 'Full name is required.';
@@ -54,28 +61,18 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
 
     setState('submitting');
     try {
-      const res = await fetch('/api/v1/access-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          communitySlug,
-          email,
-          fullName,
-          phone: undefined,
-          claimedUnitNumber: unitNumber.trim() || undefined,
-          isUnitOwner,
-          refCode,
-        }),
+      const result = await submitMutation.mutateAsync({
+        communityId,
+        communitySlug,
+        email,
+        fullName,
+        phone: undefined,
+        claimedUnitNumber: unitNumber.trim() || undefined,
+        isUnitOwner,
+        refCode,
       });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { message?: string }).message ?? 'Something went wrong. Please try again.');
-      }
-
-      const body = await res.json() as { data: { requestId: number } };
-      setRequestId(body.data.requestId);
+      setRequestId(result.requestId);
       setState('otp_input');
     } catch (err) {
       setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -96,16 +93,7 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
     setState('verifying');
 
     try {
-      const res = await fetch('/api/v1/access-requests/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId, otp, communityId }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { message?: string }).message ?? 'Verification failed. Please try again.');
-      }
+      await verifyMutation.mutateAsync({ requestId, otp, communityId });
 
       setState('success');
     } catch (err) {
