@@ -118,6 +118,15 @@ describe('DocumentSearch (presenter)', () => {
     expect(runSearchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('does not call runSearch on Enter-submit while isPending', () => {
+    setHookState({ isPending: true });
+    const { container } = render(<DocumentSearch communityId={1} />);
+    const form = container.querySelector('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    expect(runSearchMock).not.toHaveBeenCalled();
+  });
+
   it('does not auto-search when initialQuery is absent', () => {
     setHookState();
     render(<DocumentSearch communityId={1} />);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 
 export interface DocumentSearchRecord {
   id: number;
@@ -34,7 +34,16 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const runSearch = (query: string, cursor?: number | null) => {
+  // Reset transient state when the community changes — matches the
+  // hook-authoring checklist (clear keyed-id state) so a tenant switch
+  // doesn't show the previous community's results/error.
+  useEffect(() => {
+    setItems([]);
+    setNextCursor(null);
+    setError(null);
+  }, [communityId]);
+
+  const runSearch = useCallback((query: string, cursor?: number | null) => {
     startTransition(async () => {
       try {
         setError(null);
@@ -61,7 +70,11 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
         setError(err instanceof Error ? err.message : 'Search failed');
       }
     });
-  };
+    // NOTE: pagination intentionally uses the live `query` arg (preserved
+    // verbatim from the original component). The "Load more"-after-edit
+    // query/cursor mismatch is a pre-existing bug filed as a separate
+    // follow-up — out of scope for this behavior-preserving drain.
+  }, [communityId]);
 
   return { items, nextCursor, error, isPending, runSearch };
 }

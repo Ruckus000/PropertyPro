@@ -145,4 +145,26 @@ describe('useDocumentSearch', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.items).toHaveLength(1);
   });
+
+  it('resets items/nextCursor/error when communityId changes', async () => {
+    fetchMock.mockResolvedValueOnce(
+      okResponse([makeRecord(1), makeRecord(2)], 7),
+    );
+    const { result, rerender } = renderHook(
+      ({ cid }: { cid: number }) => useDocumentSearch(cid),
+      { initialProps: { cid: 1 } },
+    );
+
+    await act(async () => {
+      result.current.runSearch('cats', null);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+    expect(result.current.nextCursor).toBe(7);
+
+    rerender({ cid: 2 });
+
+    await waitFor(() => expect(result.current.items).toHaveLength(0));
+    expect(result.current.nextCursor).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
 });

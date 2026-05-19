@@ -31,6 +31,9 @@ export function DocumentSearch({ communityId, initialQuery }: DocumentSearchProp
         className="flex gap-2"
         onSubmit={(event) => {
           event.preventDefault();
+          // Guard the Enter-key path: the submit button is disabled while
+          // pending, but Enter can still fire onSubmit in some browsers.
+          if (isPending) return;
           runSearch(query, null);
         }}
       >
