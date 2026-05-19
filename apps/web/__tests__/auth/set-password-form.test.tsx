@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { type PropsWithChildren } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { signInWithPasswordMock } = vi.hoisted(() => ({
@@ -16,6 +17,17 @@ vi.mock('@propertypro/db/supabase/client', () => ({
 
 import { SetPasswordForm } from '../../src/components/auth/set-password-form';
 
+// SetPasswordForm now sources the invitation PATCH from the use-invitations
+// TanStack mutation hook, so it must render inside a QueryClientProvider.
+function Wrapper({ children }: PropsWithChildren) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
+
 describe('SetPasswordForm', () => {
   beforeEach(() => {
     signInWithPasswordMock.mockReset();
@@ -23,7 +35,11 @@ describe('SetPasswordForm', () => {
   });
 
   it('clears stale password validation errors when the password changes', async () => {
-    render(<SetPasswordForm token="invite-token" communityId={1} />);
+    render(
+      <Wrapper>
+        <SetPasswordForm token="invite-token" communityId={1} />
+      </Wrapper>,
+    );
     const form = screen.getByTestId('set-password-form');
 
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'abcdefgh' } });

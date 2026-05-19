@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface ChecklistItem {
   id: number;
@@ -57,4 +57,25 @@ export function useOnboardingChecklist(communityId: number | null) {
   }, [communityId, query.isSuccess, query.data, queryClient]);
 
   return query;
+}
+
+/**
+ * Fire-and-forget bootstrap of the onboarding checklist for a community.
+ * Used by the welcome screen's "Go to dashboard" CTA; failures are
+ * intentionally non-blocking (the dashboard's useOnboardingChecklist
+ * self-heals via its own bootstrap effect).
+ */
+export function useBootstrapOnboardingChecklist() {
+  return useMutation<void, Error, number>({
+    // Documented exception to the requestJson rule: this is a non-blocking
+    // fire-and-forget POST whose response is intentionally ignored; raw
+    // fetch keeps the swallow-all-errors semantics the caller depends on.
+    mutationFn: async (communityId: number) => {
+      await fetch('/api/v1/onboarding/checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId }),
+      });
+    },
+  });
 }

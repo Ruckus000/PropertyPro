@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useBootstrapOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import {
   OwnerCards,
   BoardMemberCards,
@@ -114,6 +115,7 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
+  const bootstrapChecklist = useBootstrapOnboardingChecklist();
 
   const roleLabel = getRoleGreeting(role);
   const subtext = getRoleSubtext(role, community.name);
@@ -122,12 +124,8 @@ export function WelcomeScreen({
   async function handleGoToDashboard() {
     setIsNavigating(true);
     try {
-      // Bootstrap checklist items via POST to the API
-      await fetch('/api/v1/onboarding/checklist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ communityId }),
-      });
+      // Bootstrap checklist items via the onboarding-checklist hook.
+      await bootstrapChecklist.mutateAsync(communityId);
     } catch {
       // Non-blocking: checklist bootstrap failure should not prevent navigation
     }

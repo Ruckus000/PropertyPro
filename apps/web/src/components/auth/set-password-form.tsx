@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PASSWORD_POLICY } from '@propertypro/shared';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
+import { useAcceptInvitation } from '@/hooks/use-invitations';
 
 interface Props {
   token: string;
@@ -25,6 +26,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const acceptInvitation = useAcceptInvitation();
 
   function handlePasswordChange(value: string): void {
     setPassword(value);
@@ -55,29 +57,17 @@ export function SetPasswordForm({ token, communityId }: Props) {
     }
 
     setLoading(true);
+
+    let email: string;
     try {
-      const res = await fetch('/api/v1/invitations', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, communityId, password }),
-      });
+      email = await acceptInvitation.mutateAsync({ token, communityId, password });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept invitation.');
+      setLoading(false);
+      return;
+    }
 
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: { code?: string; message?: string } };
-        if (json?.error?.code === 'TOKEN_USED') {
-          setError('This invitation link has already been used.');
-        } else if (json?.error?.code === 'TOKEN_EXPIRED') {
-          setError('This invitation link has expired.');
-        } else {
-          setError(json?.error?.message ?? 'Failed to accept invitation.');
-        }
-        setLoading(false);
-        return;
-      }
-
-      const json = (await res.json()) as { data: { email: string } };
-      const email = json.data.email;
-
+    try {
       // Sign in the user with the new credentials
       const supabase = createBrowserClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
