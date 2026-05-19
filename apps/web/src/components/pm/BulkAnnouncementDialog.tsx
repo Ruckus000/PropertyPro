@@ -6,7 +6,7 @@
  * Uses shadcn Dialog, TanStack Mutation, and the bulk announcements API.
  */
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useBulkAnnouncements } from '@/hooks/use-bulk-announcements';
 import {
   Dialog,
   DialogContent,
@@ -41,17 +41,6 @@ interface BulkAnnouncementDialogProps {
   onClose: () => void;
 }
 
-interface BulkResult {
-  communityId: number;
-  communityName: string;
-  status: 'sent' | 'failed';
-  error?: string;
-}
-
-interface BulkAnnouncementResponse {
-  results: BulkResult[];
-}
-
 type Audience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
 // ---------------------------------------------------------------------------
@@ -71,40 +60,33 @@ export function BulkAnnouncementDialog({
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [resultIsError, setResultIsError] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/v1/pm/bulk/announcements', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityIds: selectedCommunities.map((c) => c.id),
-          title,
-          body,
-          audience,
-          isPinned,
-        }),
-      });
+  const mutation = useBulkAnnouncements();
 
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: { message?: string } };
-        throw new Error(json.error?.message ?? 'Failed to send bulk announcement');
-      }
-
-      return (await res.json()) as BulkAnnouncementResponse;
-    },
-    onSuccess: (data) => {
-      const sent = data.results.filter((r) => r.status === 'sent').length;
-      const total = data.results.length;
-      setResultMessage(`Sent to ${sent}/${total} communities`);
-      setResultIsError(false);
-      setShowConfirm(false);
-    },
-    onError: (error: Error) => {
-      setResultMessage(error.message);
-      setResultIsError(true);
-      setShowConfirm(false);
-    },
-  });
+  function runMutation() {
+    mutation.mutate(
+      {
+        communityIds: selectedCommunities.map((c) => c.id),
+        title,
+        body,
+        audience,
+        isPinned,
+      },
+      {
+        onSuccess: (data) => {
+          const sent = data.results.filter((r) => r.status === 'sent').length;
+          const total = data.results.length;
+          setResultMessage(`Sent to ${sent}/${total} communities`);
+          setResultIsError(false);
+          setShowConfirm(false);
+        },
+        onError: (error: Error) => {
+          setResultMessage(error.message);
+          setResultIsError(true);
+          setShowConfirm(false);
+        },
+      },
+    );
+  }
 
   function resetForm() {
     setTitle('');
@@ -129,7 +111,7 @@ export function BulkAnnouncementDialog({
   }
 
   function handleConfirm() {
-    mutation.mutate();
+    runMutation();
   }
 
   const isFormValid = title.trim().length > 0 && body.trim().length > 0;
