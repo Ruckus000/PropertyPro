@@ -56,8 +56,16 @@ export function useSubmitAccessRequest() {
         );
       }
 
-      const body = (await res.json()) as { data: { requestId: number } };
-      return { requestId: body.data.requestId };
+      // Defensive: a malformed/empty 2xx body must surface the intended
+      // literal, not a raw TypeError/SyntaxError.
+      const body = (await res.json().catch(() => ({}))) as {
+        data?: { requestId?: number };
+      };
+      const requestId = body?.data?.requestId;
+      if (typeof requestId !== 'number') {
+        throw new Error('Something went wrong. Please try again.');
+      }
+      return { requestId };
     },
   });
 }
@@ -67,11 +75,11 @@ export function useSubmitAccessRequest() {
  */
 export function useVerifyAccessRequest() {
   return useMutation<void, Error, VerifyAccessRequestPayload>({
-    mutationFn: async ({ requestId, otp, communityId }) => {
+    mutationFn: async (payload) => {
       const res = await fetch('/api/v1/access-requests/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId, otp, communityId }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {

@@ -125,6 +125,22 @@ describe('useSubmitAccessRequest', () => {
       'Something went wrong. Please try again.',
     );
   });
+
+  it('throws the exact fallback literal on a 2xx body missing data.requestId', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useSubmitAccessRequest(), { wrapper });
+    result.current.mutate(submitPayload);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Something went wrong. Please try again.',
+    );
+  });
 });
 
 describe('useVerifyAccessRequest', () => {
