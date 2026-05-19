@@ -9,6 +9,7 @@ import {
 } from '@/hooks/use-email-verification';
 
 const POLL_INTERVAL_MS = 5000;
+const DEFAULT_COOLDOWN_SECONDS = 120;
 
 export function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -25,16 +26,10 @@ export function VerifyEmailContent() {
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // TanStack's mutateAsync is referentially stable, so depend on it directly
+  // in the effect/callback dep arrays (no render-phase ref writes).
   const { mutateAsync: confirmVerification } = useConfirmVerification();
   const { mutateAsync: resendVerification } = useResendVerification();
-
-  // TanStack's mutateAsync is referentially stable, but we hold it in refs so
-  // the poll/resend effect+callback dependency arrays stay exactly as before
-  // (no mutation objects added to deps).
-  const confirmVerificationRef = useRef(confirmVerification);
-  confirmVerificationRef.current = confirmVerification;
-  const resendVerificationRef = useRef(resendVerification);
-  resendVerificationRef.current = resendVerification;
 
   // Poll for email verification — auto-navigate to checkout when confirmed
   useEffect(() => {
@@ -42,7 +37,7 @@ export function VerifyEmailContent() {
 
     async function checkVerification() {
       try {
-        const response = await confirmVerificationRef.current(signupRequestId);
+        const response = await confirmVerification(signupRequestId);
 
         if (!response.ok) return; // Not verified yet or error — keep polling
 
@@ -68,7 +63,7 @@ export function VerifyEmailContent() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [signupRequestId, verified, router]);
+  }, [signupRequestId, verified, router, confirmVerification]);
 
   // Cooldown tick
   useEffect(() => {
@@ -103,7 +98,7 @@ export function VerifyEmailContent() {
     setResendError(null);
 
     try {
-      const response = await resendVerificationRef.current(signupRequestId);
+      const response = await resendVerification(signupRequestId);
 
       if (response.status === 409) {
         // Already verified — redirect to checkout
@@ -118,7 +113,7 @@ export function VerifyEmailContent() {
 
       if (response.status === 429) {
         const payload = response.body;
-        const remaining = payload.error?.cooldownRemainingSeconds ?? 120;
+        const remaining = payload.error?.cooldownRemainingSeconds ?? DEFAULT_COOLDOWN_SECONDS;
         setCooldownSeconds(remaining);
         return;
       }
@@ -136,13 +131,13 @@ export function VerifyEmailContent() {
       setTimeout(() => setShowResent(false), 4000);
 
       // Start cooldown
-      setCooldownSeconds(payload.data?.cooldownSeconds ?? 120);
+      setCooldownSeconds(payload.data?.cooldownSeconds ?? DEFAULT_COOLDOWN_SECONDS);
     } catch {
       setResendError('Unable to resend verification email. Please try again.');
     } finally {
       setIsResending(false);
     }
-  }, [signupRequestId, isResending, cooldownSeconds, router]);
+  }, [signupRequestId, isResending, cooldownSeconds, router, resendVerification]);
 
   // Missing signupRequestId
   if (!signupRequestId) {
