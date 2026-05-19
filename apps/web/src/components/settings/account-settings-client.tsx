@@ -2,9 +2,14 @@
 
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, Check, User, Lock, Shield, Trash2, Clock } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@/lib/supabase/client';
+import {
+  useUpdateProfile,
+  useDeletionStatus,
+  useRequestAccountDeletion,
+  useCancelAccountDeletion,
+} from '@/hooks/use-account-settings';
 import {
   Dialog,
   DialogContent,
@@ -72,6 +77,7 @@ export function AccountSettingsClient({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState(false);
+  const updateProfile = useUpdateProfile();
 
   // ── Password state ─────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
@@ -98,31 +104,27 @@ export function AccountSettingsClient({
 
     setProfileLoading(true);
 
-    try {
-      const res = await fetch('/api/v1/account/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          phone: phone.trim() || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        setProfileError(json?.error?.message ?? 'Failed to update profile. Please try again.');
-        return;
-      }
-
-      setProfileSuccess(true);
-      setTimeout(() => setProfileSuccess(false), 5000);
-    } catch {
-      setProfileError('An unexpected error occurred. Please try again.');
-    } finally {
-      setProfileLoading(false);
-    }
+    updateProfile.mutate(
+      {
+        fullName: fullName.trim(),
+        phone: phone.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setProfileSuccess(true);
+          setTimeout(() => setProfileSuccess(false), 5000);
+          setProfileLoading(false);
+        },
+        onError: (error) => {
+          setProfileError(
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred. Please try again.',
+          );
+          setProfileLoading(false);
+        },
+      },
+    );
   }
 
   // ── Password handlers ──────────────────────────
@@ -433,13 +435,6 @@ export function AccountSettingsClient({
 
 // ── Danger Zone / Account Deletion ─────────────────────────
 
-interface DeletionRequest {
-  id: number;
-  status: 'cooling' | 'recovering' | 'purging' | 'completed' | 'canceled';
-  coolingEndsAt: string;
-  createdAt: string;
-}
-
 function getDaysUntil(dateStr: string): number {
   const target = new Date(dateStr);
   const now = new Date();
@@ -450,61 +445,16 @@ function getDaysUntil(dateStr: string): number {
 function DangerZoneSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
-  const queryClient = useQueryClient();
   const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
 
   // Fetch active deletion request
-  const { data: deletionRequest, isLoading } = useQuery<DeletionRequest | null>({
-    queryKey: ['account-deletion-request'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/account/delete');
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error('Failed to fetch deletion status');
-      const json = await res.json();
-      return json.data ?? null;
-    },
-  });
+  const { data: deletionRequest, isLoading } = useDeletionStatus();
 
   // Request deletion
-  const requestDeletion = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/v1/account/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(json?.error?.message ?? 'Failed to request account deletion.');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['account-deletion-request'] });
-      setDialogOpen(false);
-      setConfirmText('');
-    },
-  });
+  const requestDeletion = useRequestAccountDeletion();
 
   // Cancel deletion
-  const cancelDeletion = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/v1/account/delete', {
-        method: 'DELETE',
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(json?.error?.message ?? 'Failed to cancel account deletion.');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['account-deletion-request'] });
-    },
-  });
+  const cancelDeletion = useCancelAccountDeletion();
 
   const hasCoolingRequest = deletionRequest?.status === 'cooling';
 
@@ -666,7 +616,13 @@ function DangerZoneSection() {
                 setDialogOpen(false);
                 setConfirmText('');
                 const confirmed = await triggerReauth();
-                if (confirmed) requestDeletion.mutate();
+                if (confirmed)
+                  requestDeletion.mutate(undefined, {
+                    onSuccess: () => {
+                      setDialogOpen(false);
+                      setConfirmText('');
+                    },
+                  });
               }}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
