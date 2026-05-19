@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Loader2, ShieldCheck, Eye } from 'lucide-react';
 import {
@@ -47,13 +47,10 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
   // message falls back to the network literal.
   const [transientError, setTransientError] = useState('');
 
-  // Reset transient (mutation) error when the community changes.
-  const lastCommunityIdRef = useRef(communityId);
+  // Reset the transient (mutation) error when the community changes —
+  // mirrors the pre-B5 fetchData() which cleared the error on each load.
   useEffect(() => {
-    if (lastCommunityIdRef.current !== communityId) {
-      lastCommunityIdRef.current = communityId;
-      setTransientError('');
-    }
+    setTransientError('');
   }, [communityId]);
 
   const queryError = query.error

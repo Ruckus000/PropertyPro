@@ -132,6 +132,22 @@ describe('useSupportAccess', () => {
     );
   });
 
+  it('throws the load literal when a 200 success body is not JSON (no silent {})', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => {
+        throw new Error('not json');
+      },
+    });
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useSupportAccess(42), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Failed to load support access settings',
+    );
+  });
+
   it('refetches with the new id when communityId changes', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => SAMPLE });
     const { wrapper } = makeWrapper();

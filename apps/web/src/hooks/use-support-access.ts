@@ -52,15 +52,22 @@ export function useSupportAccess(communityId: number) {
         signal,
       });
       // Documented exception to the requestJson rule: GET returns flat
-      // { consentActive, consent, recentAccess }, not { data }
-      const body = await res.json().catch(() => ({}));
+      // { consentActive, consent, recentAccess }, not { data }. Check
+      // res.ok BEFORE parsing and read the success body exactly once; a
+      // non-JSON/empty success body throws the load literal rather than a
+      // silent `{}` that would crash the component on data.recentAccess.
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
         throw new Error(
           (body as { error?: { message?: string } }).error?.message ??
             'Failed to load support access settings',
         );
       }
-      return body as SupportAccessData;
+      try {
+        return (await res.json()) as SupportAccessData;
+      } catch {
+        throw new Error('Failed to load support access settings');
+      }
     },
   });
 }
