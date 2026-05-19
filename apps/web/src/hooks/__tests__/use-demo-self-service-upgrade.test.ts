@@ -127,6 +127,27 @@ describe('useDemoSelfServiceUpgrade', () => {
     expect(result.current.error?.message).toBe('Request failed (500)');
   });
 
+  it('throws the status literal when a 200 success body is unparseable (no silent no-op)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error('not json');
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useDemoSelfServiceUpgrade(), {
+      wrapper,
+    });
+    result.current.mutate(input);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Request failed (200)');
+  });
+
   it('falls back to the status literal when error body has no error field', async () => {
     vi.stubGlobal(
       'fetch',

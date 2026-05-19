@@ -42,13 +42,21 @@ export function useDemoSelfServiceUpgrade() {
         }),
       });
 
-      const json = (await res.json().catch(() => ({}))) as {
+      const json = (await res.json().catch(() => null)) as {
         error?: string;
         checkoutUrl?: string;
-      };
+      } | null;
 
       if (!res.ok) {
-        throw new Error(json.error ?? `Request failed (${res.status})`);
+        throw new Error(json?.error ?? `Request failed (${res.status})`);
+      }
+
+      // The original inline code did `const { checkoutUrl } = await
+      // res.json()`, which THREW on an unparseable success body. Preserve
+      // that: an OK response we cannot parse is a failure, not a silent
+      // no-op (which would leave the user stuck with no redirect/error).
+      if (json === null) {
+        throw new Error(`Request failed (${res.status})`);
       }
 
       return { checkoutUrl: json.checkoutUrl };
