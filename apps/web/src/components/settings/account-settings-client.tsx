@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, User, Lock, Shield, Trash2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -81,6 +81,15 @@ export function AccountSettingsClient({
   const [profileSuccess, setProfileSuccess] = useState(false);
   const updateProfile = useUpdateProfile();
 
+  // Auto-dismiss the profile success banner after 5s. Keyed on the success
+  // flag so the timer is cleared if the component unmounts (or the banner is
+  // re-shown) before it fires — avoids state updates on an unmounted component.
+  useEffect(() => {
+    if (!profileSuccess) return;
+    const timer = setTimeout(() => setProfileSuccess(false), 5000);
+    return () => clearTimeout(timer);
+  }, [profileSuccess]);
+
   // ── Password state ─────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -114,7 +123,6 @@ export function AccountSettingsClient({
       {
         onSuccess: () => {
           setProfileSuccess(true);
-          setTimeout(() => setProfileSuccess(false), 5000);
           setProfileLoading(false);
         },
         onError: (error) => {

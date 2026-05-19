@@ -11,6 +11,7 @@ import {
   screen,
   fireEvent,
   waitFor,
+  act,
 } from '@testing-library/react';
 
 // ── Hook mocks ──────────────────────────────────────────────
@@ -136,6 +137,43 @@ describe('AccountSettingsClient — profile section', () => {
     await waitFor(() =>
       expect(screen.getByText('Profile updated successfully.')).toBeDefined(),
     );
+  });
+
+  it('clears the success-banner auto-dismiss timer when unmounted before 5s', async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      updateProfileMutate.mockImplementation((_input, opts) => opts.onSuccess());
+      const { unmount } = renderComponent();
+
+      const nameInput = screen.getByLabelText('Full Name') as HTMLInputElement;
+      fireEvent.change(nameInput, { target: { value: 'New Name' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+      expect(screen.getByText('Profile updated successfully.')).toBeDefined();
+
+      // Unmount within the 5s window — the effect cleanup must cancel the timer.
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+
+      // Firing the (now-cancelled) timer must not update an unmounted component.
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      const actWarnings = consoleError.mock.calls.filter(([msg]) =>
+        typeof msg === 'string'
+          ? msg.includes('not wrapped in act') ||
+            msg.includes('unmounted component')
+          : false,
+      );
+      expect(actWarnings).toEqual([]);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      consoleError.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('surfaces the hook error message verbatim on failure', async () => {
