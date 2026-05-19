@@ -149,7 +149,6 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/components/settings/account-settings-client.tsx',
   'apps/web/src/components/settings/sms-consent-form.tsx',
   'apps/web/src/components/signup/signup-form.tsx',
-  'apps/web/src/components/signup/verify-email-content.tsx',
 ]);
 
 // ---------------------------------------------------------------------------

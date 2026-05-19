@@ -3,18 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-interface ResendSuccessData {
-  sent?: boolean;
-  cooldownSeconds?: number;
-  alreadyVerified?: boolean;
-  signupRequestId?: string;
-}
-
-interface ResendErrorData {
-  message?: string;
-  cooldownRemainingSeconds?: number;
-}
+import {
+  useConfirmVerification,
+  useResendVerification,
+} from '@/hooks/use-email-verification';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -33,23 +25,28 @@ export function VerifyEmailContent() {
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const { mutateAsync: confirmVerification } = useConfirmVerification();
+  const { mutateAsync: resendVerification } = useResendVerification();
+
+  // TanStack's mutateAsync is referentially stable, but we hold it in refs so
+  // the poll/resend effect+callback dependency arrays stay exactly as before
+  // (no mutation objects added to deps).
+  const confirmVerificationRef = useRef(confirmVerification);
+  confirmVerificationRef.current = confirmVerification;
+  const resendVerificationRef = useRef(resendVerification);
+  resendVerificationRef.current = resendVerification;
+
   // Poll for email verification — auto-navigate to checkout when confirmed
   useEffect(() => {
     if (!signupRequestId || verified) return;
 
     async function checkVerification() {
       try {
-        const response = await fetch('/api/v1/auth/confirm-verification', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ signupRequestId }),
-        });
+        const response = await confirmVerificationRef.current(signupRequestId);
 
         if (!response.ok) return; // Not verified yet or error — keep polling
 
-        const payload = (await response.json()) as {
-          data?: { success: boolean; signupRequestId: string };
-        };
+        const payload = response.body;
 
         if (payload.data?.success) {
           setVerified(true);
@@ -106,15 +103,11 @@ export function VerifyEmailContent() {
     setResendError(null);
 
     try {
-      const response = await fetch('/api/v1/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ signupRequestId }),
-      });
+      const response = await resendVerificationRef.current(signupRequestId);
 
       if (response.status === 409) {
         // Already verified — redirect to checkout
-        const payload = (await response.json()) as { data?: ResendSuccessData };
+        const payload = response.body;
         if (payload.data?.alreadyVerified) {
           router.push(
             `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
@@ -124,19 +117,19 @@ export function VerifyEmailContent() {
       }
 
       if (response.status === 429) {
-        const payload = (await response.json()) as { error?: ResendErrorData };
+        const payload = response.body;
         const remaining = payload.error?.cooldownRemainingSeconds ?? 120;
         setCooldownSeconds(remaining);
         return;
       }
 
       if (!response.ok) {
-        const payload = (await response.json()) as { error?: ResendErrorData };
+        const payload = response.body;
         setResendError(payload.error?.message ?? 'Unable to resend verification email.');
         return;
       }
 
-      const payload = (await response.json()) as { data?: ResendSuccessData };
+      const payload = response.body;
 
       // Show confirmation
       setShowResent(true);
