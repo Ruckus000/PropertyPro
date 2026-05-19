@@ -137,7 +137,6 @@ function walkDirectory(dir: string, files: string[]): void {
 const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
   'apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx',
   'apps/web/src/app/(authenticated)/settings/payments/connected/page.tsx',
-  'apps/web/src/components/access-requests/request-access-form.tsx',
   'apps/web/src/components/command-palette/useDataSearch.ts',
   'apps/web/src/components/finance/payment-dialog.tsx',
   'apps/web/src/components/finance/payment-portal.tsx',
