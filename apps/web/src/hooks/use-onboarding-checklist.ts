@@ -71,11 +71,19 @@ export function useBootstrapOnboardingChecklist() {
     // fire-and-forget POST whose response is intentionally ignored; raw
     // fetch keeps the swallow-all-errors semantics the caller depends on.
     mutationFn: async (communityId: number) => {
-      await fetch('/api/v1/onboarding/checklist', {
+      const res = await fetch('/api/v1/onboarding/checklist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
+      // Throw on a non-OK status so the mutation state is accurate. This
+      // does NOT change user behavior: the only caller (WelcomeScreen)
+      // wraps mutateAsync in try/catch and navigates regardless, and the
+      // dashboard's useOnboardingChecklist self-heals via its own
+      // bootstrap effect.
+      if (!res.ok) {
+        throw new Error('Failed to bootstrap onboarding checklist');
+      }
     },
   });
 }

@@ -38,16 +38,19 @@ describe('useBootstrapOnboardingChecklist', () => {
     });
   });
 
-  it('resolves (non-blocking) even when the POST responds non-OK', async () => {
+  it('reports an error state when the POST responds non-OK', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
     const { result } = renderHook(() => useBootstrapOnboardingChecklist(), {
       wrapper: createWrapper(),
     });
     result.current.mutate(7);
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toEqual(
+      new Error('Failed to bootstrap onboarding checklist'),
+    );
   });
 
-  it('rejects only when fetch itself throws', async () => {
+  it('reports an error state when fetch itself throws', async () => {
     fetchMock.mockRejectedValueOnce(new Error('network'));
     const { result } = renderHook(() => useBootstrapOnboardingChecklist(), {
       wrapper: createWrapper(),

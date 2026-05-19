@@ -78,10 +78,14 @@ describe('normalizeActivityFeedResponse', () => {
     });
   });
 
-  it('throws ActivityFetchError on an invalid response', () => {
-    expect(() => normalizeActivityFeedResponse({ nope: true })).toThrow(
-      ActivityFetchError,
-    );
+  it('throws ActivityFetchError with the non-HTTP sentinel status 0 on an invalid response', () => {
+    try {
+      normalizeActivityFeedResponse({ nope: true });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ActivityFetchError);
+      expect((err as ActivityFetchError).status).toBe(0);
+    }
   });
 });
 

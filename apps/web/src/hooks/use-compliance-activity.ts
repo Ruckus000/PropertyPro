@@ -73,7 +73,10 @@ export function normalizeActivityFeedResponse(
     };
   }
 
-  throw new ActivityFetchError(200, 'Invalid activity response');
+  // Sentinel status 0 (not a real HTTP status) marks a client-side parse
+  // failure. Only `status === 403` is special-cased by the component (hide
+  // the panel); any other value — including 0 — renders the generic error UI.
+  throw new ActivityFetchError(0, 'Invalid activity response');
 }
 
 export const COMPLIANCE_ACTIVITY_QUERY_KEY = (communityId: number) =>
