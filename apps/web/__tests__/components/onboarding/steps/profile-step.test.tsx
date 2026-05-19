@@ -97,6 +97,81 @@ describe('profile step', () => {
     );
   });
 
+  it('does not re-upload the logo when a failed onNext is retried', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { uploadUrl: 'https://upload.example.com', path: 'logos/community.png' } }),
+      })
+      .mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const onNext = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('transient server error'))
+      .mockResolvedValueOnce(undefined);
+
+    await act(async () => {
+      root.render(
+        renderWithClient(
+          <ProfileStep
+            communityId={42}
+            onNext={onNext}
+            initialData={{
+              name: 'Metro Apartments',
+              addressLine1: '123 Main St',
+              city: 'Miami',
+              state: 'FL',
+              zipCode: '33101',
+              timezone: 'America/New_York',
+            }}
+          />,
+        ),
+      );
+      await flushEffects();
+    });
+
+    const logoInput = container.querySelector('#logo') as HTMLInputElement;
+
+    await act(async () => {
+      const logoFile = new File(['logo'], 'logo.png', { type: 'image/png' });
+      Object.defineProperty(logoInput, 'files', {
+        configurable: true,
+        value: [logoFile],
+      });
+      logoInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Selected file: logo.png');
+
+    const form = container.querySelector('form');
+
+    // First submit: upload succeeds (2 fetch calls), onNext rejects.
+    await act(async () => {
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushEffects();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('transient server error');
+    // UI flips to the resolved-path display; "Selected file" label is gone.
+    expect(container.textContent).toContain('Current logo path: logos/community.png');
+    expect(container.textContent).not.toContain('Selected file: logo.png');
+
+    // Retry: no logoFile remains, so the upload must NOT run again.
+    await act(async () => {
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushEffects();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onNext).toHaveBeenCalledTimes(2);
+    expect(onNext).toHaveBeenLastCalledWith(
+      expect.objectContaining({ logoPath: 'logos/community.png' }),
+    );
+  });
+
   it('rejects oversized logo file', async () => {
     const onNext = vi.fn();
 
