@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Check, Loader2 } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
+import { useChangePlan } from '@/hooks/use-change-plan';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ export function ChangePlanForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
+  const changePlan = useChangePlan();
 
   // A plan card is offered when the change is either a tier upgrade
   // (compareTiers < 0) OR the same tier with a different interval.
@@ -91,21 +93,11 @@ export function ChangePlanForm({
         setIsSubmitting(false);
         return;
       }
-      const res = await fetch(`/api/v1/subscribe/change-plan?communityId=${communityId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: selectedPlan, billingInterval: interval }),
+      await changePlan.mutateAsync({
+        communityId,
+        planId: selectedPlan,
+        billingInterval: interval,
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as {
-          error?: string | { message?: string };
-        };
-        const message =
-          typeof body.error === 'string'
-            ? body.error
-            : body.error?.message ?? `Could not change plan (${res.status})`;
-        throw new Error(message);
-      }
       // Webhook will sync subscriptionPlan in a few seconds; bounce back and refresh.
       router.push(cancelHref);
       router.refresh();

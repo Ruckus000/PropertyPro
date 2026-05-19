@@ -1,80 +1,71 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Loader2, ShieldCheck, Eye } from 'lucide-react';
+import {
+  useSupportAccess,
+  useToggleSupportAccess,
+} from '@/hooks/use-support-access';
 
-interface ConsentGrant {
-  id: number;
-  community_id: number;
-  granted_by: string;
-  granted_at: string;
-  revoked_at: string | null;
-}
+/**
+ * The hook's queryFn throws the server/load literal for non-OK responses.
+ * Any other rejection (e.g. a `fetch` network failure → TypeError) is
+ * surfaced as the original "Network error" copy, matching the pre-B5
+ * try/catch behaviour exactly.
+ */
+const NETWORK_ERROR_LITERAL = 'Network error. Please try again.';
 
-interface AccessLogEntry {
-  id: number;
-  event: string;
-  admin_user_id: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
-interface SupportAccessData {
-  consentActive: boolean;
-  consent: ConsentGrant | null;
-  recentAccess: AccessLogEntry[];
+function toDisplayError(err: unknown, fallback: string): string {
+  // Our controlled non-OK throws are plain `Error` carrying the server
+  // message or our own load/update literal — pass those through. A genuine
+  // `fetch` network failure is a `TypeError`, and a React-Query
+  // cancellation an AbortError/`DOMException`; both carry non-user-facing
+  // messages, so they fall back to the network copy exactly as the pre-B5
+  // try/catch did.
+  if (
+    err instanceof Error &&
+    err.message &&
+    !(err instanceof TypeError) &&
+    !(typeof DOMException !== 'undefined' && err instanceof DOMException)
+  ) {
+    return err.message;
+  }
+  return fallback;
 }
 
 export function SupportAccessSettings({ communityId }: { communityId: number }) {
-  const [data, setData] = useState<SupportAccessData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
-  const [error, setError] = useState('');
+  const query = useSupportAccess(communityId);
+  const toggle = useToggleSupportAccess(communityId);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/v1/settings/support-access?communityId=${communityId}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error?.message ?? 'Failed to load support access settings');
-        return;
-      }
-      const body = await res.json();
-      setData(body);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const data = query.data ?? null;
+  const loading = query.isLoading;
+  const toggling = toggle.isPending;
 
+  // Mirror the original toggle try/catch: the mutation rejection's message
+  // (server message or update literal) is shown; anything without a usable
+  // message falls back to the network literal.
+  const [transientError, setTransientError] = useState('');
+
+  // Reset the transient (mutation) error when the community changes —
+  // mirrors the pre-B5 fetchData() which cleared the error on each load.
   useEffect(() => {
-    fetchData();
+    setTransientError('');
   }, [communityId]);
+
+  const queryError = query.error
+    ? toDisplayError(query.error, NETWORK_ERROR_LITERAL)
+    : '';
+
+  const error = transientError || queryError;
 
   const handleToggle = async () => {
     if (!data) return;
-    setToggling(true);
-    setError('');
+    setTransientError('');
     try {
-      const res = await fetch('/api/v1/settings/support-access', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ communityId, enabled: !data.consentActive }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error?.message ?? 'Failed to update support access');
-        return;
-      }
-      await fetchData();
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setToggling(false);
+      await toggle.mutateAsync({ enabled: !data.consentActive });
+    } catch (err) {
+      setTransientError(toDisplayError(err, NETWORK_ERROR_LITERAL));
     }
   };
 
