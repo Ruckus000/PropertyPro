@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useReauth } from '@/hooks/use-reauth';
+import { useExportData } from '@/hooks/use-export-data';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 
 interface ExportButtonProps {
@@ -9,10 +10,11 @@ interface ExportButtonProps {
 }
 
 export function ExportButton({ communityId }: ExportButtonProps) {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const { triggerReauth, isOpen, onCancel, verify } = useReauth();
+  const exportMutation = useExportData();
+  const loading = exportMutation.isPending;
 
   useEffect(() => {
     return () => {
@@ -26,26 +28,10 @@ export function ExportButton({ communityId }: ExportButtonProps) {
     const confirmed = await triggerReauth();
     if (!confirmed) return;
 
-    setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/export?communityId=${communityId}`);
-      if (!res.ok) {
-        let message = `Export failed (${res.status})`;
-        try {
-          const body = await res.json();
-          // API errors have the shape { error: { message: '...' } }
-          if (body && body.error && typeof body.error.message === 'string') {
-            message = body.error.message;
-          }
-        } catch (jsonError) {
-          // Body is not JSON or doesn't contain a message, use default.
-          console.error('Failed to parse error response from export API:', jsonError);
-        }
-        throw new Error(message);
-      }
+      const { blob, filename } = await exportMutation.mutateAsync({ communityId });
 
-      const blob = await res.blob();
       // Revoke any previous blob URL before creating a new one
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
@@ -54,22 +40,12 @@ export function ExportButton({ communityId }: ExportButtonProps) {
       blobUrlRef.current = url;
       const a = document.createElement('a');
       a.href = url;
-      const disposition = res.headers.get('Content-Disposition');
-      let filename = `community-export-${communityId}.zip`;
-      if (disposition && disposition.includes('attachment')) {
-        const filenameMatch = /filename="([^"]+)"/.exec(disposition);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1];
-        }
-      }
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
-    } finally {
-      setLoading(false);
     }
   }
 
