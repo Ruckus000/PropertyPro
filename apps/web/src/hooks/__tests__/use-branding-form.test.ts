@@ -70,7 +70,7 @@ describe('useSaveBranding', () => {
     });
   });
 
-  it('empty customEmailFooter collapses to undefined (omitted from JSON)', async () => {
+  it('clearing customEmailFooter sends an empty string so the backend can clear it', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -80,6 +80,12 @@ describe('useSaveBranding', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const patchInit = fetchMock.mock.calls[0]![1] as RequestInit;
+    const parsed = JSON.parse(patchInit.body as string) as Record<string, unknown>;
+    // The empty string must survive serialization (not collapse to undefined /
+    // be omitted) — an omitted field is a PATCH no-op and the stale footer
+    // would persist. The route schema accepts '' and treats it as "clear".
+    expect(Object.prototype.hasOwnProperty.call(parsed, 'customEmailFooter')).toBe(true);
+    expect(parsed.customEmailFooter).toBe('');
     expect(patchInit.body).toBe(
       JSON.stringify({
         communityId: 42,
@@ -88,7 +94,7 @@ describe('useSaveBranding', () => {
         accentColor: '#DBEAFE', // design-tokens:exempt — branding hex round-trip test fixture
         fontHeading: 'Inter',
         fontBody: 'Inter',
-        customEmailFooter: undefined,
+        customEmailFooter: '',
       }),
     );
   });
