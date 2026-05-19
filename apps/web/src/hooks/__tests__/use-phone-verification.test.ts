@@ -70,6 +70,20 @@ describe('useSendPhoneVerification', () => {
       result.current.mutateAsync({ phone: '+13055551234' }),
     ).rejects.toThrow('Failed to send verification code');
   });
+
+  it('falls back to the send literal when a non-OK body is non-JSON', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new Error('Unexpected token < in JSON');
+      },
+    });
+    const { result } = renderHook(() => useSendPhoneVerification(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({ phone: '+13055551234' }),
+    ).rejects.toThrow('Failed to send verification code');
+  });
 });
 
 describe('useConfirmPhoneVerification', () => {
@@ -106,6 +120,22 @@ describe('useConfirmPhoneVerification', () => {
 
   it('falls back to the exact confirm literal when error is absent', async () => {
     fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+    const { result } = renderHook(() => useConfirmPhoneVerification(), {
+      wrapper,
+    });
+
+    await expect(
+      result.current.mutateAsync({ phone: '+13055551234', code: '000000' }),
+    ).rejects.toThrow('Invalid verification code');
+  });
+
+  it('falls back to the confirm literal when a non-OK body is non-JSON', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new Error('Unexpected token < in JSON');
+      },
+    });
     const { result } = renderHook(() => useConfirmPhoneVerification(), {
       wrapper,
     });

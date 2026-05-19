@@ -24,10 +24,14 @@ export function useSendPhoneVerification() {
         body: JSON.stringify({ phone }),
       });
 
-      // Documented exception: bare res.json() error parse, preserved exactly
-      // from the original component (data.error ?? '<literal>').
+      // Documented exception to the requestJson rule: non-standard
+      // { error: '<string>' } body. Guard the parse so a non-JSON error
+      // body (proxy/LB HTML) still surfaces the intended literal rather
+      // than a raw SyntaxError.
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(data.error ?? 'Failed to send verification code');
       }
     },
@@ -43,10 +47,13 @@ export function useConfirmPhoneVerification() {
         body: JSON.stringify({ phone, code }),
       });
 
-      // Documented exception: bare res.json() error parse, preserved exactly
-      // from the original component (data.error ?? '<literal>').
+      // Documented exception to the requestJson rule: non-standard
+      // { error: '<string>' } body. Guard the parse so a non-JSON error
+      // body still surfaces the intended literal, not a raw SyntaxError.
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
         throw new Error(data.error ?? 'Invalid verification code');
       }
     },
