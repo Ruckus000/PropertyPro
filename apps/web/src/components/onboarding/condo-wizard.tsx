@@ -117,6 +117,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
                 throw new Error(await readApiError(response));
             }
 
+            setIsSaving(false);
             router.push(`/dashboard?communityId=${communityId}`);
             return;
         } catch (completeError) {

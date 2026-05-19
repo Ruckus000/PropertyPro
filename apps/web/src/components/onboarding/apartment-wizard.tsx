@@ -82,6 +82,7 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
     try {
       await completeMutation.mutateAsync();
 
+      setIsSaving(false);
       router.push(`/dashboard?communityId=${communityId}`);
       return;
     } catch (completeError) {
