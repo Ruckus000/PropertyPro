@@ -86,11 +86,11 @@ describe('useUpdateMobileSettings', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(callOrder).toEqual([
-      '/api/v1/profile',
+      '/api/v1/account/profile',
       '/api/v1/notification-preferences',
     ]);
 
-    const profileCall = findCall(fetchMock, '/api/v1/profile');
+    const profileCall = findCall(fetchMock, '/api/v1/account/profile');
     expect(profileCall?.[1]).toEqual({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -107,7 +107,7 @@ describe('useUpdateMobileSettings', () => {
 
   it('short-circuits: a failed profile PATCH skips the preferences PATCH and throws its literal', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/api/v1/profile') {
+      if (url === '/api/v1/account/profile') {
         return Promise.resolve({
           ok: false,
           json: async () => ({ error: { message: 'Name is required' } }),
@@ -123,7 +123,7 @@ describe('useUpdateMobileSettings', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error?.message).toBe('Name is required');
-    expect(findCall(fetchMock, '/api/v1/profile')).toBeDefined();
+    expect(findCall(fetchMock, '/api/v1/account/profile')).toBeDefined();
     expect(findCall(fetchMock, '/api/v1/notification-preferences')).toBeUndefined();
   });
 
@@ -146,7 +146,7 @@ describe('useUpdateMobileSettings', () => {
 
   it('throws the preferences literal when the second PATCH fails', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/api/v1/profile') {
+      if (url === '/api/v1/account/profile') {
         return Promise.resolve({ ok: true, json: async () => ({ data: {} }) });
       }
       return Promise.resolve({
@@ -165,7 +165,7 @@ describe('useUpdateMobileSettings', () => {
 
   it('falls back to the preferences literal when its error body is non-JSON', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/api/v1/profile') {
+      if (url === '/api/v1/account/profile') {
         return Promise.resolve({ ok: true, json: async () => ({ data: {} }) });
       }
       return Promise.resolve({
