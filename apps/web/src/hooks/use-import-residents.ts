@@ -39,30 +39,27 @@ export interface ImportResponse {
 // API helpers (relocated verbatim from import-residents-client.tsx)
 // ---------------------------------------------------------------------------
 
-async function dryRunImport(communityId: number, csvText: string): Promise<DryRunResponse> {
+// dryRunImport and executeImport differed only by the `dryRun` flag and the
+// fallback error literal — collapsed into one parameterized helper. Behavior
+// (URL/method/headers/body, the `.catch(() => null)` parse, the exact
+// fallbacks, the whole-envelope return) is byte-identical to the originals.
+async function performImport<T>(
+  communityId: number,
+  csvText: string,
+  dryRun: boolean,
+): Promise<T> {
   const response = await fetch('/api/v1/import-residents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, csv: csvText, dryRun: true }),
+    body: JSON.stringify({ communityId, csv: csvText, dryRun }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(err?.message ?? 'Failed to validate CSV');
+    throw new Error(
+      err?.message ?? (dryRun ? 'Failed to validate CSV' : 'Failed to import residents'),
+    );
   }
-  return response.json() as Promise<DryRunResponse>;
-}
-
-async function executeImport(communityId: number, csvText: string): Promise<ImportResponse> {
-  const response = await fetch('/api/v1/import-residents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, csv: csvText, dryRun: false }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(err?.message ?? 'Failed to import residents');
-  }
-  return response.json() as Promise<ImportResponse>;
+  return response.json() as Promise<T>;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +81,7 @@ async function executeImport(communityId: number, csvText: string): Promise<Impo
  */
 export function useDryRunImport(communityId: number) {
   return useMutation<DryRunResponse, Error, string>({
-    mutationFn: (csv: string) => dryRunImport(communityId, csv),
+    mutationFn: (csv: string) => performImport<DryRunResponse>(communityId, csv, true),
   });
 }
 
@@ -100,6 +97,6 @@ export function useDryRunImport(communityId: number) {
  */
 export function useImportResidents(communityId: number) {
   return useMutation<ImportResponse, Error, string>({
-    mutationFn: (csv: string) => executeImport(communityId, csv),
+    mutationFn: (csv: string) => performImport<ImportResponse>(communityId, csv, false),
   });
 }
