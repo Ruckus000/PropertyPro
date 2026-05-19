@@ -150,4 +150,29 @@ describe('SupportAccessSettings', () => {
       expect(screen.getByText('Network error. Please try again.')).toBeDefined(),
     );
   });
+
+  it('shows the network literal (not the raw message) on a query TypeError — genuine fetch network failure', () => {
+    // A real offline `fetch` rejects with a TypeError ("Failed to fetch").
+    // Pre-B5 the bare try/catch showed the network literal; preserve that.
+    setQuery({ error: new TypeError('Failed to fetch') });
+    setToggle();
+    render(<SupportAccessSettings communityId={42} />);
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Network error. Please try again.',
+    );
+  });
+
+  it('shows the network literal on a toggle TypeError rejection', async () => {
+    setQuery({ data: SAMPLE });
+    setToggle({
+      mutateAsync: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    });
+    render(<SupportAccessSettings communityId={42} />);
+
+    fireEvent.click(screen.getByRole('switch'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Network error. Please try again.')).toBeDefined(),
+    );
+  });
 });

@@ -17,8 +17,18 @@ import {
 const NETWORK_ERROR_LITERAL = 'Network error. Please try again.';
 
 function toDisplayError(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message) {
-    // Server-provided message or our own load/update literal — pass through.
+  // Our controlled non-OK throws are plain `Error` carrying the server
+  // message or our own load/update literal — pass those through. A genuine
+  // `fetch` network failure is a `TypeError`, and a React-Query
+  // cancellation an AbortError/`DOMException`; both carry non-user-facing
+  // messages, so they fall back to the network copy exactly as the pre-B5
+  // try/catch did.
+  if (
+    err instanceof Error &&
+    err.message &&
+    !(err instanceof TypeError) &&
+    !(typeof DOMException !== 'undefined' && err instanceof DOMException)
+  ) {
     return err.message;
   }
   return fallback;
