@@ -1,13 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-
-interface ManageFaqItem {
-  id: number;
-  question: string;
-  answer: string;
-  sortOrder: number;
-}
+import {
+  useCreateFaq,
+  useDeleteFaq,
+  useUpdateFaq,
+  type ManageFaqItem,
+} from '@/hooks/use-faq-manage';
 
 interface HelpFaqManageClientProps {
   communityId: number;
@@ -24,6 +23,10 @@ export function HelpFaqManageClient({
   const [answer, setAnswer] = useState('');
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const updateFaq = useUpdateFaq(communityId);
+  const createFaq = useCreateFaq(communityId);
+  const deleteFaq = useDeleteFaq(communityId);
 
   const editingFaq = useMemo(
     () => faqs.find((faq) => faq.id === editingId) ?? null,
@@ -45,15 +48,6 @@ export function HelpFaqManageClient({
     setAnswer(faq.answer);
   }
 
-  async function readErrorMessage(response: Response): Promise<string> {
-    try {
-      const body = (await response.json()) as { error?: { message?: string } };
-      return body.error?.message ?? 'Unable to save FAQ changes right now.';
-    } catch {
-      return 'Unable to save FAQ changes right now.';
-    }
-  }
-
   async function handleSave() {
     if (!question.trim() || !answer.trim()) return;
     setSaving(true);
@@ -61,21 +55,11 @@ export function HelpFaqManageClient({
 
     try {
       if (editingFaq) {
-        const response = await fetch(`/api/v1/faqs/${editingFaq.id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            communityId,
-            question: question.trim(),
-            answer: answer.trim(),
-          }),
+        await updateFaq.mutateAsync({
+          id: editingFaq.id,
+          question: question.trim(),
+          answer: answer.trim(),
         });
-
-        if (!response.ok) {
-          setErrorMessage(await readErrorMessage(response));
-          return;
-        }
-
         setFaqs((current) =>
           current.map((faq) =>
             faq.id === editingFaq.id
@@ -89,33 +73,19 @@ export function HelpFaqManageClient({
         );
         resetForm();
       } else {
-        const response = await fetch('/api/v1/faqs', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            communityId,
-            question: question.trim(),
-            answer: answer.trim(),
-          }),
+        const newFaq = await createFaq.mutateAsync({
+          question: question.trim(),
+          answer: answer.trim(),
         });
-        const body = (await response.json()) as {
-          data?: ManageFaqItem;
-          error?: { message?: string };
-        };
-
-        if (!response.ok || !body.data) {
-          setErrorMessage(body.error?.message ?? 'Unable to create this FAQ right now.');
-          return;
-        }
-
-        const newFaq = body.data;
         setFaqs((current) =>
           [...current, newFaq].sort((a, b) => a.sortOrder - b.sortOrder),
         );
         resetForm();
       }
-    } catch {
-      setErrorMessage('Unable to save FAQ changes right now.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to save FAQ changes right now.',
+      );
     } finally {
       setSaving(false);
     }
@@ -126,19 +96,13 @@ export function HelpFaqManageClient({
     setSaving(true);
     setErrorMessage(null);
     try {
-      const response = await fetch(
-        `/api/v1/faqs/${editingFaq.id}?communityId=${communityId}`,
-        { method: 'DELETE' },
-      );
-      if (!response.ok) {
-        setErrorMessage(await readErrorMessage(response));
-        return;
-      }
-
+      await deleteFaq.mutateAsync(editingFaq.id);
       setFaqs((current) => current.filter((faq) => faq.id !== editingFaq.id));
       resetForm();
-    } catch {
-      setErrorMessage('Unable to delete this FAQ right now.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete this FAQ right now.',
+      );
     } finally {
       setSaving(false);
     }
