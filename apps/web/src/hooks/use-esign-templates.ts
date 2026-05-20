@@ -128,27 +128,29 @@ export interface PresignTemplateUploadInput {
 export interface PresignTemplateUploadResult {
   path: string;
   uploadUrl: string;
-  token: string;
+  token?: string;
 }
 
-// Documented exception to the requestJson rule: the component throws the
-// bespoke literal 'Failed to prepare template PDF upload' regardless of the
-// API's error.message, and the response is destructured manually
-// (.data.path/.data.uploadUrl/.data.token) rather than via the standard
-// `{ data: T }` unwrap. Raw fetch preserves both invariants byte-for-byte.
+// Uses requestJson for the standard `{ data: T }` envelope unwrap, with a
+// try/catch wrapper to preserve the component's bespoke error literal
+// 'Failed to prepare template PDF upload' regardless of the API's
+// error.message. The component renders this throw via its outer try/catch
+// (currently an empty catch — pre-existing UX behavior, not changed here).
 export function usePresignEsignTemplateUpload() {
   return useMutation<PresignTemplateUploadResult, Error, PresignTemplateUploadInput>({
     mutationFn: async (input) => {
-      const res = await fetch('/api/v1/esign/templates/upload', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) {
+      try {
+        return await requestJson<PresignTemplateUploadResult>(
+          '/api/v1/esign/templates/upload',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(input),
+          },
+        );
+      } catch {
         throw new Error('Failed to prepare template PDF upload');
       }
-      const body = (await res.json()) as { data: PresignTemplateUploadResult };
-      return body.data;
     },
   });
 }
