@@ -3,8 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { useMutation } from '@tanstack/react-query';
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
+import { useCreatePaymentIntent, useUpdatePaymentIntentMethod } from '@/hooks/use-payment-intent';
 
 /* ─────── Types ─────── */
 
@@ -22,21 +22,6 @@ interface PaymentDialogProps {
   unitId?: number;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-interface PaymentIntentResponse {
-  paymentIntentId: string;
-  clientSecret: string;
-  amountCents: number;
-  convenienceFeeCents: number;
-  totalChargeCents: number;
-  currency: string;
-  feePolicy: PaymentFeePolicy;
-}
-
-interface UpdateIntentResponse {
-  convenienceFeeCents: number;
-  totalChargeCents: number;
 }
 
 /* ─────── Helpers ─────── */
@@ -65,50 +50,12 @@ function formatDate(dateStr: string): string {
   });
 }
 
-async function createPaymentIntent(
-  communityId: number,
-  lineItemId: number,
-  unitId?: number,
-): Promise<PaymentIntentResponse> {
-  const res = await fetch('/api/v1/payments/create-intent', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, lineItemId, ...(unitId != null && { unitId }) }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error?.message || 'Failed to create payment');
-  }
-  const json = await res.json();
-  return json.data;
-}
-
-async function updatePaymentIntentMethod(
-  communityId: number,
-  paymentIntentId: string,
-  paymentMethod: 'card' | 'us_bank_account',
-): Promise<UpdateIntentResponse> {
-  const res = await fetch('/api/v1/payments/update-intent', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, paymentIntentId, paymentMethod }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error?.message || 'Failed to update payment method');
-  }
-  const json = await res.json();
-  return json.data;
-}
-
 /* ─────── Main Dialog ─────── */
 
 export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSuccess }: PaymentDialogProps) {
   const totalCents = lineItem.amountCents + lineItem.lateFeeCents;
 
-  const intentMutation = useMutation({
-    mutationFn: () => createPaymentIntent(communityId, lineItem.id, unitId),
-  });
+  const intentMutation = useCreatePaymentIntent(communityId, lineItem.id, unitId);
 
   // Create intent on mount (useEffect prevents duplicate calls in React 18 strict mode)
   const intentCreated = useRef(false);
@@ -259,9 +206,7 @@ function CheckoutForm({
   const initialUpdateDone = useRef(false);
 
   // Call update-intent immediately with default method (card), and on method change
-  const updateMutation = useMutation({
-    mutationFn: (method: 'card' | 'us_bank_account') =>
-      updatePaymentIntentMethod(communityId, paymentIntentId, method),
+  const updateMutation = useUpdatePaymentIntentMethod(communityId, paymentIntentId, {
     onSuccess: (data) => {
       setConfirmedFee(data.convenienceFeeCents);
       setTotalCharge(data.totalChargeCents);
