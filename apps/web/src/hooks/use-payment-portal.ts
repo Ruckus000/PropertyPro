@@ -98,8 +98,8 @@ export function usePaymentFeePolicy(communityId: number): UseQueryResult<Payment
     queryFn: async () => {
       const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
       if (!res.ok) return 'association_absorbs';
-      const json = (await res.json()) as { data: { feePolicy: PaymentFeePolicy } };
-      return json.data.feePolicy;
+      const json = (await res.json()) as { data?: { feePolicy?: PaymentFeePolicy } };
+      return json.data?.feePolicy ?? 'association_absorbs';
     },
     staleTime: 60_000,
   });
