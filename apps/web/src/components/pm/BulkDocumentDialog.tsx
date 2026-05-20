@@ -78,7 +78,6 @@ export function BulkDocumentDialog({
           fileName: file.name,
           fileSize: file.size,
           mimeType: file.type,
-          fileNameForError: file.name,
         });
 
         // Upload to storage

@@ -32,30 +32,22 @@ export interface PresignUploadResult {
   uploadUrl: string;
 }
 
-export interface PresignUploadVariables extends PresignUploadInput {
-  /**
-   * Display name used to build the bespoke per-file error literal
-   * ('Failed to prepare upload for <fileNameForError>'). Not sent in the
-   * request body — only `communityId`, `fileName`, `fileSize`, `mimeType`
-   * reach the server, matching the pre-drain payload exactly.
-   */
-  fileNameForError: string;
-}
-
 export function usePresignDocumentUpload(): UseMutationResult<
   PresignUploadResult,
   Error,
-  PresignUploadVariables
+  PresignUploadInput
 > {
-  return useMutation<PresignUploadResult, Error, PresignUploadVariables>({
-    mutationFn: async ({ fileNameForError, ...input }) => {
+  return useMutation<PresignUploadResult, Error, PresignUploadInput>({
+    mutationFn: async (input) => {
       const res = await fetch('/api/v1/upload', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
       });
       if (!res.ok) {
-        throw new Error(`Failed to prepare upload for ${fileNameForError}`);
+        // Bespoke per-file literal — `input.fileName` is already the display
+        // name that matches the file the loop is currently processing.
+        throw new Error(`Failed to prepare upload for ${input.fileName}`);
       }
       const body = (await res.json()) as { data: PresignUploadResult };
       return body.data;

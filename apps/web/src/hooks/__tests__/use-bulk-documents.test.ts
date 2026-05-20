@@ -53,7 +53,6 @@ describe('usePresignDocumentUpload', () => {
       fileName: 'report.pdf',
       fileSize: 12345,
       mimeType: 'application/pdf',
-      fileNameForError: 'report.pdf',
     });
 
     expect(returned).toEqual(presignData);
@@ -72,7 +71,7 @@ describe('usePresignDocumentUpload', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 
-  it('omits fileNameForError from the request body (used only for the error literal)', async () => {
+  it('sends only the four documented fields in the request body', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: { path: 'p', uploadUrl: 'u' } }),
@@ -86,18 +85,16 @@ describe('usePresignDocumentUpload', () => {
       fileName: 'a.pdf',
       fileSize: 1,
       mimeType: 'application/pdf',
-      fileNameForError: 'a.pdf',
     });
 
     const [, init] = fetchMock.mock.calls[0]!;
     const parsed = JSON.parse(init.body as string) as Record<string, unknown>;
-    expect(parsed).not.toHaveProperty('fileNameForError');
     expect(Object.keys(parsed).sort()).toEqual(
       ['communityId', 'fileName', 'fileSize', 'mimeType'].sort(),
     );
   });
 
-  it('rejects with the per-file error literal interpolating fileNameForError on non-OK', async () => {
+  it('rejects with the per-file error literal interpolating fileName on non-OK', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       json: async () => ({ error: { message: 'ignored' } }),
@@ -112,7 +109,6 @@ describe('usePresignDocumentUpload', () => {
         fileName: 'report.pdf',
         fileSize: 1,
         mimeType: 'application/pdf',
-        fileNameForError: 'report.pdf',
       }),
     ).rejects.toThrow('Failed to prepare upload for report.pdf');
   });
