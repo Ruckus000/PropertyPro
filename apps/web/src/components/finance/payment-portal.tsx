@@ -2,11 +2,17 @@
 
 import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { formatDateOnly } from '@/lib/utils/format-date';
+import {
+  usePaymentStatement,
+  usePaymentFeePolicy,
+  type PaymentPortalMode,
+} from '@/hooks/use-payment-portal';
+
+export type { PaymentPortalMode };
 
 /* ─────── Types ─────── */
 
@@ -29,34 +35,6 @@ interface CommunityLineItem extends UnitLineItem {
 }
 
 type LineItem = UnitLineItem | CommunityLineItem;
-
-interface LedgerEntry {
-  id: number;
-  entryType: string;
-  amountCents: number;
-  description: string;
-  createdAt: string;
-}
-
-interface UnitStatementData {
-  unitId: number;
-  balanceCents: number;
-  ledgerEntries: LedgerEntry[];
-  lineItems: UnitLineItem[];
-}
-
-interface CommunityStatementData {
-  balanceCents: number;
-  ledgerEntries: LedgerEntry[];
-  lineItems: CommunityLineItem[];
-}
-
-interface StatementEnvelope {
-  mode: 'unit' | 'community';
-  data: UnitStatementData | CommunityStatementData;
-}
-
-export type PaymentPortalMode = 'unit' | 'community';
 
 interface PaymentPortalProps {
   communityId: number;
@@ -113,36 +91,6 @@ function StatusBadge({ status }: { status: LineItemStatus }) {
   );
 }
 
-/* ─────── Fetch ─────── */
-
-async function fetchStatement(
-  communityId: number,
-  mode: PaymentPortalMode,
-  unitId?: number,
-): Promise<UnitStatementData | CommunityStatementData> {
-  const params = new URLSearchParams({ communityId: String(communityId) });
-  if (unitId) params.set('unitId', String(unitId));
-  const res = await fetch(`/api/v1/payments/statement?${params}`);
-  if (!res.ok) throw new Error('Failed to load payment data');
-  const json = (await res.json()) as StatementEnvelope | { data: UnitStatementData };
-
-  // Back-compat: older servers (or mocks) may return `{ data }` without `mode`.
-  if ('mode' in json && typeof json.mode === 'string') {
-    if (mode === 'community' && json.mode !== 'community') {
-      throw new Error('Expected community statement, received unit statement');
-    }
-    return json.data;
-  }
-  return (json as { data: UnitStatementData }).data;
-}
-
-async function fetchFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
-  const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
-  if (!res.ok) return 'association_absorbs';
-  const json = await res.json();
-  return json.data.feePolicy;
-}
-
 /* ─────── Component ─────── */
 
 export function PaymentPortal({
@@ -164,19 +112,11 @@ export function PaymentPortal({
   const showUnitColumn = mode === 'community';
   const canPay = mode === 'unit';
 
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['payment-portal', communityId, mode, unitId],
-    queryFn: () => fetchStatement(communityId, mode, unitId),
+  const { data, isPending, isError, refetch } = usePaymentStatement(communityId, mode, unitId, {
     enabled: canLoadData,
-    staleTime: 30_000,
-    retry: false,
   });
 
-  const { data: feePolicy } = useQuery({
-    queryKey: ['fee-policy', communityId],
-    queryFn: () => fetchFeePolicy(communityId),
-    staleTime: 60_000,
-  });
+  const { data: feePolicy } = usePaymentFeePolicy(communityId);
 
   const handleUnitChange = (nextUnitId: number) => {
     const params = new URLSearchParams(searchParams.toString());

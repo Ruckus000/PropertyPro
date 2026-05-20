@@ -1,0 +1,106 @@
+'use client';
+
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import type { PaymentFeePolicy } from '@propertypro/shared';
+
+/* ─────── Types ─────── */
+
+type LineItemStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
+
+interface LedgerEntry {
+  id: number;
+  entryType: string;
+  amountCents: number;
+  description: string;
+  createdAt: string;
+}
+
+interface UnitLineItem {
+  id: number;
+  assessmentId: number | null;
+  unitId: number;
+  amountCents: number;
+  dueDate: string;
+  status: LineItemStatus;
+  paidAt: string | null;
+  paymentIntentId: string | null;
+  lateFeeCents: number;
+}
+
+interface CommunityLineItem extends UnitLineItem {
+  unitNumber: string;
+}
+
+export interface UnitStatementData {
+  unitId: number;
+  balanceCents: number;
+  ledgerEntries: LedgerEntry[];
+  lineItems: UnitLineItem[];
+}
+
+export interface CommunityStatementData {
+  balanceCents: number;
+  ledgerEntries: LedgerEntry[];
+  lineItems: CommunityLineItem[];
+}
+
+export interface StatementEnvelope {
+  mode: 'unit' | 'community';
+  data: UnitStatementData | CommunityStatementData;
+}
+
+export type PaymentPortalMode = 'unit' | 'community';
+
+/* ─────── Hooks ─────── */
+
+// Documented exception to the requestJson rule: (a) the statement query
+// throws a bespoke literal 'Failed to load payment data' (and a second
+// literal 'Expected community statement, received unit statement' for the
+// discriminated-union mode mismatch case) and parses a non-standard
+// envelope that may include a `mode` discriminator alongside `data`;
+// (b) the fee-policy query SILENTLY returns 'association_absorbs' on non-OK
+// (does NOT throw) — `requestJson` would always throw. Raw fetch preserves
+// both behaviors byte-for-byte.
+
+export function usePaymentStatement(
+  communityId: number,
+  mode: PaymentPortalMode,
+  unitId: number | undefined,
+  options?: { enabled?: boolean },
+): UseQueryResult<UnitStatementData | CommunityStatementData, Error> {
+  return useQuery<UnitStatementData | CommunityStatementData, Error>({
+    queryKey: ['payment-portal', communityId, mode, unitId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ communityId: String(communityId) });
+      if (unitId) params.set('unitId', String(unitId));
+      const res = await fetch(`/api/v1/payments/statement?${params}`);
+      if (!res.ok) throw new Error('Failed to load payment data');
+      const json = (await res.json()) as StatementEnvelope | { data: UnitStatementData };
+
+      // Back-compat: older servers (or mocks) may return `{ data }` without `mode`.
+      if ('mode' in json && typeof json.mode === 'string') {
+        if (mode === 'community' && json.mode !== 'community') {
+          throw new Error('Expected community statement, received unit statement');
+        }
+        return json.data;
+      }
+      return (json as { data: UnitStatementData }).data;
+    },
+    enabled: options?.enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function usePaymentFeePolicy(communityId: number): UseQueryResult<PaymentFeePolicy, Error> {
+  return useQuery<PaymentFeePolicy, Error>({
+    queryKey: ['fee-policy', communityId],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/payments/fee-policy?communityId=${communityId}`);
+      if (!res.ok) return 'association_absorbs';
+      const json = (await res.json()) as { data: { feePolicy: PaymentFeePolicy } };
+      return json.data.feePolicy;
+    },
+    staleTime: 60_000,
+  });
+}
