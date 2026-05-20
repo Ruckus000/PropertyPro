@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import type { z } from 'zod';
+import { ZodError, type z } from 'zod';
 import type { RouteContract, HttpMethod } from './define-route';
 import type { PaginationResult } from './pagination';
 import { ContractValidationError } from './errors';
@@ -135,8 +135,15 @@ function parseQuery<C extends AnyRouteContract>(contract: C, req: NextRequest): 
   // Collapse empty-string params (`?cursor=`, `?pageSize=`) to undefined so
   // optional Zod schemas don't 400 on `min(1)` / `positive()` constraints.
   // Matches the `||` convention in .claude/rules/api-patterns.md.
+  //
+  // For repeated keys (`?tag=a&tag=b`) we preserve the prior
+  // `searchParams.get(name)` first-wins semantics — `.get()` returns the first
+  // occurrence. If a future route needs array-valued params, declare it as
+  // `z.array(...)` and read via `searchParams.getAll()`-aware preprocessing in
+  // a follow-up PR rather than relying on last-wins iteration here.
   const raw: Record<string, string | undefined> = {};
   for (const [key, value] of searchParams.entries()) {
+    if (raw[key] !== undefined) continue; // first-wins
     raw[key] = value || undefined;
   }
   const parsed = schema.safeParse(raw);
@@ -233,11 +240,9 @@ function isPaginationResult(value: unknown): value is PaginationResult {
 
 // `ContractValidationError` requires a ZodError; construct a synthetic one
 // for our own runner-side asserts (e.g. paginated-shape check) so the same
-// rendering path applies.
+// rendering path applies. Uses the static `ZodError` value-import at the top
+// of this file — no runtime `require()`.
 function makeStandaloneZodError(message: string): z.ZodError {
-  // Lazy require avoids a top-level value import (we already import the type).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ZodError } = require('zod') as typeof import('zod');
   return new ZodError([
     {
       code: 'custom',

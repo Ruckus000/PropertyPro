@@ -41,6 +41,21 @@ describe('runRoute — non-paginated', () => {
     expect(body).toEqual({ data: { id: 7, name: 'widget-7' } });
   });
 
+  it('preserves first-wins semantics for repeated query keys', async () => {
+    // Mirrors the behaviour of `searchParams.get(name)` — the first occurrence
+    // of a repeated key wins, matching what migrated routes did before runRoute
+    // was introduced. Future array-valued params should preprocess via
+    // `searchParams.getAll()` in their own schema, not rely on iteration order.
+    const handler = runRoute(contract, async ({ query }) => ({
+      id: query.id,
+      name: `widget-${query.id}`,
+    }));
+    const res = await handler(makeRequest('/api/v1/widget?id=7&id=99'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ data: { id: 7, name: 'widget-7' } });
+  });
+
   it('collapses empty-string query params to undefined', async () => {
     const handler = runRoute(contract, async ({ query }) => ({
       id: query.id,
