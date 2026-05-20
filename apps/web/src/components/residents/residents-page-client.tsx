@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Upload } from 'lucide-react';
 import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
@@ -18,80 +18,17 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  useInviteResident,
+  useResendInvitation,
+  useResidentsList,
+} from '@/hooks/use-residents-management';
 
 /* ─────── Types ─────── */
-
-interface ResidentRecord {
-  userId: string;
-  fullName: string | null;
-  email: string | null;
-  role: string;
-  unitId: number | null;
-}
 
 interface ResidentsPageClientProps {
   communityId: number;
   communityType: CommunityType;
-}
-
-/* ─────── API helpers ─────── */
-
-async function fetchResidents(communityId: number): Promise<ResidentRecord[]> {
-  const response = await fetch(`/api/v1/residents?communityId=${communityId}`);
-  if (!response.ok) {
-    throw new Error('Failed to load residents');
-  }
-  const json = await response.json() as { data: ResidentRecord[] };
-  return json.data;
-}
-
-interface CreateResidentResult {
-  userId: string;
-  isNewUser: boolean;
-  invitationFailed: boolean;
-}
-
-async function resendInvitation(communityId: number, userId: string): Promise<void> {
-  const response = await fetch('/api/v1/invitations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, userId }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Failed to send invitation');
-  }
-}
-
-async function createAndInviteResident(
-  communityId: number,
-  values: ResidentFormSubmitValues,
-  sendInvitation: boolean,
-): Promise<CreateResidentResult> {
-  const response = await fetch('/api/v1/residents/invite', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      communityId,
-      email: values.email,
-      fullName: values.fullName,
-      phone: values.phone || null,
-      role: values.role,
-      unitId: values.unitId,
-      isUnitOwner: values.isUnitOwner,
-      presetKey: values.presetKey,
-      sendInvitation,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Failed to add resident');
-  }
-
-  const json = await response.json() as { data: CreateResidentResult };
-  return json.data;
 }
 
 /* ─────── Component ─────── */
@@ -109,14 +46,9 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
     isError,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['residents', communityId],
-    queryFn: () => fetchResidents(communityId),
-  });
+  } = useResidentsList(communityId);
 
-  const mutation = useMutation({
-    mutationFn: (values: ResidentFormSubmitValues) =>
-      createAndInviteResident(communityId, values, sendInvitation),
+  const mutation = useInviteResident(communityId, {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['residents', communityId] });
       if (result.invitationFailed) {
@@ -133,16 +65,18 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   const handleFormSubmit = useCallback(
     async (values: ResidentFormSubmitValues) => {
       setInvitationWarning(null);
-      await mutation.mutateAsync(values);
+      await mutation.mutateAsync({ values, sendInvitation });
     },
-    [mutation],
+    [mutation, sendInvitation],
   );
+
+  const resendInviteMutation = useResendInvitation(communityId);
 
   const handleResendInvite = useCallback(
     async (userId: string) => {
-      await resendInvitation(communityId, userId);
+      await resendInviteMutation.mutateAsync(userId);
     },
-    [communityId],
+    [resendInviteMutation],
   );
 
   // Filter residents by search query
