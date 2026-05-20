@@ -8,7 +8,6 @@
  * then document records are created in each target community.
  */
 import { useState, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -19,10 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import {
-  usePresignDocumentUpload,
-  useBulkCreateDocuments,
-} from '@/hooks/use-bulk-documents';
+import { useBulkUploadDocuments } from '@/hooks/use-bulk-documents';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,11 +33,6 @@ interface BulkDocumentDialogProps {
   selectedCommunities: Community[];
   open: boolean;
   onClose: () => void;
-}
-
-interface UploadedFile {
-  fileName: string;
-  storagePath: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,65 +52,37 @@ export function BulkDocumentDialog({
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const presignUpload = usePresignDocumentUpload();
-  const bulkCreate = useBulkCreateDocuments();
-
-  // Upload files then create document records
-  const mutation = useMutation({
-    mutationFn: async () => {
-      // Step 1: Upload each file to storage
-      setUploadProgress('Uploading files...');
-      const uploaded: UploadedFile[] = [];
-
-      for (const file of files) {
-        // Get presigned URL — use first community's ID for the upload path
-        const presigned = await presignUpload.mutateAsync({
-          communityId: selectedCommunities[0]!.id,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
-        });
-
-        // Upload to storage
-        const uploadRes = await fetch(presigned.uploadUrl, {
-          method: 'PUT',
-          headers: { 'content-type': file.type },
-          body: file,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Failed to upload ${file.name}`);
-        }
-
-        uploaded.push({ fileName: file.name, storagePath: presigned.path });
-      }
-
-      // Step 2: Create document records in all communities
-      setUploadProgress('Creating document records...');
-      return await bulkCreate.mutateAsync({
-        communityIds: selectedCommunities.map((c) => c.id),
-        documents: uploaded.map((u) => ({
-          fileName: u.fileName,
-          storagePath: u.storagePath,
-          description: description || null,
-        })),
-      });
-    },
-    onSuccess: (data) => {
-      const created = data.results.filter((r) => r.status === 'created').length;
-      const total = data.results.length;
-      setResultMessage(`Documents created in ${created}/${total} communities`);
-      setResultIsError(false);
-      setShowConfirm(false);
-      setUploadProgress(null);
-    },
-    onError: (error: Error) => {
-      setResultMessage(error.message);
-      setResultIsError(true);
-      setShowConfirm(false);
-      setUploadProgress(null);
-    },
+  const mutation = useBulkUploadDocuments({
+    onProgress: (message) => setUploadProgress(message),
   });
+
+  function handleSubmitConfirm() {
+    if (!selectedCommunities[0]) return;
+    mutation.mutate(
+      {
+        files,
+        communityIds: selectedCommunities.map((c) => c.id),
+        uploadCommunityId: selectedCommunities[0].id,
+        description: description || null,
+      },
+      {
+        onSuccess: (data) => {
+          const created = data.results.filter((r) => r.status === 'created').length;
+          const total = data.results.length;
+          setResultMessage(`Documents created in ${created}/${total} communities`);
+          setResultIsError(false);
+          setShowConfirm(false);
+          setUploadProgress(null);
+        },
+        onError: (error: Error) => {
+          setResultMessage(error.message);
+          setResultIsError(true);
+          setShowConfirm(false);
+          setUploadProgress(null);
+        },
+      },
+    );
+  }
 
   function resetForm() {
     setFiles([]);
@@ -151,7 +114,7 @@ export function BulkDocumentDialog({
   }
 
   function handleConfirm() {
-    mutation.mutate();
+    handleSubmitConfirm();
   }
 
   return (
