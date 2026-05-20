@@ -118,11 +118,11 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
             }
 
             router.push(`/dashboard?communityId=${communityId}`);
-            return;
         } catch (completeError) {
             setError(
                 completeError instanceof Error ? completeError.message : 'Failed to complete onboarding',
             );
+        } finally {
             setIsSaving(false);
         }
     }
