@@ -23,6 +23,13 @@ function wrapper({ children }: { children: ReactNode }) {
   return createElement(QueryClientProvider, { client: qc }, children);
 }
 
+// readOnboardingApiError now inspects `Content-Type` before parsing JSON.
+// All non-OK Response mocks in this file represent JSON error responses,
+// so they need a headers stub that returns 'application/json'.
+const jsonResponseHeaders = {
+  get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+};
+
 describe('useSaveApartmentStep', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -58,6 +65,7 @@ describe('useSaveApartmentStep', () => {
   it('throws the string `error` value verbatim on non-OK', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      headers: jsonResponseHeaders,
       json: async () => ({ error: 'short' }),
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -72,6 +80,7 @@ describe('useSaveApartmentStep', () => {
   it('throws the object error.message verbatim on non-OK', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      headers: jsonResponseHeaders,
       json: async () => ({ error: { message: 'X' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -86,6 +95,7 @@ describe('useSaveApartmentStep', () => {
   it('falls back to "Request failed" when the body is unparseable', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      headers: jsonResponseHeaders,
       json: async () => {
         throw new Error('not json');
       },
@@ -134,6 +144,7 @@ describe('useCompleteApartmentOnboarding', () => {
   it('throws the object error.message verbatim on non-OK', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      headers: jsonResponseHeaders,
       json: async () => ({ error: { message: 'fail' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
