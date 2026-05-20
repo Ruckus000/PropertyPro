@@ -107,3 +107,18 @@ export function useDeleteFaq(communityId: number): UseMutationResult<void, Error
     },
   });
 }
+
+export function useReorderFaqs(communityId: number): UseMutationResult<void, Error, number[]> {
+  return useMutation<void, Error, number[]>({
+    mutationFn: async (ids) => {
+      // Pre-drain semantics: only network errors (fetch throws) bubble; non-OK
+      // responses are silently ignored (mobile UX shows no error feedback for
+      // reorder, only reverts local state when fetch itself fails).
+      await fetch('/api/v1/faqs/reorder', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, ids }),
+      });
+    },
+  });
+}
