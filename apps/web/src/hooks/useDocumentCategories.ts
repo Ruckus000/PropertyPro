@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { Infer } from '@propertypro/api-contract';
 import { walkPaginated } from '@/lib/api/walk-paginated';
+import type { documentCategoriesListContract } from
+  '@/app/api/v1/document-categories/contract';
 import {
   resolveDocumentCategoryId,
   type DocumentCategoryOption,
@@ -13,11 +16,18 @@ import {
  * resolve a category by name, so the helper walks pages until `hasMore` is
  * false.
  *
+ * The item shape is derived from the route contract (Plan A1 pilot) so the
+ * hook stays in lockstep with the route's declared response schema — no
+ * duplicated interface.
+ *
  * Cancellation: pairs an `AbortController` with the helper's `signal` option.
  * If `communityId` changes mid-walk (or the component unmounts), the in-
  * flight request is cancelled at the network layer rather than discarded
  * client-side.
  */
+type CategoryItem =
+  Infer<typeof documentCategoriesListContract>['data'][number];
+
 export function useDocumentCategories(communityId: number) {
   const [categories, setCategories] = useState<DocumentCategoryOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +40,7 @@ export function useDocumentCategories(communityId: number) {
       setIsLoading(true);
       setError(null);
       try {
-        const collected = await walkPaginated<DocumentCategoryOption>(
+        const collected = await walkPaginated<CategoryItem>(
           '/api/v1/document-categories',
           { communityId: String(communityId) },
           { signal: controller.signal },

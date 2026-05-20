@@ -19,6 +19,8 @@
     "skipLibCheck": true,
     "jsx": "react-jsx",
     "paths": {
+      "@propertypro/api-contract": ["packages/api-contract/src"],
+      "@propertypro/api-contract/*": ["packages/api-contract/src/*"],
       "@propertypro/db": ["packages/db/src"],
       "@propertypro/db/*": ["packages/db/src/*"],
       "@propertypro/email": ["packages/email/src"],
@@ -37,6 +39,7 @@
   "references": [
     { "path": "apps/web" },
     { "path": "apps/admin" },
+    { "path": "packages/api-contract" },
     { "path": "packages/db" },
     { "path": "packages/shared" },
     { "path": "packages/ui" },
