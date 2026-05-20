@@ -206,7 +206,7 @@ describe('useDeleteFaq', () => {
     const { result } = renderHook(() => useDeleteFaq(COMMUNITY_ID), { wrapper });
 
     await expect(result.current.mutateAsync(1)).rejects.toThrow(
-      'Unable to save FAQ changes right now.',
+      'Unable to delete this FAQ right now.',
     );
   });
 });

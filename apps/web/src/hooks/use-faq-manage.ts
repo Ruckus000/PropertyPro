@@ -14,19 +14,19 @@ interface ApiErrorBody {
   error?: { message?: string };
 }
 
-// Documented exception to the requestJson rule: each mutation throws bespoke
-// per-operation error literals ('Unable to save FAQ changes right now.' for
-// PATCH/DELETE fallback, 'Unable to create this FAQ right now.' for POST
-// fallback) that the component renders verbatim in an inline error banner;
-// the POST path also rejects 200 responses with missing `data`. requestJson's
-// generic 'Request failed' fallback would not match. Raw fetch + readApiError
-// preserve byte-for-byte.
-async function readApiError(response: Response): Promise<string> {
+// Documented exception to the requestJson rule: each mutation throws a
+// per-operation friendly fallback literal that the component renders verbatim
+// in its inline error banner ('Unable to save FAQ changes right now.' /
+// 'Unable to create this FAQ right now.' / 'Unable to delete this FAQ right
+// now.'). The POST path also rejects 200 responses with missing `data`. The
+// hook normalizes all network/JSON-parse failures to the operation's friendly
+// fallback so the component's catch can safely display error.message.
+async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as { error?: { message?: string } };
-    return body.error?.message ?? 'Unable to save FAQ changes right now.';
+    return body.error?.message ?? fallback;
   } catch {
-    return 'Unable to save FAQ changes right now.';
+    return fallback;
   }
 }
 
@@ -44,13 +44,18 @@ export interface CreateFaqInput {
 export function useUpdateFaq(communityId: number): UseMutationResult<void, Error, UpdateFaqInput> {
   return useMutation<void, Error, UpdateFaqInput>({
     mutationFn: async ({ id, question, answer }) => {
-      const response = await fetch(`/api/v1/faqs/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, question, answer }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`/api/v1/faqs/${id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, question, answer }),
+        });
+      } catch {
+        throw new Error('Unable to save FAQ changes right now.');
+      }
       if (!response.ok) {
-        throw new Error(await readApiError(response));
+        throw new Error(await readApiError(response, 'Unable to save FAQ changes right now.'));
       }
     },
   });
@@ -59,12 +64,24 @@ export function useUpdateFaq(communityId: number): UseMutationResult<void, Error
 export function useCreateFaq(communityId: number): UseMutationResult<ManageFaqItem, Error, CreateFaqInput> {
   return useMutation<ManageFaqItem, Error, CreateFaqInput>({
     mutationFn: async ({ question, answer }) => {
-      const response = await fetch('/api/v1/faqs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, question, answer }),
-      });
-      const body = (await response.json()) as ApiErrorBody;
+      let response: Response;
+      try {
+        response = await fetch('/api/v1/faqs', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, question, answer }),
+        });
+      } catch {
+        throw new Error('Unable to create this FAQ right now.');
+      }
+
+      let body: ApiErrorBody;
+      try {
+        body = (await response.json()) as ApiErrorBody;
+      } catch {
+        throw new Error('Unable to create this FAQ right now.');
+      }
+
       if (!response.ok || !body.data) {
         throw new Error(body.error?.message ?? 'Unable to create this FAQ right now.');
       }
@@ -76,11 +93,16 @@ export function useCreateFaq(communityId: number): UseMutationResult<ManageFaqIt
 export function useDeleteFaq(communityId: number): UseMutationResult<void, Error, number> {
   return useMutation<void, Error, number>({
     mutationFn: async (id) => {
-      const response = await fetch(`/api/v1/faqs/${id}?communityId=${communityId}`, {
-        method: 'DELETE',
-      });
+      let response: Response;
+      try {
+        response = await fetch(`/api/v1/faqs/${id}?communityId=${communityId}`, {
+          method: 'DELETE',
+        });
+      } catch {
+        throw new Error('Unable to delete this FAQ right now.');
+      }
       if (!response.ok) {
-        throw new Error(await readApiError(response));
+        throw new Error(await readApiError(response, 'Unable to delete this FAQ right now.'));
       }
     },
   });
