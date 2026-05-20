@@ -117,3 +117,40 @@ export function useCloneEsignTemplate(communityId: number) {
     },
   });
 }
+
+export interface PresignTemplateUploadInput {
+  communityId: number;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
+export interface PresignTemplateUploadResult {
+  path: string;
+  uploadUrl: string;
+  token?: string;
+}
+
+// Uses requestJson for the standard `{ data: T }` envelope unwrap, with a
+// try/catch wrapper to preserve the component's bespoke error literal
+// 'Failed to prepare template PDF upload' regardless of the API's
+// error.message. The component renders this throw via its outer try/catch
+// (currently an empty catch — pre-existing UX behavior, not changed here).
+export function usePresignEsignTemplateUpload() {
+  return useMutation<PresignTemplateUploadResult, Error, PresignTemplateUploadInput>({
+    mutationFn: async (input) => {
+      try {
+        return await requestJson<PresignTemplateUploadResult>(
+          '/api/v1/esign/templates/upload',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(input),
+          },
+        );
+      } catch {
+        throw new Error('Failed to prepare template PDF upload');
+      }
+    },
+  });
+}

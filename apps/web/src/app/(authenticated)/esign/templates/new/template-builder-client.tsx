@@ -29,7 +29,10 @@ import {
   type EsignTemplateType,
 } from '@propertypro/shared';
 import dynamic from 'next/dynamic';
-import { useCreateEsignTemplate } from '@/hooks/use-esign-templates';
+import {
+  useCreateEsignTemplate,
+  usePresignEsignTemplateUpload,
+} from '@/hooks/use-esign-templates';
 import { FieldOverlay } from '@/components/esign/field-overlay';
 import { FieldPalette } from '@/components/esign/field-palette';
 
@@ -50,14 +53,6 @@ interface TemplateBuilderClientProps {
 interface PageDimension {
   width: number;
   height: number;
-}
-
-interface TemplateUploadResponse {
-  data: {
-    path: string;
-    token?: string;
-    uploadUrl: string;
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +107,7 @@ export function TemplateBuilderClient({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createTemplate = useCreateEsignTemplate(communityId);
+  const presignUpload = usePresignEsignTemplateUpload();
 
   // -----------------------------------------------------------------------
   // Phase state
@@ -294,27 +290,14 @@ export function TemplateBuilderClient({
 
     setSaving(true);
     try {
-      const uploadPrepRes = await fetch('/api/v1/esign/templates/upload', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId,
-          fileName: pdfFile.name,
-          fileSize: pdfFile.size,
-          mimeType: pdfFile.type || 'application/pdf',
-        }),
+      const presigned = await presignUpload.mutateAsync({
+        communityId,
+        fileName: pdfFile.name,
+        fileSize: pdfFile.size,
+        mimeType: pdfFile.type || 'application/pdf',
       });
-
-      if (!uploadPrepRes.ok) {
-        throw new Error('Failed to prepare template PDF upload');
-      }
-
-      const uploadPrepBody = (await uploadPrepRes.json()) as TemplateUploadResponse;
-      const storagePath = uploadPrepBody.data.path;
-      const uploadUrl = buildUploadUrl(
-        uploadPrepBody.data.uploadUrl,
-        uploadPrepBody.data.token,
-      );
+      const storagePath = presigned.path;
+      const uploadUrl = buildUploadUrl(presigned.uploadUrl, presigned.token);
 
       const uploadRes = await fetch(uploadUrl, {
         method: 'PUT',
@@ -355,6 +338,7 @@ export function TemplateBuilderClient({
     templateType,
     description,
     createTemplate,
+    presignUpload,
     router,
   ]);
 
