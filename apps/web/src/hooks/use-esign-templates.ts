@@ -117,3 +117,38 @@ export function useCloneEsignTemplate(communityId: number) {
     },
   });
 }
+
+export interface PresignTemplateUploadInput {
+  communityId: number;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
+export interface PresignTemplateUploadResult {
+  path: string;
+  uploadUrl: string;
+  token: string;
+}
+
+// Documented exception to the requestJson rule: the component throws the
+// bespoke literal 'Failed to prepare template PDF upload' regardless of the
+// API's error.message, and the response is destructured manually
+// (.data.path/.data.uploadUrl/.data.token) rather than via the standard
+// `{ data: T }` unwrap. Raw fetch preserves both invariants byte-for-byte.
+export function usePresignEsignTemplateUpload() {
+  return useMutation<PresignTemplateUploadResult, Error, PresignTemplateUploadInput>({
+    mutationFn: async (input) => {
+      const res = await fetch('/api/v1/esign/templates/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to prepare template PDF upload');
+      }
+      const body = (await res.json()) as { data: PresignTemplateUploadResult };
+      return body.data;
+    },
+  });
+}
