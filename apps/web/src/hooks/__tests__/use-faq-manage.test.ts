@@ -255,7 +255,7 @@ describe('useReorderFaqs', () => {
     await expect(result.current.mutateAsync([1, 2])).resolves.toBeUndefined();
   });
 
-  it('rejects on network errors (fetch throws)', async () => {
+  it('rejects with the friendly literal on network errors (fetch throws)', async () => {
     const networkError = new TypeError('Failed to fetch');
     const fetchMock = vi.fn().mockRejectedValue(networkError);
     vi.stubGlobal('fetch', fetchMock);
@@ -263,7 +263,7 @@ describe('useReorderFaqs', () => {
     const { result } = renderHook(() => useReorderFaqs(COMMUNITY_ID), { wrapper });
 
     await expect(result.current.mutateAsync([1, 2])).rejects.toThrow(
-      'Failed to fetch',
+      'Unable to reorder FAQs right now.',
     );
   });
 });

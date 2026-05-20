@@ -111,14 +111,21 @@ export function useDeleteFaq(communityId: number): UseMutationResult<void, Error
 export function useReorderFaqs(communityId: number): UseMutationResult<void, Error, number[]> {
   return useMutation<void, Error, number[]>({
     mutationFn: async (ids) => {
-      // Pre-drain semantics: only network errors (fetch throws) bubble; non-OK
-      // responses are silently ignored (mobile UX shows no error feedback for
-      // reorder, only reverts local state when fetch itself fails).
-      await fetch('/api/v1/faqs/reorder', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, ids }),
-      });
+      // Pre-drain semantics: only network errors bubble; non-OK responses are
+      // silently ignored (mobile UX shows no error feedback for reorder; the
+      // component reverts local state only when fetch itself fails). Network
+      // errors are normalized to a friendly literal for consistency with the
+      // other hooks in this file — observable behavior is unchanged because
+      // the component swallows the throw and reverts either way.
+      try {
+        await fetch('/api/v1/faqs/reorder', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, ids }),
+        });
+      } catch {
+        throw new Error('Unable to reorder FAQs right now.');
+      }
     },
   });
 }
