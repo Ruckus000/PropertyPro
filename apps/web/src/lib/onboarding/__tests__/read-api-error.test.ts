@@ -112,6 +112,14 @@ describe('readOnboardingApiError', () => {
       expect(await readOnboardingApiError(res)).toBe('short');
     });
 
+    it('falls back to FALLBACK_ERROR when string `error` is empty (|| semantics)', async () => {
+      const res = makeResponse({
+        contentType: 'application/json',
+        json: async () => ({ error: '' }),
+      });
+      expect(await readOnboardingApiError(res)).toBe('Request failed');
+    });
+
     it('returns error.message when present', async () => {
       const res = makeResponse({
         contentType: 'application/json',

@@ -40,10 +40,10 @@ export async function readOnboardingApiError(response: Response): Promise<string
     }
 
     const body = await response.json();
-    if (!body || typeof body !== 'object') return FALLBACK_ERROR;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return FALLBACK_ERROR;
 
     const { error } = body as OnboardingApiErrorResponse;
-    if (typeof error === 'string') return error;
+    if (typeof error === 'string') return error || FALLBACK_ERROR;
     if (error && typeof error === 'object') {
       return error.message || error.code || FALLBACK_ERROR;
     }
