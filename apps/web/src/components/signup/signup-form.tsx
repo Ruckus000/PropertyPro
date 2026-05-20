@@ -21,6 +21,13 @@ import {
   type SubdomainAvailability,
 } from './subdomain-checker';
 import { SignupAddressAutocomplete } from './address-autocomplete';
+import {
+  ConfirmVerificationError,
+  SignupApiError,
+  useConfirmEmailVerification,
+  useCreateSignup,
+  type SignupField,
+} from '@/hooks/use-signup';
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -33,30 +40,6 @@ interface SignupFormProps {
   initialSignupRequestId?: string;
   verificationReturn?: boolean;
 }
-
-interface SignupApiSuccess {
-  signupRequestId: string;
-  subdomain: string;
-  verificationRequired: true;
-  checkoutEligible: false;
-  message: string;
-}
-
-type SignupField =
-  | 'primaryContactName'
-  | 'email'
-  | 'password'
-  | 'communityName'
-  | 'addressLine1'
-  | 'city'
-  | 'state'
-  | 'zipCode'
-  | 'county'
-  | 'unitCount'
-  | 'candidateSlug'
-  | 'termsAccepted'
-  | 'planKey'
-  | 'communityType';
 
 type VerificationState =
   | { status: 'idle' }
@@ -103,6 +86,9 @@ export function SignupForm({
   const [errorField, setErrorField] = useState<SignupField | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  const confirmMutation = useConfirmEmailVerification();
+  const signupMutation = useCreateSignup();
+
   const plans = useMemo(
     () => getSignupPlansForCommunityType(communityType),
     [communityType],
@@ -133,36 +119,20 @@ export function SignupForm({
   const confirmVerification = useCallback(async (requestId: string) => {
     setVerificationState({ status: 'confirming' });
     try {
-      const response = await fetch('/api/v1/auth/confirm-verification', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ signupRequestId: requestId }),
-      });
-
-      const payload = (await response.json()) as {
-        data?: { success: boolean; signupRequestId: string };
-        error?: { message?: string };
-      };
-
-      if (!response.ok || !payload.data?.success) {
-        setVerificationState({
-          status: 'error',
-          message: payload.error?.message ?? 'Unable to confirm email verification.',
-        });
-        return;
-      }
-
+      const { signupRequestId: confirmedId } =
+        await confirmMutation.mutateAsync(requestId);
       setVerificationState({
         status: 'confirmed',
-        signupRequestId: payload.data.signupRequestId,
+        signupRequestId: confirmedId,
       });
-    } catch {
-      setVerificationState({
-        status: 'error',
-        message: 'Unable to confirm email verification. Please try again.',
-      });
+    } catch (error) {
+      const message =
+        error instanceof ConfirmVerificationError
+          ? error.message
+          : 'Unable to confirm email verification. Please try again.';
+      setVerificationState({ status: 'error', message });
     }
-  }, []);
+  }, [confirmMutation]);
 
   useEffect(() => {
     if (verificationReturn && initialSignupRequestId) {
@@ -232,50 +202,29 @@ export function SignupForm({
         return;
       }
 
-      const response = await fetch('/api/v1/auth/signup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      const payload = (await response.json()) as {
-        data?: SignupApiSuccess;
-        error?: {
-          message?: string;
-          details?: { fieldErrors?: Record<string, string[] | undefined> };
-        };
-      };
-
-      if (!response.ok || !payload.data) {
-        const responseFieldErrors = payload.error?.details?.fieldErrors;
-        const normalizedFieldErrors = Object.fromEntries(
-          Object.entries(responseFieldErrors ?? {}).map(([field, messages]) => [field, messages?.[0]]),
-        );
-        if (Object.keys(normalizedFieldErrors).length > 0) {
-          setFieldErrors(normalizedFieldErrors);
+      try {
+        const success = await signupMutation.mutateAsync(requestBody);
+        // Navigate to the verify page with masked email in the URL
+        // (sessionStorage would be lost on new tabs; query param is simplest)
+        const verifyUrl = `/signup/verify?signupRequestId=${encodeURIComponent(success.signupRequestId)}&email=${encodeURIComponent(maskEmail(email))}`;
+        router.push(verifyUrl);
+      } catch (error) {
+        if (error instanceof SignupApiError) {
+          if (error.fieldErrors) {
+            setFieldErrors(error.fieldErrors);
+          }
+          const firstField = error.fieldErrors
+            ? (Object.entries(error.fieldErrors).find(([, message]) => Boolean(message))?.[0] as SignupField | undefined)
+            : undefined;
+          setErrorField(firstField ?? null);
+          setErrorMessage(error.message);
+        } else {
+          setErrorField(null);
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Unable to complete signup right now.',
+          );
         }
-        const firstField = Object.entries(normalizedFieldErrors).find(([, message]) => Boolean(message))?.[0] as SignupField | undefined;
-        const firstFromFields =
-          responseFieldErrors
-          && Object.values(responseFieldErrors)
-            .flat()
-            .find((m): m is string => Boolean(m));
-        setErrorField(firstField ?? null);
-        setErrorMessage(
-          firstFromFields
-          ?? payload.error?.message
-          ?? 'Unable to complete signup right now.',
-        );
-        return;
       }
-
-      // Navigate to the verify page with masked email in the URL
-      // (sessionStorage would be lost on new tabs; query param is simplest)
-      const verifyUrl = `/signup/verify?signupRequestId=${encodeURIComponent(payload.data.signupRequestId)}&email=${encodeURIComponent(maskEmail(email))}`;
-      router.push(verifyUrl);
-    } catch {
-      setErrorField(null);
-      setErrorMessage('Unable to complete signup right now.');
     } finally {
       setIsSubmitting(false);
     }

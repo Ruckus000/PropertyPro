@@ -135,7 +135,6 @@ function walkDirectory(dir: string, files: string[]): void {
 // ---------------------------------------------------------------------------
 
 const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
-  'apps/web/src/components/signup/signup-form.tsx',
 ]);
 
 // ---------------------------------------------------------------------------

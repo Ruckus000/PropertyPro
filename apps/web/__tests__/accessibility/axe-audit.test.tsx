@@ -108,7 +108,14 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       const { SignupForm } = await import(
         '@/components/signup/signup-form'
       );
-      const { container } = render(<SignupForm />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      const { container } = render(
+        <QueryClientProvider client={queryClient}>
+          <SignupForm />
+        </QueryClientProvider>,
+      );
       const results = await axe(container);
       expect(results).toHaveNoViolations();
     });
