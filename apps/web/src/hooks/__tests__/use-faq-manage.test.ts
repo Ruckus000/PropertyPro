@@ -15,6 +15,7 @@ import { createElement, type ReactNode } from 'react';
 import {
   useCreateFaq,
   useDeleteFaq,
+  useReorderFaqs,
   useUpdateFaq,
 } from '../use-faq-manage';
 
@@ -207,6 +208,62 @@ describe('useDeleteFaq', () => {
 
     await expect(result.current.mutateAsync(1)).rejects.toThrow(
       'Unable to delete this FAQ right now.',
+    );
+  });
+});
+
+describe('useReorderFaqs', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCHes /api/v1/faqs/reorder with the communityId + ids payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useReorderFaqs(COMMUNITY_ID), { wrapper });
+
+    await result.current.mutateAsync([3, 1, 2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/v1/faqs/reorder');
+    expect(init.method).toBe('PATCH');
+    expect(init.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(init.body as string)).toEqual({
+      communityId: COMMUNITY_ID,
+      ids: [3, 1, 2],
+    });
+  });
+
+  it('still resolves on non-OK responses (mobile UX silently swallows reorder errors)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: 'boom' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useReorderFaqs(COMMUNITY_ID), { wrapper });
+
+    await expect(result.current.mutateAsync([1, 2])).resolves.toBeUndefined();
+  });
+
+  it('rejects with the friendly literal on network errors (fetch throws)', async () => {
+    const networkError = new TypeError('Failed to fetch');
+    const fetchMock = vi.fn().mockRejectedValue(networkError);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useReorderFaqs(COMMUNITY_ID), { wrapper });
+
+    await expect(result.current.mutateAsync([1, 2])).rejects.toThrow(
+      'Unable to reorder FAQs right now.',
     );
   });
 });

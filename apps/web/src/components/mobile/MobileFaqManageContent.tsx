@@ -10,13 +10,13 @@ import {
 import { cn } from "@/lib/utils";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import { PageTransition, SlideUp } from "@/components/motion";
-
-interface FaqItem {
-  id: number;
-  question: string;
-  answer: string;
-  sortOrder: number;
-}
+import {
+  useCreateFaq,
+  useDeleteFaq,
+  useReorderFaqs,
+  useUpdateFaq,
+  type ManageFaqItem as FaqItem,
+} from "@/hooks/use-faq-manage";
 
 interface MobileFaqManageContentProps {
   initialFaqs: FaqItem[];
@@ -36,6 +36,11 @@ export function MobileFaqManageContent({
   // Sheet form state
   const [sheetQuestion, setSheetQuestion] = useState("");
   const [sheetAnswer, setSheetAnswer] = useState("");
+
+  const reorderMutation = useReorderFaqs(communityId);
+  const createMutation = useCreateFaq(communityId);
+  const updateMutation = useUpdateFaq(communityId);
+  const deleteMutation = useDeleteFaq(communityId);
 
   function openEdit(faq: FaqItem) {
     setEditingFaq(faq);
@@ -74,20 +79,13 @@ export function MobileFaqManageContent({
       );
 
       try {
-        await fetch("/api/v1/faqs/reorder", {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            communityId,
-            ids: newFaqs.map((f) => f.id),
-          }),
-        });
+        await reorderMutation.mutateAsync(newFaqs.map((f) => f.id));
       } catch {
-        // Revert on failure
+        // Revert on failure (matches pre-drain: only network errors trigger revert).
         setFaqs(faqs);
       }
     },
-    [faqs, communityId],
+    [faqs, reorderMutation],
   );
 
   async function handleSave() {
@@ -96,36 +94,22 @@ export function MobileFaqManageContent({
 
     try {
       if (isAdding) {
-        const res = await fetch("/api/v1/faqs", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            communityId,
+        try {
+          const newFaq = await createMutation.mutateAsync({
             question: sheetQuestion.trim(),
             answer: sheetAnswer.trim(),
-          }),
-        });
-        const json = await res.json();
-        if (res.ok && json.data) {
-          const newFaq: FaqItem = {
-            id: json.data.id as number,
-            question: json.data.question as string,
-            answer: json.data.answer as string,
-            sortOrder: json.data.sortOrder as number,
-          };
+          });
           setFaqs((prev) => [...prev, newFaq]);
+        } catch {
+          // Pre-drain: silently swallow non-OK / no-data responses.
         }
       } else if (editingFaq) {
-        const res = await fetch(`/api/v1/faqs/${editingFaq.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            communityId,
+        try {
+          await updateMutation.mutateAsync({
+            id: editingFaq.id,
             question: sheetQuestion.trim(),
             answer: sheetAnswer.trim(),
-          }),
-        });
-        if (res.ok) {
+          });
           setFaqs((prev) =>
             prev.map((f) =>
               f.id === editingFaq.id
@@ -137,6 +121,8 @@ export function MobileFaqManageContent({
                 : f,
             ),
           );
+        } catch {
+          // Pre-drain: silently swallow non-OK responses.
         }
       }
       closeSheet();
@@ -151,14 +137,11 @@ export function MobileFaqManageContent({
 
     setSaving(true);
     try {
-      const res = await fetch(
-        `/api/v1/faqs/${editingFaq.id}?communityId=${communityId}`,
-        { method: "DELETE" },
-      );
-      if (res.ok) {
-        setFaqs((prev) => prev.filter((f) => f.id !== editingFaq.id));
-        closeSheet();
-      }
+      await deleteMutation.mutateAsync(editingFaq.id);
+      setFaqs((prev) => prev.filter((f) => f.id !== editingFaq.id));
+      closeSheet();
+    } catch {
+      // Pre-drain: silently swallow non-OK — sheet stays open.
     } finally {
       setSaving(false);
     }
