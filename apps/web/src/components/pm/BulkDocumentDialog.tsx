@@ -19,6 +19,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import {
+  usePresignDocumentUpload,
+  useBulkCreateDocuments,
+} from '@/hooks/use-bulk-documents';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,22 +44,6 @@ interface UploadedFile {
   storagePath: string;
 }
 
-interface PresignResponse {
-  data: { path: string; uploadUrl: string };
-}
-
-interface BulkDocResult {
-  communityId: number;
-  communityName: string;
-  status: 'created' | 'failed';
-  documentsCreated?: number;
-  error?: string;
-}
-
-interface BulkDocumentResponse {
-  results: BulkDocResult[];
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -73,6 +61,9 @@ export function BulkDocumentDialog({
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const presignUpload = usePresignDocumentUpload();
+  const bulkCreate = useBulkCreateDocuments();
+
   // Upload files then create document records
   const mutation = useMutation({
     mutationFn: async () => {
@@ -82,25 +73,16 @@ export function BulkDocumentDialog({
 
       for (const file of files) {
         // Get presigned URL — use first community's ID for the upload path
-        const presignRes = await fetch('/api/v1/upload', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            communityId: selectedCommunities[0]!.id,
-            fileName: file.name,
-            fileSize: file.size,
-            mimeType: file.type,
-          }),
+        const presigned = await presignUpload.mutateAsync({
+          communityId: selectedCommunities[0]!.id,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+          fileNameForError: file.name,
         });
 
-        if (!presignRes.ok) {
-          throw new Error(`Failed to prepare upload for ${file.name}`);
-        }
-
-        const { data } = (await presignRes.json()) as PresignResponse;
-
         // Upload to storage
-        const uploadRes = await fetch(data.uploadUrl, {
+        const uploadRes = await fetch(presigned.uploadUrl, {
           method: 'PUT',
           headers: { 'content-type': file.type },
           body: file,
@@ -110,30 +92,19 @@ export function BulkDocumentDialog({
           throw new Error(`Failed to upload ${file.name}`);
         }
 
-        uploaded.push({ fileName: file.name, storagePath: data.path });
+        uploaded.push({ fileName: file.name, storagePath: presigned.path });
       }
 
       // Step 2: Create document records in all communities
       setUploadProgress('Creating document records...');
-      const res = await fetch('/api/v1/pm/bulk/documents', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityIds: selectedCommunities.map((c) => c.id),
-          documents: uploaded.map((u) => ({
-            fileName: u.fileName,
-            storagePath: u.storagePath,
-            description: description || null,
-          })),
-        }),
+      return await bulkCreate.mutateAsync({
+        communityIds: selectedCommunities.map((c) => c.id),
+        documents: uploaded.map((u) => ({
+          fileName: u.fileName,
+          storagePath: u.storagePath,
+          description: description || null,
+        })),
       });
-
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: { message?: string } };
-        throw new Error(json.error?.message ?? 'Failed to create bulk documents');
-      }
-
-      return (await res.json()) as BulkDocumentResponse;
     },
     onSuccess: (data) => {
       const created = data.results.filter((r) => r.status === 'created').length;
