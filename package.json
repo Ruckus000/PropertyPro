@@ -37,10 +37,11 @@
     "guard:authz-comments": "tsx scripts/verify-authz-comments.ts",
     "guard:component-service-imports": "tsx scripts/verify-component-service-imports.ts",
     "guard:route-table-imports": "tsx scripts/verify-route-table-imports.ts",
+    "guard:contracts": "tsx scripts/verify-contracts.ts",
     "guard:help-content": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-help-content.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments && pnpm guard:component-service-imports && pnpm guard:route-table-imports && pnpm guard:help-content",
+    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:authz-comments && pnpm guard:component-service-imports && pnpm guard:route-table-imports && pnpm guard:contracts && pnpm guard:help-content",
     "clean": "turbo run clean"
   },
   "pnpm": {
