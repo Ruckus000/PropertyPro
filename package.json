@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
+    "new:resource": "tsx scripts/scaffold-resource.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "reset:demo": "tsx scripts/reset-demo.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
