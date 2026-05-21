@@ -1,26 +1,42 @@
 'use client';
 
 /**
- * Help Widget state context — manages open/close state for the help drawer.
- * Follows the same pattern as sidebar-context.tsx.
+ * Help Widget state context — manages open/close state and the article
+ * currently being viewed in the help docs modal. Follows the same pattern
+ * as sidebar-context.tsx.
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+
+interface SelectedArticle {
+  category: string;
+  slug: string;
+}
 
 interface HelpWidgetContextValue {
   isOpen: boolean;
   open: () => void;
   close: () => void;
   toggle: () => void;
+  selectedArticle: SelectedArticle | null;
+  openArticle: (category: string, slug: string) => void;
 }
 
 const HelpWidgetContext = createContext<HelpWidgetContextValue | null>(null);
 
 export function HelpWidgetProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<SelectedArticle | null>(null);
 
   const open = useCallback(() => setIsOpen(true), []);
-  const close = useCallback(() => setIsOpen(false), []);
+  const close = useCallback(() => {
+    setIsOpen(false);
+    setSelectedArticle(null);
+  }, []);
   const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
+  const openArticle = useCallback((category: string, slug: string) => {
+    setSelectedArticle({ category, slug });
+    setIsOpen(true);
+  }, []);
 
   // ? keyboard shortcut (only on pointer devices, not in inputs)
   useEffect(() => {
@@ -40,7 +56,9 @@ export function HelpWidgetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <HelpWidgetContext.Provider value={{ isOpen, open, close, toggle }}>
+    <HelpWidgetContext.Provider
+      value={{ isOpen, open, close, toggle, selectedArticle, openArticle }}
+    >
       {children}
     </HelpWidgetContext.Provider>
   );
